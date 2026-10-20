@@ -58,6 +58,7 @@ using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 using System.Threading;
 
 // 扫描位置
@@ -623,6 +624,7 @@ public static class DupFinder {
             byte[] ba = new byte[1 << 20], bb = new byte[1 << 20];
             ulong[] la = new ulong[1 << 17], lb = new ulong[1 << 17];
             while (true) {
+                if (Cancel) return false;
                 int na = ReadFull(fa, ba, ba.Length);
                 int nb = ReadFull(fb, bb, bb.Length);
                 if (na != nb) return false;
@@ -670,6 +672,8 @@ public static class DirStat {
     public static long Files, Bytes;
     // 统计时跳过的特殊项目（链接、用 Windows 压缩功能压过的文件等）的个数和第一个的位置
     public static long Reparse; public static string ReparseSample;
+    // 用户点了「取消」：数到一半就停。结果不完整，调用方看到取消标记后不会再用它做判断
+    public static volatile bool Cancel;
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     struct FD {
@@ -695,6 +699,7 @@ public static class DirStat {
         string r0 = root.TrimEnd('\\', '/');
         st.Push(r0.Length == 0 ? root : r0);
         while (st.Count > 0) {
+            if (Cancel) break;
             string d = st.Pop();
             if (win) {
                 string pat = d.StartsWith("\\\\") ? "\\\\?\\UNC\\" + d.Substring(2) + "\\*" : "\\\\?\\" + d + "\\*";
@@ -730,7 +735,7 @@ public class DmNode {
     public string Name;
     public DmNode Parent;
     public long Size, Own, Files, OwnFiles, LastWrite;
-    public bool IsLink, Denied;
+    public bool IsLink, Denied, Gone;
     public List<DmNode> Kids = new List<DmNode>();
     public string FullPath() {
         List<string> parts = new List<string>();
@@ -742,7 +747,12 @@ public class DmNode {
     }
     public int Depth() { int d = 0; for (DmNode n = Parent; n != null; n = n.Parent) d++; return d; }
 }
-public class DmFile { public string Path; public long Size; public DateTime Modified; }
+// 扫描时记下的文件（1 MB 以上）。只存所在文件夹和文件名，完整路径用到时再拼，省内存
+public class DmFile {
+    public DmNode Dir; public string Name; public long Size; public DateTime Modified;
+    public string Path { get { string d = Dir.FullPath(); return (d.EndsWith("\\") || d.EndsWith("/")) ? d + Name : d + System.IO.Path.DirectorySeparatorChar + Name; } }
+}
+public class DmFind { public List<DmFile> Files = new List<DmFile>(); public long Count, Bytes; }
 
 public static class DiskMap {
     public static volatile bool Cancel;
@@ -766,7 +776,7 @@ public static class DiskMap {
     [DllImport("kernel32.dll")]
     static extern bool FindClose(IntPtr hFindFile);
 
-    const long BigMin = 50L * 1024 * 1024;
+    const long BigMin = 1L * 1024 * 1024;   // 「找文件」只在这些文件里找
     static bool Win { get { return System.IO.Path.DirectorySeparatorChar == '\\'; } }
 
     public static DmNode Scan(string root, int threads) {
@@ -811,7 +821,6 @@ public static class DiskMap {
             n.Kids.Sort((a, b) => b.Size.CompareTo(a.Size));
         }
         big.Sort((a, b) => b.Size.CompareTo(a.Size));
-        if (big.Count > 500) big.RemoveRange(500, big.Count - 500);
         BigFiles = big;
         return top;
     }
@@ -819,7 +828,6 @@ public static class DiskMap {
     static void Enumerate(DmNode n, ConcurrentStack<DmNode> work, List<DmFile> big) {
         string dir = n.FullPath();
         Current = dir;
-        string baseDir = (dir.EndsWith("\\") || dir.EndsWith("/")) ? dir : dir + System.IO.Path.DirectorySeparatorChar;
         if (Win) {
             string pat = dir.StartsWith("\\\\") ? "\\\\?\\UNC\\" + dir.Substring(2).TrimEnd('\\') + "\\*" : "\\\\?\\" + dir.TrimEnd('\\') + "\\*";
             FD fd;
@@ -841,7 +849,7 @@ public static class DiskMap {
                         n.Own += sz; n.OwnFiles++;
                         if (wt > n.LastWrite) n.LastWrite = wt;
                         Interlocked.Increment(ref FilesSeen); Interlocked.Add(ref BytesSeen, sz);
-                        if (sz >= BigMin) { DmFile f = new DmFile(); f.Path = baseDir + name; f.Size = sz; try { f.Modified = DateTime.FromFileTime(wt); } catch { } big.Add(f); }
+                        if (sz >= BigMin) { DmFile f = new DmFile(); f.Dir = n; f.Name = name; f.Size = sz; try { f.Modified = DateTime.FromFileTime(wt); } catch { } big.Add(f); }
                     }
                 } while (!Cancel && FindNextFileW(h, out fd));
             } finally { FindClose(h); }
@@ -860,7 +868,7 @@ public static class DiskMap {
                     n.Own += sz; n.OwnFiles++;
                     if (wt > n.LastWrite) n.LastWrite = wt;
                     Interlocked.Increment(ref FilesSeen); Interlocked.Add(ref BytesSeen, sz);
-                    if (sz >= BigMin) { DmFile f = new DmFile(); f.Path = baseDir + e.Name; f.Size = sz; f.Modified = e.LastWriteTime; big.Add(f); }
+                    if (sz >= BigMin) { DmFile f = new DmFile(); f.Dir = n; f.Name = e.Name; f.Size = sz; f.Modified = e.LastWriteTime; big.Add(f); }
                 }
             }
         }
@@ -869,7 +877,7 @@ public static class DiskMap {
     // 删掉一个文件夹后，从树上摘掉并把大小从上面每一层减掉
     public static void Detach(DmNode n) {
         DmNode p = n.Parent; if (p == null) return;
-        p.Kids.Remove(n);
+        p.Kids.Remove(n); n.Gone = true;
         for (DmNode a = p; a != null; a = a.Parent) { a.Size -= n.Size; a.Files -= n.Files; }
     }
     // 删掉某一层里的一个文件
@@ -894,6 +902,52 @@ public static class DiskMap {
             cur = next;
         }
         return cur;
+    }
+    // 找文件：在扫描时记下的文件里按条件筛选。BigFiles 已按大小从大到小排好：
+    // 取前 max 个（确认文件还在），并算出符合条件的一共有几个、多大
+    public static DmFind FindFiles(long minSize, DateTime olderThan, string exts, string name, DmNode under, int max) {
+        DmFind r = new DmFind();
+        Dictionary<string, bool> ex = null;
+        if (!string.IsNullOrEmpty(exts)) {
+            ex = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            foreach (string e in exts.Split(new char[] { ' ', ';', ',' }, StringSplitOptions.RemoveEmptyEntries)) ex[e.StartsWith(".") ? e : "." + e] = true;
+        }
+        Regex rx = null; string sub = null;
+        if (name != null) name = name.Trim();
+        if (!string.IsNullOrEmpty(name)) {
+            if (name.IndexOf('*') >= 0 || name.IndexOf('?') >= 0)
+                rx = new Regex("^" + Regex.Escape(name).Replace("\\*", ".*").Replace("\\?", ".") + "$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            else sub = name;
+        }
+        foreach (DmFile f in BigFiles) {
+            if (f.Size < minSize) break;
+            if (f.Modified >= olderThan) continue;
+            if (ex != null) { int dot = f.Name.LastIndexOf('.'); if (dot < 0 || !ex.ContainsKey(f.Name.Substring(dot))) continue; }
+            if (sub != null && f.Name.IndexOf(sub, StringComparison.OrdinalIgnoreCase) < 0) continue;
+            if (rx != null && !rx.IsMatch(f.Name)) continue;
+            bool gone = false, inside = (under == null);
+            for (DmNode a = f.Dir; a != null; a = a.Parent) { if (a.Gone) { gone = true; break; } if (a == under) inside = true; }
+            if (gone || !inside) continue;
+            if (r.Files.Count < max) {
+                if (!FileThere(f.Path)) continue;
+                r.Files.Add(f);
+            }
+            r.Count++; r.Bytes += f.Size;
+        }
+        return r;
+    }
+    static bool FileThere(string p) {
+        try {
+            if (File.Exists(p)) return true;
+            if (Win && p.Length >= 248 && !p.StartsWith("\\\\")) return File.Exists("\\\\?\\" + p);
+        } catch { }
+        return false;
+    }
+    // 删掉一个文件后，从「找文件」的名单里去掉
+    public static void ForgetFile(string path) {
+        if (string.IsNullOrEmpty(path)) return;
+        string nm = System.IO.Path.GetFileName(path);
+        BigFiles.RemoveAll(f => string.Equals(f.Name, nm, StringComparison.OrdinalIgnoreCase) && string.Equals(f.Path, path, StringComparison.OrdinalIgnoreCase));
     }
     // 快照：前几层里够大的文件夹，用来和下次扫描比较谁变大了
     public static List<string> Snapshot(DmNode root, int maxDepth, long minSize) {
@@ -1010,6 +1064,8 @@ public class MapRow {
     public bool Locked { get; set; }
     public string LockTip { get; set; }
     public object Node { get; set; }
+    public string When { get; set; }    // 导出用：最近修改时间
+    public long Count { get; set; }     // 导出用：文件夹里的文件个数
 }
 public class AppRow : INotifyPropertyChanged {
     public string Name { get; set; }
@@ -1081,6 +1137,8 @@ public class GrowRow {
     public string Now { get; set; }
     public string Change { get; set; }
     public string ChangeBrush { get; set; }
+    public double BeforeBytes { get; set; }
+    public double NowBytes { get; set; }
 }
 '@
 if (-not ('DupFinder' -as [type])) { Add-Type -TypeDefinition $dupCode }
@@ -1106,6 +1164,53 @@ function FreeC { (Get-PSDrive C).Free }
 function DirBytes($p) { [double][DirStat]::Measure([string]$p) }
 # 向界面报告某一行的状态：kind = wait / run / ok / warn / fail / skip
 function SetStatus($idx, [string]$text, [string]$kind) { if ($sync -and $sync.Status) { $sync.Status[$idx] = @($text, $kind); $sync.StatusVer = [int]$sync.StatusVer + 1 } }
+
+# ---------- 中途取消 ----------
+# 用户点了「取消」后，后台只在安全的地方检查这个标记、停下来；返回 $true 时顺便记下「确实有没做完的」。
+# 换链接、删备份这类停在一半会出问题的步骤，执行期间把 CanCancel 设成 $false（界面上的取消按钮变灰），做完才停。
+function Stopping { if ($sync -and $sync.Cancel) { $sync.WasCancelled = $true; return $true }; return $false }
+function Set-CanCancel([bool]$b) { if ($sync -and $sync.P) { $sync.P.CanCancel = $b } }
+function Quote-Arg([string]$a) {
+    if ($a -eq '') { return '""' }
+    if ($a -notmatch '[\s"]') { return $a }
+    return '"' + (($a -replace '(\\*)"', '$1$1\"') -replace '(\\+)$', '$1$1') + '"'
+}
+# 运行 robocopy、compact 这类外部程序，返回 @{ Code; Cancelled }。
+# 用户取消时，只结束这一个由本工具自己启动的进程（不碰任何别的程序），Code 为 -1。
+# CopyBase >= 0 时，把 robocopy 每复制完一个文件输出的「大小<Tab>文件名」累加起来，报给进度条。
+function Invoke-Tool([string]$exe, [string[]]$argv, [string]$cwd = '', [double]$copyBase = -1) {
+    $r = @{ Code = -1; Cancelled = $false; Error = '' }
+    $si = New-Object System.Diagnostics.ProcessStartInfo
+    $si.FileName = $exe
+    $si.Arguments = (@($argv | ForEach-Object { Quote-Arg $_ }) -join ' ')
+    $si.UseShellExecute = $false; $si.CreateNoWindow = $true
+    $si.RedirectStandardOutput = $true; $si.RedirectStandardError = $true
+    if ($cwd) { $si.WorkingDirectory = $cwd }
+    $p = $null
+    try { $p = [System.Diagnostics.Process]::Start($si) } catch { $r.Error = $_.Exception.Message; return $r }
+    try {
+        $null = $p.StandardError.ReadToEndAsync()
+        $copied = [double]0
+        $task = $p.StandardOutput.ReadLineAsync()
+        while ($true) {
+            $got = $false
+            try { $got = $task.Wait(250) } catch { break }
+            if ($got) {
+                $line = $task.Result
+                if ($null -eq $line) { break }
+                if ($copyBase -ge 0) {
+                    $m = [regex]::Match($line, '(\d+)\t[^\t]*$')
+                    if ($m.Success) { $copied += [double]$m.Groups[1].Value; if ($sync -and $sync.P) { $sync.P.SubDone = $copyBase + $copied } }
+                }
+                $task = $p.StandardOutput.ReadLineAsync()
+            }
+            if (Stopping) { $r.Cancelled = $true; try { $p.Kill() } catch {}; break }
+        }
+        if ($r.Cancelled) { [void]$p.WaitForExit(10000); $r.Code = -1 }
+        else { $p.WaitForExit(); $r.Code = $p.ExitCode }
+    } finally { $p.Dispose() }
+    return $r
+}
 function IsLink($p) { $i = Get-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue; return [bool]($i -and ($i.Attributes -band [IO.FileAttributes]::ReparsePoint)) }
 
 function Get-Size([string[]]$paths, [string]$filter) {
@@ -1170,13 +1275,16 @@ function Remove-OneDir($d) {
 }
 function Remove-Contents([string[]]$paths, [string]$filter, [bool]$wholeDir) {
     foreach ($p in $paths) {
+        if (Stopping) { return }
         foreach ($it in (Get-Item -Path $p -Force -ErrorAction SilentlyContinue)) {
+            if (Stopping) { return }
             if (Test-Personal $it.FullName) { Log ((T "  跳过（在个人文件夹里，不删）：{0}") -f $($it.FullName)); OpLog '删除' (T '跳过：在个人文件夹里，不删') $it.FullName ''; continue }
             if ($it.PSIsContainer) {
                 if ($wholeDir) { Remove-OneDir $it }
                 else {
                     $f = if ($filter) { $filter } else { '*' }
                     foreach ($c in @(Get-ChildItem -LiteralPath $it.FullName -Filter $f -Force -ErrorAction SilentlyContinue)) {
+                        if (Stopping) { return }
                         if (Test-Personal $c.FullName) { continue }
                         if ($c.PSIsContainer) { Remove-OneDir $c } else { Remove-Item -LiteralPath $c.FullName -Force -ErrorAction SilentlyContinue }
                     }
@@ -1310,7 +1418,11 @@ function Invoke-Delete($it, $res, [switch]$Auto) {
     $kind = if ($it.Slow) { 'slow' } elseif ($it.Act) { 'action' } else { 'delete' }
     SetP @{ SubKind = $kind; SubStart = (Get-Date); FreeC0 = [double]$f0; Detail = $it.Note }
     if ($it.Svc) { $it.Svc | ForEach-Object { Stop-Service $_ -Force -ErrorAction SilentlyContinue } }
-    if ($it.Act) { & $it.Act } else { Remove-Contents $it.Paths $it.Filter ([bool]$it.Whole) }
+    if ($it.Act) { Set-CanCancel $false; try { & $it.Act } finally { Set-CanCancel $true } }
+    else {
+        Remove-Contents $it.Paths $it.Filter ([bool]$it.Whole)
+        if ($res -and $sync -and $sync.WasCancelled) { $res.Cancelled = $true }
+    }
     if ($it.Svc) { $it.Svc | ForEach-Object { Start-Service $_ -ErrorAction SilentlyContinue } }
     $freed = [math]::Max([double]0, [double]((FreeC) - $f0))
     if ($res) { $res.Freed = $freed }
@@ -1433,6 +1545,7 @@ function Rename-WithRetry([string]$from, [string]$to, $it, [int]$tries = 8) {
         try { [IO.Directory]::Move($from, $to); return @{ Err = ''; Tries = $i } }
         catch { $e = $_.Exception; if ($e.InnerException) { $e = $e.InnerException }; $err = $e.Message }
         if ($i -lt $tries) {
+            if (Stopping) { return @{ Err = $err; Tries = $i; Cancelled = $true } }
             SetP @{ Detail = ((T "原文件夹还被占用，关闭占用的程序后重试（第 {0} / {1} 次）：{2}") -f $i, ($tries - 1), $err) }
             [void](Close-Holders $it $from)
             Start-Sleep -Seconds 3
@@ -1454,7 +1567,9 @@ function Invoke-Move($it, $destRoot, $res) {
     SetP @{ MoveItem = $true; MoveBack = $false; HasKill = [bool]$it.Kill; MovePhase = 'kill'; PathNo = 0; PathCount = $todo.Count; MovePath = ''; MoveDest = ''; MoveReuse = $false }
     if ($it.Kill) { foreach ($s in $todo) { [void](Close-Holders $it $s) } }
     foreach ($src in $it.Paths) {
+        Set-CanCancel $true
         if (-not (Test-Path -LiteralPath $src)) { continue }
+        if (Stopping) { $m = (T '已取消，剩下的文件夹没有搬'); Log "  $m"; $res.Cancelled = $true; $res.Msgs += $m; break }
         if (IsLink $src) { Log ((T "  已经搬过（是链接），跳过 {0}") -f $src); $res.Skipped++; continue }
         if ($it.NoOneDrive -and $src -like '*OneDrive*') { Log ((T "  {0} 由 OneDrive 管理，不搬") -f $src); $res.Skipped++; continue }
         if ($src.Substring(0,1) -ieq $destRoot.Substring(0,1)) { Log ((T "  {0} 已在目标盘") -f $src); $res.Skipped++; continue }
@@ -1465,6 +1580,8 @@ function Invoke-Move($it, $destRoot, $res) {
         $pathNo = [int]$sync.P.PathNo + 1
         SetP @{ MovePhase = 'measure'; PathNo = $pathNo; MovePath = $src; MoveDest = $dst; MoveReuse = $reuse; SubKind = 'measure'; SubStart = (Get-Date); Detail = ((T "统计 {0} 的大小") -f $src) }
         $srcBytes = DirBytes $src
+        $cxNone = (T "已取消：{0} 还没开始复制，原文件夹没动") -f $src
+        if (Stopping) { Log "  $cxNone"; $res.Cancelled = $true; $res.Msgs += $cxNone; break }
         if ([long][DirStat]::Reparse -gt 0) {
             # 里面的链接（或系统压缩过的文件）复制和核对时都会被跳过，搬完删原目录时就会丢。宁可不搬
             $m = (T "{0} 里有 {1} 个特殊项目（链接，或用 Windows 压缩功能压过的文件，比如 {2}）。复制时可能漏掉它们，为了不丢东西，这个文件夹不搬，原目录未动") -f $src, [DirStat]::Reparse, [DirStat]::ReparseSample
@@ -1474,6 +1591,7 @@ function Invoke-Move($it, $destRoot, $res) {
         if ($reuse) {
             SetP @{ SubStart = (Get-Date); Detail = ((T "统计上次留下的副本 {0}") -f $dst) }
             $haveBytes = DirBytes $dst; $haveFiles = [long][DirStat]::Files
+            if (Stopping) { Log "  $cxNone"; $res.Cancelled = $true; $res.Msgs += $cxNone; break }
             SetP @{ Detail = ((T "核对 {0} 是不是这个文件夹的旧副本") -f $dst) }
             $extra = Get-ExtraCount $dst $src
             if ($extra -lt 0 -or ($extra -gt [math]::Max(20, $haveFiles * 0.05))) {
@@ -1491,6 +1609,7 @@ function Invoke-Move($it, $destRoot, $res) {
         $destFree0 = [double](Get-PSDrive $destDrive.Substring(0,1)).Free
         $need = [math]::Max([double]0, [double]($srcBytes - $haveBytes)) + [double]200MB
         if ($destFree0 -lt $need) { $m = (T "{0} 只剩 {1}，还需要约 {2}，放不下，原目录未动") -f $destDrive, (GB $destFree0), (GB $need); Log "  $m"; OpLog '搬运' (T '搬家失败') $src $m; $res.Fail++; $res.Msgs += $m; continue }
+        if (Stopping) { Log "  $cxNone"; $res.Cancelled = $true; $res.Msgs += $cxNone; break }
         Log ((T "  搬 {0} ({1}) -> {2}") -f $src, (GB $srcBytes), $dst)
         New-Item -ItemType Directory -Path $dst -Force | Out-Null
         # 搬软件时：目标文件夹先设成和 C 盘上一样的访问权限，再连同每个文件的权限一起复制
@@ -1503,22 +1622,23 @@ function Invoke-Move($it, $destRoot, $res) {
         # 用上次的副本时用 /MIR：副本和原目录完全一致（原目录里已删掉的旧文件，副本里也删掉）
         $mode = if ($reuse) { '/MIR' } else { '/E' }
         $more = @(); if ($reuse -and $it.Sddl) { $more += '/SECFIX' }   # 用上次的副本时，连没变的文件的权限也改对
-        $copied = [double]0
-        & "$sys32\robocopy.exe" "$src" "$dst" $mode $cp @more /DCOPY:DAT /R:2 /W:2 /NDL /NJH /NJS /NP /BYTES /XJ | ForEach-Object {
-            $m = [regex]::Match([string]$_, '(\d+)\t[^\t]*$')
-            if ($m.Success) { $copied += [double]$m.Groups[1].Value; if ($sync -and $sync.P) { $sync.P.SubDone = $base + $copied } }
-        }
-        if ($LASTEXITCODE -ge 8) { $m = ((T "复制失败（robocopy 代码 {0}，可能是空间不够或有文件被占用），原目录未动") -f $LASTEXITCODE); Log "  $m"; OpLog '搬运' (T '搬家失败') $src $m; $res.Fail++; $res.Msgs += $m; continue }
+        $rc = Invoke-Tool "$sys32\robocopy.exe" (@($src, $dst, $mode, $cp) + $more + @('/DCOPY:DAT', '/R:2', '/W:2', '/NDL', '/NJH', '/NJS', '/NP', '/BYTES', '/XJ')) '' $base
+        $cxHalf = (T "已取消：{0} 原文件夹没动。已复制的部分留在 {1}，下次再搬这一项会接着复制；不需要的话，可以在「搬家管理」里删掉这份副本") -f $src, $dst
+        $cxCopied = (T "已取消：{0} 已经复制到 {1}，但还没换成链接，原文件夹没动。下次再搬只补有变化的文件") -f $src, $dst
+        if ($rc.Cancelled) { Log "  $cxHalf"; OpLog '搬运' (T '搬家已取消') $src $cxHalf; $res.Cancelled = $true; $res.Msgs += $cxHalf; break }
+        if ($rc.Code -ge 8 -or $rc.Code -lt 0) { $m = ((T "复制失败（robocopy 代码 {0}，可能是空间不够或有文件被占用），原目录未动") -f $rc.Code); Log "  $m"; OpLog '搬运' (T '搬家失败') $src $m; $res.Fail++; $res.Msgs += $m; continue }
         SetP @{ MovePhase = 'verify'; SubKind = 'measure'; SubStart = (Get-Date); Detail = (T '复制完成，核对两边大小') }
         # 软件都已关掉，原目录不会再变：两边重新数一遍，文件个数一个不能少、总大小几乎一致，才继续（之后才会删 C 盘上的原目录）
         $srcBytes = DirBytes $src; $srcFiles = [long][DirStat]::Files
         $dstBytes = DirBytes $dst; $dstFiles = [long][DirStat]::Files
+        if (Stopping) { Log "  $cxCopied"; OpLog '搬运' (T '搬家已取消') $src $cxCopied; $res.Cancelled = $true; $res.Msgs += $cxCopied; break }
         if ($dstFiles -lt $srcFiles -or [math]::Abs($dstBytes - $srcBytes) -gt [math]::Max([double]16MB, [double]$srcBytes * 0.001)) {
             $m = (T "核对不一致（源 {0:N0} 个文件 {1}，目标 {2:N0} 个文件 {3}），原目录未动") -f $srcFiles, (GB $srcBytes), $dstFiles, (GB $dstBytes)
             Log "  $m"; OpLog '搬运' (T '搬家失败') $src $m; $res.Fail++; $res.Msgs += $m; continue
         }
         Log ((T "  核对通过：{0:N0} 个文件，{1}") -f $srcFiles, (GB $srcBytes))
 
+        if (Stopping) { Log "  $cxCopied"; OpLog '搬运' (T '搬家已取消') $src $cxCopied; $res.Cancelled = $true; $res.Msgs += $cxCopied; break }
         SetP @{ MovePhase = 'link'; SubKind = 'action'; SubStart = (Get-Date); Detail = ((T "把 {0} 换成指向 {1} 的链接") -f $src, $dst) }
         $bak = "$src.moved_backup"
         if (Test-Path -LiteralPath $bak) {
@@ -1527,6 +1647,7 @@ function Invoke-Move($it, $destRoot, $res) {
             try { [IO.Directory]::Move($bak, $old); Log ((T "  以前留下的备份已改名为 {0}，确认没用后可手动删除") -f $old) } catch {}
         }
         $r = Rename-WithRetry $src $bak $it
+        if ($r.Cancelled) { Log "  $cxCopied"; OpLog '搬运' (T '搬家已取消') $src $cxCopied; $res.Cancelled = $true; $res.Msgs += $cxCopied; break }
         if ($r.Err) {
             $self = [string]$env:CLEANC_SELF
             $why = if ($it.BusyHint) { [string]$it.BusyHint } else { (T '还有程序开着里面的文件。请彻底退出相关的聊天软件（微信、QQ、企业微信、飞书、钉钉等，包括屏幕右下角托盘里的图标），关掉打开着这个文件夹的窗口，再点一次「执行」') }
@@ -1534,6 +1655,8 @@ function Invoke-Move($it, $destRoot, $res) {
             $m = ((T "已复制到 {0}，但原文件夹被占用，还没换成链接：{1}。再搬时直接用这份副本，只补差异，很快就好") -f $dst, $why)
             Log ((T "  {0}（系统提示：{1}）") -f $m, $($r.Err)); OpLog '搬运' (T '搬家未完成：原文件夹被占用') $src $m; $res.Wait++; $res.Msgs += $m; continue
         }
+        # 从这里到删掉 C 盘上的备份，停在一半会留下半截状态：不能取消，做完这一项才停
+        Set-CanCancel $false
         & "$sys32\cmd.exe" /c mklink /J "$src" "$dst" | Out-Null
         if (-not (IsLink $src)) {
             try { [IO.Directory]::Move($bak, $src) } catch {}
@@ -1559,6 +1682,7 @@ function Invoke-Move($it, $destRoot, $res) {
         if (Test-Path -LiteralPath $bak) { $m = ((T "已搬好，但 C 盘上的备份没删干净（有文件被占用），过后可手动删除：{0}") -f $bak); Log "  $m"; OpLog '删除' (T '搬家后 C 盘旧文件夹没删干净') $bak ''; $res.Msgs += $m }
         else { Log ((T "  完成  {0}  ->  {1}") -f $src, $dst); OpLog '删除' (T '搬家后删除 C 盘上的原文件夹') $bak (((T "数据已在 {0}") -f $dst)) }
     }
+    Set-CanCancel $true
 }
 
 
@@ -1831,6 +1955,14 @@ function Get-MoveState($rec) {
 }
 
 # 搬回 C 盘：复制回来、核对、拆掉链接、换回真文件夹，最后删掉目标盘上的那份
+# 搬回时取消：删掉复制回 C 盘的那一半（数据仍在目标盘上，C 盘上的链接没动）
+function Undo-MoveBackCopy([string]$tmp, [bool]$fresh, [string]$dst, [string]$src, $res) {
+    $res.Cancelled = $true
+    if ($fresh -and (Test-Path -LiteralPath $tmp) -and -not (IsLink $tmp)) { & "$sys32\cmd.exe" /c rd /s /q "\\?\$tmp" 2>$null | Out-Null }
+    if (Test-Path -LiteralPath $tmp) { $res.Msg = (T "已取消，什么都没改，数据仍在 {0}。复制回 C 盘的那一半在 {1}，确认没用后可以手动删除") -f $dst, $tmp }
+    else { $res.Msg = (T "已取消，什么都没改，数据仍在 {0}。复制回 C 盘的那一半已删掉") -f $dst }
+    OpLog '搬运' (T '搬回 C 盘已取消') $src $res.Msg
+}
 function Invoke-MoveBack($rec, $res) {
     $res.Ok = $false; $res.Msg = ''
     $src = [string]$rec.Src; $dst = [string]$rec.Dst
@@ -1842,23 +1974,24 @@ function Invoke-MoveBack($rec, $res) {
     [void](Close-Holders $it $src); [void](Close-Holders $it $dst)
     SetP @{ MovePhase = 'measure'; SubKind = 'measure'; SubStart = (Get-Date); Detail = ((T "统计 {0} 的大小") -f $dst) }
     $bytes = DirBytes $dst; $files = [long][DirStat]::Files
+    if (Stopping) { $res.Cancelled = $true; $res.Msg = (T '已取消，什么都没改'); return }
     $free = [double](FreeC)
     if ($free -lt $bytes + 2GB) { $res.Msg = (T "C 盘只剩 {0}，放不下 {1}（还要留 2 GB 余量）") -f (GB $free), (GB $bytes); OpLog '搬运' (T '搬回 C 盘失败') $src $res.Msg; return }
     $tmp = "$src.cleanc_back"
     if (Test-Path -LiteralPath $tmp) { try { [IO.Directory]::Move($tmp, ("{0}_{1:yyyyMMddHHmmss}" -f $tmp, (Get-Date))) } catch {} }
+    $tmpFresh = -not (Test-Path -LiteralPath $tmp)   # 是这次新建的，里面只有这次复制回来的东西
     New-Item -ItemType Directory -Path $tmp -Force | Out-Null
     SetP @{ MovePhase = 'copy'; SubKind = 'copy'; SubTotal = [double]$bytes; SubBase = [double]0; SubDone = [double]0; SubStart = (Get-Date); DestDrive = $env:SystemDrive; DestFree0 = $free; Detail = "$dst  ->  $src" }
-    $copied = [double]0
-    & "$sys32\robocopy.exe" "$dst" "$tmp" /E /COPY:DAT /DCOPY:DAT /R:2 /W:2 /NDL /NJH /NJS /NP /BYTES /XJ | ForEach-Object {
-        $m = [regex]::Match([string]$_, '(\d+)\t[^\t]*$')
-        if ($m.Success) { $copied += [double]$m.Groups[1].Value; if ($sync -and $sync.P) { $sync.P.SubDone = $copied } }
-    }
-    if ($LASTEXITCODE -ge 8) { $res.Msg = ((T "复制回 C 盘失败（robocopy 代码 {0}），什么都没改，复制了一半的临时文件夹在 {1}") -f $LASTEXITCODE, $tmp); OpLog '搬运' (T '搬回 C 盘失败') $src $res.Msg; return }
+    $rc = Invoke-Tool "$sys32\robocopy.exe" @($dst, $tmp, '/E', '/COPY:DAT', '/DCOPY:DAT', '/R:2', '/W:2', '/NDL', '/NJH', '/NJS', '/NP', '/BYTES', '/XJ') '' 0
+    if ($rc.Cancelled) { Undo-MoveBackCopy $tmp $tmpFresh $dst $src $res; return }
+    if ($rc.Code -ge 8 -or $rc.Code -lt 0) { $res.Msg = ((T "复制回 C 盘失败（robocopy 代码 {0}），什么都没改，复制了一半的临时文件夹在 {1}") -f $rc.Code, $tmp); OpLog '搬运' (T '搬回 C 盘失败') $src $res.Msg; return }
     SetP @{ MovePhase = 'verify'; SubKind = 'measure'; SubStart = (Get-Date); Detail = (T '核对两边是否一致') }
     $b2 = DirBytes $tmp; $f2 = [long][DirStat]::Files
+    if (Stopping) { Undo-MoveBackCopy $tmp $tmpFresh $dst $src $res; return }
     if ($f2 -lt $files -or [math]::Abs($b2 - $bytes) -gt [math]::Max([double]16MB, [double]$bytes * 0.001)) {
         $res.Msg = (T "核对不一致（目标盘 {0:N0} 个文件，复制回来 {1:N0} 个），什么都没改") -f $files, $f2; OpLog '搬运' (T '搬回 C 盘失败') $src $res.Msg; return
     }
+    Set-CanCancel $false   # 拆链接、换回文件夹、删目标盘上的那份：不能停在一半
     SetP @{ MovePhase = 'link'; SubKind = 'action'; SubStart = (Get-Date); Detail = (T '拆掉链接，换回真正的文件夹') }
     & "$sys32\cmd.exe" /c rmdir "$src" 2>$null | Out-Null
     if (Test-Path -LiteralPath $src) { $res.Msg = ((T "C 盘上的链接拆不掉（可能被占用），什么都没改；复制回来的数据在 {0}") -f $tmp); OpLog '搬运' (T '搬回 C 盘失败') $src $res.Msg; return }
@@ -3087,6 +3220,99 @@ Android 模拟器	Android emulator
 日志	Log
 切换界面语言	Switch UI language
 {0} 项	{0} items
+：已中途取消	: Cancelled
+正在取消…	Cancelling…
+正在取消：做完手上这一小步就停下，已经做完的不会撤销。	Cancelling: it will stop after the current small step. What's already done won't be undone.
+这一步不能中断（正在换成链接、删除备份或运行系统命令），做完就可以取消。	This step can't be interrupted (creating a link, deleting a backup or running a system command). You can cancel once it's done.
+已经做完的项目不会撤销，还没开始的都不做了。\n\n正在做的这一项会停在安全的地方：清理会停下，已经删掉的不会回来；搬家如果还在复制，C 盘上的原文件夹不动，已复制的部分留在目标盘，下次再搬会接着复制；如果正在换成链接或运行系统命令，会等这一步做完再停。	Items already done won't be undone, and items not started yet will be skipped.\n\nThe current item stops at a safe point: a cleanup stops where it is (anything already deleted stays deleted); a move that is still copying leaves the original folder on C: untouched and keeps the copied part on the target drive, so the next move picks up where it left off; if it is creating a link or running a system command, it finishes that step first.
+已经删掉的文件不会回来，剩下的不删了。	Files already deleted won't come back; the rest won't be deleted.
+已经合并的保持合并，照常可用；剩下的不合并了。	Files already merged stay merged and work as usual; the rest won't be merged.
+已经移到回收站的还在回收站里，剩下的不删了。	What was already moved stays in the Recycle Bin; the rest won't be deleted.
+已经压缩的文件保持压缩，照常可用；剩下的不压缩了。	Files already compressed stay compressed and work as usual; the rest won't be compressed.
+数据仍在目标盘上，C 盘上的链接不动，软件照常使用；复制回 C 盘的那一半会删掉。如果已经在换回文件夹，会等这一步做完再停。	The data stays on the target drive and the link on C: is left as it is, so apps keep working; the partial copy on C: will be deleted. If it is already swapping the folder back, it finishes that step first.
+C 盘上的原文件夹不动，软件照常使用。已复制到目标盘的部分先留着，下次再搬会接着复制；不需要的话，可以在「搬家管理」里删掉这份副本。如果已经在换成链接，会等这一步做完再停。	The original folder on C: is left untouched and apps keep working. The part already copied to the target drive is kept, so the next move picks up where it left off; if you don't need it, delete that copy in "Moved folders". If it is already creating the link, it finishes that step first.
+取消「{0}」？	Cancel "{0}"?
+继续做	Keep going
+停下来	Stop
+正在取消：做完手上这一小步就停下。	Cancelling: stopping after the current small step.
+ · 比上次 {0}	 · {0} since last scan
+找到 {0:N0} 个文件，共 {1}	Found {0:N0} files, {1} in total
+，下面列出最大的 {0:N0} 个	; the {0:N0} largest are listed below
+在 {0} 里找，只能找到扫描时记下的 1 MB 以上的文件	Searching {0}. Only files of 1 MB or more recorded during the scan can be found
+没有符合条件的文件，可以把条件放宽一些	No files match. Try loosening the filters
+ 双击一行可以跳到这个文件夹。	 Double-click a row to open that folder.
+这次扫描里没有这个文件夹	This folder isn't in the current scan
+{0}\n\n它可能已经被删掉、改了名，或者变得很小。	{0}\n\nIt may have been deleted or renamed, or it has become very small.
+没有可以导出的内容	Nothing to export
+先扫描一块盘，再导出看到的列表。	Scan a drive first, then export the list you see.
+找文件	Find files
+CSV 文件（可以用 Excel 打开）	CSV file (opens in Excel)
+上次（字节）	Previous (bytes)
+这次（字节）	Current (bytes)
+变化（字节）	Change (bytes)
+名称	Name
+路径	Path
+类型	Type
+大小（字节）	Size (bytes)
+大小	Size
+文件数	Files
+最近修改	Last modified
+链接	Link
+没能保存	Couldn't save
+空间地图：已导出 {0} 行到 {1}	Space map: exported {0} rows to {1}
+已导出	Exported
+{0:N0} 行，已保存到：\n{1}	{0:N0} rows saved to:\n{1}
+打开所在位置	Show in folder
+已中途取消。	Cancelled.
+已中途取消，列表没有更新	Cancelled; the list wasn't updated
+扫描已取消，下面还是上一次扫描的结果。	Scan cancelled. The list below is still from the previous scan.
+扫描已取消。点「扫描」重新开始。	Scan cancelled. Click "Scan" to start again.
+已中途取消：还没开始的项目都没做，已经做完的不会撤销。	Cancelled: items not started were skipped, and items already done weren't undone.
+已中途取消，释放 {0}，C 盘现在剩余 {1}	Cancelled, freed {0}, C: now has {1} free
+已中途取消：C 盘从剩余 {0} 变成 {1}。每一项的结果写在列表里；想看还剩什么，再点「扫描」。	Cancelled: free space on C: went from {0} to {1}. Each item's result is shown in the list; click "Scan" again to see what's left.
+已中途取消	Cancelled
+已中途取消，删除了 {0} 个文件	Cancelled, deleted {0} files
+已中途取消：删除了 {0} 个重复文件，剩下的没删。{1}	Cancelled: deleted {0} duplicate files; the rest weren't deleted. {1}
+已中途取消，省了 {0}	Cancelled, saved {0}
+压缩已中途取消	Compression cancelled
+\n\n已经压缩的文件保持压缩，剩下的没压缩。想压缩剩下的，再压缩一次这个文件夹就好。	\n\nFiles already compressed stay compressed; the rest weren't compressed. To compress the rest, compress this folder again.
+已取消	Cancelled
+已中途取消，没统计到的软件显示安装时登记的大小	Cancelled; apps not measured show the size recorded at install
+剩下的没删。	The rest weren't deleted.
+已中途取消，合并了 {0} 个文件	Cancelled, merged {0} files
+已中途取消：合并了 {0} 个重复文件，剩下的没合并。每个位置的文件都还在。	Cancelled: merged {0} duplicate files; the rest weren't merged. The files are still in every location.
+已取消，剩下的文件夹没有搬	Cancelled; the remaining folders weren't moved
+已取消：{0} 还没开始复制，原文件夹没动	Cancelled: {0} hadn't started copying; the original folder is untouched
+已取消：{0} 原文件夹没动。已复制的部分留在 {1}，下次再搬这一项会接着复制；不需要的话，可以在「搬家管理」里删掉这份副本	Cancelled: the original folder {0} is untouched. The part already copied is kept in {1}, and moving this item again picks up where it left off; if you don't need it, delete that copy in "Moved folders"
+已取消：{0} 已经复制到 {1}，但还没换成链接，原文件夹没动。下次再搬只补有变化的文件	Cancelled: {0} was fully copied to {1} but not yet replaced with a link; the original folder is untouched. Moving it again only copies files that changed
+搬家已取消	Move cancelled
+已取消，什么都没改，数据仍在 {0}。复制回 C 盘的那一半在 {1}，确认没用后可以手动删除	Cancelled, nothing was changed; the data is still in {0}. The partial copy on C: is in {1}; you can delete it yourself once you're sure it isn't needed
+已取消，什么都没改，数据仍在 {0}。复制回 C 盘的那一半已删掉	Cancelled, nothing was changed; the data is still in {0}. The partial copy on C: was deleted
+搬回 C 盘已取消	Move back to C: cancelled
+已取消，什么都没改	Cancelled, nothing was changed
+中途取消：已搬 {0}；{1}	Cancelled partway: moved {0}; {1}
+中途取消：清理了一部分，释放 {0}	Cancelled partway: partly cleaned, freed {0}
+已取消，没有处理	Cancelled, not processed
+已中途取消。C 盘现在剩余 {0}	Cancelled. C: now has {0} free
+  已中途取消：{0}	  Cancelled: {0}
+压缩文件夹（NTFS），中途取消	Compress folder (NTFS), cancelled partway
+已取消，什么都没动。	Cancelled, nothing was touched.
+停在安全的地方，已经做完的不会撤销	Stops at a safe point; what's already done won't be undone
+导出 CSV	Export CSV
+把现在看到的列表存成 CSV 文件，可以用 Excel 打开	Save the list you see as a CSV file that opens in Excel
+大小至少	At least
+多久没改过	Not modified for
+30 天以上	30+ days
+半年以上	6+ months
+1 年以上	1+ year
+2 年以上	2+ years
+压缩包和安装包	Archives and installers
+光盘映像和虚拟磁盘	Disc images and virtual disks
+程序和游戏数据	Programs and game data
+日志、转储和临时文件	Logs, dumps and temp files
+文件名里包含这些字。可以用 * 和 ?，比如 *.mp4、备份*	Text in the file name. You can use * and ?, e.g. *.mp4, backup*
+只找当前文件夹里的	Only in the current folder
+打开「空间地图」扫描 C 盘，看清哪些文件夹和文件最占地方	Open the "Space map" and scan C: to see which folders and files take up the most space
 '@
 # 英文的帮助页（整页替换中文的那一页）
 $script:helpEnXaml = @'
@@ -3186,7 +3412,7 @@ $script:helpEnXaml = @'
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Analyze usage</Run><Run> lists the largest folders on C: and files over 1 GB. The results appear in the "Run log" at the bottom left.</Run></TextBlock>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Analyze usage</Run><Run> opens the "Space map" and scans drive C:, so you can see which folders and files take up the most space.</Run></TextBlock>
               </DockPanel>
             </StackPanel>
           </Border>
@@ -3274,7 +3500,15 @@ $script:helpEnXaml = @'
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Largest files</Run><Run>: lists the 500 largest files over 50 MB on the drive. </Run><Run FontWeight="SemiBold">Compare with last scan</Run><Run>: compares with the previous scan and lists folders that grew or shrank by more than 100 MB, so you can find what has been slowly eating up your space.</Run></TextBlock>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Find files</Run><Run>: searches the files of 1 MB or more recorded during the scan, largest first. Filter by size, how long since they were modified (for example 6+ months), type (videos, archives and installers, disc images and virtual disks…) and name; names can use * and ? (for example *.mp4). Tick "Only in the current folder" to search just the folder you opened.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Since last scan</Run><Run>: compares with the previous scan and lists folders that grew or shrank by more than 100 MB, so you can find what has been slowly eating up your space; double-click a row to open that folder. The folder list also shows changes such as "+2.1 GB since last scan".</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Export CSV</Run><Run>: saves the list you see (folders, found files or the comparison) as a CSV file you can open, sort and share in Excel.</Run></TextBlock>
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
@@ -3397,7 +3631,8 @@ $script:helpEnXaml = @'
                 <TextBlock Text="Common questions" Style="{StaticResource HelpHead}"/>
               </StackPanel>
               <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Why does ClearC need administrator rights?</Run><LineBreak/><Run>Cleaning locations such as system temporary files and the Windows Update cache requires administrator rights.</Run></TextBlock>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Can I close the window while it's running?</Run><LineBreak/><Run>Please don't close the window until the work is done. You can click "Continue in background" to collapse the progress card; progress is still shown at the bottom of the window and on the taskbar icon.</Run></TextBlock>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Can I cancel partway?</Run><LineBreak/><Run>Yes. The progress card and the bottom of the window both have a "Cancel" button. It stops at a safe point and doesn't undo what's already done: a cleanup stops where it is; a move that is still copying leaves the original folder on C: untouched and keeps the copied part on the target drive, so the next move picks up where it left off; when moving back to C:, the partial copy is deleted and nothing is changed. While it is creating a link, deleting a backup or running a system command (such as cleaning up Windows Update), the button is greyed out; you can cancel as soon as that step is done.</Run></TextBlock>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Can I close the window while it's running?</Run><LineBreak/><Run>Please don't close the window until the work is done; to stop, click "Cancel". You can click "Continue in background" to collapse the progress card; progress is still shown at the bottom of the window and on the taskbar icon.</Run></TextBlock>
               <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Where can I see the details?</Run><LineBreak/><Run>For the deletions and moves that were made, see "Activity log" on the left. For technical details of what the program did, see "Run log" at the bottom left; the full file is at %TEMP%\CleanC-run.log.</Run></TextBlock>
               <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Less space freed than expected?</Run><LineBreak/><Run>Files moved to the Recycle Bin only free up space after you empty the Recycle Bin, and files in use by other programs are skipped.</Run></TextBlock>
             </StackPanel>
@@ -4395,7 +4630,7 @@ if ($script:mode -match '(?i)/autoclean') {
 
       <DockPanel Grid.Row="0" Margin="0,0,0,18">
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top" Margin="16,4,0,0">
-          <Button x:Name="BtnHogs" Content="分析占用" Margin="0,0,8,0" ToolTip="列出 C 盘上最占地方的文件夹和超过 1 GB 的文件，结果写在运行记录里"/>
+          <Button x:Name="BtnHogs" Content="分析占用" Margin="0,0,8,0" ToolTip="打开「空间地图」扫描 C 盘，看清哪些文件夹和文件最占地方"/>
           <Button x:Name="BtnScan" Content="扫描"/>
         </StackPanel>
         <StackPanel>
@@ -4733,6 +4968,7 @@ if ($script:mode -match '(?i)/autoclean') {
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
         <RowDefinition Height="*"/>
         <RowDefinition Height="Auto"/>
       </Grid.RowDefinitions>
@@ -4751,10 +4987,12 @@ if ($script:mode -match '(?i)/autoclean') {
         <Border DockPanel.Dock="Right" Style="{StaticResource SegBox}" VerticalAlignment="Center">
           <StackPanel Orientation="Horizontal">
             <RadioButton x:Name="MapViewDirs" GroupName="mapview" Content="文件夹" IsChecked="True" Style="{StaticResource Seg}"/>
-            <RadioButton x:Name="MapViewFiles" GroupName="mapview" Content="最大的文件" Style="{StaticResource Seg}"/>
+            <RadioButton x:Name="MapViewFiles" GroupName="mapview" Content="找文件" Style="{StaticResource Seg}"/>
             <RadioButton x:Name="MapViewGrow" GroupName="mapview" Content="和上次比" Style="{StaticResource Seg}"/>
           </StackPanel>
         </Border>
+        <Button x:Name="BtnMapExport" DockPanel.Dock="Right" Style="{StaticResource Small}" Content="导出 CSV" Margin="0,0,10,0" VerticalAlignment="Center" IsEnabled="False"
+                ToolTip="把现在看到的列表存成 CSV 文件，可以用 Excel 打开"/>
         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
           <Button x:Name="BtnMapUp" Style="{StaticResource Small}" Margin="0,0,10,0" IsEnabled="False" ToolTip="回到上一级文件夹">
             <StackPanel Orientation="Horizontal">
@@ -4768,7 +5006,43 @@ if ($script:mode -match '(?i)/autoclean') {
           </StackPanel>
         </StackPanel>
       </DockPanel>
-      <Border Grid.Row="2" Style="{StaticResource Card}" Padding="0,6,0,6">
+      <!-- 找文件的条件：只在「找文件」时显示 -->
+      <WrapPanel x:Name="MapFilter" Grid.Row="2" Margin="0,0,0,10" Visibility="Collapsed">
+        <StackPanel Orientation="Horizontal" Margin="0,2,18,2">
+          <TextBlock Text="大小至少" VerticalAlignment="Center" Foreground="#6E6E73" Margin="0,0,8,0"/>
+          <ComboBox x:Name="MapMinSize" Width="96" SelectedIndex="2">
+            <ComboBoxItem Content="1 MB" Tag="1"/><ComboBoxItem Content="10 MB" Tag="10"/><ComboBoxItem Content="50 MB" Tag="50"/>
+            <ComboBoxItem Content="100 MB" Tag="100"/><ComboBoxItem Content="500 MB" Tag="500"/><ComboBoxItem Content="1 GB" Tag="1024"/>
+          </ComboBox>
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Margin="0,2,18,2">
+          <TextBlock Text="多久没改过" VerticalAlignment="Center" Foreground="#6E6E73" Margin="0,0,8,0"/>
+          <ComboBox x:Name="MapAge" Width="120" SelectedIndex="0">
+            <ComboBoxItem Content="不限" Tag="0"/><ComboBoxItem Content="30 天以上" Tag="30"/><ComboBoxItem Content="半年以上" Tag="182"/>
+            <ComboBoxItem Content="1 年以上" Tag="365"/><ComboBoxItem Content="2 年以上" Tag="730"/>
+          </ComboBox>
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Margin="0,2,18,2">
+          <TextBlock Text="类型" VerticalAlignment="Center" Foreground="#6E6E73" Margin="0,0,8,0"/>
+          <ComboBox x:Name="MapType" Width="190" SelectedIndex="0">
+            <ComboBoxItem Content="全部" Tag=""/>
+            <ComboBoxItem Content="视频" Tag="video"/>
+            <ComboBoxItem Content="压缩包和安装包" Tag="archive"/>
+            <ComboBoxItem Content="光盘映像和虚拟磁盘" Tag="image"/>
+            <ComboBoxItem Content="图片" Tag="picture"/>
+            <ComboBoxItem Content="音乐" Tag="music"/>
+            <ComboBoxItem Content="文档" Tag="doc"/>
+            <ComboBoxItem Content="程序和游戏数据" Tag="program"/>
+            <ComboBoxItem Content="日志、转储和临时文件" Tag="log"/>
+          </ComboBox>
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Margin="0,2,18,2">
+          <TextBlock Text="名称" VerticalAlignment="Center" Foreground="#6E6E73" Margin="0,0,8,0"/>
+          <TextBox x:Name="MapName" Width="150" ToolTip="文件名里包含这些字。可以用 * 和 ?，比如 *.mp4、备份*"/>
+        </StackPanel>
+        <CheckBox x:Name="MapUnder" Content="只找当前文件夹里的" VerticalAlignment="Center" Margin="0,2,0,2"/>
+      </WrapPanel>
+      <Border Grid.Row="3" Style="{StaticResource Card}" Padding="0,6,0,6">
         <Grid>
           <ListView x:Name="MapList" Background="Transparent" BorderThickness="0" ItemTemplate="{StaticResource MapRowTpl}" ItemContainerStyle="{StaticResource SelRow}"
                     ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"/>
@@ -4796,7 +5070,7 @@ if ($script:mode -match '(?i)/autoclean') {
           </StackPanel>
         </Grid>
       </Border>
-      <DockPanel Grid.Row="3" Margin="0,14,0,0">
+      <DockPanel Grid.Row="4" Margin="0,14,0,0">
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
           <Button x:Name="BtnMapOpen" Content="打开位置" Margin="0,0,8,0" IsEnabled="False"/>
           <Button x:Name="BtnMapCompress" Content="压缩（不删文件）" Margin="0,0,8,0" IsEnabled="False"
@@ -5306,7 +5580,7 @@ if ($script:mode -match '(?i)/autoclean') {
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">分析占用</Run><Run>会列出 C 盘上最大的文件夹和超过 1 GB 的文件，结果写在左下角的「运行记录」里。</Run></TextBlock>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">分析占用</Run><Run>会打开「空间地图」并扫描 C 盘，看清哪些文件夹和文件最占地方。</Run></TextBlock>
               </DockPanel>
             </StackPanel>
           </Border>
@@ -5394,7 +5668,15 @@ if ($script:mode -match '(?i)/autoclean') {
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">最大的文件</Run><Run>：列出这块盘上 50 MB 以上最大的 500 个文件。</Run><Run FontWeight="SemiBold">和上次比</Run><Run>：和上一次扫描对比，列出变大或变小超过 100 MB 的文件夹，找出空间是被谁慢慢吃掉的。</Run></TextBlock>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">找文件</Run><Run>：在扫描时记下的 1 MB 以上的文件里找，从大到小排。可以按大小、多久没改过（比如半年以上）、类型（视频、压缩包和安装包、光盘映像和虚拟磁盘……）和名称筛选，名称里可以用 * 和 ?（比如 *.mp4）；勾选「只找当前文件夹里的」，就只找刚才点进去的那个文件夹。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">和上次比</Run><Run>：和上一次扫描对比，列出变大或变小超过 100 MB 的文件夹，找出空间是被谁慢慢吃掉的；双击一行跳到那个文件夹。文件夹列表里也会标出「比上次 +2.1 GB」这样的变化。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">导出 CSV</Run><Run>：把现在看到的列表（文件夹、找到的文件或和上次比的结果）存成 CSV 文件，可以用 Excel 打开、排序、发给别人。</Run></TextBlock>
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
@@ -5517,7 +5799,8 @@ if ($script:mode -match '(?i)/autoclean') {
                 <TextBlock Text="常见问题" Style="{StaticResource HelpHead}"/>
               </StackPanel>
               <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">为什么要管理员权限？</Run><LineBreak/><Run>清理系统临时文件、Windows 更新缓存等位置，需要管理员权限。</Run></TextBlock>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">执行时能关窗口吗？</Run><LineBreak/><Run>做完前请不要关闭窗口。可以点「在后台继续」收起进度卡片，窗口底部和任务栏图标上都能看到进度。</Run></TextBlock>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">做到一半能取消吗？</Run><LineBreak/><Run>可以。进度卡片和窗口底部都有「取消」按钮，会停在安全的地方，已经做完的不会撤销：清理会停下；搬家如果还在复制，C 盘上的原文件夹不动，已复制的部分留在目标盘，下次再搬会接着复制；搬回 C 盘时复制回来的那一半会删掉，什么都不改。正在换成链接、删除备份或运行系统命令（比如清理 Windows 更新）时按钮是灰的，等这一步做完就能取消。</Run></TextBlock>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">执行时能关窗口吗？</Run><LineBreak/><Run>做完前请不要关闭窗口，想停下请点「取消」。可以点「在后台继续」收起进度卡片，窗口底部和任务栏图标上都能看到进度。</Run></TextBlock>
               <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">在哪看详细过程？</Run><LineBreak/><Run>做过哪些删除和搬运，看左侧的「操作日志」；程序运行的技术细节，看左下角「运行记录」，完整文件在 %TEMP%\CleanC-run.log。</Run></TextBlock>
               <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">释放的空间比预计少？</Run><LineBreak/><Run>放进回收站的文件，要清空回收站后才真正释放空间；正被其他程序占用的文件会被跳过。</Run></TextBlock>
             </StackPanel>
@@ -5559,6 +5842,8 @@ if ($script:mode -match '(?i)/autoclean') {
     <Border Grid.Column="1" Grid.Row="1" x:Name="OpPanel" Style="{StaticResource Card}" Padding="16,11,16,12" Margin="30,0,30,14" Visibility="Collapsed">
       <StackPanel>
         <DockPanel>
+          <Button x:Name="OpCancel" DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="取消" Margin="14,0,0,0" Visibility="Collapsed"
+                  ToolTip="停在安全的地方，已经做完的不会撤销"/>
           <TextBlock x:Name="OpTime" DockPanel.Dock="Right" Foreground="#6E6E73" Margin="12,0,0,0"/>
           <TextBlock x:Name="OpTitle" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
         </DockPanel>
@@ -5609,6 +5894,7 @@ if ($script:mode -match '(?i)/autoclean') {
           <DockPanel Margin="0,20,0,0">
             <Button x:Name="OvClose" DockPanel.Dock="Right" Content="完成" Style="{StaticResource Primary}" Padding="26,7" Visibility="Collapsed"/>
             <Button x:Name="OvHide" DockPanel.Dock="Right" Content="在后台继续" Padding="14,7" Margin="0,0,8,0"/>
+            <Button x:Name="OvCancel" DockPanel.Dock="Right" Content="取消" Padding="14,7" Margin="0,0,8,0" Visibility="Collapsed"/>
             <TextBlock x:Name="OvNote" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,14,0"/>
           </DockPanel>
         </StackPanel>
@@ -5698,7 +5984,8 @@ foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageM
                'OpPanel','OpTime','OpTitle','OpBar','OpSubTime','OpDetail','OpSubBar','Root',
                'Overlay','OvTitle','OvTime','OvBar','OvStep','OvWhat','OvChecklist','OvDetail','OvSubBar','OvPlanBox','OvPlanScroll','OvPlan','OvHide','OvClose','OvNote',
                'BtnKeepNew','BtnKeepOld','BtnPickC','BtnPickNone','DupSummary',
-               'CleanScroll','CleanMore','CleanMoreText','CleanOverview','CleanOverviewText') { $ctl[$n] = $win.FindName($n) }
+               'CleanScroll','CleanMore','CleanMoreText','CleanOverview','CleanOverviewText',
+               'OvCancel','OpCancel','BtnMapExport','MapFilter','MapMinSize','MapAge','MapType','MapName','MapUnder') { $ctl[$n] = $win.FindName($n) }
 
 # ---------- 左侧导航：两页切换 ----------
 $script:pageList = [ordered]@{
@@ -5925,7 +6212,8 @@ function Show-Overlay {
 # 开始一项操作：重置进度面板，开始计时，弹出进度卡片
 function Start-Op([string]$title, [switch]$NoCard) {
     $sync.P = [hashtable]::Synchronized(@{ Steps = 0; Step = 0; StepName = ''; SubKind = 'none'; SubDone = [double]0; SubTotal = [double]0;
-                                          SubStart = (Get-Date); FreeC0 = [double]0; DestDrive = ''; DestFree0 = [double]0; Detail = ''; MoveItem = $false })
+                                          SubStart = (Get-Date); FreeC0 = [double]0; DestDrive = ''; DestFree0 = [double]0; Detail = ''; MoveItem = $false; CanCancel = $true })
+    $sync.Cancel = $false; $sync.WasCancelled = $false; $script:cancelUi = ''
     $script:op = @{ Title = $title; Start = (Get-Date) }
     $ctl.OpPanel.Visibility = 'Visible'
     $ctl.OpTitle.Text = $title; $ctl.OpTime.Text = (T '已用 0 秒'); $ctl.OpDetail.Text = ''; $ctl.OpSubTime.Text = ''
@@ -5939,6 +6227,8 @@ function Start-Op([string]$title, [switch]$NoCard) {
 # 结束：进度条拉满，显示总用时。执行和删除会在卡片上留下结果，等用户点「关闭」
 function End-Op([string]$result, [switch]$KeepCard, [string]$headline = '', $reportLines = $null) {
     if (-not $script:op) { return }
+    $cx = [bool]$sync.WasCancelled
+    $ctl.OvCancel.Visibility = 'Collapsed'; $ctl.OpCancel.Visibility = 'Collapsed'; $script:cancelUi = ''
     $el = (Get-Date) - $script:op.Start
     $ctl.OpBar.IsIndeterminate = $false; $ctl.OpBar.Value = 100
     $ctl.OpSubBar.Visibility = 'Collapsed'
@@ -5949,7 +6239,7 @@ function End-Op([string]$result, [switch]$KeepCard, [string]$headline = '', $rep
     $ctl.OpDetail.Text = ''; $ctl.OpSubTime.Text = ''
     UI-Log ((T "{0}：{1}，共用时 {2}") -f $script:op.Title, $result, (FmtSpan $el))
     if ($KeepCard -and $ctl.Overlay.Visibility -eq 'Visible') {
-        $ctl.OvTitle.Text = $script:op.Title + (T '：已完成')
+        $ctl.OvTitle.Text = $script:op.Title + $(if ($cx) { (T '：已中途取消') } else { (T '：已完成') })
         $ctl.OvTime.Text = (T "共用时 ") + (FmtSpan $el)
         $ctl.OvBar.IsIndeterminate = $false; $ctl.OvBar.Value = 100
         $ctl.OvSubBar.Visibility = 'Collapsed'
@@ -5964,6 +6254,63 @@ function End-Op([string]$result, [switch]$KeepCard, [string]$headline = '', $rep
         $script:cardShowsResult = $false
     }
     $script:op = $null
+}
+
+# ---------- 中途取消 ----------
+# 能中途取消的操作。look = 只是查看，不用确认；其余先问一句。
+# 不在这里的（删除单个文件夹、系统压缩、压缩虚拟磁盘、卸载、删除多余副本）要么很快做完，要么停在一半不安全
+$script:cancelModes = @{ scan = 'look'; apps = 'look'; dup = 'look'; map = 'look'
+    run = 'run'; dupdel = 'dupdel'; merge = 'merge'; leftdel = 'leftdel'; fcompress = 'fcompress'; moveback = 'moveback'; vmove = 'move'; appmove = 'move' }
+$script:cancelUi = ''
+function Update-CancelUi {
+    $m = [string]$sync.Mode
+    if (-not ($script:worker -and $script:op -and $m -and $script:cancelModes.ContainsKey($m))) {
+        $ctl.OvCancel.Visibility = 'Collapsed'; $ctl.OpCancel.Visibility = 'Collapsed'; $script:cancelUi = ''; return
+    }
+    $state = if ($sync.Cancel) { 'pending' } elseif ($sync.P -and $sync.P.CanCancel -eq $false) { 'hold' } else { 'ready' }
+    if ($state -eq $script:cancelUi) { return }
+    $script:cancelUi = $state
+    foreach ($b in @($ctl.OvCancel, $ctl.OpCancel)) {
+        $b.Visibility = 'Visible'
+        $b.IsEnabled = ($state -eq 'ready')
+        $b.Content = if ($state -eq 'pending') { (T '正在取消…') } else { (T '取消') }
+    }
+    if ($ctl.OvClose.Visibility -ne 'Visible') {   # 卡片上显示的不是上一次的结果
+        $ctl.OvNote.Text = switch ($state) {
+            'pending' { (T '正在取消：做完手上这一小步就停下，已经做完的不会撤销。') }
+            'hold'    { (T '这一步不能中断（正在换成链接、删除备份或运行系统命令），做完就可以取消。') }
+            default   { (T '可以最小化窗口，任务栏图标上也有进度。做完前不要关闭本窗口。') }
+        }
+    }
+}
+function Request-Cancel {
+    $w = $script:worker
+    if (-not $w -or $sync.Cancel) { return }
+    $m = [string]$sync.Mode
+    if (-not $script:cancelModes.ContainsKey($m)) { return }
+    if ($sync.P -and $sync.P.CanCancel -eq $false) { return }
+    $kind = $script:cancelModes[$m]
+    if ($kind -ne 'look') {
+        $text = switch ($kind) {
+            'run'       { (T "已经做完的项目不会撤销，还没开始的都不做了。`n`n正在做的这一项会停在安全的地方：清理会停下，已经删掉的不会回来；搬家如果还在复制，C 盘上的原文件夹不动，已复制的部分留在目标盘，下次再搬会接着复制；如果正在换成链接或运行系统命令，会等这一步做完再停。") }
+            'dupdel'    { (T '已经删掉的文件不会回来，剩下的不删了。') }
+            'merge'     { (T '已经合并的保持合并，照常可用；剩下的不合并了。') }
+            'leftdel'   { (T '已经移到回收站的还在回收站里，剩下的不删了。') }
+            'fcompress' { (T '已经压缩的文件保持压缩，照常可用；剩下的不压缩了。') }
+            'moveback'  { (T '数据仍在目标盘上，C 盘上的链接不动，软件照常使用；复制回 C 盘的那一半会删掉。如果已经在换回文件夹，会等这一步做完再停。') }
+            default     { (T "C 盘上的原文件夹不动，软件照常使用。已复制到目标盘的部分先留着，下次再搬会接着复制；不需要的话，可以在「搬家管理」里删掉这份副本。如果已经在换成链接，会等这一步做完再停。") }
+        }
+        $ans = Show-Sheet -Kind warn -Title ((T "取消「{0}」？") -f $script:op.Title) -Text $text -Buttons @((T '继续做'), (T '停下来')) -Primary (T '停下来') -Cancel (T '继续做')
+        if ($ans -ne (T '停下来')) { return }
+        if (-not [object]::ReferenceEquals($w, $script:worker)) { return }   # 对话框开着的时候已经做完了
+    }
+    $sync.Cancel = $true
+    [DirStat]::Cancel = $true
+    if ($m -eq 'dup' -or $m -eq 'dupdel' -or $m -eq 'merge') { [DupFinder]::Cancel = $true }
+    if ($m -eq 'map') { [DiskMap]::Cancel = $true }
+    if ($m -eq 'scan') { $script:oneClickPending = $false }
+    UI-Log (T '正在取消：做完手上这一小步就停下。')
+    Update-CancelUi
 }
 
 # 每 0.3 秒刷新一次：底部进度条和中间的卡片显示同样的内容
@@ -6109,11 +6456,12 @@ function Update-Op {
         if ($sync.Mode -eq 'run' -and $p -and $p.MoveItem) { Set-Lines $ctl.OvChecklist (Move-Checklist $p) } else { $ctl.OvChecklist.Inlines.Clear() }
         if ($sync.Mode -eq 'run' -and $script:runPlan) { Set-Lines $ctl.OvPlan (Plan-Lines) }
     }
+    Update-CancelUi
 }
 
 function Shorten($p) { if (-not $p) { return '' }; if ($p.Length -le 80) { $p } else { '…' + $p.Substring($p.Length - 79) } }
 
-$script:AppVersion = '2.2'
+$script:AppVersion = '2.3'
 $script:logFile = Join-Path ([IO.Path]::GetTempPath()) 'CleanC-run.log'
 function Write-LogFile([string]$m) { try { [IO.File]::AppendAllText($script:logFile, ("{0:yyyy-MM-dd HH:mm:ss}  {1}`r`n" -f (Get-Date), $m), [Text.Encoding]::UTF8) } catch {} }
 function UI-Log($m) { $ctl.Log.AppendText("$m`r`n"); $ctl.Log.ScrollToEnd(); Write-LogFile ([string]$m) }
@@ -6150,6 +6498,8 @@ function UI-Busy($b) {
 }
 
 function Start-Worker([string]$code, $arg) {
+    $sync.Cancel = $false; $sync.WasCancelled = $false; Set-CanCancel $true
+    [DirStat]::Cancel = $false; [DupFinder]::Cancel = $false; [DiskMap]::Cancel = $false
     $rs = [runspacefactory]::CreateRunspace(); $rs.ApartmentState = 'STA'; $rs.ThreadOptions = 'ReuseThread'; $rs.Open()
     $rs.SessionStateProxy.SetVariable('sync', $sync)
     $ps = [powershell]::Create(); $ps.Runspace = $rs
@@ -6251,14 +6601,15 @@ function Update-CleanSummary {
 function Do-Scan([switch]$Quiet) {
     $ctl.Summary.Text = (T '正在扫描，大目录可能要一两分钟…')
     if (-not $script:rows) { $ctl.EmptyCleanText.Text = (T '正在扫描…') }
+    $script:prevSizes = $sync.Sizes   # 扫描中途取消时，列表还用上一次的结果
     $sync.Mode = 'scan'; $sync.Sizes = $null
     if (-not $Quiet) { Start-Op (T '扫描可清理项') }
     UI-Busy $true
     Start-Worker @'
 $sizes = @{}
 $cat = Get-Catalog; $i = 0
-foreach ($it in $cat) { $i++; SetP @{ Steps = $cat.Count; Step = $i; StepName = $it.N; SubKind = 'measure'; SubStart = (Get-Date); Detail = (T '统计大小') }; $sizes[$it.Idx] = Measure-Item $it }
-$sync.Sizes = $sizes
+foreach ($it in $cat) { if (Stopping) { break }; $i++; SetP @{ Steps = $cat.Count; Step = $i; StepName = $it.N; SubKind = 'measure'; SubStart = (Get-Date); Detail = (T '统计大小') }; $sizes[$it.Idx] = Measure-Item $it }
+if (-not (Stopping)) { $sync.Sizes = $sizes }
 '@ $null
 }
 
@@ -6422,7 +6773,9 @@ $cat = @{}; foreach ($it in (Get-Catalog)) { $cat[$it.Idx] = $it }
 $ordered = @($plan | Where-Object { -not $cat[$_.Idx].Last }) + @($plan | Where-Object { $cat[$_.Idx].Last })
 $si = 0
 $summary = New-Object System.Collections.ArrayList
+$handled = @{}
 foreach ($p in $ordered) {
+    if (Stopping) { break }
     $si++
     $it = $cat[$p.Idx]
     SetP @{ Steps = $ordered.Count; Step = $si; StepName = ("{0} {1}" -f $p.Action, $it.N); StepIdx = $p.Idx; StepNote = $it.Note; MoveItem = $false
@@ -6435,23 +6788,38 @@ foreach ($p in $ordered) {
             New-Item -ItemType Directory -Path $dest -Force | Out-Null
             Invoke-Move $it $dest $res
             if ($res.Wait -gt 0) { $sync.WaitCount = [int]$sync.WaitCount + $res.Wait }
-            if ($res.Done -gt 0 -and $res.Fail -eq 0 -and $res.Wait -eq 0) { $t = (T "已搬 {0} 到 {1}") -f (GB $res.Moved), ($res.Dest -join (T '；')); $k = 'ok' }
+            if ($res.Cancelled) {
+                $t = if ($res.Done -gt 0) { (T "中途取消：已搬 {0}；{1}") -f (GB $res.Moved), $res.Msgs[-1] } else { [string]$res.Msgs[-1] }
+                $k = 'warn'
+            }
+            elseif ($res.Done -gt 0 -and $res.Fail -eq 0 -and $res.Wait -eq 0) { $t = (T "已搬 {0} 到 {1}") -f (GB $res.Moved), ($res.Dest -join (T '；')); $k = 'ok' }
             elseif ($res.Done -gt 0) { $t = (T "部分完成：搬了 {0}；{1}") -f (GB $res.Moved), $res.Msgs[-1]; $k = 'warn' }
             elseif ($res.Wait -gt 0 -and $res.Fail -eq 0) { $t = (T "差最后一步：") + $res.Msgs[-1]; $k = 'warn' }
             elseif ($res.Fail -gt 0) { $t = (T "没搬成：") + $res.Msgs[0]; $k = 'fail' }
             else { $t = (T '不用搬（已经搬过或不在 C 盘）'); $k = 'skip' }
         } else {
             Invoke-Delete $it $res
-            $t = if ($it.Act -and -not $it.Paths) { (T "已完成，释放 {0}") -f (GB $res.Freed) } else { (T "已清理，释放 {0}") -f (GB $res.Freed) }
-            $k = 'ok'
+            if ($res.Cancelled) { $t = (T "中途取消：清理了一部分，释放 {0}") -f (GB $res.Freed); $k = 'warn' }
+            else {
+                $t = if ($it.Act -and -not $it.Paths) { (T "已完成，释放 {0}") -f (GB $res.Freed) } else { (T "已清理，释放 {0}") -f (GB $res.Freed) }
+                $k = 'ok'
+            }
         }
     } catch { $t = (T "出错：") + $_.Exception.Message; $k = 'fail'; Log "  $t" }
     SetStatus $p.Idx $t $k
     $mark = switch ($k) { 'ok' { '✓' } 'warn' { '!' } 'fail' { '✗' } default { '·' } }
     [void]$summary.Add(((T "{0} {1}：{2}") -f $mark, $it.N, $t))
+    $handled[$p.Idx] = $true
+}
+if ($sync.WasCancelled) {
+    foreach ($p in $ordered) {
+        if ($handled.ContainsKey($p.Idx)) { continue }
+        SetStatus $p.Idx (T '已取消，没有处理') 'skip'
+        [void]$summary.Add(((T "{0} {1}：{2}") -f '·', $cat[$p.Idx].N, (T '已取消，没有处理')))
+    }
 }
 $sync.RunSummary = $summary
-Log ((T "全部完成。C 盘现在剩余 {0}") -f (GB (FreeC)))
+if ($sync.WasCancelled) { Log ((T "已中途取消。C 盘现在剩余 {0}") -f (GB (FreeC))) } else { Log ((T "全部完成。C 盘现在剩余 {0}") -f (GB (FreeC))) }
 '@ @{ Plan = $plan; Dest = $dest }
 }
 $ctl.BtnRun.Add_Click({ Invoke-RunSelected })
@@ -6935,6 +7303,7 @@ Add-Type -AssemblyName Microsoft.VisualBasic
 $done = New-Object System.Collections.ArrayList
 $i = 0; $total = $arg.Plan.Count; $freed = [double]0
 foreach ($p in $arg.Plan) {
+    if (Stopping) { break }
     $i++
     SetP @{ Steps = $total; Step = $i; StepName = [IO.Path]::GetFileName($p.Path); SubKind = 'none' }
     # 再保险：保护打开时，C 盘个人文件夹里的文件无论如何不删
@@ -6953,6 +7322,7 @@ foreach ($p in $arg.Plan) {
         if ([DupFinder]::SameContent($k, $p.Path)) { $kept = $true; break }
     }
     SetP @{ SubKind = 'none' }
+    if (-not $kept -and (Stopping)) { break }   # 核对到一半取消了：这个文件不删
     if (-not $kept) { Log ((T "  没有删除（和保留的那份内容不完全相同，或保留的那份已不在）：{0}") -f $($p.Path)); continue }
     try {
         if ($fi.Attributes -band [IO.FileAttributes]::ReadOnly) { $fi.Attributes = $fi.Attributes -bxor [IO.FileAttributes]::ReadOnly }
@@ -7016,7 +7386,7 @@ function Start-MapScan([string]$root) {
     Start-Op ((T "扫描 {0}") -f $root)
     UI-Busy $true; $ctl.BtnMapStop.IsEnabled = $true
     $ctl.EmptyMap.Visibility = 'Visible'; $ctl.EmptyMapText.Text = (T '正在扫描…')
-    $ctl.MapList.ItemsSource = $null; $ctl.MapGrow.ItemsSource = $null
+    $ctl.MapList.ItemsSource = $null; $ctl.MapGrow.ItemsSource = $null; $ctl.BtnMapExport.IsEnabled = $false
     UI-Log ((T "空间地图：开始扫描 {0}") -f $root)
     Start-Worker @'
 $L = $arg.Root.Substring(0, 1).ToUpper(); $n = 4
@@ -7071,11 +7441,22 @@ function Show-MapLevel($node) {
             $when = if ($k.LastWrite -gt 0) { try { [DateTime]::FromFileTime($k.LastWrite).ToString('yyyy-MM-dd') } catch { '' } } else { '' }
             $meta = (T "{0:N0} 个文件") -f $k.Files
             if ($when) { $meta += ((T " · 最近修改 {0}") -f $when) }
+            if ($script:prevSnap -and $script:prevSnap.Count -gt 0) {
+                $key = $p.ToLowerInvariant()
+                if ($script:prevSnap.ContainsKey($key)) {
+                    $dd = [double]$k.Size - [double]$script:prevSnap[$key]
+                    if ([math]::Abs($dd) -ge 10MB) { $meta += ((T " · 比上次 {0}") -f ($(if ($dd -gt 0) { '+' } else { '−' }) + (Fmt ([math]::Abs($dd))))) }
+                }
+            }
             if ($k.Denied) { $meta += (T ' · 部分内容没有权限读取') }
-            [void]$rows.Add((New-MapRow $k.Name $p $k.Size $max $node.Size $true $k $meta 'dir'))
+            $row = New-MapRow $k.Name $p $k.Size $max $node.Size $true $k $meta 'dir'
+            $row.When = $when; $row.Count = [long]$k.Files
+            [void]$rows.Add($row)
         } else {
             $f = $x.F
-            [void]$rows.Add((New-MapRow $f.Name $f.FullName $f.Length $max $node.Size $false $null ((T "文件 · 修改于 {0:yyyy-MM-dd}") -f $f.LastWriteTime) 'file'))
+            $row = New-MapRow $f.Name $f.FullName $f.Length $max $node.Size $false $null ((T "文件 · 修改于 {0:yyyy-MM-dd}") -f $f.LastWriteTime) 'file'
+            $row.When = '{0:yyyy-MM-dd HH:mm}' -f $f.LastWriteTime
+            [void]$rows.Add($row)
         }
     }
     $ctl.MapList.ItemsSource = $rows
@@ -7084,27 +7465,75 @@ function Show-MapLevel($node) {
     $ctl.BtnMapUp.IsEnabled = ($null -ne $node.Parent)
     $ctl.EmptyMap.Visibility = if ($rows.Count -gt 0) { 'Collapsed' } else { 'Visible' }
     if ($rows.Count -eq 0) { $ctl.EmptyMapText.Text = (T '这个文件夹是空的') }
+    $ctl.BtnMapExport.IsEnabled = ($rows.Count -gt 0)
     Update-MapSel
+}
+# 找文件：在扫描时记下的 1 MB 以上的文件里，按大小、多久没改过、类型、名称、所在文件夹筛选
+$script:mapTypes = @{
+    video   = '.mp4 .mkv .avi .mov .wmv .flv .m4v .ts .m2ts .webm .mpg .mpeg .rmvb .rm .3gp .vob'
+    archive = '.zip .rar .7z .tar .gz .tgz .bz2 .xz .zst .cab .msi .msp .msix .msixbundle .appx .appxbundle .apk .dmg'
+    image   = '.iso .img .vhd .vhdx .avhdx .vmdk .vdi .qcow2 .wim .esd .gho'
+    picture = '.jpg .jpeg .png .gif .bmp .tif .tiff .heic .webp .raw .cr2 .cr3 .nef .arw .dng .psd'
+    music   = '.mp3 .flac .wav .aac .m4a .ogg .wma .ape .opus'
+    doc     = '.pdf .doc .docx .xls .xlsx .ppt .pptx .txt .md .epub .mobi .csv .wps .et .dps'
+    program = '.exe .dll .sys .ocx .pak .bin .vpk .pck .assets .bundle'
+    log     = '.log .etl .dmp .mdmp .hdmp .tmp .temp .bak .old .cache .chk'
+}
+$script:mapFindMax = 500
+function Get-MapFilter {
+    $min = [double]50MB; $t = $ctl.MapMinSize.SelectedItem; if ($t) { $min = [double]([string]$t.Tag) * 1MB }
+    $days = 0; $t = $ctl.MapAge.SelectedItem; if ($t) { $days = [int]([string]$t.Tag) }
+    $type = ''; $t = $ctl.MapType.SelectedItem; if ($t) { $type = [string]$t.Tag }
+    $under = $null
+    if ($ctl.MapUnder.IsChecked -and $script:mapCur -and -not [object]::ReferenceEquals($script:mapCur, $script:mapRoot)) { $under = $script:mapCur }
+    return @{
+        Min = [long]$min
+        Before = $(if ($days -gt 0) { (Get-Date).AddDays(-$days) } else { [DateTime]::MaxValue })
+        Exts = $(if ($type -and $script:mapTypes.ContainsKey($type)) { $script:mapTypes[$type] } else { '' })
+        Name = ([string]$ctl.MapName.Text).Trim()
+        Under = $under
+    }
 }
 function Show-MapFiles {
     $rows = New-Object System.Collections.Generic.List[MapRow]
-    $big = @([DiskMap]::BigFiles)
-    $max = if ($big.Count -gt 0) { [double]$big[0].Size } else { 0 }
+    $f = Get-MapFilter
+    $res = [DiskMap]::FindFiles($f.Min, $f.Before, $f.Exts, $f.Name, $f.Under, $script:mapFindMax)
+    $max = if ($res.Files.Count -gt 0) { [double]$res.Files[0].Size } else { 0 }
     $tot = if ($script:mapRoot) { [double]$script:mapRoot.Size } else { 0 }
-    foreach ($f in $big) {
-        if (-not (Test-Path -LiteralPath $f.Path)) { continue }
-        [void]$rows.Add((New-MapRow ([IO.Path]::GetFileName($f.Path)) $f.Path $f.Size $max $tot $false $null ((T "{0} · 修改于 {1:yyyy-MM-dd}") -f (Split-Path $f.Path -Parent), $f.Modified) 'file'))
+    foreach ($x in $res.Files) {
+        $p = $x.Path
+        $row = New-MapRow $x.Name $p $x.Size $max $tot $false $null ((T "{0} · 修改于 {1:yyyy-MM-dd}") -f (Split-Path $p -Parent), $x.Modified) 'file'
+        $row.When = '{0:yyyy-MM-dd HH:mm}' -f $x.Modified
+        [void]$rows.Add($row)
     }
     $ctl.MapList.ItemsSource = $rows
-    $ctl.MapPath.Text = (T "最大的 {0} 个文件") -f $rows.Count
-    $ctl.MapInfo.Text = (T '只列出 50 MB 以上的文件，最多 500 个')
+    $head = (T "找到 {0:N0} 个文件，共 {1}") -f $res.Count, (Fmt $res.Bytes)
+    if ($res.Count -gt $rows.Count) { $head += ((T "，下面列出最大的 {0:N0} 个") -f $rows.Count) }
+    $ctl.MapPath.Text = $head
+    $where = if ($f.Under) { $f.Under.FullPath() } elseif ($script:mapRoot) { $script:mapRoot.FullPath() } else { '' }
+    $ctl.MapInfo.Text = (T "在 {0} 里找，只能找到扫描时记下的 1 MB 以上的文件") -f $where
+    $ctl.MapUnder.ToolTip = if ($script:mapCur) { $script:mapCur.FullPath() } else { $null }
     $ctl.BtnMapUp.IsEnabled = $false
     $ctl.EmptyMap.Visibility = if ($rows.Count -gt 0) { 'Collapsed' } else { 'Visible' }
-    if ($rows.Count -eq 0) { $ctl.EmptyMapText.Text = (T '没有超过 50 MB 的文件') }
+    if ($rows.Count -eq 0) { $ctl.EmptyMapText.Text = (T '没有符合条件的文件，可以把条件放宽一些') }
+    $ctl.BtnMapExport.IsEnabled = ($rows.Count -gt 0)
     Update-MapSel
 }
+function Refresh-MapFiles { if ($script:mapView -eq 'files' -and $script:mapRoot) { Show-MapFiles } }
+$ctl.MapMinSize.Add_SelectionChanged({ Refresh-MapFiles })
+$ctl.MapAge.Add_SelectionChanged({ Refresh-MapFiles })
+$ctl.MapType.Add_SelectionChanged({ Refresh-MapFiles })
+$ctl.MapUnder.Add_Checked({ Refresh-MapFiles })
+$ctl.MapUnder.Add_Unchecked({ Refresh-MapFiles })
+# 名称：停下打字 0.4 秒后再找，免得每打一个字就刷新一次
+$script:mapNameTimer = New-Object System.Windows.Threading.DispatcherTimer
+$script:mapNameTimer.Interval = [TimeSpan]::FromMilliseconds(400)
+$script:mapNameTimer.Add_Tick({ $script:mapNameTimer.Stop(); Refresh-MapFiles })
+$ctl.MapName.Add_TextChanged({ $script:mapNameTimer.Stop(); $script:mapNameTimer.Start() })
+
 function Set-MapView([string]$v) {
     $script:mapView = $v
+    $ctl.MapFilter.Visibility = if ($v -eq 'files') { 'Visible' } else { 'Collapsed' }
     $grow = ($v -eq 'grow')
     $ctl.MapGrow.Visibility = if ($grow) { 'Visible' } else { 'Collapsed' }
     $ctl.MapList.Visibility = if ($grow) { 'Collapsed' } else { 'Visible' }
@@ -7118,7 +7547,8 @@ function Set-MapView([string]$v) {
         $ctl.EmptyMap.Visibility = if ($has) { 'Collapsed' } else { 'Visible' }
         $ctl.EmptyMapText.Text = $script:growNote
         $ctl.MapPath.Text = (T '和上次扫描相比')
-        $ctl.MapInfo.Text = $script:growNote
+        $ctl.MapInfo.Text = $script:growNote + $(if ($has) { (T ' 双击一行可以跳到这个文件夹。') } else { '' })
+        $ctl.BtnMapExport.IsEnabled = [bool]$has
         Update-MapSel
     }
 }
@@ -7126,6 +7556,14 @@ $ctl.MapViewDirs.Add_Checked({ Set-MapView 'dirs' })
 $ctl.MapViewFiles.Add_Checked({ Set-MapView 'files' })
 $ctl.MapViewGrow.Add_Checked({ Set-MapView 'grow' })
 $ctl.BtnMapUp.Add_Click({ if ($script:mapCur -and $script:mapCur.Parent) { Show-MapLevel $script:mapCur.Parent } })
+$ctl.MapGrow.Add_MouseDoubleClick({
+    $g = $ctl.MapGrow.SelectedItem
+    if (-not $g -or -not $script:mapRoot) { return }
+    $node = [DiskMap]::Find($script:mapRoot, [string]$g.Path)
+    if (-not $node) { Show-Sheet -Title (T '这次扫描里没有这个文件夹') -Text ((T "{0}`n`n它可能已经被删掉、改了名，或者变得很小。") -f $g.Path) | Out-Null; return }
+    $ctl.MapViewDirs.IsChecked = $true
+    Show-MapLevel $node
+})
 $ctl.MapList.Add_MouseDoubleClick({
     $r = $ctl.MapList.SelectedItem
     if ($r -and $r.IsDir -and $r.Node) {
@@ -7143,6 +7581,36 @@ function Update-MapSel {
     $ctl.MapSel.Text = if ($r.Locked) { (T "{0}：不能在这里删（{1}）") -f $r.Name, $r.LockTip } else { "{0}  {1}" -f $r.Name, $r.SizeText }
 }
 $ctl.MapList.Add_SelectionChanged({ Update-MapSel })
+function Csv-Line([object[]]$cells) {
+    (@($cells | ForEach-Object { $s = [string]$_; if ($s -match '[",\r\n]') { '"' + $s.Replace('"', '""') + '"' } else { $s } }) -join ',')
+}
+$ctl.BtnMapExport.Add_Click({
+    $v = $script:mapView
+    $list = if ($v -eq 'grow') { @($script:growRows) } else { @($ctl.MapList.ItemsSource) }
+    if (-not $script:mapRoot -or $list.Count -eq 0) { Show-Sheet -Title (T '没有可以导出的内容') -Text (T '先扫描一块盘，再导出看到的列表。') | Out-Null; return }
+    $what = switch ($v) { 'files' { (T '找文件') } 'grow' { (T '和上次比') } default { (T '文件夹') } }
+    $dlg = New-Object Microsoft.Win32.SaveFileDialog
+    $dlg.Filter = (T 'CSV 文件（可以用 Excel 打开）') + '|*.csv'
+    $dlg.FileName = '{0}-{1}-{2}-{3:yyyyMMdd-HHmm}.csv' -f (T '空间地图'), $script:mapRoot.FullPath().Substring(0, 1), $what, (Get-Date)
+    try { $dlg.InitialDirectory = [Environment]::GetFolderPath('Desktop') } catch {}
+    if (-not $dlg.ShowDialog($win)) { return }
+    $lines = New-Object System.Collections.Generic.List[string]
+    if ($v -eq 'grow') {
+        $lines.Add((Csv-Line @((T '文件夹'), (T '上次（字节）'), (T '这次（字节）'), (T '变化（字节）'), (T '上次'), (T '这次'), (T '变化'))))
+        foreach ($g in $list) { $lines.Add((Csv-Line @($g.Path, [long]$g.BeforeBytes, [long]$g.NowBytes, [long]($g.NowBytes - $g.BeforeBytes), $g.Before, $g.Now, $g.Change))) }
+    } else {
+        $lines.Add((Csv-Line @((T '名称'), (T '路径'), (T '类型'), (T '大小（字节）'), (T '大小'), (T '文件数'), (T '最近修改'))))
+        foreach ($r in $list) {
+            $k = if ($r.IsDir) { (T '文件夹') } elseif ($r.Node -and $r.Node.IsLink) { (T '链接') } else { (T '文件') }
+            $lines.Add((Csv-Line @($r.Name, $r.Path, $k, [long]$r.Size, $r.SizeText, $(if ($r.IsDir) { $r.Count } else { '' }), $r.When)))
+        }
+    }
+    try { [IO.File]::WriteAllLines($dlg.FileName, $lines.ToArray(), (New-Object Text.UTF8Encoding $true)) }
+    catch { Show-Sheet -Kind warn -Title (T '没能保存') -Text $_.Exception.Message | Out-Null; return }
+    UI-Log ((T "空间地图：已导出 {0} 行到 {1}") -f $list.Count, $dlg.FileName)
+    $ans = Show-Sheet -Kind done -Title (T '已导出') -Text ((T "{0:N0} 行，已保存到：`n{1}") -f $list.Count, $dlg.FileName) -Buttons @((T '打开所在位置'), (T '好')) -Primary (T '好') -Cancel (T '好')
+    if ($ans -eq (T '打开所在位置')) { Open-Location $dlg.FileName }
+})
 $ctl.BtnMapOpen.Add_Click({ $r = $ctl.MapList.SelectedItem; if ($r) { Open-Location $r.Path } })
 
 # 和上次比：把这次扫描的快照和上次的对比，列出变化最大的文件夹
@@ -7159,6 +7627,7 @@ function Update-Growth($root) {
         }
     }
     $snap = [DiskMap]::Snapshot($root, 4, 100MB)
+    $script:prevSnap = $old
     if ($old.Count -gt 0) {
         $list = New-Object System.Collections.ArrayList
         $seen = @{}
@@ -7176,6 +7645,7 @@ function Update-Growth($root) {
             $g.Now = if ($x.N -gt 0) { Fmt $x.N } else { (T '不到 100 MB') }
             $g.Change = $(if ($x.D -gt 0) { '+' } else { '−' }) + (Fmt ([math]::Abs($x.D)))
             $g.ChangeBrush = if ($x.D -gt 0) { '#D70015' } else { '#248A3D' }
+            $g.BeforeBytes = [double]$x.B; $g.NowBytes = [double]$x.N
             $script:growRows.Add($g)
         }
         $script:growNote = if ($script:growRows.Count -gt 0) { ((T "上次扫描在 {0}。红色是变大的，绿色是变小的（只列变化超过 100 MB 的文件夹）") -f $oldAt) } else { ((T "和上次（{0}）相比，没有文件夹变化超过 100 MB") -f $oldAt) }
@@ -7235,7 +7705,7 @@ function Start-FolderCompress([string]$path) {
     Start-Op (T '压缩文件夹')
     UI-Busy $true
     Start-Worker @'
-$p = $arg.Path
+$p = $arg.Path; $cx = $false
 SetP @{ Steps = 2; Step = 1; StepName = (T '统计压缩前的实际占用'); SubKind = 'action'; SubStart = (Get-Date); Detail = $p }
 $before = [double][FsTools]::OnDiskTree($p)
 SetP @{ Step = 2; StepName = (T '压缩'); SubStart = (Get-Date); Detail = ((T "正在压缩 {0}") -f $p) }
@@ -7244,15 +7714,18 @@ else {
     $inside = $false
     try { Set-Location -LiteralPath $p -ErrorAction Stop; $inside = ((Get-Location).ProviderPath.TrimEnd('\') -ieq $p.TrimEnd('\')) } catch { Log ((T "  进不去：{0}") -f $p) }
     if ($inside) {
-        & "$sys32\compact.exe" /c /s /a /i /q '*' 2>&1 | Out-Null
-        # 虚拟磁盘文件压缩后会变慢、甚至出错，压完再把它们解压回去
+        $rc = Invoke-Tool "$sys32\compact.exe" @('/c', '/s', '/a', '/i', '/q', '*') $p
+        if ($rc.Cancelled) { $cx = $true; Log ((T "  已中途取消：{0}") -f $p) }
+        # 虚拟磁盘文件压缩后会变慢、甚至出错，压完再把它们解压回去（中途取消了也要做，这一步不能中断）
+        Set-CanCancel $false
         & "$sys32\compact.exe" /u /s /a /i /q '*.vhd' '*.vhdx' '*.avhdx' 2>&1 | Out-Null
+        Set-CanCancel $true
     }
 }
 try { [Environment]::CurrentDirectory = $env:SystemRoot; Set-Location -LiteralPath $env:SystemRoot } catch {}
 $after = [double][FsTools]::OnDiskTree($p)
-OpLog '压缩' (T '压缩文件夹（NTFS）') $p ((T "实际占用 {0} → {1}") -f (GB $before), (GB $after))
-$sync.FcResult = @{ Path = $p; Before = $before; After = $after }
+OpLog '压缩' $(if ($cx) { (T '压缩文件夹（NTFS），中途取消') } else { (T '压缩文件夹（NTFS）') }) $p ((T "实际占用 {0} → {1}") -f (GB $before), (GB $after))
+$sync.FcResult = @{ Path = $p; Before = $before; After = $after; Cancelled = $cx }
 '@ @{ Path = $path }
 }
 $ctl.BtnMapCompress.Add_Click({ $r = $ctl.MapList.SelectedItem; if ($r -and $r.IsDir) { Start-FolderCompress $r.Path } })
@@ -7516,13 +7989,16 @@ try {
 } catch {}
 $i = 0
 $generic = @($env:SystemRoot, "$env:SystemDrive\Program Files", "$env:SystemDrive\Program Files (x86)", "$env:SystemDrive\ProgramData", $env:LOCALAPPDATA, $env:APPDATA, "$env:LOCALAPPDATA\Programs")
+$stopped = $false
 foreach ($a in $out) {
     $i++
-    SetP @{ Steps = $out.Count; Step = $i; StepName = $a.Name; SubKind = 'none' }
     $a.Size = $a.Est; $a.Measured = $false
+    if ($stopped -or (Stopping)) { $stopped = $true; continue }   # 取消后剩下的用安装时登记的大小
+    SetP @{ Steps = $out.Count; Step = $i; StepName = $a.Name; SubKind = 'none' }
     $loc = $a.Location
     if ($loc -and $loc.Length -gt 3 -and ($generic -notcontains $loc) -and (Test-Path -LiteralPath $loc -PathType Container)) {
         $b = DirBytes $loc
+        if (Stopping) { $stopped = $true; continue }
         if ($b -gt 0) { $a.Size = $b; $a.Measured = $true }
     }
 }
@@ -7620,7 +8096,8 @@ New-Item -ItemType Directory -Path $arg.Dest -Force | Out-Null
 SetP @{ Steps = 1; Step = 1; StepName = $arg.Item.N; StepNote = ''; SubKind = 'action'; SubStart = (Get-Date); Detail = (T '检查有没有别的程序在用它的文件') }
 $res = @{ Done = 0; Fail = 0; Wait = 0; Moved = [double]0; Dest = @(); Msgs = @() }
 $held = Get-ModuleHolders $p
-if ($held.Count -gt 0) {
+if (Stopping) { $res.Cancelled = $true; $res.Msgs = @((T '已取消，什么都没动。')) }
+elseif ($held.Count -gt 0) {
     $m = (T "这些程序正在使用它的组件：{0}。文件夹被它们占着，搬不了。输入法、右键菜单、杀毒、驱动这一类软件一般都不适合搬。") -f ($held -join (T '、'))
     $res.Msgs = @($m); OpLog '搬运' (T '软件没搬：组件正被别的程序使用') $p ($held -join (T '、'))
 } else {
@@ -7751,6 +8228,7 @@ $ctl.BtnAppsLeft.Add_Click({
     Start-Worker @'
 $n = 0; $i = 0
 foreach ($x in $arg.Items) {
+    if (Stopping) { break }
     $i++
     SetP @{ Steps = $arg.Items.Count; Step = $i; StepName = $x.Path; SubKind = 'none' }
     if (Get-DeleteBlock $x.Path -Leftover) { continue }
@@ -8046,6 +8524,7 @@ $ctl.BtnDupMerge.Add_Click({
 $done = New-Object System.Collections.ArrayList
 $i = 0; $total = $arg.Plan.Count
 foreach ($p in $arg.Plan) {
+    if (Stopping) { break }
     $i++
     SetP @{ Steps = $total; Step = $i; StepName = [IO.Path]::GetFileName($p.Path); SubKind = 'none' }
     if ($arg.Protect -and (Test-Personal $p.Path)) { continue }
@@ -8054,7 +8533,9 @@ foreach ($p in $arg.Plan) {
     if (-not $fi -or -not $ki -or $fi.Length -ne $p.Size -or $ki.Length -ne $p.Size) { Log ((T "  跳过（文件在扫描后变了）：{0}") -f $($p.Path)); continue }
     if (-not $p.Verified) {
         SetP @{ SubKind = 'verify'; Detail = $p.Path }
-        if (-not [DupFinder]::SameContent($p.Keep, $p.Path)) { Log ((T "  跳过（和保留的那份内容不完全相同）：{0}") -f $($p.Path)); SetP @{ SubKind = 'none' }; continue }
+        $same = [DupFinder]::SameContent($p.Keep, $p.Path)
+        if (-not $same -and (Stopping)) { break }   # 核对到一半取消了：这个不合并
+        if (-not $same) { Log ((T "  跳过（和保留的那份内容不完全相同）：{0}") -f $($p.Path)); SetP @{ SubKind = 'none' }; continue }
         SetP @{ SubKind = 'none' }
     }
     $err = [FsTools]::MergeHardLink($p.Keep, $p.Path)
@@ -8097,10 +8578,20 @@ $timer.Add_Tick({
         try { $w.PS.EndInvoke($w.Handle) | Out-Null } catch { UI-Log ((T "后台出错：{0}") -f $($_.Exception.Message)) }
         foreach ($er in @($w.PS.Streams.Error | Select-Object -First 5)) { UI-Log ((T "后台出错：{0}") -f $er) }
         $w.PS.Dispose(); $w.RS.Dispose()
+        [DirStat]::Cancel = $false
+        if ($sync.WasCancelled) { UI-Log (T '已中途取消。') }
 
-        if ($sync.Mode -eq 'scan' -and $sync.Sizes) {
-            Build-Rows $sync.Sizes; End-Op (T '完成')
-            if ($script:oneClickPending) { $script:oneClickPending = $false; $script:runAfterScan = $true }
+        if ($sync.Mode -eq 'scan') {
+            if ($sync.WasCancelled -or -not $sync.Sizes) {
+                $script:oneClickPending = $false
+                $sync.Sizes = $script:prevSizes
+                End-Op $(if ($sync.WasCancelled) { (T '已中途取消，列表没有更新') } else { (T '没有完成') })
+                if ($script:rows) { $ctl.Summary.Text = (T '扫描已取消，下面还是上一次扫描的结果。') }
+                else { $ctl.Summary.Text = (T '扫描已取消。点「扫描」重新开始。'); $ctl.EmptyCleanText.Text = (T '扫描已取消。点「扫描」重新开始。') }
+            } else {
+                Build-Rows $sync.Sizes; End-Op (T '完成')
+                if ($script:oneClickPending) { $script:oneClickPending = $false; $script:runAfterScan = $true }
+            }
         }
         elseif ($sync.Mode -eq 'run') {
             $after = [double](FreeC); $freed = $after - $script:runFreeC0
@@ -8111,14 +8602,18 @@ $timer.Add_Tick({
                 $waitNote = (T "有 {0} 个文件夹已经复制好，但原文件夹还被别的程序占着，没换成链接。彻底退出相关的聊天软件（包括右下角托盘图标）后再点一次「执行」，会接着用复制好的副本，很快完成。") -f [int]$sync.WaitCount
                 $head += "`n" + $waitNote
             }
-            End-Op ((T "完成，释放 {0}，C 盘现在剩余 {1}") -f (GB ([math]::Max([double]0, [double]$freed))), (GB $after)) -KeepCard -headline $head -reportLines (Plan-Lines)
-            if ($ctl.Overlay.Visibility -eq 'Visible') { $script:askRemind = $true } else { $script:askRemindNow = $true }
-            $ctl.Summary.Text = (T "已完成：C 盘从剩余 {0} 变成 {1}。每一项的结果写在列表里；想看还剩什么，再点「扫描」。") -f (GB $script:runFreeC0), (GB $after)
+            $cx = [bool]$sync.WasCancelled
+            if ($cx) { $head = (T '已中途取消：还没开始的项目都没做，已经做完的不会撤销。') + "`n" + $head }
+            $endText = if ($cx) { (T "已中途取消，释放 {0}，C 盘现在剩余 {1}") } else { (T "完成，释放 {0}，C 盘现在剩余 {1}") }
+            End-Op ($endText -f (GB ([math]::Max([double]0, [double]$freed))), (GB $after)) -KeepCard -headline $head -reportLines (Plan-Lines)
+            if (-not $cx) { if ($ctl.Overlay.Visibility -eq 'Visible') { $script:askRemind = $true } else { $script:askRemindNow = $true } }
+            $sumText = if ($cx) { (T "已中途取消：C 盘从剩余 {0} 变成 {1}。每一项的结果写在列表里；想看还剩什么，再点「扫描」。") } else { (T "已完成：C 盘从剩余 {0} 变成 {1}。每一项的结果写在列表里；想看还剩什么，再点「扫描」。") }
+            $ctl.Summary.Text = $sumText -f (GB $script:runFreeC0), (GB $after)
             $script:reclaim = [double]0
             $lines = @(); if ($sync.RunSummary) { $lines = @($sync.RunSummary) }
             $shown = @($lines | Select-Object -First 22)
             if ($lines.Count -gt 22) { $shown += ((T "……另有 {0} 项，见左下角「运行记录」") -f ($lines.Count - 22)) }
-            if (-not $cardWasOpen) { $script:pendingDialog = @{ Title = (T '执行完成'); Kind = $(if ($waitNote) { 'warn' } else { 'done' }); Items = $shown
+            if (-not $cardWasOpen) { $script:pendingDialog = @{ Title = $(if ($cx) { (T '已中途取消') } else { (T '执行完成') }); Kind = $(if ($waitNote -or $cx) { 'warn' } else { 'done' }); Items = $shown
                 Text = (T "共用时 {0}。C 盘剩余 {1} → {2}，释放 {3}。{4}") -f (FmtSpan $script:lastElapsed), (GB $script:runFreeC0), (GB $after), (GB ([math]::Max([double]0, [double]$freed))), $(if ($waitNote) { "`n`n" + $waitNote } else { '' }) } }
             try { [System.Media.SystemSounds]::Asterisk.Play() } catch {}
             Fill-DestChoices
@@ -8151,9 +8646,10 @@ $timer.Add_Tick({
             $cardWasOpen = ($ctl.Overlay.Visibility -eq 'Visible')
             $bin = if ($script:lastRecycle) { (T "`n`n文件在回收站里，清空回收站后才真正释放磁盘空间。") } else { '' }
             $binShort = if ($script:lastRecycle) { (T '文件在回收站里，清空回收站后才真正释放空间。') } else { '' }
-            End-Op ((T "完成，删除了 {0} 个文件") -f $nDel) -KeepCard -headline ((T "删除了 {0} 个重复文件。{1}") -f $nDel, $binShort) -reportLines @(,@((T '没删的（内容和保留的那份不完全相同，或文件被占用）记在左下角的「运行记录」里。'), '#6E6E73', $false))
+            $cx = [bool]$sync.WasCancelled
+            End-Op ($(if ($cx) { (T "已中途取消，删除了 {0} 个文件") } else { (T "完成，删除了 {0} 个文件") }) -f $nDel) -KeepCard -headline ($(if ($cx) { (T "已中途取消：删除了 {0} 个重复文件，剩下的没删。{1}") } else { (T "删除了 {0} 个重复文件。{1}") }) -f $nDel, $binShort) -reportLines @(,@((T '没删的（内容和保留的那份不完全相同，或文件被占用）记在左下角的「运行记录」里。'), '#6E6E73', $false))
             try { [System.Media.SystemSounds]::Asterisk.Play() } catch {}
-            if (-not $cardWasOpen) { $script:pendingDialog = @{ Title = (T '删除完成'); Kind = 'done'; Text = ((T "删除了 {0} 个重复文件，共用时 {1}。{2}`n`n没删的（内容和保留的那份不完全相同，或文件被占用）记在「运行记录」里。") -f $nDel, (FmtSpan $script:lastElapsed), $bin) } }
+            if (-not $cardWasOpen) { $script:pendingDialog = @{ Title = $(if ($cx) { (T '已中途取消') } else { (T '删除完成') }); Kind = 'done'; Text = ((T "删除了 {0} 个重复文件，共用时 {1}。{2}`n`n没删的（内容和保留的那份不完全相同，或文件被占用）记在「运行记录」里。") -f $nDel, (FmtSpan $script:lastElapsed), $bin) } }
         }
         elseif ($sync.Mode -eq 'map') {
             $root = $sync.MapResult
@@ -8161,6 +8657,7 @@ $timer.Add_Tick({
             if ($root) {
                 $script:mapRoot = $root; $script:mapCur = $root; $script:mapScanAt = Get-Date
                 $script:movedTargets = $null
+                $script:prevSnap = $null
                 if (-not $stopped) { try { Update-Growth $root } catch { $script:growNote = (T '没能和上次比较') } } else { $script:growNote = (T '这次扫描中途停止了，不和上次比较') }
                 End-Op ((T "完成，{0:N0} 个文件，共 {1}") -f $root.Files, (Fmt $root.Size))
                 if ($script:mapView -eq 'grow') { Set-MapView 'grow' } elseif ($script:mapView -eq 'files') { Show-MapFiles } else { Show-MapLevel $root }
@@ -8173,7 +8670,12 @@ $timer.Add_Tick({
             $res = $sync.MapDel; $r = $script:mapDelRow
             if ($res -and $res.Ok) {
                 End-Op ((T "已删除 {0}") -f $r.Name)
-                if ($r.Node) { [DiskMap]::Detach($r.Node) } elseif ($script:mapCur -and (Split-Path $r.Path -Parent) -ieq $script:mapCur.FullPath().TrimEnd('\')) { [DiskMap]::DropFile($script:mapCur, $r.Size) }
+                if ($r.Node) { [DiskMap]::Detach($r.Node) }
+                else {
+                    $pn = [DiskMap]::Find($script:mapRoot, (Split-Path $r.Path -Parent))
+                    if ($pn) { [DiskMap]::DropFile($pn, $r.Size) }
+                    [DiskMap]::ForgetFile($r.Path)
+                }
                 if ($script:mapView -eq 'files') { Show-MapFiles } else { Show-MapLevel $script:mapCur }
             } else {
                 End-Op (T '没有删掉')
@@ -8184,9 +8686,9 @@ $timer.Add_Tick({
             $x = $sync.FcResult
             if ($x) {
                 $saved = [math]::Max([double]0, $x.Before - $x.After)
-                End-Op ((T "完成，省了 {0}") -f (Fmt $saved))
+                End-Op ($(if ($x.Cancelled) { (T "已中途取消，省了 {0}") } else { (T "完成，省了 {0}") }) -f (Fmt $saved))
                 $ctl.SaveFcState.Text = (T "上次压缩：{0}，实际占用 {1} → {2}，省了 {3}") -f $x.Path, (Fmt $x.Before), (Fmt $x.After), (Fmt $saved)
-                $script:pendingDialog = @{ Title = (T '压缩完成'); Kind = 'done'; Text = ((T "{0}`n`n实际占用 {1} → {2}，省了 {3}。文件照常使用。") -f $x.Path, (Fmt $x.Before), (Fmt $x.After), (Fmt $saved)) }
+                $script:pendingDialog = @{ Title = $(if ($x.Cancelled) { (T '压缩已中途取消') } else { (T '压缩完成') }); Kind = 'done'; Text = ((T "{0}`n`n实际占用 {1} → {2}，省了 {3}。文件照常使用。") -f $x.Path, (Fmt $x.Before), (Fmt $x.After), (Fmt $saved)) + $(if ($x.Cancelled) { (T "`n`n已经压缩的文件保持压缩，剩下的没压缩。想压缩剩下的，再压缩一次这个文件夹就好。") } else { '' }) }
             } else { End-Op (T '没有完成') }
         }
         elseif ($sync.Mode -eq 'compactos') {
@@ -8207,25 +8709,27 @@ $timer.Add_Tick({
         elseif ($sync.Mode -eq 'vmove') {
             $res = $sync.VmRes
             $ok = $res -and $res.Done -gt 0
-            End-Op $(if ($ok) { (T "已搬 {0}") -f (GB $res.Moved) } else { (T '没搬成') })
+            $cx = $res -and $res.Cancelled -and -not $ok
+            End-Op $(if ($ok) { (T "已搬 {0}") -f (GB $res.Moved) } elseif ($cx) { (T '已取消') } else { (T '没搬成') })
             $msg = if ($res -and $res.Msgs) { ($res.Msgs -join "`n") } else { '' }
-            $script:pendingDialog = @{ Title = $(if ($ok) { (T '搬好了') } else { (T '没搬成') }); Kind = $(if ($ok) { 'done' } else { 'warn' }); Text = $(if ($ok) { (T "已搬到 {0}。原位置留了链接，软件照常使用。{1}") -f ($res.Dest -join (T '；')), $msg } else { $msg }) }
+            $script:pendingDialog = @{ Title = $(if ($ok) { (T '搬好了') } elseif ($cx) { (T '已取消') } else { (T '没搬成') }); Kind = $(if ($ok) { 'done' } elseif ($cx) { 'info' } else { 'warn' }); Text = $(if ($ok) { (T "已搬到 {0}。原位置留了链接，软件照常使用。{1}") -f ($res.Dest -join (T '；')), $msg } else { $msg }) }
             Load-Save; Fill-DestChoices
         }
         elseif ($sync.Mode -eq 'appmove') {
             $res = $sync.AmRes; $r = $script:appMoveRow
             $ok = $res -and $res.Done -gt 0
-            End-Op $(if ($ok) { (T "已搬 {0}") -f (GB $res.Moved) } else { (T '没搬成') })
+            $cx = $res -and $res.Cancelled -and -not $ok
+            End-Op $(if ($ok) { (T "已搬 {0}") -f (GB $res.Moved) } elseif ($cx) { (T '已取消') } else { (T '没搬成') })
             $msg = if ($res -and $res.Msgs) { ($res.Msgs -join "`n") } else { '' }
             if ($ok) {
                 $script:pendingDialog = @{ Title = ((T "「{0}」搬好了") -f $r.Name); Kind = 'done'
                     Text = ((T "已搬到 {0}，C 盘腾出约 {1}。原位置留了链接，快捷方式和开始菜单照常能打开。建议现在打开一次这个软件，确认一切正常。`n`n要搬回来，到「搬家管理」点「搬回 C 盘」。{2}") -f ($res.Dest -join (T '；')), (GB $res.Moved), $(if ($msg) { "`n`n$msg" } else { '' })) }
-            } else { $script:pendingDialog = @{ Title = (T '没搬成'); Kind = 'warn'; Text = $(if ($msg) { $msg } else { (T '没有搬，原文件夹没动。') }) } }
+            } else { $script:pendingDialog = @{ Title = $(if ($cx) { (T '已取消') } else { (T '没搬成') }); Kind = $(if ($cx) { 'info' } else { 'warn' }); Text = $(if ($msg) { $msg } else { (T '没有搬，原文件夹没动。') }) } }
             $script:runAfterApps = $true
             Fill-DestChoices
         }
         elseif ($sync.Mode -eq 'apps') {
-            End-Op (T '完成')
+            End-Op $(if ($sync.WasCancelled) { (T '已中途取消，没统计到的软件显示安装时登记的大小') } else { (T '完成') })
             if ($sync.AppsResult) { Build-AppRows $sync.AppsResult } else { $ctl.EmptyAppsText.Text = (T '没读到已安装的软件') }
         }
         elseif ($sync.Mode -eq 'uninst') {
@@ -8236,9 +8740,10 @@ $timer.Add_Tick({
         }
         elseif ($sync.Mode -eq 'leftdel') {
             $x = $sync.LeftRes
-            End-Op (T '完成')
+            $cx = [bool]$sync.WasCancelled
+            End-Op $(if ($cx) { (T '已中途取消') } else { (T '完成') })
             $ctl.AppsLeftBox.Visibility = 'Collapsed'; $script:leftApp = $null
-            if ($x) { $script:pendingDialog = @{ Title = (T '残留已清理'); Kind = 'done'; Text = ((T "「{0}」留下的 {1} 个文件夹已移到回收站。清空回收站后才真正腾出空间。") -f $x.Name, $x.Count) } }
+            if ($x) { $script:pendingDialog = @{ Title = $(if ($cx) { (T '已中途取消') } else { (T '残留已清理') }); Kind = 'done'; Text = ((T "「{0}」留下的 {1} 个文件夹已移到回收站。清空回收站后才真正腾出空间。") -f $x.Name, $x.Count) + $(if ($cx) { (T '剩下的没删。') } else { '' }) } }
             $script:runAfterApps = $true
         }
         elseif ($sync.Mode -eq 'movesize') {
@@ -8249,9 +8754,10 @@ $timer.Add_Tick({
             $x = $sync.MoveRes
             $ok = $x -and $x.Ok
             $back = ($sync.Mode -eq 'moveback')
-            End-Op $(if ($ok) { (T '完成') } else { (T '没有完成') })
+            $cx = $x -and $x.Cancelled -and -not $ok
+            End-Op $(if ($ok) { (T '完成') } elseif ($cx) { (T '已取消') } else { (T '没有完成') })
             if ($ok) { $script:pendingDialog = @{ Title = $(if ($back) { (T '已搬回 C 盘') } else { (T '多余的副本已删除') }); Kind = 'done'; Text = $(if ($x.Msg) { $x.Msg } elseif ($back) { (T "搬回了 {0}，软件照常使用。") -f (Fmt $x.Bytes) } else { (T "腾出了 {0}。") -f (Fmt $x.Bytes) }) } }
-            else { $script:pendingDialog = @{ Title = (T '没有完成'); Kind = 'warn'; Text = $(if ($x) { $x.Msg } else { '' }) } }
+            else { $script:pendingDialog = @{ Title = $(if ($cx) { (T '已取消') } else { (T '没有完成') }); Kind = $(if ($cx) { 'info' } else { 'warn' }); Text = $(if ($x) { $x.Msg } else { '' }) } }
             $script:runAfterMoves = $true
             Fill-DestChoices
         }
@@ -8267,7 +8773,8 @@ $timer.Add_Tick({
             }
             Build-DupRows $left $left.Count
             $n = $done.Count
-            End-Op ((T "完成，合并了 {0} 个文件") -f $n) -KeepCard -headline ((T "合并了 {0} 个重复文件。每个位置的文件都还在，只占一份空间。") -f $n) -reportLines @(,@((T '没合并的（内容不完全相同、文件正被打开、不在同一块盘）记在左下角的「运行记录」里。'), '#6E6E73', $false))
+            $cx = [bool]$sync.WasCancelled
+            End-Op ($(if ($cx) { (T "已中途取消，合并了 {0} 个文件") } else { (T "完成，合并了 {0} 个文件") }) -f $n) -KeepCard -headline ($(if ($cx) { (T "已中途取消：合并了 {0} 个重复文件，剩下的没合并。每个位置的文件都还在。") } else { (T "合并了 {0} 个重复文件。每个位置的文件都还在，只占一份空间。") }) -f $n) -reportLines @(,@((T '没合并的（内容不完全相同、文件正被打开、不在同一块盘）记在左下角的「运行记录」里。'), '#6E6E73', $false))
         }
         $sync.Mode = $null
         UI-Status; UI-Busy $false
@@ -8295,6 +8802,8 @@ $win.Add_Closing({
     }
 })
 
+$ctl.OvCancel.Add_Click({ Request-Cancel })
+$ctl.OpCancel.Add_Click({ Request-Cancel })
 $ctl.OvHide.Add_Click({ $ctl.Overlay.Visibility = 'Collapsed'; UI-Log (T '进度卡片已收起，进度见窗口底部和任务栏图标；做完会弹窗告诉你。') })
 $ctl.OvClose.Add_Click({
     $ctl.Overlay.Visibility = 'Collapsed'; $script:cardShowsResult = $false

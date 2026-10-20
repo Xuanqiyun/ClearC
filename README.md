@@ -17,7 +17,7 @@
 | **聊天记录搬家** | 微信（新版和旧版）、QQ、企业微信、腾讯会议、飞书、钉钉、Telegram 的聊天记录和文件，整个搬到其他硬盘，C 盘原位置留一个链接，软件照常使用。软件开着时会先问你要不要替你关掉。 |
 | **重复文件** | 找出内容完全相同的文件。可以删掉多余的，也可以「合并为一份」（硬链接，每个位置的文件都还在，只占一份空间）。 |
 | **省空间** | 不删文件也能省：系统压缩（CompactOS）、NTFS 压缩文件夹、页面文件改到其他盘、休眠文件精简、压缩 WSL / Docker 的虚拟磁盘、把模拟器和虚拟机整个搬走。 |
-| **空间地图** | 扫描整块盘，一层层点进去看是哪些文件夹占了空间，还能和上次扫描比较，看哪里在变大。 |
+| **空间地图** | 扫描整块盘，一层层点进去看是哪些文件夹占了空间。「找文件」按大小、多久没改过、类型、名称筛选大文件；「和上次比」看哪些文件夹在变大。看到的列表可以导出成 CSV。 |
 | **软件管理** | 已装软件按占用大小排列。可以卸载，卸载后检查残留文件夹；装在 C 盘的还可以整个搬到其他盘，不用重装。 |
 | **搬家管理** | 所有搬走的文件夹和它们现在的状态。可以搬回 C 盘、修复断掉的链接、删掉没搬完留下的多余副本。 |
 | **自动提醒** | C 盘剩余空间低于设定值时在右下角提醒（每次登录电脑后和每天中午各检查一次）；每周自动清一次缓存。两项默认关闭，由 Windows 任务计划运行，不用一直开着本工具。 |
@@ -31,6 +31,7 @@
 - **删除前必须确认**：每次删除都要先勾选「我已确认这些资料不再需要」才能点删除。
 - **系统位置不让删**：Windows 文件夹、软件的安装文件夹（请到「软件管理」卸载）、保存密码和证书的位置、软件安装包缓存、搬家后的数据，都会被挡住并说明原因。
 - **搬家先核对再删**：复制到目标盘后，两边的文件个数和大小核对一致，才把原位置换成链接、删除 C 盘上的那份。核对不过、文件被占用，原文件夹都原样不动。
+- **可以中途取消**：耗时的操作随时能点「取消」，停在安全的地方。搬家时还在复制就取消，C 盘上的原文件夹不动；正在换成链接这类不能停在一半的步骤，会做完这一步再停。
 - **有记录可查**：所有改动都写进操作日志。
 
 ## 搬家是怎么工作的
@@ -123,8 +124,8 @@ ClearC frees up space on drive C: on Windows 10 / 11. It is a single exe that ne
 
 - **Clean up C:** lists what can be removed (caches, temp files, update leftovers) and what has a cost (Windows.old, Recycle Bin), each with Delete / Move / Skip.
 - **Move chat history and apps to another drive.** WeChat, QQ, WeCom, Tencent Meeting, Feishu, DingTalk and Telegram data, as well as installed apps, are copied to another drive, verified, and replaced by a directory link, so the software keeps working unchanged.
-- **Duplicates, Save space, Space map, Apps, Moved folders, Reminders, Activity log.** Find duplicate files or merge them into hard links. Use CompactOS, NTFS folder compression, page-file and hibernation settings, and WSL / Docker disk compaction. Browse folder sizes, uninstall apps and clean leftovers, move folders back, and get low-space reminders. Every change is logged.
-- **Safety rules.** Personal folders (Desktop, Documents, Downloads…) are never deleted, every deletion needs an explicit confirmation, and system locations are blocked.
+- **Duplicates, Save space, Space map, Apps, Moved folders, Reminders, Activity log.** Find duplicate files or merge them into hard links. Use CompactOS, NTFS folder compression, page-file and hibernation settings, and WSL / Docker disk compaction. Browse folder sizes, find large files by size, age, type and name, see which folders grew since the last scan, export lists to CSV, uninstall apps and clean leftovers, move folders back, and get low-space reminders. Every change is logged.
+- **Safety rules.** Personal folders (Desktop, Documents, Downloads…) are never deleted, every deletion needs an explicit confirmation, and system locations are blocked. Long operations can be cancelled at any time and stop at a safe point.
 
 The interface is available in English and Chinese. Switch with "English / 中文" at the bottom of the sidebar; the first launch follows the Windows display language.
 
