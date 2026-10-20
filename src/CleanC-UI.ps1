@@ -1135,6 +1135,7 @@ public class CandRow : INotifyPropertyChanged {
     public string Location { get; set; }
     public string[] Apps { get; set; }
     public bool CanMove { get; set; }
+    public bool Partial { get; set; }    // 目标盘上已经有上次复制的一部分
     private bool _chk; public bool Checked { get { return _chk; } set { if (_chk != value) { _chk = value; Dirty = true; Raise("Checked"); } } }
     private string _status = ""; public string Status { get { return _status; } set { _status = value; Raise("Status"); } }
     private string _brush = "#86868B"; public string StatusBrush { get { return _brush; } set { _brush = value; Raise("StatusBrush"); } }
@@ -1349,13 +1350,13 @@ function Get-ChatApps {
         '飞书'     = @{ P = @('Feishu*','Lark'); Dirs = @('\Feishu\','\LarkShell\','\Lark\') }
         '钉钉'     = @{ P = @('DingTalk*','DingDing*'); Dirs = @('\DingDing\','\DingTalk\') }
         'Telegram' = @{ P = @('Telegram'); Dirs = @('\Telegram Desktop\') }
-        'Discord'  = @{ P = @('Discord','DiscordPTB','DiscordCanary'); Dirs = @('\Discord\','\DiscordPTB\','\DiscordCanary\') }
-        'Slack'    = @{ P = @('slack'); Dirs = @('\slack\') }
-        'Signal'   = @{ P = @('Signal'); Dirs = @('\signal-desktop\') }
-        'LINE'     = @{ P = @('LINE','LineLauncher','LineUpdater','LineMediaPlayer'); Dirs = @('\LINE\bin\') }
-        'Viber'    = @{ P = @('Viber'); Dirs = @('\Viber\') }
-        'KakaoTalk' = @{ P = @('KakaoTalk'); Dirs = @('\Kakao\KakaoTalk\') }
-        'Zoom'     = @{ P = @('Zoom','ZoomWebHost','zWebview2Agent','CptHost','Zoom_launcher'); Dirs = @('\Zoom\bin') }
+        'Discord'  = @{ P = @('Discord','DiscordPTB','DiscordCanary'); Dirs = @("$env:LOCALAPPDATA\Discord\", "$env:LOCALAPPDATA\DiscordPTB\", "$env:LOCALAPPDATA\DiscordCanary\") }
+        'Slack'    = @{ P = @('slack'); Dirs = @("$env:LOCALAPPDATA\slack\") }
+        'Signal'   = @{ P = @('Signal'); Dirs = @("$env:LOCALAPPDATA\Programs\signal-desktop\") }
+        'LINE'     = @{ P = @('LINE','LineLauncher','LineUpdater','LineMediaPlayer'); Dirs = @("$env:LOCALAPPDATA\LINE\bin\") }
+        'Viber'    = @{ P = @('Viber'); Dirs = @("$env:LOCALAPPDATA\Viber\") }
+        'KakaoTalk' = @{ P = @('KakaoTalk'); Dirs = @("${env:ProgramFiles(x86)}\Kakao\KakaoTalk\", "$env:ProgramFiles\Kakao\KakaoTalk\") }
+        'Zoom'     = @{ P = @('Zoom','ZoomWebHost','zWebview2Agent','CptHost','Zoom_launcher'); Dirs = @("$env:APPDATA\Zoom\bin\", "$env:ProgramFiles\Zoom\bin\") }
         'Docker Desktop' = @{ P = @('Docker Desktop','com.docker.backend','com.docker.build','com.docker.dev-envs'); Dirs = @('\Docker\Docker\') }
         'VirtualBox' = @{ P = @('VirtualBox','VirtualBoxVM','VBoxHeadless','VBoxSVC'); Dirs = @('\Oracle\VirtualBox\') }
         'VMware'     = @{ P = @('vmware','vmware-vmx','vmplayer'); Dirs = @('\VMware Workstation\','\VMware Player\') }
@@ -1583,13 +1584,15 @@ function Find-MoveDest([string]$src, [string]$destRoot) {
 # 关掉占着文件夹的程序：清理项里列出的（微信、QQ 等），以及从这个文件夹里运行的程序（比如微信的插件）
 function Close-Holders($it, [string]$src) {
     $names = @()
+    # Restrict：只关用户在确认框里看到并同意关掉的程序（Allowed 里的进程名），确认之后才打开的程序不碰，搬不成就留到下次
+    $only = [bool]$it.Restrict; $ok = @($it.Allowed)
     if ($it.Kill) {
-        $p = @(Get-Process -Name $it.Kill -ErrorAction SilentlyContinue)
+        $p = @(Get-Process -Name $it.Kill -ErrorAction SilentlyContinue | Where-Object { -not $only -or $ok -contains $_.Name })
         if ($p) { $names += $p.Name; $p | Stop-Process -Force -ErrorAction SilentlyContinue }
     }
     $pre = $src.TrimEnd('\') + '\'
     $dirs = @($it.KillDirs)
-    $inside = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Id -ne $PID -and $_.Path -and
+    $inside = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Id -ne $PID -and $_.Path -and (-not $only -or $ok -contains $_.Name) -and
         ($_.Path.StartsWith($pre, [StringComparison]::OrdinalIgnoreCase) -or ($dirs.Count -gt 0 -and (PathHasAny $_.Path $dirs))) })
     if ($inside) { $names += $inside.Name; $inside | Stop-Process -Force -ErrorAction SilentlyContinue }
     $names = @($names | Select-Object -Unique)
@@ -1597,6 +1600,30 @@ function Close-Holders($it, [string]$src) {
     return ,$names
 }
 
+# 搬家时会关掉哪些程序：和 Close-Holders 同样的规则（进程名、程序所在的文件夹、从要搬的文件夹里运行的程序），
+# 在确认框里列出来；确认后后台只关这些。$items：@{ Kill; KillDirs; Paths } 的列表
+function Get-KillPreview($items) {
+    $procs = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Id -ne $PID })
+    $names = @()
+    foreach ($it in @($items)) {
+        if (-not $it) { continue }
+        $pats = @($it.Kill | Where-Object { $_ }); $dirs = @($it.KillDirs | Where-Object { $_ })
+        $pres = @($it.Paths | Where-Object { $_ } | ForEach-Object { ([string]$_).TrimEnd('\') + '\' })
+        foreach ($p in $procs) {
+            $hit = $false
+            foreach ($pat in $pats) { if ($p.Name -like $pat) { $hit = $true; break } }
+            if (-not $hit) {
+                $path = ''; try { $path = [string]$p.Path } catch {}
+                if ($path) {
+                    foreach ($pre in $pres) { if ($path.StartsWith($pre, [StringComparison]::OrdinalIgnoreCase)) { $hit = $true; break } }
+                    if (-not $hit -and $dirs.Count -gt 0 -and (PathHasAny $path $dirs)) { $hit = $true }
+                }
+            }
+            if ($hit) { $names += $p.Name }
+        }
+    }
+    return ,@($names | Select-Object -Unique)
+}
 # 把原文件夹改名。被占用时关掉占用的程序再试，一共试 $tries 次（约半分钟）
 function Rename-WithRetry([string]$from, [string]$to, $it, [int]$tries = 8) {
     $err = ''
@@ -2029,6 +2056,7 @@ function Invoke-MoveBack($rec, $res) {
     try { [Environment]::CurrentDirectory = $env:SystemRoot; Set-Location -LiteralPath $env:SystemRoot } catch {}
     $it = @{ Kill = @(); KillDirs = @() }
     if ($rec.Idx) { foreach ($c in (Get-Catalog)) { if ($c.Idx -eq $rec.Idx) { $it = $c } } }
+    if ($rec.Restrict) { $it.Restrict = $true; $it.Allowed = @($rec.Allowed) }
     SetP @{ MoveItem = $true; MoveBack = $true; HasKill = [bool]$it.Kill; MovePhase = 'kill'; PathNo = 0; PathCount = 1; MovePath = $dst; MoveDest = $src; MoveReuse = $false }
     [void](Close-Holders $it $src); [void](Close-Holders $it $dst)
     SetP @{ MovePhase = 'measure'; SubKind = 'measure'; SubStart = (Get-Date); Detail = ((T "统计 {0} 的大小") -f $dst) }
@@ -3564,6 +3592,12 @@ Zoom 装在这里的程序和本地数据。会议录像默认存在「文档」
 全选	Select all
 勾选所有聊天记录和软件。「其他文件夹」请看清说明再自己勾选	Ticks all chat histories and apps. Read the notes for "Other folders" and tick them yourself
 全不选	Select none
+搬家时还要关掉这些程序	These programs also need to be closed
+这些程序正在使用要搬的文件夹：{0}。不关掉的话文件被占用，这几项搬不成。\n\n点「关掉并继续」会替你关掉它们，没保存的内容请先保存；点「不关」就先不碰它们，这几项复制好后会停在最后一步，下次再搬很快。	These programs are using folders that will be moved: {0}. If they stay open, the files are in use and those items can't be moved.\n\n"Close and continue" closes them for you; save any unsaved work first. "Don't close" leaves them alone: those items are copied but stop at the last step, and the next move is quick.
+不关	Don't close
+关掉并继续	Close and continue
+这是一个链接（多半是搬家后留下的），删了软件会找不到数据。要处理请到「搬家管理」	This is a link (most likely left by a move); deleting it would leave apps unable to find their data. Manage it in "Moved folders"
+它所在的文件夹 {0} 已经搬到其他盘了，这份扫描结果过时了，请重新扫描	Its folder {0} has been moved to another drive, so this scan is out of date. Please scan again
 '@
 # 英文的帮助页（整页替换中文的那一页）
 $script:helpEnXaml = @'
@@ -7045,6 +7079,20 @@ $ctl.BtnDestBrowse.Add_Click({
     Fill-DestChoices $path
 })
 
+# 搬家前要关掉的程序：Names 交给后台（只关这些），Text 给人看（聊天软件写软件名，其余写进程名）
+function Get-ClosePlan($items, [string[]]$appKeys) {
+    $names = @(Get-KillPreview $items)
+    $friendly = @(); $covered = @{}
+    if ($appKeys) {
+        $defs = Get-ChatApps
+        foreach ($a in @(Get-BusyApps $appKeys)) {
+            $friendly += (T $a)
+            foreach ($n in $names) { foreach ($pat in (@($defs[$a].P) + @($defs[$a].K))) { if ($pat -and $n -like $pat) { $covered[$n] = $true } } }
+        }
+    }
+    foreach ($n in $names) { if (-not $covered.ContainsKey($n)) { $friendly += $n } }
+    return @{ Names = $names; Text = (@($friendly | Select-Object -Unique) -join (T '、')) }
+}
 # 这些聊天软件里哪些正开着：先按进程名找，对不上再看程序所在的文件夹（例如 ...\DingDing\...）
 function Get-BusyApps([string[]]$apps) {
     $def = Get-ChatApps
@@ -7127,6 +7175,20 @@ function Invoke-RunSelected([string]$title = (T '执行所选操作')) {
             }
         }
     }
+    # 搬家时还会关掉的其他程序（后台进程、从要搬的文件夹里运行的程序）：先说清楚，确认后后台只关这些
+    $allowed = @()
+    if ($moves) {
+        $cp = Get-ClosePlan @($moves | ForEach-Object { $cat0[$_.Idx] }) @($moves | ForEach-Object { @($cat0[$_.Idx].Apps) } | Where-Object { $_ } | Select-Object -Unique)
+        $agreed = @{}; if ($chatMoves -and $busy) { $defs = Get-ChatApps; foreach ($a in $busy) { foreach ($n in $cp.Names) { foreach ($pat in (@($defs[$a].P) + @($defs[$a].K))) { if ($pat -and $n -like $pat) { $agreed[$n] = $true } } } } }
+        $extra = @($cp.Names | Where-Object { -not $agreed.ContainsKey($_) })
+        $allowed = @($cp.Names)
+        if ($extra.Count -gt 0) {
+            $ans = Show-Sheet -Kind warn -Title (T '搬家时还要关掉这些程序') -Text ((T "这些程序正在使用要搬的文件夹：{0}。不关掉的话文件被占用，这几项搬不成。`n`n点「关掉并继续」会替你关掉它们，没保存的内容请先保存；点「不关」就先不碰它们，这几项复制好后会停在最后一步，下次再搬很快。") -f ($extra -join (T '、'))) `
+                -Buttons @((T '取消'), (T '不关'), (T '关掉并继续')) -Primary (T '关掉并继续') -Cancel (T '取消')
+            if ($ans -eq (T '取消')) { return }
+            if ($ans -eq (T '不关')) { $allowed = @($cp.Names | Where-Object { $agreed.ContainsKey($_) }) }
+        }
+    }
     # 每一行先标「等待」，执行时由后台逐行改成 进行中 / 完成 / 失败
     $sync.Status = [hashtable]::Synchronized(@{}); $sync.StatusVer = 0; $script:statusSeen = -1; $sync.RunSummary = $null; $sync.WaitCount = 0
     $planned = @{}; foreach ($x in $plan) { $planned[$x.Idx] = $true }
@@ -7160,6 +7222,7 @@ foreach ($p in $ordered) {
     try {
         if ($p.Action -eq (T '搬到其他盘')) {
             New-Item -ItemType Directory -Path $dest -Force | Out-Null
+            $it.Restrict = $true; $it.Allowed = @($arg.Allowed)
             Invoke-Move $it $dest $res
             if ($res.Wait -gt 0) { $sync.WaitCount = [int]$sync.WaitCount + $res.Wait }
             $rt = Move-ResultText $res; $t = $rt[0]; $k = $rt[1]
@@ -7186,7 +7249,7 @@ if ($sync.WasCancelled) {
 }
 $sync.RunSummary = $summary
 if ($sync.WasCancelled) { Log ((T "已中途取消。C 盘现在剩余 {0}") -f (GB (FreeC))) } else { Log ((T "全部完成。C 盘现在剩余 {0}") -f (GB (FreeC))) }
-'@ @{ Plan = $plan; Dest = $dest }
+'@ @{ Plan = $plan; Dest = $dest; Allowed = $allowed }
 }
 $ctl.BtnRun.Add_Click({ Invoke-RunSelected })
 
@@ -7889,10 +7952,12 @@ function Draw-MapTree {
     if ($w -lt 40 -or $h -lt 40) { return }   # 还没排好版：等 SizeChanged 再画
     $ti = Get-TreeItems @($ctl.MapList.ItemsSource)
     if ($ti.Sizes.Count -eq 0) { return }
-    $rects = Get-TreeRects $ti.Sizes 0 0 $w $h
+    $order = @(0..($ti.Sizes.Count - 1) | Sort-Object { $ti.Sizes[$_] } -Descending)
+    $rects = Get-TreeRects ([double[]]@($order | ForEach-Object { $ti.Sizes[$_] })) 0 0 $w $h
     $clear = Brush '#00000000'
-    for ($i = 0; $i -lt $ti.Sizes.Count; $i++) {
-        $rc = $rects[$i]; if (-not $rc) { continue }
+    for ($q = 0; $q -lt $order.Count; $q++) {
+        $i = $order[$q]
+        $rc = $rects[$q]; if (-not $rc) { continue }
         $row = if ($i -lt $ti.Show.Count) { $ti.Show[$i] } else { $null }
         $b = New-Object System.Windows.Controls.Border
         $b.Width = [math]::Max([double]0, $rc[2] - 2); $b.Height = [math]::Max([double]0, $rc[3] - 2)
@@ -8127,8 +8192,10 @@ footer { margin-top:40px; color:var(--mute); font-size:12px; border-top:1px soli
             $fill = if ($isRest) { '#c7ccd6' } else { $script:treeColors[$q % $script:treeColors.Count] }
             & $add ('<g><title>{0}  {1}</title><rect x="{2}" y="{3}" width="{4}" height="{5}" rx="3" fill="{6}" stroke="#fff" stroke-width="2"/>' -f (& $H $name), (& $H (Fmt $sorted[$q])), (& $num $rc[0]), (& $num $rc[1]), (& $num $rc[2]), (& $num $rc[3]), $fill)
             if ($rc[2] -gt 70 -and $rc[3] -gt 30) {
-                $max = [math]::Max(3, [int](($rc[2] - 14) / 8))
-                $label = if ($name.Length -gt $max) { $name.Substring(0, $max - 1) + '…' } else { $name }
+                # 估算文字宽度：中日韩文字约 13 像素，其他约 7.5 像素
+                $room = $rc[2] - 14; $wsum = 0.0; $cut = $name.Length
+                for ($c = 0; $c -lt $name.Length; $c++) { $wsum += $(if ([int][char]$name[$c] -ge 0x2E80) { 13 } else { 7.5 }); if ($wsum -gt $room) { $cut = [math]::Max(1, $c - 1); break } }
+                $label = if ($cut -lt $name.Length) { $name.Substring(0, $cut) + '…' } else { $name }
                 & $add ('<text x="{0}" y="{1}" fill="#fff" font-size="13" font-weight="600">{2}</text>' -f (& $num ($rc[0] + 7)), (& $num ($rc[1] + 18)), (& $H $label))
                 if ($rc[3] -gt 44) { & $add ('<text x="{0}" y="{1}" fill="#fff" font-size="12" opacity=".9">{2}</text>' -f (& $num ($rc[0] + 7)), (& $num ($rc[1] + 35)), (& $H (Fmt $sorted[$q]))) }
             }
@@ -8323,6 +8390,8 @@ foreach ($x in $arg.Items) {
     SetP @{ Steps = $arg.Items.Count; Step = $i; StepName = (Split-Path $p -Leaf); SubKind = 'action'; SubStart = (Get-Date); Detail = $p }
     # 删之前再查一次：个人文件夹、系统位置、软件安装文件夹、搬家后的数据一律不删
     $why = Get-DeleteBlock $p
+    if (-not $why -and (IsLink $p)) { $why = (T '这是一个链接（多半是搬家后留下的），删了软件会找不到数据。要处理请到「搬家管理」') }
+    if (-not $why) { $up = Get-LinkedAncestor $p; if ($up) { $why = ((T "它所在的文件夹 {0} 已经搬到其他盘了，这份扫描结果过时了，请重新扫描") -f $up) } }
     if ($why) { [void]$res.Fail.Add(((T "{0}：{1}") -f $p, $why)); continue }
     $msg = ''
     if ($arg.Recycle) {
@@ -8463,6 +8532,7 @@ foreach ($c in $cat) {
     foreach ($p in $c.Paths) {
         if (-not $p) { continue }
         $catKeys += $p.TrimEnd('\').ToLowerInvariant()
+        if (-not $p.StartsWith("$env:SystemDrive\", [StringComparison]::OrdinalIgnoreCase)) { continue }   # 比如「文档」已经改到 D 盘
         if (-not (Test-Path -LiteralPath $p -PathType Container)) { continue }
         if ($c.NoOneDrive -and $p -like '*OneDrive*') { continue }
         if ((IsLink $p) -or (Get-LinkedAncestor $p)) { continue }
@@ -8482,11 +8552,13 @@ if (-not $sync.WasCancelled) {
     $svc = Get-ServicePaths
     $sd = $env:SystemDrive
     $onC = @($apps | Where-Object { $_.Location -and $_.Location.StartsWith("$sd\", [StringComparison]::OrdinalIgnoreCase) })
-    $step++; $n = 0
+    $step++; $n = 0; $seenLoc = @{}
     foreach ($a in $onC) {
         if (Stopping) { break }
         $n++
         $loc = ([string]$a.Location).TrimEnd('\')
+        if ($seenLoc.ContainsKey($loc.ToLowerInvariant())) { continue }   # 注册表里同一个文件夹登记了两次
+        $seenLoc[$loc.ToLowerInvariant()] = $true
         if (-not (Test-Path -LiteralPath $loc -PathType Container)) { continue }
         if ((IsLink $loc) -or (Get-LinkedAncestor $loc)) { continue }
         # 和「聊天记录」等项目是同一个文件夹（或互相包含）的，只列一次
@@ -8533,7 +8605,7 @@ function Build-CandRows($list) {
         $r.PathText = (@($x.Paths) -join (T '；'))
         $r.Location = if ($x.Type -eq 'app') { $x.Location } else { [string]@($x.Paths)[0] }
         $r.Apps = [string[]]@($x.Apps)
-        $r.CanMove = ($g -ne 'blocked')
+        $r.CanMove = ($g -ne 'blocked'); $r.Partial = [bool]$x.Partial
         if ($x.Type -eq 'app') {
             $meta = @(); if ($x.Publisher) { $meta += $x.Publisher }; if ($x.Version) { $meta += ((T '版本 ') + $x.Version) }
             $r.Note = if ($x.Block) { [string]$x.Block } else { $meta -join ' · ' }
@@ -8597,9 +8669,9 @@ function Start-MoveMany {
     if ($sel.Count -eq 0) { return }
     $dest = Get-Dest
     if (-not $dest) { Show-Sheet -Kind warn -Title (T '没有可用的搬家目标') -Text (T '这台电脑没有 C 盘以外的硬盘，或者还没选搬家目标。') | Out-Null; return }
-    $total = [double]0; foreach ($r in $sel) { $total += [double]$r.Size }
+    $total = [double]0; $need = [double]0; foreach ($r in $sel) { $total += [double]$r.Size; if (-not $r.Partial) { $need += [double]$r.Size } }
     $free = DriveFree ($dest.Substring(0, 2))
-    if ($free -gt 0 -and $free -lt $total + 1GB) {
+    if ($free -gt 0 -and $free -lt $need + 1GB) {
         Show-Sheet -Kind warn -Title (T '目标盘放不下') -Text ((T "选中的一共约 {0}，{1} 只剩 {2}。少选几项，或者换一块空间更大的盘。") -f (Fmt $total), $dest.Substring(0, 2), (Fmt $free)) | Out-Null; return
     }
     # 给资源管理器装了右键菜单之类组件的软件，文件夹一直被占着，搬不了
@@ -8616,9 +8688,9 @@ function Start-MoveMany {
     # 要先关掉的软件
     $cat0 = @{}; foreach ($c in $catalog) { $cat0[$c.Idx] = $c }
     $need = @($sel | Where-Object { $_.Type -eq 'cat' } | ForEach-Object { @($cat0[$_.Idx].Apps) } | Where-Object { $_ } | Select-Object -Unique)
-    $busy = if ($need) { @(Get-BusyApps $need) } else { @() }
-    $running = @(); foreach ($r in @($sel | Where-Object { $_.Type -eq 'app' })) { $running += @(Get-ProcsInside @($r.Location)) }
-    $who = (@(@($busy | ForEach-Object { T $_ }) + $running) | Select-Object -Unique) -join (T '、')
+    $pv = @($sel | ForEach-Object { if ($_.Type -eq 'app') { @{ Kill = @(); KillDirs = @(); Paths = @($_.Location) } } else { $cat0[$_.Idx] } })
+    $cp = Get-ClosePlan $pv $need
+    $who = $cp.Text
     $text = (T "把下面 {0} 项搬到 {1}，一共约 {2}。每一项都先复制、核对两边一致，再把 C 盘上的原位置换成链接，删掉 C 盘上的那份；软件照常使用，以后可以在「已经搬走的」里搬回 C 盘。") -f $sel.Count, $dest, (Fmt $total)
     if ($who) { $text += ((T "`n`n{0} 正在运行，搬之前会替你关掉（包括屏幕右下角托盘里的）。没保存的内容请先保存。") -f $who) }
     $text += (T "`n`n要注意：目标盘要一直接着；不要删除、改名或移动目标盘上的 CDriveMoved 文件夹。")
@@ -8627,6 +8699,7 @@ function Start-MoveMany {
     if ((Show-Sheet -Title ((T "把 {0} 项搬到其他盘？") -f $sel.Count) -Text $text -Items $items -Buttons @((T '取消'), $btn) -Primary $btn -Cancel (T '取消')) -ne $btn) { return }
     if ($script:worker) { return }
     $plan = @(); foreach ($r in $sel) { $plan += @{ Key = $r.Key; Type = $r.Type; Idx = $r.Idx; Name = $r.Name; Location = $r.Location; Bytes = [double]$r.Size; Note = $r.Note } }
+    $allowed = @($cp.Names)
     $sync.Status = [hashtable]::Synchronized(@{}); $sync.StatusVer = 0; $script:statusSeen = -1; $script:candSeen = -1; $sync.WaitCount = 0
     foreach ($r in $sel) { $r.Status = (T '等待'); $r.StatusBrush = '#86868B' }
     $script:runPlan = @($plan | ForEach-Object { @{ Idx = $_.Key; Name = $_.Name } })
@@ -8653,9 +8726,11 @@ foreach ($p in $arg.Plan) {
         if ($p.Type -eq 'app') {
             $item = @{ N = $p.Name; Paths = @($p.Location); Apps = @(); Kill = @(); KillDirs = @()
                 BusyHint = (T '还有程序开着里面的文件。请退出这个软件（包括屏幕右下角托盘里的图标），关掉打开着这个文件夹的窗口，再搬一次；已经复制好的部分下次直接用，很快') }
+            $item.Restrict = $true; $item.Allowed = @($arg.Allowed)
             Invoke-AppMove $item $dest $res
         } else {
-            Invoke-Move $cat[[int]$p.Idx] $dest $res
+            $it = $cat[[int]$p.Idx]; $it.Restrict = $true; $it.Allowed = @($arg.Allowed)
+            Invoke-Move $it $dest $res
         }
         if ($res.Wait -gt 0) { $sync.WaitCount = [int]$sync.WaitCount + $res.Wait }
         $rt = Move-ResultText $res; $t = $rt[0]; $k = $rt[1]
@@ -8674,7 +8749,7 @@ if ($sync.WasCancelled) {
     }
 }
 $sync.MmRes = @{ Summary = $summary; Done = $doneKeys; Moved = $moved }
-'@ @{ Plan = $plan; Dest = $dest }
+'@ @{ Plan = $plan; Dest = $dest; Allowed = $allowed }
 }
 
 $ctl.BtnMovesRefresh.Add_Click({ if (-not $script:worker) { $script:candPending = $true; Load-Moves } })
@@ -8711,15 +8786,19 @@ $res = @{}; Invoke-DropCopy $arg.Rec $res; $sync.MoveRes = $res
             if ((Show-Sheet -Title ((T "把「{0}」搬回 C 盘？") -f $r.Name) -Text $text -Buttons @((T '取消'), (T '搬回')) -Primary (T '搬回') -Cancel (T '取消')) -ne (T '搬回')) { return }
             $rec = @{ Src = $r.Src; Dst = $r.Dst; Idx = 0 }; $apps = @()
             foreach ($c in $catalog) { if (@($c.Paths) -contains $r.Src) { $rec.Idx = $c.Idx; $apps = @($c.Apps) } }
-            $inside = Get-ProcsInside @($r.Src, $r.Dst)
+            $cItem = @{ Kill = @(); KillDirs = @() }; foreach ($c in $catalog) { if ($c.Idx -eq $rec.Idx -and $rec.Idx) { $cItem = $c } }
+            $cp = Get-ClosePlan @(@{ Kill = @($cItem.Kill); KillDirs = @($cItem.KillDirs); Paths = @($r.Src, $r.Dst) }) $apps
+            $rec.Restrict = $true; $rec.Allowed = @($cp.Names)
+            $inside = @($cp.Names)
+            if ($inside.Count -gt 0 -and $cp.Text) { $inside = @($cp.Text) }
             if (-not $apps -and $inside.Count -gt 0) {
                 $who = $inside -join (T '、')
                 if ((Show-Sheet -Kind warn -Title ((T "需要先退出{0}") -f $who) -Text ((T "{0} 正在从这个文件夹运行，不退出的话没法搬回。点「退出并继续」会替你关掉它们（没保存的内容请先保存）。") -f $who) -Buttons @((T '取消'), (T '退出并继续')) -Primary (T '退出并继续') -Cancel (T '取消')) -ne (T '退出并继续')) { return }
             }
             if ($apps) {
                 $busy = Get-BusyApps $apps
-                if ($busy.Count -gt 0) {
-                    $who = @($busy | ForEach-Object { T $_ }) -join (T '、')
+                if ($busy.Count -gt 0 -or $cp.Names.Count -gt 0) {
+                    $who = $cp.Text
                     if ((Show-Sheet -Kind warn -Title ((T "需要先退出{0}") -f $who) -Text ((T "{0} 正在使用这个文件夹，不退出的话没法搬回。点「退出并继续」会替你关掉它们。") -f $who) -Buttons @((T '取消'), (T '退出并继续')) -Primary (T '退出并继续') -Cancel (T '取消')) -ne (T '退出并继续')) { return }
                 }
             }
@@ -8838,14 +8917,14 @@ $res = @{}; Invoke-CompactVdisk $arg.Path $arg.Kind $res; $sync.VdRes = $res
             $dest = Get-Dest
             if (-not $dest) { Show-Sheet -Kind warn -Title (T '没有可用的搬家目标') -Text (T '请先在「清理 C 盘」页的「搬家目标」里选一块 C 盘以外的硬盘。') | Out-Null; return }
             $apps = switch -Wildcard ($r.Name) { (T '安卓*') { @('Android 模拟器') } 'VirtualBox*' { @('VirtualBox') } 'VMware*' { @('VMware') } default { @() } }
-            $busy = if ($apps) { Get-BusyApps $apps } else { @() }
-            $who = @($busy | ForEach-Object { T $_ }) -join (T '、')
-            $text = (T "{0}（{1}）整个搬到 {2}，原位置留一个链接，软件照常使用。") -f $r.Path, $r.SizeText, $dest
-            if ($busy.Count -gt 0) { $text += ((T "`n`n{0} 正在运行，搬之前会替你关掉它们（正在运行的模拟器或虚拟机会被结束）。") -f $who) }
-            if ((Show-Sheet -Title ((T "把「{0}」搬到其他盘？") -f $r.Name) -Text $text -Buttons @((T '取消'), (T '搬')) -Primary (T '搬') -Cancel (T '取消')) -ne (T '搬')) { return }
             $defs = Get-ChatApps; $k = @(); $dd = @()
             foreach ($a in $apps) { $k += $defs[$a].P; $dd += $defs[$a].Dirs }
             $item = @{ N = $r.Name; Paths = @($r.Path); Apps = $apps; Kill = @($k); KillDirs = @($dd) }
+            $cp = Get-ClosePlan @($item) $apps
+            $text = (T "{0}（{1}）整个搬到 {2}，原位置留一个链接，软件照常使用。") -f $r.Path, $r.SizeText, $dest
+            if ($cp.Names.Count -gt 0) { $text += ((T "`n`n{0} 正在运行，搬之前会替你关掉它们（正在运行的模拟器或虚拟机会被结束）。") -f $cp.Text) }
+            if ((Show-Sheet -Title ((T "把「{0}」搬到其他盘？") -f $r.Name) -Text $text -Buttons @((T '取消'), (T '搬')) -Primary (T '搬') -Cancel (T '取消')) -ne (T '搬')) { return }
+            $item.Restrict = $true; $item.Allowed = @($cp.Names)
             $sync.Mode = 'vmove'; $sync.VmRes = $null
             Start-Op ((T "搬到其他盘：{0}") -f $r.Name); UI-Busy $true
             Start-Worker @'
@@ -8969,7 +9048,7 @@ function Start-AppMove($r) {
     $text += (T "`n`n要注意：{0} 盘要一直接着；以后软件大版本升级时，个别安装程序会把它重新装回 C 盘，到时在这里再搬一次就好。要搬回来，到「搬家管理」点「搬回 C 盘」。") -f $dest.Substring(0, 1)
     $btn = if ($running.Count -gt 0) { (T '关掉并搬走') } else { (T '搬到其他盘') }
     if ((Show-Sheet -Title ((T "把「{0}」搬到其他盘？") -f $r.Name) -Text $text -Buttons @((T '取消'), $btn) -Primary $btn -Cancel (T '取消')) -ne $btn) { return }
-    $item = @{ N = $r.Name; Paths = @($loc); Apps = @(); Kill = @(); KillDirs = @()
+    $item = @{ N = $r.Name; Paths = @($loc); Apps = @(); Kill = @(); KillDirs = @(); Restrict = $true; Allowed = @($running)
         BusyHint = (T '还有程序开着里面的文件。请退出这个软件（包括屏幕右下角托盘里的图标），关掉打开着这个文件夹的窗口，再搬一次；已经复制好的部分下次直接用，很快') }
     $sync.Mode = 'appmove'; $sync.AmRes = $null; $script:appMoveRow = $r
     Start-Op ((T "搬到其他盘：{0}") -f $r.Name); UI-Busy $true
@@ -9589,7 +9668,7 @@ $timer.Add_Tick({
             Load-Save
         }
         elseif ($sync.Mode -eq 'vmove') {
-            $script:candScanned = $false
+            $script:candScanned = $false; if ($ctl.PageMoves.Visibility -eq 'Visible') { $script:candPending = $true }
             $res = $sync.VmRes
             $ok = $res -and $res.Done -gt 0
             $cx = $res -and $res.Cancelled -and -not $ok
@@ -9599,7 +9678,7 @@ $timer.Add_Tick({
             Load-Save; Fill-DestChoices
         }
         elseif ($sync.Mode -eq 'appmove') {
-            $script:candScanned = $false
+            $script:candScanned = $false; if ($ctl.PageMoves.Visibility -eq 'Visible') { $script:candPending = $true }
             $res = $sync.AmRes; $r = $script:appMoveRow
             $ok = $res -and $res.Done -gt 0
             $cx = $res -and $res.Cancelled -and -not $ok
@@ -9632,7 +9711,7 @@ $timer.Add_Tick({
         }
         elseif ($sync.Mode -eq 'movescan') {
             End-Op $(if ($sync.WasCancelled) { (T '已中途取消') } else { (T '完成') })
-            if ($sync.WasCancelled -or -not $sync.CandResult) {
+            if ($sync.WasCancelled -or $null -eq $sync.CandResult) {
                 $script:candScanned = $false
                 $ctl.EmptyCandText.Text = (T '已取消。点右上角「刷新」重新看。')
                 Set-CandInfo (T '已取消，没有看完。')
@@ -9676,7 +9755,7 @@ $timer.Add_Tick({
             if ($script:candPending) { $script:runAfterCand = $true }
         }
         elseif ($sync.Mode -eq 'moveback' -or $sync.Mode -eq 'movedrop') {
-            $script:candScanned = $false
+            $script:candScanned = $false; if ($ctl.PageMoves.Visibility -eq 'Visible') { $script:candPending = $true }
             $x = $sync.MoveRes
             $ok = $x -and $x.Ok
             $back = ($sync.Mode -eq 'moveback')
@@ -9713,6 +9792,7 @@ $timer.Add_Tick({
         if ($script:runAfterApps) { $script:runAfterApps = $false; Load-Apps }
         if ($script:runAfterMoves) { $script:runAfterMoves = $false; Load-Moves }
         if ($script:runAfterCand) { $script:runAfterCand = $false; if (-not $script:worker) { Start-CandScan } }
+        if ($script:candPending -and -not $script:worker -and $ctl.PageMoves.Visibility -eq 'Visible') { Start-CandScan }
         if ($script:pendingDialog) {
             # 先清掉再弹，避免对话框打开期间定时器再弹一次
             $d = $script:pendingDialog; $script:pendingDialog = $null
