@@ -1,5 +1,12 @@
 # 更新记录
 
+## 2.3
+- 耗时的操作都能**中途取消**：进度卡片和窗口底部多了「取消」按钮。会停在安全的地方，已经做完的不会撤销：清理会停下；搬家如果还在复制，C 盘上的原文件夹不动，已复制的部分留在目标盘，下次再搬接着复制；搬回 C 盘时复制回来的那一半会删掉。正在换成链接、删除备份或运行系统命令时按钮变灰，做完这一步就能取消。扫描、查找重复文件、空间地图、统计软件大小也能停。
+- 空间地图的「最大的文件」改成「**找文件**」：在扫描时记下的 1 MB 以上的文件里，按大小、多久没改过、类型（视频、压缩包和安装包、光盘映像和虚拟磁盘等）和名称（可以用 * 和 ?）筛选，也可以只找当前文件夹里的。显示一共找到多少个、多大。
+- 空间地图的列表可以**导出 CSV**，用 Excel 打开。
+- 「和上次比」里双击一行，直接跳到那个文件夹；文件夹列表里也标出「比上次 +2.1 GB」这样的变化。
+- Cancel long operations partway (stops at a safe point; nothing already done is undone). Space map: "Find files" with size, age, type and name filters, CSV export, and growth since the last scan shown in the folder list.
+
 ## 2.2
 - 界面支持中文和英文。左下角点「English / 中文」切换，切换后本工具会自动重新打开；第一次打开时跟随系统显示语言。
 - English UI: click "English / 中文" at the bottom left of the sidebar to switch; ClearC reopens in the chosen language. The first launch follows the Windows display language.
