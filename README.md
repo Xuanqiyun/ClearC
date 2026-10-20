@@ -80,6 +80,8 @@ build/build-roslyn.ps1   其他系统上构建 exe
 - `%LOCALAPPDATA%\CleanC\`：设置（settings.txt）、C 盘空间记录（history.txt）、操作日志、空间地图快照。
 - 各盘的 `CDriveMoved\`：搬到其他盘的数据。
 - 任务计划程序里的 `CleanC` 文件夹：只在打开自动提醒或每周清理时才会创建，关掉开关就删除。
+- <img width="1509" height="970" alt="image" src="https://github.com/user-attachments/assets/39907aed-ba40-4885-bc80-381db17b7348" />
+
 
 ## 安全风险提示
 
