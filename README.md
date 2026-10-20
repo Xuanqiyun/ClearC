@@ -14,12 +14,12 @@
 | 页面 | 做什么 |
 |---|---|
 | **清理 C 盘** | 扫描后分组列出可以处理的项目，每一项都可以选「删除」「搬到其他盘」或「跳过」。缓存、临时文件、日志这类删了会自动重建的，默认选中；Windows.old、回收站这类有代价的，默认跳过。也可以「一键清理」。 |
-| **聊天记录搬家** | 微信（新版和旧版）、QQ、企业微信、腾讯会议、飞书、钉钉、Telegram 的聊天记录和文件，整个搬到其他硬盘，C 盘原位置留一个链接，软件照常使用。软件开着时会先问你要不要替你关掉。 |
+| **聊天记录搬家** | 微信（新版和旧版）、QQ、企业微信、腾讯会议、飞书、钉钉，以及 Telegram、Discord、Slack、Signal、LINE、Viber、KakaoTalk、Zoom 的聊天记录和数据，整个搬到其他硬盘，C 盘原位置留一个链接，软件照常使用。软件开着时会先问你要不要替你关掉。 |
 | **重复文件** | 找出内容完全相同的文件。可以删掉多余的，也可以「合并为一份」（硬链接，每个位置的文件都还在，只占一份空间）。 |
 | **省空间** | 不删文件也能省：系统压缩（CompactOS）、NTFS 压缩文件夹、页面文件改到其他盘、休眠文件精简、压缩 WSL / Docker 的虚拟磁盘、把模拟器和虚拟机整个搬走。 |
-| **空间地图** | 扫描整块盘，一层层点进去看是哪些文件夹占了空间。「找文件」按大小、多久没改过、类型、名称筛选大文件；「和上次比」看哪些文件夹在变大。看到的列表可以导出成 CSV。 |
+| **空间地图** | 扫描整块盘，一层层点进去看是哪些文件夹占了空间，也可以看成「方块图」。「找文件」按大小、多久没改过、类型、名称筛选大文件，可以多选一起删；「和上次比」看哪些文件夹在变大。列表可以导出成 CSV，整块盘的情况可以导出成网页报告（在浏览器里能存成 PDF）。 |
 | **软件管理** | 已装软件按占用大小排列。可以卸载，卸载后检查残留文件夹；装在 C 盘的还可以整个搬到其他盘，不用重装。 |
-| **搬家管理** | 所有搬走的文件夹和它们现在的状态。可以搬回 C 盘、修复断掉的链接、删掉没搬完留下的多余副本。 |
+| **搬家管理** | 「可以搬的」自动列出 C 盘上还能搬走的聊天记录、软件和其他大文件夹，勾选后一次搬好几项；不适合搬的软件单独列出并写明原因。「已经搬走的」显示每个搬走的文件夹现在的状态，可以搬回 C 盘、修复断掉的链接、删掉没搬完留下的多余副本。 |
 | **自动提醒** | C 盘剩余空间低于设定值时在右下角提醒（每次登录电脑后和每天中午各检查一次）；每周自动清一次缓存。两项默认关闭，由 Windows 任务计划运行，不用一直开着本工具。 |
 | **操作日志** | 每一次删除、搬运、合并、压缩、卸载和系统设置改动都记成 txt，可以按类别和时间查看。默认保存半年，可以改。 |
 
@@ -123,8 +123,8 @@ build/build-roslyn.ps1   其他系统上构建 exe
 ClearC frees up space on drive C: on Windows 10 / 11. It is a single exe that needs no installation and runs on the PowerShell 5.1 and .NET Framework 4.8 that ship with Windows.
 
 - **Clean up C:** lists what can be removed (caches, temp files, update leftovers) and what has a cost (Windows.old, Recycle Bin), each with Delete / Move / Skip.
-- **Move chat history and apps to another drive.** WeChat, QQ, WeCom, Tencent Meeting, Feishu, DingTalk and Telegram data, as well as installed apps, are copied to another drive, verified, and replaced by a directory link, so the software keeps working unchanged.
-- **Duplicates, Save space, Space map, Apps, Moved folders, Reminders, Activity log.** Find duplicate files or merge them into hard links. Use CompactOS, NTFS folder compression, page-file and hibernation settings, and WSL / Docker disk compaction. Browse folder sizes, find large files by size, age, type and name, see which folders grew since the last scan, export lists to CSV, uninstall apps and clean leftovers, move folders back, and get low-space reminders. Every change is logged.
+- **Move chat history and apps to another drive.** WeChat, QQ, WeCom, Tencent Meeting, Feishu, DingTalk, Telegram, Discord, Slack, Signal, LINE, Viber, KakaoTalk and Zoom data, as well as installed apps, are copied to another drive, verified, and replaced by a directory link, so the software keeps working unchanged.
+- **Duplicates, Save space, Space map, Apps, Moved folders, Reminders, Activity log.** Find duplicate files or merge them into hard links. Use CompactOS, NTFS folder compression, page-file and hibernation settings, and WSL / Docker disk compaction. The "Moved folders" page lists everything on C: that can still be moved and moves several items at once. Browse folder sizes as a list or treemap, find large files by size, age, type and name and delete several at once, export an HTML report, see which folders grew since the last scan, export lists to CSV, uninstall apps and clean leftovers, move folders back, and get low-space reminders. Every change is logged.
 - **Safety rules.** Personal folders (Desktop, Documents, Downloads…) are never deleted, every deletion needs an explicit confirmation, and system locations are blocked. Long operations can be cancelled at any time and stop at a safe point.
 
 The interface is available in English and Chinese. Switch with "English / 中文" at the bottom of the sidebar; the first launch follows the Windows display language.
