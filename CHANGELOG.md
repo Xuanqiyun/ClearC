@@ -5,6 +5,7 @@
 - 支持更多国外常用的聊天软件搬家：Discord、Slack、Signal、LINE、Viber、KakaoTalk、Zoom（Telegram 原来就支持）。从应用商店装的 WhatsApp、Microsoft Teams、Messenger 等由 Windows 管理，页面上会提示在 Windows 设置里用「移动」换盘。
 - 空间地图新增「**方块图**」：这一层的文件夹和文件画成方块，方块越大占的空间越多；单击选中，双击往里点。
 - 空间地图的列表可以**按住 Ctrl 或 Shift 多选，一起删除**（带小锁的照样跳过，删之前再核对一次）。
+- 搬家时**只关掉确认框里列出的程序**：除了聊天软件，搬家还要关掉的后台程序、从要搬的文件夹里运行的程序，都先列出来问你；可以选「不关」，那几项会停在最后一步，下次再搬很快。确认之后才打开的程序一律不碰。
 - 空间地图可以**导出报告**：一个网页，包含方块图、最大的文件夹和文件、各类文件占多少、和上次比的变化；在浏览器里按 Ctrl+P 可以存成 PDF。
 - Moved folders: a new "Can be moved" tab lists everything on C: that can still be moved (chat data, apps installed on C:, other folders) and moves several items at once. Added Discord, Slack, Signal, LINE, Viber, KakaoTalk and Zoom. Space map: treemap view, multi-select delete and an HTML report.
 
