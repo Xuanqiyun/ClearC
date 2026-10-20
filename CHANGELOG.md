@@ -1,5 +1,13 @@
 # 更新记录
 
+## 2.4
+- 「搬家管理」分成两页：**可以搬的**会自动列出 C 盘上还能搬走的东西，分聊天记录、装在 C 盘的软件、其他文件夹三组，标出大小；勾选后选好目标盘，一次搬好几项，搬之前列出全部项目和要先关掉的软件，中途可以取消。不适合搬的软件（带服务或驱动、给资源管理器装了右键菜单、微软的软件等）单独列出并写明原因。**已经搬走的**就是原来的列表；没搬完的项目在「可以搬的」里再搬一次，只补差异。
+- 支持更多国外常用的聊天软件搬家：Discord、Slack、Signal、LINE、Viber、KakaoTalk、Zoom（Telegram 原来就支持）。从应用商店装的 WhatsApp、Microsoft Teams、Messenger 等由 Windows 管理，页面上会提示在 Windows 设置里用「移动」换盘。
+- 空间地图新增「**方块图**」：这一层的文件夹和文件画成方块，方块越大占的空间越多；单击选中，双击往里点。
+- 空间地图的列表可以**按住 Ctrl 或 Shift 多选，一起删除**（带小锁的照样跳过，删之前再核对一次）。
+- 空间地图可以**导出报告**：一个网页，包含方块图、最大的文件夹和文件、各类文件占多少、和上次比的变化；在浏览器里按 Ctrl+P 可以存成 PDF。
+- Moved folders: a new "Can be moved" tab lists everything on C: that can still be moved (chat data, apps installed on C:, other folders) and moves several items at once. Added Discord, Slack, Signal, LINE, Viber, KakaoTalk and Zoom. Space map: treemap view, multi-select delete and an HTML report.
+
 ## 2.3
 - 耗时的操作都能**中途取消**：进度卡片和窗口底部多了「取消」按钮。会停在安全的地方，已经做完的不会撤销：清理会停下；搬家如果还在复制，C 盘上的原文件夹不动，已复制的部分留在目标盘，下次再搬接着复制；搬回 C 盘时复制回来的那一半会删掉。正在换成链接、删除备份或运行系统命令时按钮变灰，做完这一步就能取消。扫描、查找重复文件、空间地图、统计软件大小也能停。
 - 有操作在进行时关窗口，改成「停下并关闭」：先停在安全的地方，再自动关闭，不会停在换链接的半路上。
