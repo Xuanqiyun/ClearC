@@ -82,6 +82,12 @@ build/build-roslyn.ps1   其他系统上构建 exe
 - 各盘的 `CDriveMoved\`：搬到其他盘的数据。
 - 任务计划程序里的 `CleanC` 文件夹：只在打开自动提醒或每周清理时才会创建，关掉开关就删除。
 - <img width="1509" height="970" alt="image" src="https://github.com/user-attachments/assets/39907aed-ba40-4885-bc80-381db17b7348" />
+<img width="1525" height="976" alt="image" src="https://github.com/user-attachments/assets/25cf0dfc-011b-4311-91b6-cb299468f394" />
+<img width="1516" height="960" alt="image" src="https://github.com/user-attachments/assets/64d37cf8-ae32-4be6-ac40-bcc38cde5d77" />
+<img width="1529" height="981" alt="image" src="https://github.com/user-attachments/assets/c317aaa8-6581-43bf-a4c3-697f699398ac" />
+<img width="1526" height="986" alt="image" src="https://github.com/user-attachments/assets/7ca6d454-f5ff-4fdc-846e-a8df708666c5" />
+
+
 
 
 
