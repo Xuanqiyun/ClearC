@@ -1,0 +1,7 @@
+# 保持 Windows 文件原样（CRLF、UTF-8 BOM），Windows PowerShell 5.1 才能正确读取中文
+*.ps1      -text
+*.bat      -text
+*.cs       -text
+*.manifest -text
+*.ico      binary
+*.png      binary
