@@ -508,7 +508,7 @@ public static class DupFinder {
 
     // ================= 主流程 =================
     public static List<DupGroup> Find(string[] roots, long minSize, long maxSize, bool matchName, string[] onlyExt, bool exact, string[] driveThreads) {
-        Cancel = false; FilesSeen = 0; DirsSeen = 0; CandidateFiles = 0; BytesDone = 0; BytesTotal = 0;
+        FilesSeen = 0; DirsSeen = 0; CandidateFiles = 0; BytesDone = 0; BytesTotal = 0;
         GroupsFound = 0; FilesDone = 0; FilesTotal = 0;
         Phase = "list"; Current = "";
         progDirCache = new ConcurrentDictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
@@ -780,7 +780,7 @@ public static class DiskMap {
     static bool Win { get { return System.IO.Path.DirectorySeparatorChar == '\\'; } }
 
     public static DmNode Scan(string root, int threads) {
-        Cancel = false; FilesSeen = 0; DirsSeen = 0; BytesSeen = 0; Current = "";
+        FilesSeen = 0; DirsSeen = 0; BytesSeen = 0; Current = "";
         string r = root;
         if (Win) { r = root.TrimEnd('\\') + "\\"; } else if (r.Length > 1) { r = r.TrimEnd('/'); }
         DmNode top = new DmNode(); top.Name = r;
@@ -1065,7 +1065,7 @@ public class MapRow {
     public string LockTip { get; set; }
     public object Node { get; set; }
     public string When { get; set; }    // 导出用：最近修改时间
-    public long Count { get; set; }     // 导出用：文件夹里的文件个数
+    public long FileCount { get; set; } // 导出用：文件夹里的文件个数
 }
 public class AppRow : INotifyPropertyChanged {
     public string Name { get; set; }
@@ -1192,9 +1192,10 @@ function Invoke-Tool([string]$exe, [string[]]$argv, [string]$cwd = '', [double]$
         $null = $p.StandardError.ReadToEndAsync()
         $copied = [double]0
         $task = $p.StandardOutput.ReadLineAsync()
+        $readOk = $true
         while ($true) {
             $got = $false
-            try { $got = $task.Wait(250) } catch { break }
+            try { $got = $task.Wait(250) } catch { $readOk = $false; break }
             if ($got) {
                 $line = $task.Result
                 if ($null -eq $line) { break }
@@ -1205,6 +1206,11 @@ function Invoke-Tool([string]$exe, [string[]]$argv, [string]$cwd = '', [double]$
                 $task = $p.StandardOutput.ReadLineAsync()
             }
             if (Stopping) { $r.Cancelled = $true; try { $p.Kill() } catch {}; break }
+        }
+        if (-not $readOk) {
+            # 读输出出错：不再统计进度，把输出倒掉免得程序卡住，只等它做完；期间仍然可以取消
+            try { $null = $p.StandardOutput.BaseStream.CopyToAsync([IO.Stream]::Null) } catch {}
+            while (-not $p.WaitForExit(250)) { if (Stopping) { $r.Cancelled = $true; try { $p.Kill() } catch {}; break } }
         }
         if ($r.Cancelled) { [void]$p.WaitForExit(10000); $r.Code = -1 }
         else { $p.WaitForExit(); $r.Code = $p.ExitCode }
@@ -2035,6 +2041,7 @@ function Invoke-DropCopy($rec, $res) {
     foreach ($c in (Get-Catalog)) { foreach ($p in $c.Paths) { $t = LinkTarget $p; if ($t -and $t.TrimEnd('\') -ieq $dst.TrimEnd('\')) { $res.Msg = ((T "这份副本正被 {0} 的链接使用，不能删") -f $p); return } } }
     SetP @{ Detail = (T '核对副本里有没有 C 盘上没有的文件') }
     $b = DirBytes $dst; $nf = [long][DirStat]::Files
+    if (Stopping) { $res.Msg = (T '已取消，副本没删'); return }
     $extra = Get-ExtraCount $dst $src
     if ($extra -lt 0 -or ($extra -gt [math]::Max(20, $nf * 0.05))) {
         $res.Msg = if ($extra -lt 0) { (T '核对不了，不删') } else { ((T "副本里有 {0} 个文件在 C 盘原文件夹里没有（或比 C 盘上的新），这份副本可能是唯一的一份，所以不删。请打开两边对比后再决定") -f $extra) }
@@ -3313,6 +3320,11 @@ CSV 文件（可以用 Excel 打开）	CSV file (opens in Excel)
 文件名里包含这些字。可以用 * 和 ?，比如 *.mp4、备份*	Text in the file name. You can use * and ?, e.g. *.mp4, backup*
 只找当前文件夹里的	Only in the current folder
 打开「空间地图」扫描 C 盘，看清哪些文件夹和文件最占地方	Open the "Space map" and scan C: to see which folders and files take up the most space
+已中途停止，看过 {0:N0} 个文件，共 {1}	Stopped partway, looked at {0:N0} files, {1} in total
+已取消，副本没删	Cancelled; the copy wasn't deleted
+现在直接关掉，可能留下搬了一半的文件夹。选「停下并关闭」会先停在安全的地方（正在做的这一小步会做完），然后自动关闭窗口。	Closing right now could leave a folder half moved. "Stop and close" first stops at a safe point (the current small step is finished), then closes the window automatically.
+停下并关闭	Stop and close
+正在停下，停好后自动关闭窗口。	Stopping; the window will close automatically once it has stopped.
 '@
 # 英文的帮助页（整页替换中文的那一页）
 $script:helpEnXaml = @'
@@ -6304,13 +6316,17 @@ function Request-Cancel {
         if ($ans -ne (T '停下来')) { return }
         if (-not [object]::ReferenceEquals($w, $script:worker)) { return }   # 对话框开着的时候已经做完了
     }
+    Set-CancelFlags
+    UI-Log (T '正在取消：做完手上这一小步就停下。')
+    Update-CancelUi
+}
+function Set-CancelFlags {
+    $m = [string]$sync.Mode
     $sync.Cancel = $true
-    [DirStat]::Cancel = $true
+    if ($script:cancelModes.ContainsKey($m)) { [DirStat]::Cancel = $true }
     if ($m -eq 'dup' -or $m -eq 'dupdel' -or $m -eq 'merge') { [DupFinder]::Cancel = $true }
     if ($m -eq 'map') { [DiskMap]::Cancel = $true }
     if ($m -eq 'scan') { $script:oneClickPending = $false }
-    UI-Log (T '正在取消：做完手上这一小步就停下。')
-    Update-CancelUi
 }
 
 # 每 0.3 秒刷新一次：底部进度条和中间的卡片显示同样的内容
@@ -7450,7 +7466,7 @@ function Show-MapLevel($node) {
             }
             if ($k.Denied) { $meta += (T ' · 部分内容没有权限读取') }
             $row = New-MapRow $k.Name $p $k.Size $max $node.Size $true $k $meta 'dir'
-            $row.When = $when; $row.Count = [long]$k.Files
+            $row.When = $when; $row.FileCount = [long]$k.Files
             [void]$rows.Add($row)
         } else {
             $f = $x.F
@@ -7586,7 +7602,7 @@ function Csv-Line([object[]]$cells) {
 }
 $ctl.BtnMapExport.Add_Click({
     $v = $script:mapView
-    $list = if ($v -eq 'grow') { @($script:growRows) } else { @($ctl.MapList.ItemsSource) }
+    $list = @(if ($v -eq 'grow') { $script:growRows } else { $ctl.MapList.ItemsSource })
     if (-not $script:mapRoot -or $list.Count -eq 0) { Show-Sheet -Title (T '没有可以导出的内容') -Text (T '先扫描一块盘，再导出看到的列表。') | Out-Null; return }
     $what = switch ($v) { 'files' { (T '找文件') } 'grow' { (T '和上次比') } default { (T '文件夹') } }
     $dlg = New-Object Microsoft.Win32.SaveFileDialog
@@ -7602,7 +7618,7 @@ $ctl.BtnMapExport.Add_Click({
         $lines.Add((Csv-Line @((T '名称'), (T '路径'), (T '类型'), (T '大小（字节）'), (T '大小'), (T '文件数'), (T '最近修改'))))
         foreach ($r in $list) {
             $k = if ($r.IsDir) { (T '文件夹') } elseif ($r.Node -and $r.Node.IsLink) { (T '链接') } else { (T '文件') }
-            $lines.Add((Csv-Line @($r.Name, $r.Path, $k, [long]$r.Size, $r.SizeText, $(if ($r.IsDir) { $r.Count } else { '' }), $r.When)))
+            $lines.Add((Csv-Line @($r.Name, $r.Path, $k, [long]$r.Size, $r.SizeText, $(if ($r.IsDir) { $r.FileCount } else { '' }), $r.When)))
         }
     }
     try { [IO.File]::WriteAllLines($dlg.FileName, $lines.ToArray(), (New-Object Text.UTF8Encoding $true)) }
@@ -8659,7 +8675,7 @@ $timer.Add_Tick({
                 $script:movedTargets = $null
                 $script:prevSnap = $null
                 if (-not $stopped) { try { Update-Growth $root } catch { $script:growNote = (T '没能和上次比较') } } else { $script:growNote = (T '这次扫描中途停止了，不和上次比较') }
-                End-Op ((T "完成，{0:N0} 个文件，共 {1}") -f $root.Files, (Fmt $root.Size))
+                End-Op ($(if ($stopped) { (T "已中途停止，看过 {0:N0} 个文件，共 {1}") } else { (T "完成，{0:N0} 个文件，共 {1}") }) -f $root.Files, (Fmt $root.Size))
                 if ($script:mapView -eq 'grow') { Set-MapView 'grow' } elseif ($script:mapView -eq 'files') { Show-MapFiles } else { Show-MapLevel $root }
                 if ($stopped) { $ctl.MapInfo.Text = (T '扫描中途停止了，下面只是已经看过的部分') }
                 Add-History
@@ -8778,6 +8794,7 @@ $timer.Add_Tick({
         }
         $sync.Mode = $null
         UI-Status; UI-Busy $false
+        if ($script:closeWhenDone) { $script:pendingDialog = $null; $script:runAfterScan = $false; $script:askRemindNow = $false; $win.Close(); return }
         if ($script:runAfterScan) {
             $script:runAfterScan = $false
             Apply-OneClick
@@ -8794,12 +8811,19 @@ $timer.Add_Tick({
     }
 })
 
+# 有操作在进行时关窗口：不直接关（可能正停在换链接的半路上），先停在安全的地方，停好后自动关闭
+$script:closeWhenDone = $false
 $win.Add_Closing({
     param($s, $e)
-    if ($script:worker) {
-        $e.Cancel = ((Show-Sheet -Kind warn -Title (T '还有操作在进行中') -Text (T '现在关闭可能留下搬了一半的文件夹。确定要关闭吗？') -Buttons @((T '继续等待'), (T '仍然关闭')) -Primary (T '继续等待') -Cancel (T '继续等待')) -ne (T '仍然关闭'))
-        if (-not $e.Cancel) { [DupFinder]::Cancel = $true }
-    }
+    if (-not $script:worker) { return }
+    $e.Cancel = $true
+    if ($script:closeWhenDone) { return }
+    $ans = Show-Sheet -Kind warn -Title (T '还有操作在进行中') -Text (T '现在直接关掉，可能留下搬了一半的文件夹。选「停下并关闭」会先停在安全的地方（正在做的这一小步会做完），然后自动关闭窗口。') -Buttons @((T '继续等待'), (T '停下并关闭')) -Primary (T '继续等待') -Cancel (T '继续等待')
+    if ($ans -ne (T '停下并关闭')) { return }
+    if (-not $script:worker) { $e.Cancel = $false; return }   # 对话框开着的时候已经做完了
+    Set-CancelFlags
+    $script:closeWhenDone = $true
+    UI-Log (T '正在停下，停好后自动关闭窗口。')
 })
 
 $ctl.OvCancel.Add_Click({ Request-Cancel })
