@@ -8,6 +8,7 @@ param()
 $ErrorActionPreference = 'SilentlyContinue'
 
 # ---------------- 管理员权限 ----------------
+$script:selfScript = $PSCommandPath
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin -and $env:CLEANC_ARGS) { $global:CLEANC_UI_SHOWN = $true; return }
 if (-not $isAdmin) {
@@ -643,7 +644,7 @@ public static class DupFinder {
         string lower = path.ToLowerInvariant().Replace('/', '\\');
         if (lower.Contains("xwechat_files") || lower.Contains("wechat files") || lower.Contains("tencent files") ||
             lower.Contains("\\tencent\\") || lower.Contains("tencentdata") || lower.Contains("_tencent"))
-            return "微信/QQ 的数据，删掉后对应聊天里这个文件会打不开";
+            return L10n.T("微信/QQ 的数据，删掉后对应聊天里这个文件会打不开");
         string dir;
         try { dir = System.IO.Path.GetDirectoryName(path); } catch { return ""; }
         if (string.IsNullOrEmpty(dir)) return "";
@@ -659,7 +660,7 @@ public static class DupFinder {
             } catch { }
             progDirCache[dir] = prog;
         }
-        if (prog) return "所在文件夹像是程序目录（里面有 .dll），删掉后这里的程序可能打不开";
+        if (prog) return L10n.T("所在文件夹像是程序目录（里面有 .dll），删掉后这里的程序可能打不开");
         return "";
     }
 }
@@ -960,18 +961,18 @@ public static class FsTools {
     // 把 dup 换成指向 keep 的硬链接：两个位置都还在，只占一份空间。返回空字符串表示成功
     public static string MergeHardLink(string keep, string dup) {
         try {
-            if (!string.Equals(System.IO.Path.GetPathRoot(keep), System.IO.Path.GetPathRoot(dup), StringComparison.OrdinalIgnoreCase)) return "不在同一块盘上";
+            if (!string.Equals(System.IO.Path.GetPathRoot(keep), System.IO.Path.GetPathRoot(dup), StringComparison.OrdinalIgnoreCase)) return L10n.T("不在同一块盘上");
             if (Win) {
                 DriveInfo di = new DriveInfo(System.IO.Path.GetPathRoot(keep));
-                if (!string.Equals(di.DriveFormat, "NTFS", StringComparison.OrdinalIgnoreCase)) return "这块盘不是 NTFS 格式";
+                if (!string.Equals(di.DriveFormat, "NTFS", StringComparison.OrdinalIgnoreCase)) return L10n.T("这块盘不是 NTFS 格式");
             }
             FileInfo fd = new FileInfo(dup);
             if ((fd.Attributes & FileAttributes.ReadOnly) != 0) fd.Attributes &= ~FileAttributes.ReadOnly;
             string tmp = dup + ".cleanc_link";
             if (File.Exists(tmp)) File.Delete(tmp);
-            if (!Win) return "只支持 Windows";
-            if (!CreateHardLinkW("\\\\?\\" + tmp, "\\\\?\\" + keep, IntPtr.Zero)) return "建硬链接失败（错误 " + Marshal.GetLastWin32Error() + "）";
-            if (!MoveFileExW("\\\\?\\" + tmp, "\\\\?\\" + dup, 1)) { int e = Marshal.GetLastWin32Error(); try { File.Delete(tmp); } catch { } return "替换原文件失败（错误 " + e + "，文件可能正被打开）"; }
+            if (!Win) return L10n.T("只支持 Windows");
+            if (!CreateHardLinkW("\\\\?\\" + tmp, "\\\\?\\" + keep, IntPtr.Zero)) return string.Format(L10n.T("建硬链接失败（错误 {0}）"), Marshal.GetLastWin32Error());
+            if (!MoveFileExW("\\\\?\\" + tmp, "\\\\?\\" + dup, 1)) { int e = Marshal.GetLastWin32Error(); try { File.Delete(tmp); } catch { } return string.Format(L10n.T("替换原文件失败（错误 {0}，文件可能正被打开）"), e); }
             return "";
         } catch (Exception ex) { return ex.Message; }
     }
@@ -986,6 +987,12 @@ public static class FsTools {
         if (r == 0 && op.fAnyOperationsAborted != 0) return -1;
         return r;
     }
+}
+
+// ==================== 界面文字翻译（PowerShell 启动时按语言设置填入；没有就原样返回中文） ====================
+public static class L10n {
+    public static System.Collections.Generic.Dictionary<string, string> Map;
+    public static string T(string s) { string v; if (Map != null && s != null && Map.TryGetValue(s, out v)) return v; return s; }
 }
 
 // ==================== 各页面列表的一行 ====================
@@ -1015,7 +1022,7 @@ public class AppRow : INotifyPropertyChanged {
     public string PackageName { get; set; }
     public string Icon { get; set; }
     private string _meta = ""; public string Meta { get { return _meta; } set { _meta = value; Raise("Meta"); } }
-    private string _size = "计算中…"; public string SizeText { get { return _size; } set { _size = value; Raise("SizeText"); } }
+    private string _size = L10n.T("计算中…"); public string SizeText { get { return _size; } set { _size = value; Raise("SizeText"); } }
     public long Size { get; set; }
     public bool OnC { get; set; }
     public bool LocReg { get; set; }
@@ -1030,7 +1037,7 @@ public class MoveRow : INotifyPropertyChanged {
     public string State { get; set; }
     private string _status = ""; public string Status { get { return _status; } set { _status = value; Raise("Status"); } }
     private string _brush = "#86868B"; public string StatusBrush { get { return _brush; } set { _brush = value; Raise("StatusBrush"); } }
-    private string _size = "计算中…"; public string SizeText { get { return _size; } set { _size = value; Raise("SizeText"); } }
+    private string _size = L10n.T("计算中…"); public string SizeText { get { return _size; } set { _size = value; Raise("SizeText"); } }
     public long Size { get; set; }
     public bool CanBack { get; set; }
     public bool CanFix { get; set; }
@@ -1043,6 +1050,7 @@ public class LogRow {
     public string Time { get; set; }
     public DateTime When { get; set; }
     public string Cat { get; set; }
+    public string CatText { get; set; }
     public string CatBg { get; set; }
     public string CatFg { get; set; }
     public string What { get; set; }
@@ -1056,7 +1064,7 @@ public class VdiskRow : INotifyPropertyChanged {
     public string Note { get; set; }
     public bool CanCompact { get; set; }
     public bool CanMove { get; set; }
-    private string _size = "计算中…"; public string SizeText { get { return _size; } set { _size = value; Raise("SizeText"); } }
+    private string _size = L10n.T("计算中…"); public string SizeText { get { return _size; } set { _size = value; Raise("SizeText"); } }
     public long Size { get; set; }
     void Raise(string n) { PropertyChangedEventHandler h = PropertyChanged; if (h != null) h(this, new PropertyChangedEventArgs(n)); }
     public event PropertyChangedEventHandler PropertyChanged;
@@ -1081,6 +1089,13 @@ if (-not ('DupFinder' -as [type])) { Add-Type -TypeDefinition $dupCode }
 # 引擎：清理项目录、测量、删除、搬家。主线程和后台线程都会加载这一段。
 # ============================================================
 $engine = @'
+# 界面文字翻译：中文是原文；英文界面时查表，查不到就原样显示中文。后台任务通过 $sync.L10n 拿到同一张表
+function T([string]$s) {
+    $d = $script:L10n
+    if ($null -eq $d -and $sync) { $d = $sync.L10n }
+    if ($null -ne $d) { $v = $null; if ($d.TryGetValue($s, [ref]$v)) { return $v } }
+    return $s
+}
 $ErrorActionPreference = 'SilentlyContinue'
 function Log($m) { if ($sync -and $sync.Log) { $sync.Log.Enqueue($m) } else { Write-Host $m } }
 # 向界面报告进度（界面每 0.3 秒读一次）
@@ -1156,7 +1171,7 @@ function Remove-OneDir($d) {
 function Remove-Contents([string[]]$paths, [string]$filter, [bool]$wholeDir) {
     foreach ($p in $paths) {
         foreach ($it in (Get-Item -Path $p -Force -ErrorAction SilentlyContinue)) {
-            if (Test-Personal $it.FullName) { Log "  跳过（在个人文件夹里，不删）：$($it.FullName)"; OpLog '删除' '跳过：在个人文件夹里，不删' $it.FullName ''; continue }
+            if (Test-Personal $it.FullName) { Log ((T "  跳过（在个人文件夹里，不删）：{0}") -f $($it.FullName)); OpLog '删除' (T '跳过：在个人文件夹里，不删') $it.FullName ''; continue }
             if ($it.PSIsContainer) {
                 if ($wholeDir) { Remove-OneDir $it }
                 else {
@@ -1204,66 +1219,66 @@ function Get-Catalog {
     $otherG = '其他可搬的文件夹（数据原样保留，原位置留链接，软件照常使用）'
     $list = @(
         # ---- 安全清理：缓存 / 临时文件 / 日志，删了程序自动重建 ----
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def='删除'; N='用户临时文件';        Paths=@($env:TEMP); Note='各软件运行时的临时文件，关掉软件就没用了' }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def='删除'; N='系统临时文件';        Paths=@('C:\Windows\Temp'); Note='系统和安装程序的临时文件' }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def='删除'; N='Windows 更新下载缓存'; Paths=@('C:\Windows\SoftwareDistribution\Download'); Svc=@('wuauserv','bits'); Note='已装完的更新安装包，下次更新会重新下载需要的部分' }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def='删除'; N='系统升级残留目录';    Paths=@('C:\$WINDOWS.~BT','C:\$WINDOWS.~WS','C:\$GetCurrent'); Whole=$true; Note='大版本升级留下的临时目录' }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def='删除'; N='崩溃转储与错误报告';  Paths=@('C:\Windows\Minidump','C:\Windows\MEMORY.DMP','C:\ProgramData\Microsoft\Windows\WER',"$env:LOCALAPPDATA\CrashDumps"); Note='蓝屏和程序崩溃时留下的调试文件，只对微软工程师有用' }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def='删除'; N='系统组件日志';        Paths=@('C:\Windows\Logs\CBS'); Filter='*.log'; Note='Windows 更新的安装日志' }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def='删除'; N='缩略图缓存';          Paths=@("$env:LOCALAPPDATA\Microsoft\Windows\Explorer"); Filter='thumbcache_*.db'; Note='文件夹里图片的小预览图，打开文件夹时会重新生成' }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def='删除'; N='Chrome 浏览器缓存';   Paths=@("$env:LOCALAPPDATA\Google\Chrome\User Data\*\Cache","$env:LOCALAPPDATA\Google\Chrome\User Data\*\Code Cache","$env:LOCALAPPDATA\Google\Chrome\User Data\*\GPUCache"); Note='网页缓存。请先关闭浏览器。不影响密码、书签、历史记录' }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def='删除'; N='Edge 浏览器缓存';     Paths=@("$env:LOCALAPPDATA\Microsoft\Edge\User Data\*\Cache","$env:LOCALAPPDATA\Microsoft\Edge\User Data\*\Code Cache","$env:LOCALAPPDATA\Microsoft\Edge\User Data\*\GPUCache"); Note='网页缓存。请先关闭浏览器。不影响密码、书签、历史记录' }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def='删除'; N='pip 缓存';            Paths=@("$env:LOCALAPPDATA\pip\cache"); Note='Python 装包时下载的安装包副本，再装时会重新下载' }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def='删除'; N='npm 缓存';            Paths=@("$env:LOCALAPPDATA\npm-cache"); Note='Node.js 装包时的下载缓存' }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def='删除'; N='Clash Verge 代理日志'; Paths=@("$env:APPDATA\io.github.clash-verge-rev.clash-verge-rev\logs","$env:APPDATA\clash-verge\logs","$env:LOCALAPPDATA\io.github.clash-verge-rev.clash-verge-rev\logs"); Note='代理软件的运行日志，会无限增长。建议在它设置里把日志等级改成 warn' }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def='删除'; N='Intel XTU 超频日志';   Paths=@('C:\ProgramData\Intel\Intel Extreme Tuning Utility\Logs'); Note='Intel 超频组件的日志，会无限增长' }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def='删除'; N='Apple 设备系统更新包'; Paths=@('C:\ProgramData\Apple\AMPDevicesAgent\*-Temporary-Files',"$env:APPDATA\Apple Computer\iTunes\*Software Updates"); Note='给 iPhone/iPad 升级时下载的固件，装完就没用了' }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def='删除'; N='Dell 更新程序缓存';    Paths=@('C:\ProgramData\Dell\DTP','C:\ProgramData\Dell\SupportAssist'); Note='戴尔驱动更新工具下载的安装包' }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def='删除'; N='罗技 Options+ 缓存';   Paths=@('C:\ProgramData\LogiOptionsPlus\cache','C:\ProgramData\LogiOptionsPlus\depots'); Note='罗技驱动的更新包缓存' }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def='删除'; N='NVIDIA 安装包与着色器缓存'; Paths=@('C:\ProgramData\NVIDIA Corporation\Downloader','C:\ProgramData\NVIDIA Corporation\NV_Cache',"$env:LOCALAPPDATA\NVIDIA\DXCache","$env:LOCALAPPDATA\NVIDIA\GLCache"); Note='显卡驱动安装包和游戏着色器缓存，游戏首次启动会重建' }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def='删除'; N='Intel 显卡着色器缓存'; Paths=@("$env:LOCALAPPDATA\Intel\ShaderCache",'C:\ProgramData\Intel\ShaderCache'); Note='核显着色器缓存' }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def='删除'; N='Cursor 状态库备份';    Paths=@("$env:APPDATA\Cursor\User\globalStorage\state.vscdb.backup"); Note='Cursor 编辑器状态库的备份副本，主文件保留' }
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def='跳过'; N='清空回收站';            Note='回收站里是你以前删掉、但还能找回的文件。清空后就永远找不回了，请先打开回收站确认里面没有要的东西'
+        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T '用户临时文件');        Paths=@($env:TEMP); Note=(T '各软件运行时的临时文件，关掉软件就没用了') }
+        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T '系统临时文件');        Paths=@('C:\Windows\Temp'); Note=(T '系统和安装程序的临时文件') }
+        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Windows 更新下载缓存'); Paths=@('C:\Windows\SoftwareDistribution\Download'); Svc=@('wuauserv','bits'); Note=(T '已装完的更新安装包，下次更新会重新下载需要的部分') }
+        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T '系统升级残留目录');    Paths=@('C:\$WINDOWS.~BT','C:\$WINDOWS.~WS','C:\$GetCurrent'); Whole=$true; Note=(T '大版本升级留下的临时目录') }
+        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T '崩溃转储与错误报告');  Paths=@('C:\Windows\Minidump','C:\Windows\MEMORY.DMP','C:\ProgramData\Microsoft\Windows\WER',"$env:LOCALAPPDATA\CrashDumps"); Note=(T '蓝屏和程序崩溃时留下的调试文件，只对微软工程师有用') }
+        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T '系统组件日志');        Paths=@('C:\Windows\Logs\CBS'); Filter='*.log'; Note=(T 'Windows 更新的安装日志') }
+        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T '缩略图缓存');          Paths=@("$env:LOCALAPPDATA\Microsoft\Windows\Explorer"); Filter='thumbcache_*.db'; Note=(T '文件夹里图片的小预览图，打开文件夹时会重新生成') }
+        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Chrome 浏览器缓存');   Paths=@("$env:LOCALAPPDATA\Google\Chrome\User Data\*\Cache","$env:LOCALAPPDATA\Google\Chrome\User Data\*\Code Cache","$env:LOCALAPPDATA\Google\Chrome\User Data\*\GPUCache"); Note=(T '网页缓存。请先关闭浏览器。不影响密码、书签、历史记录') }
+        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Edge 浏览器缓存');     Paths=@("$env:LOCALAPPDATA\Microsoft\Edge\User Data\*\Cache","$env:LOCALAPPDATA\Microsoft\Edge\User Data\*\Code Cache","$env:LOCALAPPDATA\Microsoft\Edge\User Data\*\GPUCache"); Note=(T '网页缓存。请先关闭浏览器。不影响密码、书签、历史记录') }
+        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'pip 缓存');            Paths=@("$env:LOCALAPPDATA\pip\cache"); Note=(T 'Python 装包时下载的安装包副本，再装时会重新下载') }
+        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'npm 缓存');            Paths=@("$env:LOCALAPPDATA\npm-cache"); Note=(T 'Node.js 装包时的下载缓存') }
+        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Clash Verge 代理日志'); Paths=@("$env:APPDATA\io.github.clash-verge-rev.clash-verge-rev\logs","$env:APPDATA\clash-verge\logs","$env:LOCALAPPDATA\io.github.clash-verge-rev.clash-verge-rev\logs"); Note=(T '代理软件的运行日志，会无限增长。建议在它设置里把日志等级改成 warn') }
+        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Intel XTU 超频日志');   Paths=@('C:\ProgramData\Intel\Intel Extreme Tuning Utility\Logs'); Note=(T 'Intel 超频组件的日志，会无限增长') }
+        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Apple 设备系统更新包'); Paths=@('C:\ProgramData\Apple\AMPDevicesAgent\*-Temporary-Files',"$env:APPDATA\Apple Computer\iTunes\*Software Updates"); Note=(T '给 iPhone/iPad 升级时下载的固件，装完就没用了') }
+        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Dell 更新程序缓存');    Paths=@('C:\ProgramData\Dell\DTP','C:\ProgramData\Dell\SupportAssist'); Note=(T '戴尔驱动更新工具下载的安装包') }
+        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T '罗技 Options+ 缓存');   Paths=@('C:\ProgramData\LogiOptionsPlus\cache','C:\ProgramData\LogiOptionsPlus\depots'); Note=(T '罗技驱动的更新包缓存') }
+        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'NVIDIA 安装包与着色器缓存'); Paths=@('C:\ProgramData\NVIDIA Corporation\Downloader','C:\ProgramData\NVIDIA Corporation\NV_Cache',"$env:LOCALAPPDATA\NVIDIA\DXCache","$env:LOCALAPPDATA\NVIDIA\GLCache"); Note=(T '显卡驱动安装包和游戏着色器缓存，游戏首次启动会重建') }
+        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Intel 显卡着色器缓存'); Paths=@("$env:LOCALAPPDATA\Intel\ShaderCache",'C:\ProgramData\Intel\ShaderCache'); Note=(T '核显着色器缓存') }
+        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Cursor 状态库备份');    Paths=@("$env:APPDATA\Cursor\User\globalStorage\state.vscdb.backup"); Note=(T 'Cursor 编辑器状态库的备份副本，主文件保留') }
+        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); N=(T '清空回收站');            Note=(T '回收站里是你以前删掉、但还能找回的文件。清空后就永远找不回了，请先打开回收站确认里面没有要的东西')
            Size={ try { $s = ((New-Object -ComObject Shell.Application).NameSpace(0xA).Items() | Measure-Object -Property Size -Sum).Sum; if ($s) { $s } else { 0 } } catch { 0 } }
            Act ={ Clear-RecycleBin -Force -ErrorAction SilentlyContinue } }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def='删除'; N='Windows 传递优化缓存'; Note='Windows 更新的点对点分发缓存'
+        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Windows 传递优化缓存'); Note=(T 'Windows 更新的点对点分发缓存')
            Size={ try { $s = (Get-DeliveryOptimizationStatus -ErrorAction Stop | Measure-Object -Property FileSize -Sum).Sum; if ($s) { $s } else { 0 } } catch { 0 } }
            Act ={ Delete-DeliveryOptimizationCache -Force -ErrorAction SilentlyContinue } }
 
         # ---- 需确认：有代价 ----
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache';  Def='跳过'; One='删除'; N='NI 安装包缓存';     Paths=@('C:\ProgramData\National Instruments\MDF\ProductCache','C:\ProgramData\National Instruments\NI Package Manager\packages'); Note='LabVIEW 等 NI 软件的安装媒体缓存。软件本身不受影响；以后修复或重装时需重新下载' }
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache';  Def='跳过'; One='删除'; N='Windows.old';        Paths=@('C:\Windows.old'); Whole=$true; Note='上一版 Windows 的完整副本。删后不能回退到上一版系统（系统升级 10 天后会自动删）'
+        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache';  Def=(T '跳过'); One=(T '删除'); N=(T 'NI 安装包缓存');     Paths=@('C:\ProgramData\National Instruments\MDF\ProductCache','C:\ProgramData\National Instruments\NI Package Manager\packages'); Note=(T 'LabVIEW 等 NI 软件的安装媒体缓存。软件本身不受影响；以后修复或重装时需重新下载') }
+        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache';  Def=(T '跳过'); One=(T '删除'); N='Windows.old';        Paths=@('C:\Windows.old'); Whole=$true; Note=(T '上一版 Windows 的完整副本。删后不能回退到上一版系统（系统升级 10 天后会自动删）')
            Act ={ & "$env:SystemRoot\System32\takeown.exe" /F 'C:\Windows.old' /R /A /D Y | Out-Null; & "$env:SystemRoot\System32\icacls.exe" 'C:\Windows.old' /grant Administrators:F /T /C /Q | Out-Null; Remove-Item 'C:\Windows.old' -Recurse -Force -ErrorAction SilentlyContinue } }
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def='跳过'; One='执行'; N='重建 Windows 搜索索引'; Note='搜索索引膨胀时可重建，重建后通常只剩 1 到 2 GB。重建期间（约 1 小时）搜文件会变慢'
+        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def=(T '跳过'); One=(T '执行'); N=(T '重建 Windows 搜索索引'); Note=(T '搜索索引膨胀时可重建，重建后通常只剩 1 到 2 GB。重建期间（约 1 小时）搜文件会变慢')
            Size={ $s = 0; foreach ($f in 'C:\ProgramData\Microsoft\Search\Data\Applications\Windows\Windows.edb','C:\ProgramData\Microsoft\Search\Data\Applications\Windows\Windows.db') { $i = Get-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue; if ($i) { $s += $i.Length } }; if ($s -gt 2GB) { $s } else { 0 } }
            Act ={ Stop-Service WSearch -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 3; Remove-Item 'C:\ProgramData\Microsoft\Search\Data\Applications\Windows\Windows.edb','C:\ProgramData\Microsoft\Search\Data\Applications\Windows\Windows.db' -Force -ErrorAction SilentlyContinue; Set-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows Search' -Name SetupCompletedSuccessfully -Value 0 -ErrorAction SilentlyContinue; Start-Service WSearch -ErrorAction SilentlyContinue } }
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def='跳过'; N='关闭休眠 (hiberfil.sys)'; Paths=@('C:\hiberfil.sys'); Note='休眠文件约等于内存大小。关闭后睡眠不受影响，只是没有「休眠」和「快速启动」'
+        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def=(T '跳过'); N=(T '关闭休眠 (hiberfil.sys)'); Paths=@('C:\hiberfil.sys'); Note=(T '休眠文件约等于内存大小。关闭后睡眠不受影响，只是没有「休眠」和「快速启动」')
            Act ={ & "$env:SystemRoot\System32\powercfg.exe" /h off } }
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def='跳过'; One='执行'; N='禁用 XTU 超频日志服务'; Note='外星人 Command Center 的 CPU 超频组件，会持续写几 GB 日志。不超频可禁用，AWCC 的风扇和性能档位不受影响'
+        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def=(T '跳过'); One=(T '执行'); N=(T '禁用 XTU 超频日志服务'); Note=(T '外星人 Command Center 的 CPU 超频组件，会持续写几 GB 日志。不超频可禁用，AWCC 的风扇和性能档位不受影响')
            Size={ $s = Get-Service XTU3SERVICE -ErrorAction SilentlyContinue; if ($s -and $s.Status -eq 'Running') { -1 } else { 0 } }
            Act ={ Stop-Service XTU3SERVICE -Force -ErrorAction SilentlyContinue; Set-Service XTU3SERVICE -StartupType Disabled -ErrorAction SilentlyContinue } }
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def='跳过'; One='执行'; N='WinSxS 组件清理 (DISM)'; Note='清掉系统更新替换下来的旧组件，通常能省 2 到 10 GB。耗时 10 到 20 分钟，完成后建议重启'; Last=$true
+        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def=(T '跳过'); One=(T '执行'); N=(T 'WinSxS 组件清理 (DISM)'); Note=(T '清掉系统更新替换下来的旧组件，通常能省 2 到 10 GB。耗时 10 到 20 分钟，完成后建议重启'); Last=$true
            Size={ -1 }
            Act ={ & "$env:SystemRoot\System32\Dism.exe" /Online /Cleanup-Image /StartComponentCleanup /ResetBase | Out-Null }; Slow=$true }
 
         # ---- 可搬家：数据不能删，但可以整体搬到其他盘并在原位置留链接 ----
         # ---- 聊天软件：聊天记录不能删，整体搬到其他盘，原位置留链接 ----
-        @{ G=$chatG; Kind='move'; Def='搬到其他盘'; N='微信/QQ 缓存 (Roaming)';  Paths=@("$env:APPDATA\Tencent");      Apps=@('微信','QQ','企业微信','腾讯会议'); Note='微信、QQ、企业微信、腾讯会议的聊天图片、视频和缓存。搬之前要先退出它们，开着的话会提醒你' }
-        @{ G=$chatG; Kind='move'; Def='搬到其他盘'; N='微信/QQ 缓存 (Local)';    Paths=@("$env:LOCALAPPDATA\Tencent"); Apps=@('微信','QQ','企业微信','腾讯会议'); Note='微信、QQ 等腾讯软件的本地缓存' }
-        @{ G=$chatG; Kind='move'; Def='搬到其他盘'; N='微信文件 (旧版)';         Paths=@("$docs\WeChat Files","$env:USERPROFILE\WeChat Files");     Apps=@('微信'); Note='微信 3.x 的聊天记录和接收的文件' }
-        @{ G=$chatG; Kind='move'; Def='搬到其他盘'; N='微信文件 (新版)';         Paths=@("$docs\xwechat_files","$env:USERPROFILE\xwechat_files");   Apps=@('微信'); Note='微信 4.x 的聊天记录、图片、视频和接收的文件，通常是 C 盘最大的一块' }
-        @{ G=$chatG; Kind='move'; Def='搬到其他盘'; N='企业微信文件';            Paths=@("$docs\WXWork");                                         Apps=@('企业微信'); Note='企业微信的聊天记录、图片、文件和缓存' }
-        @{ G=$chatG; Kind='move'; Def='搬到其他盘'; N='QQ 文件';                 Paths=@("$docs\Tencent Files","$env:USERPROFILE\Tencent Files");   Apps=@('QQ'); Note='QQ 的聊天记录和接收的文件' }
-        @{ G=$chatG; Kind='move'; Def='搬到其他盘'; N='飞书聊天记录';            Paths=@("$env:APPDATA\LarkShell");                               Apps=@('飞书'); Note='飞书的聊天记录、图片、文件和缓存。搬之前要先退出飞书' }
-        @{ G=$chatG; Kind='move'; Def='搬到其他盘'; N='钉钉聊天记录';            Paths=@("$env:APPDATA\DingTalk");                                Apps=@('钉钉'); Note='钉钉的聊天记录、图片和缓存（每个账号一个以 _v2 结尾的文件夹）。搬之前要先退出钉钉' }
-        @{ G=$chatG; Kind='move'; Def='搬到其他盘'; N='Telegram 聊天记录';       Paths=@("$env:APPDATA\Telegram Desktop");                        Apps=@('Telegram'); Note='Telegram 电脑版的本地数据、缓存和程序本身。搬之前要先退出 Telegram' }
+        @{ G=$chatG; Kind='move'; Def=(T '搬到其他盘'); N=(T '微信/QQ 缓存 (Roaming)');  Paths=@("$env:APPDATA\Tencent");      Apps=@('微信','QQ','企业微信','腾讯会议'); Note=(T '微信、QQ、企业微信、腾讯会议的聊天图片、视频和缓存。搬之前要先退出它们，开着的话会提醒你') }
+        @{ G=$chatG; Kind='move'; Def=(T '搬到其他盘'); N=(T '微信/QQ 缓存 (Local)');    Paths=@("$env:LOCALAPPDATA\Tencent"); Apps=@('微信','QQ','企业微信','腾讯会议'); Note=(T '微信、QQ 等腾讯软件的本地缓存') }
+        @{ G=$chatG; Kind='move'; Def=(T '搬到其他盘'); N=(T '微信文件 (旧版)');         Paths=@("$docs\WeChat Files","$env:USERPROFILE\WeChat Files");     Apps=@('微信'); Note=(T '微信 3.x 的聊天记录和接收的文件') }
+        @{ G=$chatG; Kind='move'; Def=(T '搬到其他盘'); N=(T '微信文件 (新版)');         Paths=@("$docs\xwechat_files","$env:USERPROFILE\xwechat_files");   Apps=@('微信'); Note=(T '微信 4.x 的聊天记录、图片、视频和接收的文件，通常是 C 盘最大的一块') }
+        @{ G=$chatG; Kind='move'; Def=(T '搬到其他盘'); N=(T '企业微信文件');            Paths=@("$docs\WXWork");                                         Apps=@('企业微信'); Note=(T '企业微信的聊天记录、图片、文件和缓存') }
+        @{ G=$chatG; Kind='move'; Def=(T '搬到其他盘'); N=(T 'QQ 文件');                 Paths=@("$docs\Tencent Files","$env:USERPROFILE\Tencent Files");   Apps=@('QQ'); Note=(T 'QQ 的聊天记录和接收的文件') }
+        @{ G=$chatG; Kind='move'; Def=(T '搬到其他盘'); N=(T '飞书聊天记录');            Paths=@("$env:APPDATA\LarkShell");                               Apps=@('飞书'); Note=(T '飞书的聊天记录、图片、文件和缓存。搬之前要先退出飞书') }
+        @{ G=$chatG; Kind='move'; Def=(T '搬到其他盘'); N=(T '钉钉聊天记录');            Paths=@("$env:APPDATA\DingTalk");                                Apps=@('钉钉'); Note=(T '钉钉的聊天记录、图片和缓存（每个账号一个以 _v2 结尾的文件夹）。搬之前要先退出钉钉') }
+        @{ G=$chatG; Kind='move'; Def=(T '搬到其他盘'); N=(T 'Telegram 聊天记录');       Paths=@("$env:APPDATA\Telegram Desktop");                        Apps=@('Telegram'); Note=(T 'Telegram 电脑版的本地数据、缓存和程序本身。搬之前要先退出 Telegram') }
 
         # ---- 其他可搬的文件夹 ----
-        @{ G=$otherG; Kind='move'; Def='跳过';    N='桌面';                   Paths=@($desk); NoOneDrive=$true; Note='桌面上的所有文件。搬后桌面照常显示，文件实际在 D 盘' }
-        @{ G=$otherG; Kind='move'; Def='跳过';    N='下载';                   Paths=@($down); NoOneDrive=$true; Note='下载文件夹。搬后浏览器照常下载到这里，文件实际在 D 盘' }
-        @{ G=$otherG; Kind='flex'; Def='跳过';    N='用户目录 .cache';        Paths=@("$env:USERPROFILE\.cache"); Note='各类开发工具的缓存（HuggingFace 模型、uv、playwright 等）。删了会重新下载；也可搬走' }
-        @{ G=$otherG; Kind='flex'; Def='跳过';    N='conda 环境 (.conda)';    Paths=@("$env:USERPROFILE\.conda"); Note='conda 创建的 Python 环境。搬走后照常使用；删了要重建环境' }
-        @{ G=$otherG; Kind='flex'; Def='跳过';    N='pip --user 安装的包';    Paths=@("$env:APPDATA\Python"); Note='用 pip install --user 装的 Python 包。有 conda 的话多半已不用，可删；不确定就搬走' }
+        @{ G=$otherG; Kind='move'; Def=(T '跳过');    N=(T '桌面');                   Paths=@($desk); NoOneDrive=$true; Note=(T '桌面上的所有文件。搬后桌面照常显示，文件实际在 D 盘') }
+        @{ G=$otherG; Kind='move'; Def=(T '跳过');    N=(T '下载');                   Paths=@($down); NoOneDrive=$true; Note=(T '下载文件夹。搬后浏览器照常下载到这里，文件实际在 D 盘') }
+        @{ G=$otherG; Kind='flex'; Def=(T '跳过');    N=(T '用户目录 .cache');        Paths=@("$env:USERPROFILE\.cache"); Note=(T '各类开发工具的缓存（HuggingFace 模型、uv、playwright 等）。删了会重新下载；也可搬走') }
+        @{ G=$otherG; Kind='flex'; Def=(T '跳过');    N=(T 'conda 环境 (.conda)');    Paths=@("$env:USERPROFILE\.conda"); Note=(T 'conda 创建的 Python 环境。搬走后照常使用；删了要重建环境') }
+        @{ G=$otherG; Kind='flex'; Def=(T '跳过');    N=(T 'pip --user 安装的包');    Paths=@("$env:APPDATA\Python"); Note=(T '用 pip install --user 装的 Python 包。有 conda 的话多半已不用，可删；不确定就搬走') }
     )
     $apps = Get-ChatApps
     $i = 0
@@ -1274,7 +1289,7 @@ function Get-Catalog {
             foreach ($a in $it.Apps) { $k += $apps[$a].P; if ($apps[$a].K) { $k += $apps[$a].K }; $d += $apps[$a].Dirs }
             $it.Kill = @($k | Select-Object -Unique); $it.KillDirs = @($d | Select-Object -Unique)
         }
-        $it.Actions = switch ($it.Kind) { 'cache' { @('删除','跳过') } 'action' { @('执行','跳过') } 'move' { @('搬到其他盘','跳过') } 'flex' { @('搬到其他盘','删除','跳过') } }
+        $it.Actions = switch ($it.Kind) { 'cache' { @((T '删除'),(T '跳过')) } 'action' { @((T '执行'),(T '跳过')) } 'move' { @((T '搬到其他盘'),(T '跳过')) } 'flex' { @((T '搬到其他盘'),(T '删除'),(T '跳过')) } }
     }
     return $list
 }
@@ -1299,10 +1314,10 @@ function Invoke-Delete($it, $res, [switch]$Auto) {
     if ($it.Svc) { $it.Svc | ForEach-Object { Start-Service $_ -ErrorAction SilentlyContinue } }
     $freed = [math]::Max([double]0, [double]((FreeC) - $f0))
     if ($res) { $res.Freed = $freed }
-    Log ("  完成  {0,-26} 释放 {1}" -f $it.N, (GB $freed))
-    $cat = if ($it.Kind -eq 'action') { '系统设置' } else { '删除' }
-    $what = if ($Auto) { "每周自动清理：$($it.N)" } else { "清理：$($it.N)" }
-    OpLog $cat $what $(if ($it.Paths) { $it.Paths -join '；' } else { '' }) ("C 盘多出 " + (GB $freed))
+    Log ((T "  完成  {0,-26} 释放 {1}") -f $it.N, (GB $freed))
+    $cat = if ($it.Kind -eq 'action') { '系统设置' } else { '删除' }   # 日志类别保持中文原样，是日志页筛选用的键
+    $what = if ($Auto) { ((T "每周自动清理：{0}") -f $($it.N)) } else { ((T "清理：{0}") -f $($it.N)) }
+    OpLog $cat $what $(if ($it.Paths) { $it.Paths -join (T '；') } else { '' }) ((T "C 盘多出 ") + (GB $freed))
 }
 
 # ---------- 搬家 ----------
@@ -1407,7 +1422,7 @@ function Close-Holders($it, [string]$src) {
         ($_.Path.StartsWith($pre, [StringComparison]::OrdinalIgnoreCase) -or ($dirs.Count -gt 0 -and (PathHasAny $_.Path $dirs))) })
     if ($inside) { $names += $inside.Name; $inside | Stop-Process -Force -ErrorAction SilentlyContinue }
     $names = @($names | Select-Object -Unique)
-    if ($names) { Log ("  关闭 {0}" -f ($names -join ', ')); Start-Sleep -Seconds 2 }
+    if ($names) { Log ((T "  关闭 {0}") -f ($names -join ', ')); Start-Sleep -Seconds 2 }
     return ,$names
 }
 
@@ -1418,7 +1433,7 @@ function Rename-WithRetry([string]$from, [string]$to, $it, [int]$tries = 8) {
         try { [IO.Directory]::Move($from, $to); return @{ Err = ''; Tries = $i } }
         catch { $e = $_.Exception; if ($e.InnerException) { $e = $e.InnerException }; $err = $e.Message }
         if ($i -lt $tries) {
-            SetP @{ Detail = ("原文件夹还被占用，关闭占用的程序后重试（第 {0} / {1} 次）：{2}" -f $i, ($tries - 1), $err) }
+            SetP @{ Detail = ((T "原文件夹还被占用，关闭占用的程序后重试（第 {0} / {1} 次）：{2}") -f $i, ($tries - 1), $err) }
             [void](Close-Holders $it $from)
             Start-Sleep -Seconds 3
         }
@@ -1440,26 +1455,26 @@ function Invoke-Move($it, $destRoot, $res) {
     if ($it.Kill) { foreach ($s in $todo) { [void](Close-Holders $it $s) } }
     foreach ($src in $it.Paths) {
         if (-not (Test-Path -LiteralPath $src)) { continue }
-        if (IsLink $src) { Log "  已经搬过（是链接），跳过 $src"; $res.Skipped++; continue }
-        if ($it.NoOneDrive -and $src -like '*OneDrive*') { Log "  $src 由 OneDrive 管理，不搬"; $res.Skipped++; continue }
-        if ($src.Substring(0,1) -ieq $destRoot.Substring(0,1)) { Log "  $src 已在目标盘"; $res.Skipped++; continue }
+        if (IsLink $src) { Log ((T "  已经搬过（是链接），跳过 {0}") -f $src); $res.Skipped++; continue }
+        if ($it.NoOneDrive -and $src -like '*OneDrive*') { Log ((T "  {0} 由 OneDrive 管理，不搬") -f $src); $res.Skipped++; continue }
+        if ($src.Substring(0,1) -ieq $destRoot.Substring(0,1)) { Log ((T "  {0} 已在目标盘") -f $src); $res.Skipped++; continue }
         $leaf = Split-Path $src -Leaf
         $pick = Find-MoveDest $src $destRoot
         $dst = [string]$pick.Path; $reuse = [bool]$pick.Reuse
         $dstRoot = Split-Path $dst -Parent
         $pathNo = [int]$sync.P.PathNo + 1
-        SetP @{ MovePhase = 'measure'; PathNo = $pathNo; MovePath = $src; MoveDest = $dst; MoveReuse = $reuse; SubKind = 'measure'; SubStart = (Get-Date); Detail = "统计 $src 的大小" }
+        SetP @{ MovePhase = 'measure'; PathNo = $pathNo; MovePath = $src; MoveDest = $dst; MoveReuse = $reuse; SubKind = 'measure'; SubStart = (Get-Date); Detail = ((T "统计 {0} 的大小") -f $src) }
         $srcBytes = DirBytes $src
         if ([long][DirStat]::Reparse -gt 0) {
             # 里面的链接（或系统压缩过的文件）复制和核对时都会被跳过，搬完删原目录时就会丢。宁可不搬
-            $m = "{0} 里有 {1} 个特殊项目（链接，或用 Windows 压缩功能压过的文件，比如 {2}）。复制时可能漏掉它们，为了不丢东西，这个文件夹不搬，原目录未动" -f $src, [DirStat]::Reparse, [DirStat]::ReparseSample
-            Log "  $m"; OpLog '搬运' '搬家失败' $src $m; $res.Fail++; $res.Msgs += $m; continue
+            $m = (T "{0} 里有 {1} 个特殊项目（链接，或用 Windows 压缩功能压过的文件，比如 {2}）。复制时可能漏掉它们，为了不丢东西，这个文件夹不搬，原目录未动") -f $src, [DirStat]::Reparse, [DirStat]::ReparseSample
+            Log "  $m"; OpLog '搬运' (T '搬家失败') $src $m; $res.Fail++; $res.Msgs += $m; continue
         }
         $haveBytes = [double]0
         if ($reuse) {
-            SetP @{ SubStart = (Get-Date); Detail = "统计上次留下的副本 $dst" }
+            SetP @{ SubStart = (Get-Date); Detail = ((T "统计上次留下的副本 {0}") -f $dst) }
             $haveBytes = DirBytes $dst; $haveFiles = [long][DirStat]::Files
-            SetP @{ Detail = "核对 $dst 是不是这个文件夹的旧副本" }
+            SetP @{ Detail = ((T "核对 {0} 是不是这个文件夹的旧副本") -f $dst) }
             $extra = Get-ExtraCount $dst $src
             if ($extra -lt 0 -or ($extra -gt [math]::Max(20, $haveFiles * 0.05))) {
                 # 副本里有大量 C 盘上没有的文件：可能是唯一的一份（比如 C 盘上的链接被软件换成了新的空文件夹），绝不覆盖它
@@ -1467,16 +1482,16 @@ function Invoke-Move($it, $destRoot, $res) {
                 $dst = Join-Path $destRoot ("{0}_{1}" -f $leaf, (Get-Date -Format 'yyyyMMddHHmm'))
                 $dstRoot = Split-Path $dst -Parent
                 $reuse = $false; $haveBytes = [double]0
-                $m = "目标盘上的 $old 里有 $extra 个文件在 C 盘上没有，可能是唯一的一份，保留不动；这次搬到新文件夹 $dst"
-                Log "  $m"; OpLog '搬运' '保留旧副本，改用新文件夹' $old $m; $res.Msgs += $m
+                $m = ((T "目标盘上的 {0} 里有 {1} 个文件在 C 盘上没有，可能是唯一的一份，保留不动；这次搬到新文件夹 {2}") -f $old, $extra, $dst)
+                Log "  $m"; OpLog '搬运' (T '保留旧副本，改用新文件夹') $old $m; $res.Msgs += $m
                 SetP @{ MoveDest = $dst; MoveReuse = $false }
-            } else { Log ("  {0} 里已有上次复制的 {1}，这次只补有变化的文件" -f $dst, (GB $haveBytes)) }
+            } else { Log ((T "  {0} 里已有上次复制的 {1}，这次只补有变化的文件") -f $dst, (GB $haveBytes)) }
         }
         $destDrive = $dst.Substring(0, 2)
         $destFree0 = [double](Get-PSDrive $destDrive.Substring(0,1)).Free
         $need = [math]::Max([double]0, [double]($srcBytes - $haveBytes)) + [double]200MB
-        if ($destFree0 -lt $need) { $m = "{0} 只剩 {1}，还需要约 {2}，放不下，原目录未动" -f $destDrive, (GB $destFree0), (GB $need); Log "  $m"; OpLog '搬运' '搬家失败' $src $m; $res.Fail++; $res.Msgs += $m; continue }
-        Log ("  搬 {0} ({1}) -> {2}" -f $src, (GB $srcBytes), $dst)
+        if ($destFree0 -lt $need) { $m = (T "{0} 只剩 {1}，还需要约 {2}，放不下，原目录未动") -f $destDrive, (GB $destFree0), (GB $need); Log "  $m"; OpLog '搬运' (T '搬家失败') $src $m; $res.Fail++; $res.Msgs += $m; continue }
+        Log ((T "  搬 {0} ({1}) -> {2}") -f $src, (GB $srcBytes), $dst)
         New-Item -ItemType Directory -Path $dst -Force | Out-Null
         # 搬软件时：目标文件夹先设成和 C 盘上一样的访问权限，再连同每个文件的权限一起复制
         if ($it.Sddl) { [void](Set-DirAccess $dst ([string]$it.Sddl)) }
@@ -1493,56 +1508,56 @@ function Invoke-Move($it, $destRoot, $res) {
             $m = [regex]::Match([string]$_, '(\d+)\t[^\t]*$')
             if ($m.Success) { $copied += [double]$m.Groups[1].Value; if ($sync -and $sync.P) { $sync.P.SubDone = $base + $copied } }
         }
-        if ($LASTEXITCODE -ge 8) { $m = "复制失败（robocopy 代码 $LASTEXITCODE，可能是空间不够或有文件被占用），原目录未动"; Log "  $m"; OpLog '搬运' '搬家失败' $src $m; $res.Fail++; $res.Msgs += $m; continue }
-        SetP @{ MovePhase = 'verify'; SubKind = 'measure'; SubStart = (Get-Date); Detail = '复制完成，核对两边大小' }
+        if ($LASTEXITCODE -ge 8) { $m = ((T "复制失败（robocopy 代码 {0}，可能是空间不够或有文件被占用），原目录未动") -f $LASTEXITCODE); Log "  $m"; OpLog '搬运' (T '搬家失败') $src $m; $res.Fail++; $res.Msgs += $m; continue }
+        SetP @{ MovePhase = 'verify'; SubKind = 'measure'; SubStart = (Get-Date); Detail = (T '复制完成，核对两边大小') }
         # 软件都已关掉，原目录不会再变：两边重新数一遍，文件个数一个不能少、总大小几乎一致，才继续（之后才会删 C 盘上的原目录）
         $srcBytes = DirBytes $src; $srcFiles = [long][DirStat]::Files
         $dstBytes = DirBytes $dst; $dstFiles = [long][DirStat]::Files
         if ($dstFiles -lt $srcFiles -or [math]::Abs($dstBytes - $srcBytes) -gt [math]::Max([double]16MB, [double]$srcBytes * 0.001)) {
-            $m = "核对不一致（源 {0:N0} 个文件 {1}，目标 {2:N0} 个文件 {3}），原目录未动" -f $srcFiles, (GB $srcBytes), $dstFiles, (GB $dstBytes)
-            Log "  $m"; OpLog '搬运' '搬家失败' $src $m; $res.Fail++; $res.Msgs += $m; continue
+            $m = (T "核对不一致（源 {0:N0} 个文件 {1}，目标 {2:N0} 个文件 {3}），原目录未动") -f $srcFiles, (GB $srcBytes), $dstFiles, (GB $dstBytes)
+            Log "  $m"; OpLog '搬运' (T '搬家失败') $src $m; $res.Fail++; $res.Msgs += $m; continue
         }
-        Log ("  核对通过：{0:N0} 个文件，{1}" -f $srcFiles, (GB $srcBytes))
+        Log ((T "  核对通过：{0:N0} 个文件，{1}") -f $srcFiles, (GB $srcBytes))
 
-        SetP @{ MovePhase = 'link'; SubKind = 'action'; SubStart = (Get-Date); Detail = "把 $src 换成指向 $dst 的链接" }
+        SetP @{ MovePhase = 'link'; SubKind = 'action'; SubStart = (Get-Date); Detail = ((T "把 {0} 换成指向 {1} 的链接") -f $src, $dst) }
         $bak = "$src.moved_backup"
         if (Test-Path -LiteralPath $bak) {
             # 以前留下的备份不直接删（万一是唯一的一份），改个名放在旁边
             $old = "{0}_{1:yyyyMMddHHmmss}" -f $bak, (Get-Date)
-            try { [IO.Directory]::Move($bak, $old); Log "  以前留下的备份已改名为 $old，确认没用后可手动删除" } catch {}
+            try { [IO.Directory]::Move($bak, $old); Log ((T "  以前留下的备份已改名为 {0}，确认没用后可手动删除") -f $old) } catch {}
         }
         $r = Rename-WithRetry $src $bak $it
         if ($r.Err) {
             $self = [string]$env:CLEANC_SELF
-            $why = if ($it.BusyHint) { [string]$it.BusyHint } else { '还有程序开着里面的文件。请彻底退出相关的聊天软件（微信、QQ、企业微信、飞书、钉钉等，包括屏幕右下角托盘里的图标），关掉打开着这个文件夹的窗口，再点一次「执行」' }
-            if ($self -and $self.StartsWith($src.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) { $why = '本工具就放在这个文件夹里，请把工具挪到别处再运行' }
-            $m = "已复制到 $dst，但原文件夹被占用，还没换成链接：$why。再搬时直接用这份副本，只补差异，很快就好"
-            Log "  $m（系统提示：$($r.Err)）"; OpLog '搬运' '搬家未完成：原文件夹被占用' $src $m; $res.Wait++; $res.Msgs += $m; continue
+            $why = if ($it.BusyHint) { [string]$it.BusyHint } else { (T '还有程序开着里面的文件。请彻底退出相关的聊天软件（微信、QQ、企业微信、飞书、钉钉等，包括屏幕右下角托盘里的图标），关掉打开着这个文件夹的窗口，再点一次「执行」') }
+            if ($self -and $self.StartsWith($src.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) { $why = (T '本工具就放在这个文件夹里，请把工具挪到别处再运行') }
+            $m = ((T "已复制到 {0}，但原文件夹被占用，还没换成链接：{1}。再搬时直接用这份副本，只补差异，很快就好") -f $dst, $why)
+            Log ((T "  {0}（系统提示：{1}）") -f $m, $($r.Err)); OpLog '搬运' (T '搬家未完成：原文件夹被占用') $src $m; $res.Wait++; $res.Msgs += $m; continue
         }
         & "$sys32\cmd.exe" /c mklink /J "$src" "$dst" | Out-Null
         if (-not (IsLink $src)) {
             try { [IO.Directory]::Move($bak, $src) } catch {}
-            $m = "建链接失败，已改回原目录，副本在 $dst"; Log "  $m"; OpLog '搬运' '搬家失败' $src $m; $res.Fail++; $res.Msgs += $m; continue
+            $m = ((T "建链接失败，已改回原目录，副本在 {0}") -f $dst); Log "  $m"; OpLog '搬运' (T '搬家失败') $src $m; $res.Fail++; $res.Msgs += $m; continue
         }
         # 核对之后到改名之间可能有程序又写了文件，补复制一遍新文件；补不过去就保留 C 盘上的旧文件夹
-        SetP @{ Detail = '补复制最后写入的文件' }
+        SetP @{ Detail = (T '补复制最后写入的文件') }
         & "$sys32\robocopy.exe" "$bak" "$dst" /E /XO $cp /R:1 /W:1 /XJ /NFL /NDL /NJH /NJS /NP | Out-Null
         if ($LASTEXITCODE -ge 8) {
-            $m = "已搬好，但最后几个文件没补复制过去，C 盘上的旧文件夹先保留：$bak"
-            Log "  $m"; OpLog '搬运' '搬到其他盘' "$src → $dst" ("{0:N0} 个文件，{1}，两边已核对一致" -f $srcFiles, (GB $srcBytes)); OpLog '搬运' '搬家后保留 C 盘旧文件夹' $bak $m
+            $m = ((T "已搬好，但最后几个文件没补复制过去，C 盘上的旧文件夹先保留：{0}") -f $bak)
+            Log "  $m"; OpLog '搬运' (T '搬到其他盘') "$src → $dst" ((T "{0:N0} 个文件，{1}，两边已核对一致") -f $srcFiles, (GB $srcBytes)); OpLog '搬运' (T '搬家后保留 C 盘旧文件夹') $bak $m
             $res.Done++; $res.Moved += $srcBytes; $res.Dest += $dst; $res.Msgs += $m; $script:movedTargets = $null
             SetP @{ MovePhase = 'done' }
             continue
         }
-        SetP @{ MovePhase = 'cleanup'; SubKind = 'delete'; SubTotal = [double]$srcBytes; SubStart = (Get-Date); FreeC0 = [double](FreeC); Detail = '链接已建好，删除 C 盘上的原目录' }
+        SetP @{ MovePhase = 'cleanup'; SubKind = 'delete'; SubTotal = [double]$srcBytes; SubStart = (Get-Date); FreeC0 = [double](FreeC); Detail = (T '链接已建好，删除 C 盘上的原目录') }
         & "$sys32\cmd.exe" /c rd /s /q "\\?\$bak" 2>$null | Out-Null
         if (Test-Path -LiteralPath $bak) { Remove-Item -LiteralPath $bak -Recurse -Force -ErrorAction SilentlyContinue }
         $res.Done++; $res.Moved += $srcBytes; $res.Dest += $dst
         SetP @{ MovePhase = 'done' }
-        OpLog '搬运' '搬到其他盘' "$src → $dst" ("{0:N0} 个文件，{1}，两边已核对一致" -f $srcFiles, (GB $srcBytes))
+        OpLog '搬运' (T '搬到其他盘') "$src → $dst" ((T "{0:N0} 个文件，{1}，两边已核对一致") -f $srcFiles, (GB $srcBytes))
         $script:movedTargets = $null
-        if (Test-Path -LiteralPath $bak) { $m = "已搬好，但 C 盘上的备份没删干净（有文件被占用），过后可手动删除：$bak"; Log "  $m"; OpLog '删除' '搬家后 C 盘旧文件夹没删干净' $bak ''; $res.Msgs += $m }
-        else { Log "  完成  $src  ->  $dst"; OpLog '删除' '搬家后删除 C 盘上的原文件夹' $bak ("数据已在 $dst") }
+        if (Test-Path -LiteralPath $bak) { $m = ((T "已搬好，但 C 盘上的备份没删干净（有文件被占用），过后可手动删除：{0}") -f $bak); Log "  $m"; OpLog '删除' (T '搬家后 C 盘旧文件夹没删干净') $bak ''; $res.Msgs += $m }
+        else { Log ((T "  完成  {0}  ->  {1}") -f $src, $dst); OpLog '删除' (T '搬家后删除 C 盘上的原文件夹') $bak (((T "数据已在 {0}") -f $dst)) }
     }
 }
 
@@ -1664,53 +1679,53 @@ function Get-MovedTargets {
 $script:progKeep = @('Common Files','WindowsApps','ModifiableWindowsApps','Windows Defender','Windows Defender Advanced Threat Protection','Windows Mail','Windows Media Player',
     'Windows NT','Windows Photo Viewer','Windows Portable Devices','Windows Security','Windows Sidebar','WindowsPowerShell','Internet Explorer','Reference Assemblies','MSBuild','dotnet','Microsoft Update Health Tools','Uninstall Information')
 function Get-DeleteBlock([string]$path, [switch]$Leftover) {
-    if (-not $path) { return '路径为空' }
+    if (-not $path) { return (T '路径为空') }
     $full = $path
     try { $full = [IO.Path]::GetFullPath($path) } catch {}
     $full = $full.TrimEnd('\')
-    if ($full.Length -le 2) { return '整块磁盘不能删' }
-    if (Test-Personal $full) { return 'C 盘个人文件夹（桌面、文档、下载、图片、视频、音乐等）里的东西不删' }
+    if ($full.Length -le 2) { return (T '整块磁盘不能删') }
+    if (Test-Personal $full) { return (T 'C 盘个人文件夹（桌面、文档、下载、图片、视频、音乐等）里的东西不删') }
     $sd = $env:SystemDrive
     foreach ($d in @($env:SystemRoot, "$sd\System Volume Information", "$sd\`$Recycle.Bin", "$sd\Recovery", "$sd\Boot", "$sd\EFI", "$sd\Config.Msi", "$sd\Documents and Settings", "$sd\ProgramData\Microsoft")) {
-        if ($full -ieq $d -or $full.StartsWith("$d\", [StringComparison]::OrdinalIgnoreCase)) { return '系统文件夹，删了 Windows 可能出问题' }
+        if ($full -ieq $d -or $full.StartsWith("$d\", [StringComparison]::OrdinalIgnoreCase)) { return (T '系统文件夹，删了 Windows 可能出问题') }
     }
     foreach ($pf in @("$sd\Program Files", "$sd\Program Files (x86)")) {
-        if ($full -ieq $pf) { return '程序总文件夹不能删' }
+        if ($full -ieq $pf) { return (T '程序总文件夹不能删') }
         if ($full.StartsWith("$pf\", [StringComparison]::OrdinalIgnoreCase)) {
             $first = $full.Substring($pf.Length + 1).Split('\')[0]
-            if ($script:progKeep -contains $first -or $first -like 'Microsoft*' -or $first -like 'Windows*') { return '系统自带的程序，不能删' }
-            if (-not $Leftover) { return '软件的安装文件夹，请到「软件管理」里卸载，不要直接删' }
+            if ($script:progKeep -contains $first -or $first -like 'Microsoft*' -or $first -like 'Windows*') { return (T '系统自带的程序，不能删') }
+            if (-not $Leftover) { return (T '软件的安装文件夹，请到「软件管理」里卸载，不要直接删') }
         }
     }
     $parent = Split-Path $full -Parent
     if ($parent -and $parent.TrimEnd('\').Length -le 2) {
         $leaf = Split-Path $full -Leaf
         if (@('pagefile.sys','hiberfil.sys','swapfile.sys','DumpStack.log','DumpStack.log.tmp','bootmgr','BOOTNXT','Users','ProgramData','Windows','Program Files','Program Files (x86)') -contains $leaf) {
-            if ($leaf -like '*.sys') { return '系统文件，请用「省空间」里的功能处理' }
-            return '系统文件夹，不能整个删'
+            if ($leaf -like '*.sys') { return (T '系统文件，请用「省空间」里的功能处理') }
+            return (T '系统文件夹，不能整个删')
         }
     }
     $users = Split-Path $env:USERPROFILE -Parent
-    if ($full -ieq $users -or ($parent -and $parent -ieq $users)) { return '用户目录本身不能整个删' }
+    if ($full -ieq $users -or ($parent -and $parent -ieq $users)) { return (T '用户目录本身不能整个删') }
     foreach ($a in @("$env:USERPROFILE\AppData", $env:LOCALAPPDATA, $env:APPDATA, "$env:USERPROFILE\AppData\LocalLow", "$sd\ProgramData",
                      "$env:LOCALAPPDATA\Programs", "$env:LOCALAPPDATA\Packages", "$env:LOCALAPPDATA\Microsoft", "$env:APPDATA\Microsoft")) {
-        if ($a -and $full -ieq $a.TrimEnd('\')) { return '这是软件数据的总文件夹，只能删里面具体的项目' }
+        if ($a -and $full -ieq $a.TrimEnd('\')) { return (T '这是软件数据的总文件夹，只能删里面具体的项目') }
     }
     if ($parent -and (Split-Path $parent -Parent) -ieq $users) {
-        if (@('AppData') -contains (Split-Path $full -Leaf)) { return '这是软件数据的总文件夹，只能删里面具体的项目' }
+        if (@('AppData') -contains (Split-Path $full -Leaf)) { return (T '这是软件数据的总文件夹，只能删里面具体的项目') }
     }
-    if ($full -match ('^' + [regex]::Escape($users) + '\\[^\\]+\\AppData\\(Local|Roaming|LocalLow)$')) { return '这是软件数据的总文件夹，只能删里面具体的项目' }
+    if ($full -match ('^' + [regex]::Escape($users) + '\\[^\\]+\\AppData\\(Local|Roaming|LocalLow)$')) { return (T '这是软件数据的总文件夹，只能删里面具体的项目') }
     foreach ($k in @("$env:APPDATA\Microsoft\Protect", "$env:APPDATA\Microsoft\Credentials", "$env:APPDATA\Microsoft\Crypto", "$env:APPDATA\Microsoft\SystemCertificates",
                      "$env:LOCALAPPDATA\Microsoft\Credentials", "$env:LOCALAPPDATA\Microsoft\Vault")) {
-        if ($full -ieq $k -or $full.StartsWith("$k\", [StringComparison]::OrdinalIgnoreCase)) { return '系统保存密码、证书和密钥的地方，删了会丢失登录信息和证书' }
+        if ($full -ieq $k -or $full.StartsWith("$k\", [StringComparison]::OrdinalIgnoreCase)) { return (T '系统保存密码、证书和密钥的地方，删了会丢失登录信息和证书') }
     }
     $pc = "$sd\ProgramData\Package Cache"
-    if ($full -ieq $pc -or $full.StartsWith("$pc\", [StringComparison]::OrdinalIgnoreCase)) { return '软件的安装包缓存，删了以后这些软件可能没法修复、升级或卸载' }
-    if ($full -ieq $script:appDir -or $full.StartsWith("$($script:appDir)\", [StringComparison]::OrdinalIgnoreCase)) { return '本工具自己的设置和日志' }
-    if ((Split-Path $full -Leaf) -ieq 'CDriveMoved' -or $full -match '(?i)\\CDriveMoved(\\|$)') { return '这是搬家后的数据（CDriveMoved 文件夹），C 盘上的链接指向这里。要处理请到「搬家管理」' }
+    if ($full -ieq $pc -or $full.StartsWith("$pc\", [StringComparison]::OrdinalIgnoreCase)) { return (T '软件的安装包缓存，删了以后这些软件可能没法修复、升级或卸载') }
+    if ($full -ieq $script:appDir -or $full.StartsWith("$($script:appDir)\", [StringComparison]::OrdinalIgnoreCase)) { return (T '本工具自己的设置和日志') }
+    if ((Split-Path $full -Leaf) -ieq 'CDriveMoved' -or $full -match '(?i)\\CDriveMoved(\\|$)') { return (T '这是搬家后的数据（CDriveMoved 文件夹），C 盘上的链接指向这里。要处理请到「搬家管理」') }
     foreach ($t in (Get-MovedTargets)) {
         if ($full -ieq $t -or $full.StartsWith("$t\", [StringComparison]::OrdinalIgnoreCase) -or $t.StartsWith("$full\", [StringComparison]::OrdinalIgnoreCase)) {
-            return '这里是搬家后的数据，C 盘上的链接指向这里。要处理请到「搬家管理」'
+            return (T '这里是搬家后的数据，C 盘上的链接指向这里。要处理请到「搬家管理」')
         }
     }
     return ''
@@ -1718,16 +1733,16 @@ function Get-DeleteBlock([string]$path, [switch]$Leftover) {
 function Get-CompressBlock([string]$path) {
     $full = $path; try { $full = [IO.Path]::GetFullPath($path) } catch {}
     $full = $full.TrimEnd('\')
-    if ($full.Length -le 2) { return '整块磁盘请用系统压缩，不要整盘压' }
+    if ($full.Length -le 2) { return (T '整块磁盘请用系统压缩，不要整盘压') }
     $sd = $env:SystemDrive
     foreach ($d in @($env:SystemRoot, "$sd\System Volume Information", "$sd\`$Recycle.Bin", "$sd\Recovery", "$sd\Boot", "$sd\EFI")) {
-        if ($full -ieq $d -or $full.StartsWith("$d\", [StringComparison]::OrdinalIgnoreCase)) { return '系统文件夹请用上面的「系统压缩」' }
+        if ($full -ieq $d -or $full.StartsWith("$d\", [StringComparison]::OrdinalIgnoreCase)) { return (T '系统文件夹请用上面的「系统压缩」') }
     }
     foreach ($v in (Get-VDisks)) {
         $vp = ([string]$v.Path).TrimEnd('\')
         if (-not $vp) { continue }
         if ($vp -ieq $full -or $vp.StartsWith("$full\", [StringComparison]::OrdinalIgnoreCase) -or $full.StartsWith("$vp\", [StringComparison]::OrdinalIgnoreCase)) {
-            return "这个文件夹里有虚拟磁盘（$($v.Name)），压缩会让它变慢，甚至出错。可以压缩里面别的子文件夹，虚拟磁盘请用「省空间」页里的「压缩虚拟磁盘」"
+            return ((T "这个文件夹里有虚拟磁盘（{0}），压缩会让它变慢，甚至出错。可以压缩里面别的子文件夹，虚拟磁盘请用「省空间」页里的「压缩虚拟磁盘」") -f $($v.Name))
         }
     }
     return ''
@@ -1801,34 +1816,34 @@ function Get-MoveState($rec) {
     $srcLink = IsLink $src
     $srcThere = Test-Path -LiteralPath $src
     $dstThere = $dst -and (Test-Path -LiteralPath $dst)
-    if ($srcLink -and $dstThere) { return @{ State = 'ok'; Text = ("正常：数据在 {0} 盘，C 盘这里只留了一个指向它的链接，不占 C 盘空间，软件照常使用" -f $dst.Substring(0, 1).ToUpper()); Brush = '#248A3D' } }
+    if ($srcLink -and $dstThere) { return @{ State = 'ok'; Text = ((T "正常：数据在 {0} 盘，C 盘这里只留了一个指向它的链接，不占 C 盘空间，软件照常使用") -f $dst.Substring(0, 1).ToUpper()); Brush = '#248A3D' } }
     if ($srcLink -and -not $dstThere) {
         $fix = ''
         $leaf = Split-Path $dst -Leaf
         foreach ($root in (All-MoveRoots)) { $c = Join-Path $root $leaf; if (Test-Path -LiteralPath $c) { $fix = $c; break } }
-        $t = '链接断了：目标文件夹不在了（硬盘拔了、或者盘符变了？）'
-        if ($fix) { $t += "。在 $fix 找到一份同名的，可以改指向它" }
+        $t = (T '链接断了：目标文件夹不在了（硬盘拔了、或者盘符变了？）')
+        if ($fix) { $t += ((T "。在 {0} 找到一份同名的，可以改指向它") -f $fix) }
         return @{ State = 'broken'; Text = $t; Brush = '#D70015'; Fix = $fix }
     }
-    if ($srcThere -and -not $srcLink -and $dstThere) { return @{ State = 'pending'; Text = '没搬完：C 盘原文件夹还在，目标盘上也有一份。可以在原来搬它的地方（「清理 C 盘」或「软件管理」）再搬一次，只补差异；也可以删掉这份副本，删之前会先核对，副本里有不少 C 盘上没有的文件就不删'; Brush = '#B25000' } }
-    if (-not $srcThere -and $dstThere) { return @{ State = 'nosrc'; Text = 'C 盘上的链接不见了（软件卸载了，或者链接被删了）。软件还在用的话，可以重建链接；软件已经卸载的话，打开看看，确认不要了再自己删掉这份数据'; Brush = '#D70015'; Fix = $dst } }
-    return @{ State = 'gone'; Text = '已经不在了'; Brush = '#86868B' }
+    if ($srcThere -and -not $srcLink -and $dstThere) { return @{ State = 'pending'; Text = (T '没搬完：C 盘原文件夹还在，目标盘上也有一份。可以在原来搬它的地方（「清理 C 盘」或「软件管理」）再搬一次，只补差异；也可以删掉这份副本，删之前会先核对，副本里有不少 C 盘上没有的文件就不删'); Brush = '#B25000' } }
+    if (-not $srcThere -and $dstThere) { return @{ State = 'nosrc'; Text = (T 'C 盘上的链接不见了（软件卸载了，或者链接被删了）。软件还在用的话，可以重建链接；软件已经卸载的话，打开看看，确认不要了再自己删掉这份数据'); Brush = '#D70015'; Fix = $dst } }
+    return @{ State = 'gone'; Text = (T '已经不在了'); Brush = '#86868B' }
 }
 
 # 搬回 C 盘：复制回来、核对、拆掉链接、换回真文件夹，最后删掉目标盘上的那份
 function Invoke-MoveBack($rec, $res) {
     $res.Ok = $false; $res.Msg = ''
     $src = [string]$rec.Src; $dst = [string]$rec.Dst
-    if (-not (IsLink $src) -or -not (Test-Path -LiteralPath $dst)) { $res.Msg = '这一项现在不是正常的搬家状态，没法搬回'; return }
+    if (-not (IsLink $src) -or -not (Test-Path -LiteralPath $dst)) { $res.Msg = (T '这一项现在不是正常的搬家状态，没法搬回'); return }
     try { [Environment]::CurrentDirectory = $env:SystemRoot; Set-Location -LiteralPath $env:SystemRoot } catch {}
     $it = @{ Kill = @(); KillDirs = @() }
     if ($rec.Idx) { foreach ($c in (Get-Catalog)) { if ($c.Idx -eq $rec.Idx) { $it = $c } } }
     SetP @{ MoveItem = $true; MoveBack = $true; HasKill = [bool]$it.Kill; MovePhase = 'kill'; PathNo = 0; PathCount = 1; MovePath = $dst; MoveDest = $src; MoveReuse = $false }
     [void](Close-Holders $it $src); [void](Close-Holders $it $dst)
-    SetP @{ MovePhase = 'measure'; SubKind = 'measure'; SubStart = (Get-Date); Detail = "统计 $dst 的大小" }
+    SetP @{ MovePhase = 'measure'; SubKind = 'measure'; SubStart = (Get-Date); Detail = ((T "统计 {0} 的大小") -f $dst) }
     $bytes = DirBytes $dst; $files = [long][DirStat]::Files
     $free = [double](FreeC)
-    if ($free -lt $bytes + 2GB) { $res.Msg = "C 盘只剩 {0}，放不下 {1}（还要留 2 GB 余量）" -f (GB $free), (GB $bytes); OpLog '搬运' '搬回 C 盘失败' $src $res.Msg; return }
+    if ($free -lt $bytes + 2GB) { $res.Msg = (T "C 盘只剩 {0}，放不下 {1}（还要留 2 GB 余量）") -f (GB $free), (GB $bytes); OpLog '搬运' (T '搬回 C 盘失败') $src $res.Msg; return }
     $tmp = "$src.cleanc_back"
     if (Test-Path -LiteralPath $tmp) { try { [IO.Directory]::Move($tmp, ("{0}_{1:yyyyMMddHHmmss}" -f $tmp, (Get-Date))) } catch {} }
     New-Item -ItemType Directory -Path $tmp -Force | Out-Null
@@ -1838,32 +1853,32 @@ function Invoke-MoveBack($rec, $res) {
         $m = [regex]::Match([string]$_, '(\d+)\t[^\t]*$')
         if ($m.Success) { $copied += [double]$m.Groups[1].Value; if ($sync -and $sync.P) { $sync.P.SubDone = $copied } }
     }
-    if ($LASTEXITCODE -ge 8) { $res.Msg = "复制回 C 盘失败（robocopy 代码 $LASTEXITCODE），什么都没改，复制了一半的临时文件夹在 $tmp"; OpLog '搬运' '搬回 C 盘失败' $src $res.Msg; return }
-    SetP @{ MovePhase = 'verify'; SubKind = 'measure'; SubStart = (Get-Date); Detail = '核对两边是否一致' }
+    if ($LASTEXITCODE -ge 8) { $res.Msg = ((T "复制回 C 盘失败（robocopy 代码 {0}），什么都没改，复制了一半的临时文件夹在 {1}") -f $LASTEXITCODE, $tmp); OpLog '搬运' (T '搬回 C 盘失败') $src $res.Msg; return }
+    SetP @{ MovePhase = 'verify'; SubKind = 'measure'; SubStart = (Get-Date); Detail = (T '核对两边是否一致') }
     $b2 = DirBytes $tmp; $f2 = [long][DirStat]::Files
     if ($f2 -lt $files -or [math]::Abs($b2 - $bytes) -gt [math]::Max([double]16MB, [double]$bytes * 0.001)) {
-        $res.Msg = "核对不一致（目标盘 {0:N0} 个文件，复制回来 {1:N0} 个），什么都没改" -f $files, $f2; OpLog '搬运' '搬回 C 盘失败' $src $res.Msg; return
+        $res.Msg = (T "核对不一致（目标盘 {0:N0} 个文件，复制回来 {1:N0} 个），什么都没改") -f $files, $f2; OpLog '搬运' (T '搬回 C 盘失败') $src $res.Msg; return
     }
-    SetP @{ MovePhase = 'link'; SubKind = 'action'; SubStart = (Get-Date); Detail = '拆掉链接，换回真正的文件夹' }
+    SetP @{ MovePhase = 'link'; SubKind = 'action'; SubStart = (Get-Date); Detail = (T '拆掉链接，换回真正的文件夹') }
     & "$sys32\cmd.exe" /c rmdir "$src" 2>$null | Out-Null
-    if (Test-Path -LiteralPath $src) { $res.Msg = "C 盘上的链接拆不掉（可能被占用），什么都没改；复制回来的数据在 $tmp"; OpLog '搬运' '搬回 C 盘失败' $src $res.Msg; return }
+    if (Test-Path -LiteralPath $src) { $res.Msg = ((T "C 盘上的链接拆不掉（可能被占用），什么都没改；复制回来的数据在 {0}") -f $tmp); OpLog '搬运' (T '搬回 C 盘失败') $src $res.Msg; return }
     try { [IO.Directory]::Move($tmp, $src) }
     catch {
         & "$sys32\cmd.exe" /c mklink /J "$src" "$dst" | Out-Null
-        $res.Msg = "换回文件夹失败，已恢复原来的链接；复制回来的数据在 $tmp"; OpLog '搬运' '搬回 C 盘失败' $src $res.Msg; return
+        $res.Msg = ((T "换回文件夹失败，已恢复原来的链接；复制回来的数据在 {0}") -f $tmp); OpLog '搬运' (T '搬回 C 盘失败') $src $res.Msg; return
     }
-    OpLog '搬运' '搬回 C 盘' "$dst → $src" ("{0:N0} 个文件，{1}，已核对" -f $files, (GB $bytes))
+    OpLog '搬运' (T '搬回 C 盘') "$dst → $src" ((T "{0:N0} 个文件，{1}，已核对") -f $files, (GB $bytes))
     & "$sys32\robocopy.exe" "$dst" "$src" /E /XO /COPY:DAT /R:1 /W:1 /XJ /NFL /NDL /NJH /NJS /NP | Out-Null
     if ($LASTEXITCODE -ge 8) {
-        $res.Ok = $true; $res.Bytes = $bytes; $res.Msg = "已搬回 C 盘，但有几个最后写入的文件没补复制过来，目标盘上的那份先保留：$dst"
-        OpLog '搬运' '搬回后保留目标盘副本' $dst $res.Msg
+        $res.Ok = $true; $res.Bytes = $bytes; $res.Msg = ((T "已搬回 C 盘，但有几个最后写入的文件没补复制过来，目标盘上的那份先保留：{0}") -f $dst)
+        OpLog '搬运' (T '搬回后保留目标盘副本') $dst $res.Msg
         foreach ($root in (All-MoveRoots)) { Remove-MoveMapEntry $root $src }
         $script:movedTargets = $null; SetP @{ MovePhase = 'done' }; return
     }
-    SetP @{ MovePhase = 'cleanup'; SubKind = 'action'; SubStart = (Get-Date); Detail = '删除目标盘上的那份' }
+    SetP @{ MovePhase = 'cleanup'; SubKind = 'action'; SubStart = (Get-Date); Detail = (T '删除目标盘上的那份') }
     & "$sys32\cmd.exe" /c rd /s /q "\\?\$dst" 2>$null | Out-Null
-    if (Test-Path -LiteralPath $dst) { $res.Msg = "已搬回，但目标盘上的旧副本没删干净：$dst" }
-    else { OpLog '删除' '搬回后删除目标盘上的旧副本' $dst (GB $bytes) }
+    if (Test-Path -LiteralPath $dst) { $res.Msg = ((T "已搬回，但目标盘上的旧副本没删干净：{0}") -f $dst) }
+    else { OpLog '删除' (T '搬回后删除目标盘上的旧副本') $dst (GB $bytes) }
     foreach ($root in (All-MoveRoots)) { Remove-MoveMapEntry $root $src }
     $script:movedTargets = $null
     $res.Ok = $true; $res.Bytes = $bytes
@@ -1872,31 +1887,31 @@ function Invoke-MoveBack($rec, $res) {
 # 重建链接：C 盘原位置（断掉的链接或已经不在）重新指向 $target
 function Invoke-FixLink([string]$src, [string]$target, $res) {
     $res.Ok = $false
-    if (-not (Test-Path -LiteralPath $target)) { $res.Msg = "目标 $target 不存在"; return }
+    if (-not (Test-Path -LiteralPath $target)) { $res.Msg = ((T "目标 {0} 不存在") -f $target); return }
     if (IsLink $src) { & "$sys32\cmd.exe" /c rmdir "$src" 2>$null | Out-Null }
-    if (Test-Path -LiteralPath $src) { $res.Msg = "C 盘上 $src 是一个真文件夹，不能覆盖"; return }
+    if (Test-Path -LiteralPath $src) { $res.Msg = ((T "C 盘上 {0} 是一个真文件夹，不能覆盖") -f $src); return }
     & "$sys32\cmd.exe" /c mklink /J "$src" "$target" | Out-Null
-    if (IsLink $src) { $res.Ok = $true; OpLog '搬运' '重建链接' "$src → $target" '' ; $script:movedTargets = $null }
-    else { $res.Msg = '建链接失败'; OpLog '搬运' '重建链接失败' "$src → $target" '' }
+    if (IsLink $src) { $res.Ok = $true; OpLog '搬运' (T '重建链接') "$src → $target" '' ; $script:movedTargets = $null }
+    else { $res.Msg = (T '建链接失败'); OpLog '搬运' (T '重建链接失败') "$src → $target" '' }
 }
 # 删掉没搬完留下的多余副本（只有 C 盘原文件夹还在时才允许）
 function Invoke-DropCopy($rec, $res) {
     $res.Ok = $false
     $src = [string]$rec.Src; $dst = [string]$rec.Dst
-    if (-not (Test-Path -LiteralPath $src) -or (IsLink $src)) { $res.Msg = 'C 盘原文件夹不在，这份副本可能是唯一的一份，不删'; return }
-    foreach ($c in (Get-Catalog)) { foreach ($p in $c.Paths) { $t = LinkTarget $p; if ($t -and $t.TrimEnd('\') -ieq $dst.TrimEnd('\')) { $res.Msg = "这份副本正被 $p 的链接使用，不能删"; return } } }
-    SetP @{ Detail = '核对副本里有没有 C 盘上没有的文件' }
+    if (-not (Test-Path -LiteralPath $src) -or (IsLink $src)) { $res.Msg = (T 'C 盘原文件夹不在，这份副本可能是唯一的一份，不删'); return }
+    foreach ($c in (Get-Catalog)) { foreach ($p in $c.Paths) { $t = LinkTarget $p; if ($t -and $t.TrimEnd('\') -ieq $dst.TrimEnd('\')) { $res.Msg = ((T "这份副本正被 {0} 的链接使用，不能删") -f $p); return } } }
+    SetP @{ Detail = (T '核对副本里有没有 C 盘上没有的文件') }
     $b = DirBytes $dst; $nf = [long][DirStat]::Files
     $extra = Get-ExtraCount $dst $src
     if ($extra -lt 0 -or ($extra -gt [math]::Max(20, $nf * 0.05))) {
-        $res.Msg = if ($extra -lt 0) { '核对不了，不删' } else { "副本里有 $extra 个文件在 C 盘原文件夹里没有（或比 C 盘上的新），这份副本可能是唯一的一份，所以不删。请打开两边对比后再决定" }
-        OpLog '删除' '没删多余副本（副本里有 C 盘没有的文件）' $dst $res.Msg; return
+        $res.Msg = if ($extra -lt 0) { (T '核对不了，不删') } else { ((T "副本里有 {0} 个文件在 C 盘原文件夹里没有（或比 C 盘上的新），这份副本可能是唯一的一份，所以不删。请打开两边对比后再决定") -f $extra) }
+        OpLog '删除' (T '没删多余副本（副本里有 C 盘没有的文件）') $dst $res.Msg; return
     }
     & "$sys32\cmd.exe" /c rd /s /q "\\?\$dst" 2>$null | Out-Null
-    if (Test-Path -LiteralPath $dst) { $res.Msg = '没删干净，可能有文件被占用'; return }
+    if (Test-Path -LiteralPath $dst) { $res.Msg = (T '没删干净，可能有文件被占用'); return }
     foreach ($root in (All-MoveRoots)) { Remove-MoveMapEntry $root $src }
     $script:movedTargets = $null
-    OpLog '删除' '删除没搬完留下的多余副本' $dst ("{0}，C 盘原文件夹 {1} 保留" -f (GB $b), $src)
+    OpLog '删除' (T '删除没搬完留下的多余副本') $dst ((T "{0}，C 盘原文件夹 {1} 保留") -f (GB $b), $src)
     $res.Ok = $true; $res.Bytes = $b
 }
 
@@ -1908,40 +1923,40 @@ function Get-AppMoveBlock($app, $others) {
     if ($app.Kind -eq 'store') { return 'store' }
     $loc = ([string]$app.Location).Trim().TrimEnd('\')
     $sd = $env:SystemDrive
-    if (-not $loc -or -not (Test-Path -LiteralPath $loc -PathType Container)) { return '安装程序没有写明这个软件装在哪个文件夹，没法确定要搬什么' }
-    if (-not $loc.StartsWith("$sd\", [StringComparison]::OrdinalIgnoreCase)) { return '这个软件本来就不在 C 盘' }
-    if (IsLink $loc) { return '已经搬过了，C 盘上这里只剩一个链接。要搬回来请到「搬家管理」' }
+    if (-not $loc -or -not (Test-Path -LiteralPath $loc -PathType Container)) { return (T '安装程序没有写明这个软件装在哪个文件夹，没法确定要搬什么') }
+    if (-not $loc.StartsWith("$sd\", [StringComparison]::OrdinalIgnoreCase)) { return (T '这个软件本来就不在 C 盘') }
+    if (IsLink $loc) { return (T '已经搬过了，C 盘上这里只剩一个链接。要搬回来请到「搬家管理」') }
     $up = Get-LinkedAncestor $loc
-    if ($up) { return "它所在的文件夹 $up 已经搬到其他盘了，这个软件的文件其实已经不在 C 盘" }
+    if ($up) { return ((T "它所在的文件夹 {0} 已经搬到其他盘了，这个软件的文件其实已经不在 C 盘") -f $up) }
     $pf = "$sd\Program Files"; $pf86 = "$sd\Program Files (x86)"; $lp = "$env:LOCALAPPDATA\Programs"
     $par = (Split-Path $loc -Parent).TrimEnd('\')
     if (-not $app.LocReg -and @($pf, $pf86, $lp) -notcontains $par) {
-        return "安装程序没有写明软件装在哪个文件夹（只知道它的图标在 $loc 里），为了不搬错，不搬"
+        return ((T "安装程序没有写明软件装在哪个文件夹（只知道它的图标在 {0} 里），为了不搬错，不搬") -f $loc)
     }
     foreach ($g in @("$sd", $pf, $pf86, "$sd\ProgramData", "$sd\Users", $env:USERPROFILE, $env:LOCALAPPDATA, $env:APPDATA, $lp, "$env:USERPROFILE\AppData", "$env:USERPROFILE\AppData\LocalLow")) {
-        if ($g -and $loc -ieq $g.TrimEnd('\')) { return '记录的安装位置是一个总文件夹，里面还有很多别的东西，不能整个搬' }
+        if ($g -and $loc -ieq $g.TrimEnd('\')) { return (T '记录的安装位置是一个总文件夹，里面还有很多别的东西，不能整个搬') }
     }
     foreach ($d in @($env:SystemRoot, "$sd\ProgramData\Microsoft", "$sd\ProgramData\Package Cache", "$pf\WindowsApps", "$pf\ModifiableWindowsApps", "$pf\Common Files", "$pf86\Common Files",
                      "$sd\Recovery", "$sd\Boot", "$sd\EFI", "$sd\System Volume Information", "$sd\`$Recycle.Bin", "$sd\Config.Msi", "$sd\Intel", "$sd\AMD", "$sd\NVIDIA", "$sd\Drivers")) {
-        if ($loc -ieq $d -or $loc.StartsWith("$d\", [StringComparison]::OrdinalIgnoreCase)) { return '这是系统或硬件驱动的文件夹，不能搬' }
+        if ($loc -ieq $d -or $loc.StartsWith("$d\", [StringComparison]::OrdinalIgnoreCase)) { return (T '这是系统或硬件驱动的文件夹，不能搬') }
     }
     foreach ($root in @($pf, $pf86)) {
         if ($loc.StartsWith("$root\", [StringComparison]::OrdinalIgnoreCase)) {
             $first = $loc.Substring($root.Length + 1).Split('\')[0]
-            if ($script:progKeep -contains $first -or $first -like 'Microsoft*' -or $first -like 'Windows*') { return '微软的软件或 Windows 自带的组件，由系统统一管理更新和修复，不能搬' }
+            if ($script:progKeep -contains $first -or $first -like 'Microsoft*' -or $first -like 'Windows*') { return (T '微软的软件或 Windows 自带的组件，由系统统一管理更新和修复，不能搬') }
         }
     }
-    if (Test-Personal $loc) { return '装在个人文件夹（桌面、文档、下载等）里，不动' }
+    if (Test-Personal $loc) { return (T '装在个人文件夹（桌面、文档、下载等）里，不动') }
     if ([string]$app.Publisher -match '(?i)^Microsoft' -and -not $loc.StartsWith("$lp\", [StringComparison]::OrdinalIgnoreCase)) {
-        return '微软的软件（Office、Visual Studio、.NET、Edge 等）由微软的安装程序统一管理更新和修复，搬走后容易出错，不搬'
+        return (T '微软的软件（Office、Visual Studio、.NET、Edge 等）由微软的安装程序统一管理更新和修复，搬走后容易出错，不搬')
     }
     $self = [string]$env:CLEANC_SELF
-    if ($self -and $self.StartsWith("$loc\", [StringComparison]::OrdinalIgnoreCase)) { return '本工具就放在这个文件夹里，请把工具挪到别处再搬' }
+    if ($self -and $self.StartsWith("$loc\", [StringComparison]::OrdinalIgnoreCase)) { return (T '本工具就放在这个文件夹里，请把工具挪到别处再搬') }
     foreach ($o in @($others)) {
         $ol = ([string]$o.Location).Trim().TrimEnd('\')
         if (-not $ol -or $ol.Length -le 3 -or [string]$o.Name -eq [string]$app.Name -or $ol -ieq $loc) { continue }
-        if ($ol.StartsWith("$loc\", [StringComparison]::OrdinalIgnoreCase)) { return "这个文件夹里还装着别的软件「$($o.Name)」，整个搬会连它一起搬走。可以单独搬「$($o.Name)」" }
-        if ($loc.StartsWith("$ol\", [StringComparison]::OrdinalIgnoreCase) -and -not $app.LocReg) { return "它装在「$($o.Name)」的文件夹里面，是那个软件的一部分。要搬请搬「$($o.Name)」" }
+        if ($ol.StartsWith("$loc\", [StringComparison]::OrdinalIgnoreCase)) { return ((T "这个文件夹里还装着别的软件「{0}」，整个搬会连它一起搬走。可以单独搬「{1}」") -f $($o.Name), $($o.Name)) }
+        if ($loc.StartsWith("$ol\", [StringComparison]::OrdinalIgnoreCase) -and -not $app.LocReg) { return ((T "它装在「{0}」的文件夹里面，是那个软件的一部分。要搬请搬「{1}」") -f $($o.Name), $($o.Name)) }
     }
     # 带系统服务或驱动的（杀毒、VPN、显卡和外设驱动、远程控制……）：开机早期就要加载，搬走可能启动失败，甚至影响开机
     $pre = "$loc\"; $hits = @()
@@ -1949,7 +1964,7 @@ function Get-AppMoveBlock($app, $others) {
         try { foreach ($sv in @(Get-CimInstance -ClassName $cls -ErrorAction Stop)) { if (([string]$sv.PathName).IndexOf($pre, [StringComparison]::OrdinalIgnoreCase) -ge 0) { $hits += [string]$sv.DisplayName } } } catch {}
     }
     if ($hits.Count -gt 0) {
-        return ("这个软件带有系统服务或驱动（{0}）。服务和驱动在开机时就要加载，搬走后可能启动失败，甚至影响开机，所以不搬" -f (@($hits | Select-Object -Unique -First 3) -join '、'))
+        return ((T "这个软件带有系统服务或驱动（{0}）。服务和驱动在开机时就要加载，搬走后可能启动失败，甚至影响开机，所以不搬") -f (@($hits | Select-Object -Unique -First 3) -join (T '、')))
     }
     return ''
 }
@@ -1986,7 +2001,7 @@ function Get-ModuleHolders([string]$dir) {
         foreach ($m in $mods) {
             $f = ''; try { $f = [string]$m.FileName } catch {}
             if ($f -and $f.StartsWith($pre, [StringComparison]::OrdinalIgnoreCase)) {
-                $out += $(if ($p.Name -ieq 'explorer') { '资源管理器（桌面、文件夹窗口、右键菜单）' } else { $p.Name }); break
+                $out += $(if ($p.Name -ieq 'explorer') { (T '资源管理器（桌面、文件夹窗口、右键菜单）') } else { $p.Name }); break
             }
         }
     }
@@ -2000,7 +2015,7 @@ function Set-DirAccess([string]$dir, [string]$sddl) {
         $sec.SetAccessRuleProtection($true, $true)
         [IO.Directory]::SetAccessControl($dir, $sec)
         return $true
-    } catch { Log "  没能把 $dir 的权限设成和原来一样：$($_.Exception.Message)"; return $false }
+    } catch { Log ((T "  没能把 {0} 的权限设成和原来一样：{1}") -f $dir, $($_.Exception.Message)); return $false }
 }
 
 # ============================================================
@@ -2013,22 +2028,22 @@ function Get-VDisks {
         if (-not $p -or -not $p.BasePath -or ([string]$p.DistributionName) -like 'docker-desktop*') { continue }
         $base = ([string]$p.BasePath) -replace '^\\\\\?\\', ''
         $vh = Join-Path $base 'ext4.vhdx'
-        if (Test-Path -LiteralPath $vh) { [void]$out.Add(@{ Name = "WSL：$($p.DistributionName)"; Path = $vh; Kind = 'wsl'; Compact = $true; Move = $false
-            Note = "Linux 子系统的虚拟磁盘。在 Linux 里删了文件，这个文件不会自动变小，压缩一下就能把空间还给 Windows。要换位置可以用命令 wsl --manage $($p.DistributionName) --move D:\WSL" }) }
+        if (Test-Path -LiteralPath $vh) { [void]$out.Add(@{ Name = ((T "WSL：{0}") -f $($p.DistributionName)); Path = $vh; Kind = 'wsl'; Compact = $true; Move = $false
+            Note = ((T "Linux 子系统的虚拟磁盘。在 Linux 里删了文件，这个文件不会自动变小，压缩一下就能把空间还给 Windows。要换位置可以用命令 wsl --manage {0} --move D:\WSL") -f $($p.DistributionName)) }) }
     }
     foreach ($vh in @("$env:LOCALAPPDATA\Docker\wsl\data\ext4.vhdx", "$env:LOCALAPPDATA\Docker\wsl\disk\docker_data.vhdx", "$env:LOCALAPPDATA\Docker\wsl\main\ext4.vhdx", "$env:LOCALAPPDATA\Docker\wsl\distro\ext4.vhdx")) {
-        if (Test-Path -LiteralPath $vh) { [void]$out.Add(@{ Name = 'Docker Desktop 数据盘'; Path = $vh; Kind = 'docker'; Compact = $true; Move = $false
-            Note = 'Docker 的镜像和容器都在里面。先在 Docker 里删掉不用的镜像（docker system prune），再压缩。换位置在 Docker Desktop 设置 → Resources → Disk image location' }) }
+        if (Test-Path -LiteralPath $vh) { [void]$out.Add(@{ Name = (T 'Docker Desktop 数据盘'); Path = $vh; Kind = 'docker'; Compact = $true; Move = $false
+            Note = (T 'Docker 的镜像和容器都在里面。先在 Docker 里删掉不用的镜像（docker system prune），再压缩。换位置在 Docker Desktop 设置 → Resources → Disk image location') }) }
     }
     foreach ($vh in @(Get-ChildItem "$env:SystemDrive\ProgramData\Microsoft\Windows\Virtual Hard Disks" -Filter '*.vhd*' -File -ErrorAction SilentlyContinue)) {
-        [void]$out.Add(@{ Name = "Hyper-V 虚拟磁盘：$($vh.Name)"; Path = $vh.FullName; Kind = 'hyperv'; Compact = $true; Move = $false; Note = '压缩前要先关掉用它的虚拟机' })
+        [void]$out.Add(@{ Name = ((T "Hyper-V 虚拟磁盘：{0}") -f $($vh.Name)); Path = $vh.FullName; Kind = 'hyperv'; Compact = $true; Move = $false; Note = (T '压缩前要先关掉用它的虚拟机') })
     }
-    foreach ($d in @(@("$env:USERPROFILE\.android\avd", '安卓模拟器（Android Studio）', 'Android 模拟器的系统镜像和数据'),
-                     @("$env:USERPROFILE\VirtualBox VMs", 'VirtualBox 虚拟机', 'VirtualBox 的虚拟机和虚拟磁盘'),
-                     @(([Environment]::GetFolderPath('MyDocuments') + '\Virtual Machines'), 'VMware 虚拟机', 'VMware 的虚拟机和虚拟磁盘'))) {
+    foreach ($d in @(@("$env:USERPROFILE\.android\avd", (T '安卓模拟器（Android Studio）'), (T 'Android 模拟器的系统镜像和数据')),
+                     @("$env:USERPROFILE\VirtualBox VMs", (T 'VirtualBox 虚拟机'), (T 'VirtualBox 的虚拟机和虚拟磁盘')),
+                     @(([Environment]::GetFolderPath('MyDocuments') + '\Virtual Machines'), (T 'VMware 虚拟机'), (T 'VMware 的虚拟机和虚拟磁盘')))) {
         if (Test-Path -LiteralPath $d[0]) {
             if (IsLink $d[0]) { continue }
-            [void]$out.Add(@{ Name = $d[1]; Path = $d[0]; Kind = 'folder'; Compact = $false; Move = $true; Note = $d[2] + '。可以整个搬到其他盘，原位置留链接，软件照常使用。搬之前要关掉模拟器或虚拟机' })
+            [void]$out.Add(@{ Name = $d[1]; Path = $d[0]; Kind = 'folder'; Compact = $false; Move = $true; Note = $d[2] + (T '。可以整个搬到其他盘，原位置留链接，软件照常使用。搬之前要关掉模拟器或虚拟机') })
         }
     }
     return ,$out
@@ -2037,11 +2052,11 @@ function Invoke-CompactVdisk([string]$path, [string]$kind, $res) {
     $res.Ok = $false
     $before = [double](Get-Item -LiteralPath $path -Force).Length
     if ($kind -eq 'wsl' -or $kind -eq 'docker') {
-        SetP @{ Detail = '先关掉 WSL（wsl --shutdown），虚拟磁盘不在使用中才能压缩' }
+        SetP @{ Detail = (T '先关掉 WSL（wsl --shutdown），虚拟磁盘不在使用中才能压缩') }
         & "$sys32\wsl.exe" --shutdown 2>$null | Out-Null
         Start-Sleep -Seconds 4
     }
-    SetP @{ Detail = "压缩 $path（diskpart，可能要几分钟）" }
+    SetP @{ Detail = ((T "压缩 {0}（diskpart，可能要几分钟）") -f $path) }
     $tmp = Join-Path $env:TEMP ("cleanc-diskpart-{0}.txt" -f (Get-Random))
     $lines = @("select vdisk file=`"$path`"", 'attach vdisk readonly', 'compact vdisk', 'exit')
     [IO.File]::WriteAllText($tmp, (($lines -join "`r`n") + "`r`n"), [Text.Encoding]::Default)
@@ -2054,7 +2069,7 @@ function Invoke-CompactVdisk([string]$path, [string]$kind, $res) {
     $res.Before = $before; $res.After = $after
     $res.Out = (($out -split "`r?`n") | Where-Object { $_.Trim() } | Select-Object -Last 4) -join ' / '
     $res.Ok = ($after -lt $before)
-    OpLog '压缩' '压缩虚拟磁盘' $path ("{0} → {1}" -f (GB $before), (GB $after))
+    OpLog '压缩' (T '压缩虚拟磁盘') $path ("{0} → {1}" -f (GB $before), (GB $after))
 }
 
 # ============================================================
@@ -2070,10 +2085,10 @@ function Get-CompactOSOn {
 function Invoke-CompactOS([bool]$on, $res) {
     $f0 = [double](FreeC)
     $arg = if ($on) { '/compactos:always' } else { '/compactos:never' }
-    SetP @{ Detail = $(if ($on) { '正在压缩系统文件，通常要 10 到 30 分钟，期间可以照常用电脑' } else { '正在解压系统文件，通常要 10 到 30 分钟' }) }
+    SetP @{ Detail = $(if ($on) { (T '正在压缩系统文件，通常要 10 到 30 分钟，期间可以照常用电脑') } else { (T '正在解压系统文件，通常要 10 到 30 分钟') }) }
     & "$sys32\compact.exe" $arg 2>&1 | Out-Null
     $res.Delta = [double](FreeC) - $f0
-    OpLog '压缩' $(if ($on) { '开启系统压缩（CompactOS）' } else { '关闭系统压缩（CompactOS）' }) $env:SystemRoot ("C 盘可用空间变化 {0}" -f (GB $res.Delta))
+    OpLog '压缩' $(if ($on) { (T '开启系统压缩（CompactOS）') } else { (T '关闭系统压缩（CompactOS）') }) $env:SystemRoot ((T "C 盘可用空间变化 {0}") -f (GB $res.Delta))
 }
 function Get-PageFileInfo {
     $auto = $null; $files = @()
@@ -2086,19 +2101,19 @@ function Set-PageFile([string]$drive) {
         $cs = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
         if (-not $drive) {
             Set-CimInstance -InputObject $cs -Property @{ AutomaticManagedPagefile = $true } -ErrorAction Stop
-            OpLog '系统设置' '页面文件恢复系统默认' 'pagefile.sys' '由系统自动管理，重启后生效'
+            OpLog '系统设置' (T '页面文件恢复系统默认') 'pagefile.sys' (T '由系统自动管理，重启后生效')
             return ''
         }
         if ($cs.AutomaticManagedPagefile) { Set-CimInstance -InputObject $cs -Property @{ AutomaticManagedPagefile = $false } -ErrorAction Stop }
         foreach ($s in @(Get-CimInstance Win32_PageFileSetting -ErrorAction SilentlyContinue)) { Remove-CimInstance -InputObject $s -ErrorAction SilentlyContinue }
         New-CimInstance -ClassName Win32_PageFileSetting -Property @{ Name = "$drive\pagefile.sys" } -ErrorAction Stop | Out-Null
-        OpLog '系统设置' '页面文件改到其他盘' "$drive\pagefile.sys" 'C 盘不再放页面文件，大小由系统自动管理，重启后生效'
+        OpLog '系统设置' (T '页面文件改到其他盘') "$drive\pagefile.sys" (T 'C 盘不再放页面文件，大小由系统自动管理，重启后生效')
         return ''
     } catch {
         $msg = $_.Exception.Message
         # 改了一半失败时，恢复成系统自动管理，免得重启后没有页面文件
         try { Set-CimInstance -InputObject (Get-CimInstance Win32_ComputerSystem) -Property @{ AutomaticManagedPagefile = $true } -ErrorAction Stop } catch {}
-        OpLog '系统设置' '修改页面文件失败，已恢复系统默认' $drive $msg; return $msg
+        OpLog '系统设置' (T '修改页面文件失败，已恢复系统默认') $drive $msg; return $msg
     }
 }
 function Get-HiberInfo {
@@ -2110,9 +2125,9 @@ function Get-HiberInfo {
 function Set-Hiber([string]$mode) {
     $pc = "$sys32\powercfg.exe"
     switch ($mode) {
-        'off'     { & $pc /h off | Out-Null; OpLog '系统设置' '关闭休眠' 'hiberfil.sys' '没有「休眠」和「快速启动」了，睡眠不受影响' }
-        'reduced' { & $pc /h on | Out-Null; & $pc /h /type reduced | Out-Null; OpLog '系统设置' '休眠文件改为精简' 'hiberfil.sys' '只保留快速启动，不能手动休眠' }
-        'full'    { & $pc /h on | Out-Null; & $pc /h /type full | Out-Null; OpLog '系统设置' '恢复完整休眠' 'hiberfil.sys' '' }
+        'off'     { & $pc /h off | Out-Null; OpLog '系统设置' (T '关闭休眠') 'hiberfil.sys' (T '没有「休眠」和「快速启动」了，睡眠不受影响') }
+        'reduced' { & $pc /h on | Out-Null; & $pc /h /type reduced | Out-Null; OpLog '系统设置' (T '休眠文件改为精简') 'hiberfil.sys' (T '只保留快速启动，不能手动休眠') }
+        'full'    { & $pc /h on | Out-Null; & $pc /h /type full | Out-Null; OpLog '系统设置' (T '恢复完整休眠') 'hiberfil.sys' '' }
     }
 }
 
@@ -2122,12 +2137,12 @@ function Set-Hiber([string]$mode) {
 function Invoke-AutoClean {
     $f0 = [double](FreeC); $done = @()
     foreach ($it in (Get-Catalog)) {
-        if ($it.Kind -ne 'cache' -or $it.Def -ne '删除' -or $it.Act -or $it.Svc -or $it.Whole -or -not ([string]$it.G).StartsWith('安全清理')) { continue }
+        if ($it.Kind -ne 'cache' -or $it.Def -ne (T '删除') -or $it.Act -or $it.Svc -or $it.Whole -or -not ([string]$it.G).StartsWith('安全清理')) { continue }
         $b = Measure-Item $it
         if ($b -le 0) { continue }
         $res = @{}
         Invoke-Delete $it $res -Auto
-        $done += ("{0}：{1}" -f $it.N, (GB $res.Freed))
+        $done += ((T "{0}：{1}") -f $it.N, (GB $res.Freed))
     }
     return @{ Freed = [math]::Max([double]0, [double]((FreeC) - $f0)); Items = $done }
 }
@@ -2146,6 +2161,1302 @@ function Get-Hogs {
 }
 '@
 
+# 英文界面的翻译表：每行「中文原文<Tab>英文」，\n 表示换行、\t 表示 Tab、\\ 表示反斜杠。只在英文界面时加载
+$script:l10nData = @'
+好	OK
+C 盘只剩 {0} 了	Only {0} left on C:
+低于你设定的 {0} GB。打开 C 盘清理工具，看看能清掉或搬走什么？\n（在工具的「自动提醒」页可以关掉这个提醒）	That's below the {0} GB you set. Open ClearC to see what can be cleaned up or moved?\n(You can turn off this reminder on the "Reminders" page.)
+稍后	Later
+打开清理工具	Open ClearC
+每周自动清理完成	Weekly cleanup finished
+C 盘多出 {0}；{1}	Freed {0} on C:; {1}
+；	; 
+C 盘多出 {0}。只清了临时文件、缓存和日志，没有碰任何个人文件。每一项都记在「操作日志」里。	Freed {0} on C:. Only temporary files, caches and logs were cleaned; no personal files were touched. Every item is recorded in the "Activity log".
+已复制	Copied
+复制失败，请手动输入	Couldn't copy. Please type it in manually.
+C 盘清理工具 {0}	ClearC {0}
+Windows {0}，{1} 位	Windows {0}, {1}-bit
+C 盘剩余 {0} / 共 {1}	Free on C: {0} / {1} total
+屏幕可用区域 {0:N0} x {1:N0}	Screen work area {0:N0} x {1:N0}
+---- 最近的运行记录 ----	---- Recent run log ----
+已复制，可以直接粘贴到微信里发给开发者	Copied. You can paste it straight into WeChat and send it to the developer.
+复制失败，可以点「打开运行记录文件」再手动复制	Couldn't copy. Click "Open run log file" and copy it manually.
+还没有运行记录	No run log yet
+收起运行记录	Hide run log
+运行记录	Run log
+（点「是」表示你确认这一点）	 (Clicking "Yes" means you confirm this.)
+{0} 小时 {1} 分	{0} h {1} min
+{0} 分 {1} 秒	{0} min {1} s
+{0} 秒	{0} s
+关闭占用这些文件的聊天软件（开着的话没法搬）	Close the chat apps using these files (they can't be moved while open)
+统计要搬多少	Measure how much to move
+复制到目标盘	Copy to the target drive
+核对复制是否完整	Verify the copy is complete
+把原位置换成链接（软件照常找得到；被占用时会关掉占用的程序重试）	Replace the original location with a link (apps still find their files; if something is in use, the program using it is closed and the step is retried)
+删除 C 盘上的原目录，腾出空间	Delete the original folder on C: to free up space
+关闭占用这些文件的软件	Close the apps using these files
+统计要搬回多少	Measure how much to move back
+复制回 	Copy back to 
+拆掉链接，换回真正的文件夹	Remove the link and restore a real folder
+删除目标盘上的那份	Delete the copy on the target drive
+复制到 	Copy to 
+补复制有变化的文件到 	Copy changed files to 
+（上次的副本接着用）	 (reusing the previous copy)
+等待	Waiting
+{0}  {1}：{2}	{0}  {1}: {2}
+可以最小化窗口，任务栏图标上也有进度。做完前不要关闭本窗口。	You can minimize the window; the taskbar icon shows progress too. Don't close this window until it's done.
+准备中…	Preparing…
+已用 0 秒	Elapsed 0 s
+开始：{0}	Started: {0}
+{0}：{1}	{0}: {1}
+共用时 	Total time: 
+{0}：{1}，共用时 {2}	{0}: {1}, total time {2}
+：已完成	: Done
+每一项的结果也显示在列表里；详细过程可以在左下角「运行记录」里查看。	Each item's result is also shown in the list. For details, see "Run log" at the bottom left.
+第 1 步：列出所有文件	Step 1: List all files
+先把每个位置里的文件名和大小都看一遍，名字和大小都对得上的才可能是重复文件。	First the name and size of every file in each location are checked. Only files whose name and size both match can be duplicates.
+已看过 {0:N0} 个文件夹、{1:N0} 个文件    {2}	Checked {0:N0} folders, {1:N0} files    {2}
+第 2 步：快速筛选 {0:N0} 个同名同大小的文件	Step 2: Quick check of {0:N0} files with the same name and size
+每个文件只读开头和结尾各 64 KB，内容明显不同的在这一步就排除掉。	Only the first and last 64 KB of each file are read. Files whose content is clearly different are ruled out at this step.
+每个文件读完全部内容	reading every file in full
+小文件读全文，大文件抽 16 处	small files read in full, 16 samples from large files
+第 3 步：比对剩下的 {0:N0} 个文件	Step 3: Compare the remaining {0:N0} files
+确认内容是否真的相同（{0}）。	Confirming the content is really identical ({0}).
+{0:N0} / {1:N0} 个，已读 {2} / {3}	{0:N0} / {1:N0} files, read {2} / {3}
+整理结果	Organizing results
+第 {0} / {1} 项：{2}	Item {0} / {1}: {2}
+第 {0} / {1} 个文件夹：{2}	Folder {0} / {1}: {2}
+从 {0} 搬到 {1}	Moving from {0} to {1}
+统计这一项占了多少空间。扫描只是查看，不会删除任何东西。	Measuring how much space this item takes. Scanning only looks; nothing is deleted.
+删除前会再确认保留的那份还在、内容相同；抽样判定的文件会逐字节核对。	Before deleting, it checks again that the copy being kept still exists and has the same content. Files matched by sampling are verified byte by byte.
+已复制 {0} / {1}，{2}/秒	Copied {0} / {1}, {2}/s
+上次已复制 {0}，正在补有变化的文件：{1} / {2}	{0} already copied last time; copying changed files: {1} / {2}
+这一项还要约 	Time left for this item: about 
+这一项已用 	Time on this item: 
+已释放 {0} / 约 {1}	Freed {0} / about {1}
+逐字节核对 {0}：{1} / {2}	Verifying {0} byte by byte: {1} / {2}
+删除前核对	Check before deleting
+{0}：已数 {1:N0} 个文件，{2}	{0}: counted {1:N0} files, {2}
+统计 C 盘各目录的大小	Measuring folder sizes on C:
+找出 C 盘上最占地方的文件夹和大文件，目录多时要几分钟。	Finds the largest folders and files on C:. With many folders this can take a few minutes.
+扫描 {0}	Scanning {0}
+把每个文件夹里的文件大小数一遍。只是查看，不会改动任何东西。	Adds up the size of the files in each folder. It only looks; nothing is changed.
+已看过 {0:N0} 个文件夹、{1:N0} 个文件，{2}    {3}	Checked {0:N0} folders, {1:N0} files, {2}    {3}
+已用 	Elapsed 
+，预计还要 	, estimated time left 
+{0}，{1}	{0}, {1}
+共 {0}，已用 {1}	{0} total, {1} used
+可释放约 	Reclaimable: about 
+可释放（扫描后显示）	Reclaimable (shown after scan)
+{0} {1} 项	{0}: {1}
+扫描到 {0} 项，分成 {1} 类：{2}。每一项都可以单独选「删除」「搬走」或「跳过」，往下滚动查看全部。	Found {0} items in {1} categories: {2}. For each item you can choose "Delete", "Move" or "Skip". Scroll down to see them all.
+、	, 
+下面还有 {0} 项	{0} more below
+下面还有内容	More below
+运行后知道	Known after running
+跳过	Skip
+C 盘上没找到可以清理的东西	Nothing to clean up was found on C:
+共 {0} 项。按当前选择，可释放约 {1}。	{0} items in total. With the current selection, about {1} can be freed.
+已选 {0} 项，可释放约 {1}。	{0} selected. About {1} can be freed.
+没有选中任何项目。	Nothing selected.
+正在扫描，大目录可能要一两分钟…	Scanning. Large folders may take a minute or two…
+正在扫描…	Scanning…
+扫描可清理项	Scan for items to clean
+开始扫描...	Starting scan...
+{0}    空闲 {1}{2}	{0}    {1} free{2}
+，空间最大	, most space
+{0}    空闲 {1}，自选	{0}    {1} free, custom
+这台电脑只有 C 盘，没有可以搬去的磁盘	This PC only has drive C:, so there's no other drive to move to
+已自动选了空闲最多的 {0} 盘（剩 {1}）。也可以从下拉框换一块盘，或点「选择文件夹」。只列本机硬盘：网络盘、网盘、U 盘不能做链接目标。	The drive with the most free space, {0}:, was selected automatically ({1} free). You can pick another drive from the list, or click "Choose folder". Only local hard drives are listed: network drives, cloud drives and USB drives can't be link targets.
+这台电脑只有 C 盘，不能搬家；其他清理照常可以做。	This PC only has drive C:, so moving isn't possible. Other cleanups still work as usual.
+选择搬家目标文件夹（要在 C 盘以外的本机硬盘上）	Choose a destination folder for moving (on a local hard drive other than C:)
+请选 C 盘以外的位置	Choose a location other than C:
+搬到 C 盘自己身上腾不出空间。	Moving to C: itself doesn't free any space.
+只能选本机硬盘	Local hard drives only
+网络盘、网盘和 U 盘不能做链接目标，拔掉或断网后软件会找不到数据。	Network drives, cloud drives and USB drives can't be link targets. Once unplugged or offline, apps can't find their data.
+执行所选操作	Run selected
+没有选中任何操作	No actions selected
+在列表里把要处理的项目选成「删除」或「搬到其他盘」，再点「执行所选操作」。	In the list, set the items you want to handle to "Delete" or "Move to another drive", then click "Run selected".
+搬到其他盘	Move to another drive
+没有可用的搬家目标	No move destination available
+请在「搬家目标」里选一个 C 盘以外的本机硬盘。	Under "Move destination", choose a local hard drive other than C:.
+{0} 盘放不下	Not enough room on drive {0}:
+{0} 只剩 {1}，要搬的东西有 {2}。请换一个目标，或少选几项搬家。	{0} only has {1} free, but the items to move take {2}. Choose another destination, or move fewer items.
+{0}　{1}	{0}: {1}
+涉及约 {0}。大文件夹搬家可能要几十分钟，进度会显示在窗口中间，做完会告诉你结果。	About {0} in total. Moving large folders can take tens of minutes. Progress is shown in the middle of the window, and you'll see the result when it's done.
+\n\n要搬的东西会放到 {0}。	\n\nItems to move will go to {0}.
+删除	Delete
+\n\n其中 {0} 项会删除文件，删除后可能无法恢复。请确认这些资料不再需要。	\n\n{0} of these items will delete files, which may not be recoverable. Please make sure you no longer need this data.
+我已确认要删除的内容不再需要，删除不会给我带来损失；因删除造成的后果由我自己承担。	I have confirmed that the content to be deleted is no longer needed and that deleting it will not cause me any loss. I take responsibility for any consequences of the deletion.
+执行 {0} 项操作？	Run {0} actions?
+取消	Cancel
+开始	Start
+需要先退出{0}	Quit {0} first
+{0}正在使用要搬的文件夹。不退出的话里面的文件一直被占用，搬家不会成功。\n\n点「退出并继续」会替你关掉它们（包括右下角托盘里的）。退出前请确认没有正在发送或下载的文件。搬完后照常打开即可，聊天记录和文件都在。	{0} is using the folders to be moved. Unless it quits, the files inside stay in use and the move won't succeed.\n\nClick "Quit and continue" to close it for you (including from the system tray at the bottom right). Before quitting, make sure no files are being sent or downloaded. After the move, open it as usual. Your chat history and files will all be there.
+这次不搬这几项	Skip these this time
+退出并继续	Quit and continue
+{0} 没有退出，这次不搬：{1}	{0} didn't quit. Not moved this time: {1}
+已同意退出 {0}，开始执行后会先关掉它们	Agreed to quit {0}. It will be closed first when the run starts
+这次没搬：{0} 没有退出	Not moved this time: {0} didn't quit
+搬家目标：{0}	Move destination: {0}
+开始执行 {0} 项...	Starting {0} items...
+一键清理：先扫描...	One-click cleanup: scanning first...
+桌面	Desktop
+文档	Documents
+下载	Downloads
+图片	Pictures
+视频	Videos
+音乐	Music
+整个 {0} 盘	Entire drive {0}:
+{0}  已用 {1}	{0}  {1} used
+Word 文档	Word documents
+Excel 表格	Excel sheets
+PPT 演示	PowerPoint slides
+文本	Text
+电子书	E-books
+照片图片	Photos and images
+RAW 原片	RAW photos
+设计稿	Design files
+CAD 图纸	CAD drawings
+音频	Audio
+压缩包	Archives
+安装包	Installers
+磁盘镜像	Disk images
+全部类型	All types
+不限文件类型	Any file type
+不限	Any
+1 MB 以上	1 MB or larger
+1 GB 以上	1 GB or larger
+大小只能填数字，比如 1.5	Size must be a number, e.g. 1.5
+「到」要比「从」大	"To" must be larger than "From"
+自定义	Custom
+ 等 {0} 类	 and more ({0} types)
+大小填写有误	Invalid size
+不限大小	Any size
+ 以上	 or larger
+ 以下	 or smaller
+{0} 到 {1}	{0} to {1}
+留空表示不限	Leave blank for no limit
+文件名和内容都相同	Same name and content
+只要内容相同	Same content, any name
+，完整比对	, full comparison
+，快速比对	, quick comparison
+{0}，{1}，{2}，{3} 个位置	{0}, {1}, {2}, {3} locations
+选择要查找重复文件的文件夹	Choose a folder to search for duplicates
+{0} × {1} 份，可释放 {2}	{0} × {1} copies, can free {2}
+已完整比对	Fully compared
+每个文件都读完了全部内容，内容完全相同。	Every file was read in full. The contents are identical.
+抽样判定	Matched by sampling
+文件名、大小和 16 处抽样内容都相同。删除前会逐字节完整比对，有任何不同就不删。	Name, size and 16 sampled sections all match. Before deleting, the files are compared in full, byte by byte. If anything differs, nothing is deleted.
+没有找到重复文件	No duplicates found
+一共找到 {0} 组，只显示可释放空间最大的前 3000 组。删完这些后再查一次即可看到剩下的。	Found {0} groups in total. Only the 3,000 groups that free the most space are shown. After deleting these, search again to see the rest.
+没有找到重复文件。	No duplicates found.
+找到 {0} 组重复文件。已勾选 {1} 个，删除后释放 {2}。	Found {0} groups of duplicates. {1} selected; deleting them frees {2}.
+ C 盘个人文件夹里的 {0} 个副本受保护，不会删。	 {0} copies in personal folders on C: are protected and won't be deleted.
+已打开保护：C 盘个人文件夹里的文件不会删除	Protection on: files in personal folders on C: won't be deleted
+允许删除 C 盘个人文件夹里的文件？	Allow deleting files in personal folders on C:?
+桌面、文档、下载、图片、视频、音乐等文件夹里通常是你自己的资料。关掉保护后，这些位置的重复副本也可能被勾选删除。每组仍会至少保留一份。	Folders such as Desktop, Documents, Downloads, Pictures, Videos and Music usually hold your own files. With protection off, duplicate copies in these locations may also be selected for deletion. At least one copy in each group is always kept.
+我已确认删除这些位置的副本不会给我带来损失；因删除造成的后果由我自己承担。	I have confirmed that deleting the copies in these locations will not cause me any loss. I take responsibility for any consequences of the deletion.
+保持保护	Keep protection
+允许删除	Allow deleting
+已关闭保护：C 盘个人文件夹里的重复副本也可以勾选删除（勾选不会自动改变，需要时点「留最新的」等重新勾选）	Protection off: duplicate copies in personal folders on C: can also be selected for deletion (current selections don't change automatically; to reselect, click "Keep newest" or a similar option)
+还没选查找位置	No search location selected
+请在「查找位置」里至少勾选一个文件夹或磁盘。	Under "Search locations", select at least one folder or drive.
+文件大小填写有误	Invalid file size
+正在查找…	Searching…
+查找重复文件	Find duplicates
+开始查找重复文件：{0}。位置：{1}	Started finding duplicates: {0}. Locations: {1}
+正在停止...	Stopping...
+每组至少要留一份	Keep at least one copy in each group
+有 {0} 组把所有副本都勾上了，这些组不会删除。	In {0} groups, every copy is selected. These groups won't be deleted.
+每组至少保留一份没勾选的。	Leave at least one copy unselected in each group.
+文件会放进回收站，可以恢复；清空回收站后才真正释放空间。	Files go to the Recycle Bin and can be restored. Space is only freed after you empty the Recycle Bin.
+文件会被永久删除，不能恢复。	Files will be deleted permanently and can't be restored.
+\n\n另有 {0} 组所有副本都被勾选，这些组会跳过。	\n\nIn another {0} groups every copy is selected. These groups will be skipped.
+\n\n其中 {0} 个文件带有「注意」提示（程序目录或微信数据），请确认确实要删。	\n\n{0} of these files carry a "Caution" note (program folders or WeChat data). Please make sure you really want to delete them.
+移到回收站	Move to Recycle Bin
+永久删除	Delete permanently
+我已确认这些文件删除后不会给我带来损失；因删除造成的后果由我自己承担。	I have confirmed that deleting these files will not cause me any loss. I take responsibility for any consequences of the deletion.
+删除 {0} 个重复文件，释放 {1}？	Delete {0} duplicate files and free {1}?
+删除 {0} 个重复文件	Delete {0} duplicate files
+开始删除 {0} 个重复文件...	Starting to delete {0} duplicate files...
+这个位置不存在	This location doesn't exist
+需要重启电脑才生效	Restart your PC to apply
+稍后自己重启	Restart later
+现在重启	Restart now
+C 盘清理工具：15 秒后重启，让刚才的设置生效	ClearC: restarting in 15 seconds to apply the settings you just changed
+{0}  已用 {1} / 共 {2}	{0}  {1} used / {2} total
+空间地图：开始扫描 {0}	Space map: started scanning {0}
+空间地图：正在停止…	Space map: stopping…
+链接，指向 	Link to 
+其他位置	another location
+（多半是搬家留下的，不占这块盘）	 (probably left by a move; takes no space on this drive)
+{0:N0} 个文件	{0:N0} files
+ · 最近修改 {0}	 · last modified {0}
+ · 部分内容没有权限读取	 · some items couldn't be read (no permission)
+文件 · 修改于 {0:yyyy-MM-dd}	File · modified {0:yyyy-MM-dd}
+这一层共 {0}，{1:N0} 个文件{2}	This level: {0}, {1:N0} files{2}
+ · 扫描于 {0:HH:mm}	 · scanned at {0:HH:mm}
+这个文件夹是空的	This folder is empty
+{0} · 修改于 {1:yyyy-MM-dd}	{0} · modified {1:yyyy-MM-dd}
+最大的 {0} 个文件	{0} largest files
+只列出 50 MB 以上的文件，最多 500 个	Only files over 50 MB are listed, up to 500
+没有超过 50 MB 的文件	No files over 50 MB
+和上次扫描相比	Compared with the last scan
+选中一行可以打开位置、压缩或删除。系统文件夹、软件安装文件夹、C 盘个人文件夹和搬家后的数据带小锁，不能在这里删。	Select a row to open its location, compress it, or delete it. System folders, app install folders, personal folders on C:, and moved data show a lock and can't be deleted here.
+{0}：不能在这里删（{1}）	{0}: can't be deleted here ({1})
+不到 100 MB	Under 100 MB
+上次扫描在 {0}。红色是变大的，绿色是变小的（只列变化超过 100 MB 的文件夹）	Last scan: {0}. Red means it grew, green means it shrank (only folders that changed by more than 100 MB are listed)
+和上次（{0}）相比，没有文件夹变化超过 100 MB	Since the last scan ({0}), no folder has changed by more than 100 MB
+这是第一次扫描这块盘。下次再扫描，就能看到哪些文件夹变大了	This is the first scan of this drive. Scan it again later to see which folders have grown
+这一项不能删	This item can't be deleted
+文件夹	Folder
+文件	File
+{0}\n\n「移到回收站」可以恢复，但要清空回收站后才真正腾出空间；「永久删除」马上腾出空间，删了就找不回来。	{0}\n\n"Move to Recycle Bin" can be undone, but the space is only freed once you empty the Recycle Bin. "Delete permanently" frees the space right away, and what you delete can't be recovered.
+删除这个{0}（{1}）？	Delete this item ({0}, {1})?
+我已确认这些资料不再需要，删除不会给我带来损失；因删除造成的后果由我自己承担。	I have confirmed I no longer need these files and that deleting them won't cause me any loss. I take responsibility for the consequences of deleting them.
+删除 {0}	Delete {0}
+这个文件夹不适合这样压缩	This folder isn't suitable for this kind of compression
+压缩这个文件夹？	Compress this folder?
+{0}\n\n用 Windows 自带的 NTFS 压缩：文件照常打开、照常修改，只是占的空间变小。文档、代码、日志通常能省一半；照片、视频、压缩包几乎省不了。文件多的话要几分钟。	{0}\n\nUses the NTFS compression built into Windows. Files open and edit as usual; they just take up less space. Documents, code, and logs usually shrink by about half; photos, videos, and archives barely shrink at all. With many files, this can take a few minutes.
+压缩	Compress
+压缩文件夹	Compress folder
+共 {0} 个文件夹，正在统计大小…	{0} folders, calculating sizes…
+请等当前操作做完	Please wait for the current operation to finish
+另一个操作还在进行中。	Another operation is still in progress.
+修复链接？	Repair link?
+让 C 盘上的 {0} 重新指向 {1}。修好后软件就能照常找到数据。	Point {0} on C: back to {1}. Once it's repaired, the app can find its data as usual.
+修复	Repair
+链接已修复	Link repaired
+没修好	Couldn't repair
+删除多余的副本（{0}）？	Delete the extra copy ({0})?
+C 盘上的原文件夹 {0} 还在，软件用的是它；目标盘上的 {1} 是上次没搬完留下的副本。删掉它可以腾出目标盘的空间，C 盘不受影响。	The original folder {0} is still on C: and is the one the app uses. {1} on the target drive is a copy left over from an unfinished move. Deleting it frees space on the target drive; C: is not affected.
+我已确认 C 盘上的原文件夹还在，删掉这份副本不会给我带来损失。	I have confirmed the original folder is still on C: and that deleting this copy won't cause me any loss.
+删除副本	Delete copy
+删除多余的副本	Delete extra copy
+把 {0} 复制回 C 盘的 {1}，核对一致后拆掉链接、换回真正的文件夹，最后删除目标盘上的那份。\n\nC 盘现在剩 {2}，这个文件夹约 {3}。	Copies {0} back to {1} on C:, verifies that they match, removes the link and puts the real folder back, then deletes the copy on the target drive.\n\nC: now has {2} free; this folder is about {3}.
+把「{0}」搬回 C 盘？	Move "{0}" back to C:?
+搬回	Move back
+{0} 正在从这个文件夹运行，不退出的话没法搬回。点「退出并继续」会替你关掉它们（没保存的内容请先保存）。	Apps running from this folder ({0}) must be closed before it can be moved back. Click "Quit and continue" to have them closed for you (save any unsaved work first).
+{0} 正在使用这个文件夹，不退出的话没法搬回。点「退出并继续」会替你关掉它们。	This folder is in use by {0}, so it can't be moved back until they're closed. Click "Quit and continue" to have them closed for you.
+搬回 C 盘：{0}	Move {0} back to C:
+当前：已开启，系统文件已压缩存放	Current: on, system files are stored compressed
+当前：未开启	Current: off
+{0}（约 {1}）	{0} (about {1})
+没有页面文件	No page file
+当前：{0}	Current: {0}
+，由系统自动管理	, managed by Windows
+{0}  空闲 {1}	{0}  {1} free
+当前：已关闭休眠，没有 hiberfil.sys	Current: hibernation off, no hiberfil.sys
+当前：精简（只留快速启动），占 {0}	Current: reduced (Fast Startup only), uses {0}
+当前：完整休眠，占 {0}	Current: full hibernation, uses {0}
+开启系统压缩？	Turn on system compression?
+关闭系统压缩？	Turn off system compression?
+Windows 会把系统文件压缩存放，通常省 2 到 4 GB。要 10 到 30 分钟，期间可以照常用电脑，不需要重启。	Windows will store system files compressed, usually saving 2 to 4 GB. It takes 10 to 30 minutes. You can keep using your PC in the meantime, and no restart is needed.
+系统文件会解压回原样，C 盘会多用 2 到 4 GB。要 10 到 30 分钟。	System files will be decompressed back to normal, using 2 to 4 GB more on C:. It takes 10 to 30 minutes.
+开启	Turn on
+关闭	Turn off
+开启系统压缩	Turn on system compression
+关闭系统压缩	Turn off system compression
+把页面文件改到 {0} 盘？	Move the page file to drive {0}:?
+C 盘不再放页面文件，改为放在 {0}\\pagefile.sys，大小由系统自动管理。重启后生效，C 盘会多出几个 GB。{0} 必须是一直插着的本机硬盘。	The page file will no longer be on C:. It will be at {0}\\pagefile.sys, with its size managed by Windows. This takes effect after a restart and frees a few GB on C:. {0} must be a local drive that is always connected.
+改到这块盘	Use this drive
+没改成	Couldn't change it
+页面文件的新位置要重启电脑后才生效。	The new page file location takes effect after you restart your PC.
+页面文件恢复系统默认？	Restore the default page file setting?
+恢复成 Windows 自动管理（通常放在 C 盘）。重启后生效。	Let Windows manage it automatically again (usually on C:). This takes effect after a restart.
+恢复	Restore
+页面文件的设置要重启电脑后才生效。	Page file settings take effect after you restart your PC.
+整个删掉休眠文件。睡眠不受影响，但没有「休眠」和「快速启动」了，开机可能慢几秒。	Removes the hibernation file completely. Sleep still works, but "Hibernate" and "Fast Startup" will no longer be available, and startup may take a few seconds longer.
+休眠文件缩小到一半左右，只保留「快速启动」，开机速度不变，只是不能手动休眠。	Shrinks the hibernation file to about half and keeps only "Fast Startup". Startup speed stays the same; you just can't hibernate manually.
+恢复完整的休眠功能，休眠文件会变回约等于内存四到七成的大小。	Restores full hibernation. The hibernation file grows back to about 40 to 70 percent of your memory size.
+修改休眠设置？	Change hibernation settings?
+选择要压缩的文件夹	Choose a folder to compress
+请先退出 Docker Desktop	Quit Docker Desktop first
+在任务栏右下角的 Docker 图标上右键，选「Quit Docker Desktop」，再回来压缩。	Right-click the Docker icon at the bottom right of the taskbar, choose "Quit Docker Desktop", then come back and compress.
+压缩前会先关闭所有 WSL（wsl --shutdown），正在 WSL 里运行的程序会被结束。	All of WSL will be shut down first (wsl --shutdown), and any programs running in WSL will be closed.
+用这个磁盘的虚拟机要先关掉。	Shut down any virtual machine that uses this disk first.
+压缩「{0}」？	Compress "{0}"?
+{0}\n\n现在 {1}。{2}压缩不会删除里面的任何数据，只把已经空出来的部分还给 Windows，可能要几分钟。	{0}\n\nCurrent size: {1}. {2} Compressing won't delete any data inside; it only gives space that is already free back to Windows. This may take a few minutes.
+压缩虚拟磁盘：{0}	Compress virtual disk: {0}
+请先在「清理 C 盘」页的「搬家目标」里选一块 C 盘以外的硬盘。	First choose a drive other than C: under "Move destination" on the "Clean up C:" page.
+安卓*	Android*
+{0}（{1}）整个搬到 {2}，原位置留一个链接，软件照常使用。	Moves all of {0} ({1}) to {2} and leaves a link in the original location, so the software keeps working as usual.
+\n\n{0} 正在运行，搬之前会替你关掉它们（正在运行的模拟器或虚拟机会被结束）。	\n\nThese will be closed for you before the move: {0}. Any running emulator or virtual machine will be stopped.
+把「{0}」搬到其他盘？	Move "{0}" to another drive?
+搬	Move
+搬到其他盘：{0}	Move to another drive: {0}
+正在读取已安装的软件，并统计每个占多少空间…	Reading installed apps and measuring how much space each one uses…
+统计已安装的软件	Scan installed apps
+{0} 个软件，合计约 {1}	{0} apps, about {1} in total
+没有符合条件的软件	No matching apps
+约 	About 
+版本 	Version 
+安装于 	Installed 
+应用商店	Microsoft Store
+已搬到 {0}	Moved to {0}
+没有记录安装位置	Install location not recorded
+检查「{0}」能不能搬	Checking whether "{0}" can be moved
+应用商店的软件由 Windows 管理	Microsoft Store apps are managed by Windows
+「{0}」是从应用商店装的，本工具不能搬它。\n\n有的应用可以在 Windows 设置里换盘：设置 → 应用 → 已安装的应用，点它右边的「…」，选「移动」（没有这个选项就是不支持）。	"{0}" was installed from the Microsoft Store, so ClearC can't move it.\n\nSome apps can be moved to another drive in Windows Settings: Settings → Apps → Installed apps, click "…" next to the app, then choose "Move" (if that option isn't there, the app doesn't support it).
+打开 Windows 设置	Open Windows Settings
+「{0}」不适合搬	"{0}" shouldn't be moved
+这台电脑没有 C 盘以外的硬盘，或者还没选搬家目标。请先在「清理 C 盘」页的「搬家目标」里选一块硬盘。	This PC has no drive other than C:, or no move destination has been chosen yet. Choose a drive under "Move destination" on the "Clean up C:" page first.
+它给资源管理器装了右键菜单之类的组件（{0}），桌面和文件夹窗口一直开着这些文件，文件夹被占着搬不了。这类软件通常不大，建议留在 C 盘。	It adds components such as right-click menu entries to File Explorer ({0}). The desktop and folder windows keep these files open, so the folder is locked and can't be moved. Apps like this are usually small, so it's best to leave them on C:.
+\n\n它只占 {0}，搬走腾出的空间不多。	\n\nIt only takes up {0}, so moving it won't free much space.
+把安装文件夹 {0}（{1}）整个搬到 {2}，C 盘原位置留一个链接。桌面快捷方式、开始菜单、卸载和自动更新都照常可用，不用重装。\n\n搬之前先核对两边的文件完全一致，再删掉 C 盘上的那份。{3}	Moves the whole install folder {0} ({1}) to {2} and leaves a link in its original location on C:. Desktop shortcuts, the Start menu, uninstalling, and automatic updates all keep working, with no need to reinstall.\n\nThe files on both sides are verified to be identical before the copy on C: is deleted.{3}
+\n\n{0} 正在运行，搬之前会替你关掉（没保存的内容请先保存）。	\n\nThese will be closed for you before the move: {0}. Save any unsaved work first.
+\n\n要注意：{0} 盘要一直接着；以后软件大版本升级时，个别安装程序会把它重新装回 C 盘，到时在这里再搬一次就好。要搬回来，到「搬家管理」点「搬回 C 盘」。	\n\nNote: drive {0}: must stay connected. When the app gets a major update later, some installers put it back on C:; if that happens, just move it again here. To move it back, go to "Moved folders" and click "Move back to C:".
+关掉并搬走	Close and move
+还有程序开着里面的文件。请退出这个软件（包括屏幕右下角托盘里的图标），关掉打开着这个文件夹的窗口，再搬一次；已经复制好的部分下次直接用，很快	Some programs still have files in it open. Quit this app (including its icon in the system tray at the bottom right of the screen), close any windows showing this folder, and try the move again. Whatever has already been copied will be reused next time, so it'll be quick
+这个软件的安装程序没有写明装在哪里。	This app's installer didn't record where it was installed.
+从应用商店卸载 {0}（{1}）。	Uninstalls {0} ({1}) through the Microsoft Store.
+会打开 {0} 自带的卸载程序，按它的提示一步步操作即可。卸载完回到这里点「检查残留」，看看还有没有剩下的文件夹。	Opens the uninstaller that came with {0}; just follow its steps. When it's done, come back and click "Check leftovers" to see whether any folders were left behind.
+卸载「{0}」？	Uninstall "{0}"?
+\n\n卸载会删除这个软件，它保存在软件里的数据可能一起被删掉。	\n\nUninstalling removes the app, and data it stores may be deleted along with it.
+卸载	Uninstall
+卸载 {0}	Uninstall {0}
+打开卸载程序	Open uninstaller
+已打开「{0}」的卸载程序。卸载完成后点「检查残留」，看看还剩下哪些文件夹。	The uninstaller for "{0}" is open. When it's done, click "Check leftovers" to see which folders are left.
+打不开卸载程序	Couldn't open the uninstaller
+看起来还没卸载完	The uninstall doesn't seem finished yet
+系统里还登记着「{0}」。等卸载程序走完，再点「检查残留」。	"{0}" is still registered in Windows. Wait for the uninstaller to finish, then click "Check leftovers".
+没发现残留	No leftovers found
+「{0}」已经卸载干净了。	"{0}" has been completely uninstalled.
+{0}（{1}）	{0} ({1})
+「{0}」留下了 {1} 个文件夹	"{0}" left {1} folders behind
+这些文件夹以软件名命名，多半是卸载后剩下的设置和缓存。会移到回收站，需要的话还能恢复。	These folders are named after the app and are most likely settings and caches left after uninstalling. They'll be moved to the Recycle Bin, so you can restore them if needed.
+我已确认这些是已卸载软件留下的，删除不会给我带来损失。	I have confirmed these were left by the uninstalled app and that deleting them won't cause me any loss.
+先不删	Not now
+清理「{0}」的残留	Clean up leftovers of "{0}"
+只有 exe 版本支持定时任务	Only the exe version supports scheduled tasks
+本工具现在是从临时文件夹运行的（{0}），比如直接在压缩包里双击打开的。这个位置过后会被清掉，任务就找不到本工具了。\n\n请先把本工具复制到一个固定的位置（比如 D:\\工具），从那里打开，再开启。	ClearC is running from a temporary folder ({0}), for example because it was opened directly from inside a zip file. That location will be cleared later, and the task would no longer find ClearC.\n\nCopy ClearC to a permanent location first (for example D:\\Tools), open it from there, and then turn this on.
+C 盘清理工具：每次登录电脑后和每天中午各检查一次 C 盘剩余空间，低于设定值时提醒（每天最多一次）。在工具的「自动提醒」页关掉开关即可删除本任务。	ClearC: checks free space on C: after each sign-in and at noon every day, and reminds you when it falls below the set limit (at most once a day). To remove this task, turn off the switch on the "Reminders" page in ClearC.
+C 盘清理工具：每周日自动清理一次临时文件、缓存和日志（不搬家、不清空回收站、不碰个人文件夹）。在工具的「自动提醒」页关掉开关即可删除本任务。	ClearC: cleans up temporary files, caches, and logs automatically every Sunday (doesn't move anything, empty the Recycle Bin, or touch personal folders). To remove this task, turn off the switch on the "Reminders" page in ClearC.
+更新任务计划	Update scheduled task
+改用 {0}（原来的 {1} 不在了或版本更旧）	Switched to {0} (the previous {1} is missing or older)
+加上「登录电脑后检查」	Added "Check after sign-in"
+不用开着本工具，也不用设置开机启动。开启后会在 Windows「任务计划程序」里建一个任务（{0}）：每次登录电脑 2 分钟后、以及每天中午 12 点，Windows 会在后台运行一下本工具（{1}）检查 C 盘，空间够就什么都不显示，查完马上退出。关掉开关就删除这个任务。\n请把本工具放在固定的位置，不要删掉；挪了位置后打开一次，任务会自动改用新位置。	ClearC doesn't need to stay open or start with Windows. Turning this on creates a task ({0}) in Windows "Task Scheduler": 2 minutes after each sign-in and at 12 noon every day, Windows briefly runs ClearC ({1}) in the background to check C:. If there's enough space, nothing is shown, and it exits as soon as the check is done. Turning the switch off deletes the task.\nKeep ClearC in a fixed location and don't delete it. If you move it, open it once and the task will switch to the new location automatically.
+只有 exe 版本支持自动提醒。	Only the exe version supports reminders.
+本工具的位置变了，请把开关关掉再打开一次，让任务改用现在的位置。	ClearC has been moved. Turn the switch off and on again so the task uses the current location.
+上次自动清理：{0}，{1}	Last automatic cleanup: {0}, {1}
+任务名：{0}。	Task name: {0}.
+只有 exe 版本支持每周自动清理。	Only the exe version supports weekly cleanup.
+{0}：已用 {1}，剩余 {2}	{0}: {1} used, {2} free
+最近 {0} 天有记录：C 盘剩余从 {1} 变成 {2}（{3}{4}）。蓝色正常，橙色表示用掉了八成五以上，红色表示快满了。	Records from the last {0} days: free space on C: went from {1} to {2} ({3}{4}). Blue is normal, orange means over 85% is used, red means it's nearly full.
+多了 	up 
+少了 	down 
+还没有记录。每次打开本工具都会记一笔。	No records yet. One is added each time you open ClearC.
+空间不足提醒的界限	Low-space reminder threshold
+开启空间不足提醒	Turn on low-space reminder
+开启每周自动清理	Turn on weekly cleanup
+没开成	Couldn't turn it on
+任务计划：{0}	Scheduled task: {0}
+关闭空间不足提醒	Turn off low-space reminder
+关闭每周自动清理	Turn off weekly cleanup
+已删除任务计划	Scheduled task deleted
+{0:N0} 条	{0:N0} entries
+还没有操作记录。删除、搬运等操作做完后会出现在这里	No activity yet. Deletions, moves, and other actions will appear here once they're done
+没有符合条件的记录	No matching entries
+永久保存	Keep forever
+1 个月	1 month
+3 个月	3 months
+半年	6 months
+1 年	1 year
+2 年	2 years
+{0} 个月	{0} months
+·  日志是普通的 txt 文件，放在 {0}，每个月一个，可以用记事本直接打开。	·  Logs are plain .txt files stored in {0}, one per month, and can be opened directly in Notepad.
+·  删除、搬运、合并、压缩、卸载和系统设置的每一次改动都会记下来：什么时间、做了什么、对哪个文件或文件夹、结果怎样。只记操作，不保存文件内容。	·  Every delete, move, merge, compression, uninstall, and system setting change is recorded: when, what was done, to which file or folder, and the result. Only actions are logged; file contents are never saved.
+·  当前保存 {0}：每次打开本工具时，会自动删除 {1:yyyy-MM-dd}（{0}前）之前的记录，删掉后找不回来。	·  Currently kept for {0}: each time ClearC opens, entries from before {1:yyyy-MM-dd} ({0} ago) are deleted automatically and can't be recovered.
+·  当前设置为永久保存：记录不会自动删除，日志文件会越来越多（通常每月几十 KB 到几 MB）。	·  Currently set to keep forever: entries are never deleted automatically, so log files keep piling up (usually tens of KB to a few MB per month).
+保存时间改成「{0}」？	Change log retention to "{0}"?
+{0:yyyy-MM-dd} 之前的操作记录会马上删除，删掉后找不回来。	Entries from before {0:yyyy-MM-dd} will be deleted right away and can't be recovered.
+改	Change
+修改日志保存时间	Change log retention
+删除超过保存时间的旧记录	Delete entries older than the retention period
+{0} 条	{0} entries
+没有可以合并的	Nothing to merge
+合并只适用于同一块盘上的副本：勾选的副本要和没勾选（保留）的那份在同一块盘上。	Merging only works for copies on the same drive: the checked copies must be on the same drive as the unchecked one you keep.
+合并后，每个位置的文件都还在，打开、复制都和原来一样，只是这几个位置共用一份空间。\n\n要注意：合并后它们其实是同一个文件，改了其中一个位置，其他位置也会跟着变。所以适合照片、视频、安装包、压缩包这类不会再改的文件。	After merging, the file is still in every location and opens and copies just as before; these locations simply share the space of one copy.\n\nNote: after merging they are really the same file, so changing it in one location changes it in all the others too. This suits files you won't edit again, such as photos, videos, installers, and archives.
+\n\n另有 {0} 个勾选的副本和保留的那份不在同一块盘上，不能合并，会跳过。	\n\n{0} other checked copies aren't on the same drive as the one being kept, so they can't be merged and will be skipped.
+合并 {0} 个重复文件，腾出 {1}？	Merge {0} duplicate files and free up {1}?
+我知道合并后改动一个位置，其他位置会跟着变。	I understand that after merging, changing the file in one location changes it in the others too.
+合并	Merge
+合并 {0} 个重复文件	Merge {0} duplicate files
+[内部] 	[Internal] 
+后台出错：{0}	Background error: {0}
+完成	Done
+C 盘剩余：{0} → {1}，释放了 {2}	Free on C: {0} → {1}, freed {2}
+有 {0} 个文件夹已经复制好，但原文件夹还被别的程序占着，没换成链接。彻底退出相关的聊天软件（包括右下角托盘图标）后再点一次「执行」，会接着用复制好的副本，很快完成。	{0} folders have been copied, but the original folders are still in use by other programs, so they weren't replaced with links. Fully quit the related chat apps (including their tray icons at the bottom right), then click "Run" again. The existing copies will be reused, so it'll finish quickly.
+完成，释放 {0}，C 盘现在剩余 {1}	Done. Freed {0}; C: now has {1} free
+已完成：C 盘从剩余 {0} 变成 {1}。每一项的结果写在列表里；想看还剩什么，再点「扫描」。	Done: free space on C: went from {0} to {1}. The result for each item is shown in the list; to see what's left, click "Scan" again.
+……另有 {0} 项，见左下角「运行记录」	… and {0} more, see "Run log" at the bottom left
+执行完成	Run complete
+共用时 {0}。C 盘剩余 {1} → {2}，释放 {3}。{4}	Took {0}. Free on C: {1} → {2}, freed {3}.{4}
+{0}看过 {1:N0} 个文件夹、{2:N0} 个文件，找到 {3:N0} 组重复。	{0} Checked {1:N0} folders and {2:N0} files, found {3:N0} groups of duplicates.
+已停止。	Stopped.
+查找完成。	Search complete.
+已停止，找到 {0} 组	Stopped, found {0} groups
+完成，找到 {0} 组	Done, found {0} groups
+已自动勾选：每组留最新的一份，其余删除。可以改勾选，或点上面的按钮换一种留法。	Selected automatically: the newest copy in each group is kept and the rest will be deleted. You can change the selection, or use the buttons above to keep a different copy.
+\n\n文件在回收站里，清空回收站后才真正释放磁盘空间。	\n\nThe files are in the Recycle Bin; disk space is only freed after you empty it.
+文件在回收站里，清空回收站后才真正释放空间。	The files are in the Recycle Bin; space is only freed after you empty it.
+完成，删除了 {0} 个文件	Done, deleted {0} files
+删除了 {0} 个重复文件。{1}	Deleted {0} duplicate files. {1}
+没删的（内容和保留的那份不完全相同，或文件被占用）记在左下角的「运行记录」里。	Files that weren't deleted (content not identical to the kept copy, or file in use) are listed in "Run log" at the bottom left.
+删除完成	Deletion complete
+删除了 {0} 个重复文件，共用时 {1}。{2}\n\n没删的（内容和保留的那份不完全相同，或文件被占用）记在「运行记录」里。	Deleted {0} duplicate files in {1}.{2}\n\nFiles that weren't deleted (content not identical to the kept copy, or file in use) are listed in "Run log".
+没能和上次比较	Couldn't compare with the last scan
+这次扫描中途停止了，不和上次比较	This scan was stopped partway, so it isn't compared with the last one
+完成，{0:N0} 个文件，共 {1}	Done, {0:N0} files, {1} in total
+扫描中途停止了，下面只是已经看过的部分	The scan was stopped partway; only the part already scanned is shown below
+没有完成	Not completed
+已删除 {0}	Deleted {0}
+没有删掉	Couldn't delete
+完成，省了 {0}	Done, saved {0}
+上次压缩：{0}，实际占用 {1} → {2}，省了 {3}	Last compressed: {0}, size on disk {1} → {2}, saved {3}
+压缩完成	Compression complete
+{0}\n\n实际占用 {1} → {2}，省了 {3}。文件照常使用。	{0}\n\nSize on disk {1} → {2}, saved {3}. Files work as usual.
+系统压缩完成	System compression complete
+C 盘可用空间变化：{0}{1}	Free space on C: {0}{1}
+{0} → {1}，省了 {2}。	{0} → {1}, saved {2}.
+大小没有变化（{0}）。可能里面本来就没有可回收的空间，或者虚拟磁盘还在使用中。\n\n{1}	Size didn't change ({0}). There may be no reclaimable space inside, or the virtual disk is still in use.\n\n{1}
+虚拟磁盘压缩完成	Virtual disk compressed
+已搬 {0}	Moved {0}
+没搬成	Couldn't move
+搬好了	Moved
+已搬到 {0}。原位置留了链接，软件照常使用。{1}	Moved to {0}. A link was left at the original location, so the app works as usual.{1}
+「{0}」搬好了	"{0}" moved
+已搬到 {0}，C 盘腾出约 {1}。原位置留了链接，快捷方式和开始菜单照常能打开。建议现在打开一次这个软件，确认一切正常。\n\n要搬回来，到「搬家管理」点「搬回 C 盘」。{2}	Moved to {0}, freeing about {1} on drive C:. A link was left at the original location, so shortcuts and the Start menu still open the app as usual. It's a good idea to open the app once now to make sure everything works.\n\nTo move it back, go to "Moved folders" and click "Move back to C:".{2}
+没有搬，原文件夹没动。	Not moved. The original folder was left untouched.
+没读到已安装的软件	Couldn't read the installed apps
+已卸载	Uninstalled
+没卸载成	Couldn't uninstall
+残留已清理	Leftovers cleaned up
+「{0}」留下的 {1} 个文件夹已移到回收站。清空回收站后才真正腾出空间。	{1} folders left by "{0}" were moved to the Recycle Bin. The space is freed only after you empty the Recycle Bin.
+共 {0} 个文件夹，其中 {1} 个正常，已经帮 C 盘腾出约 {2}。	{0} folders in total, {1} working normally. About {2} has been freed on C: so far.
+已搬回 C 盘	Moved back to C:
+多余的副本已删除	Extra copy deleted
+搬回了 {0}，软件照常使用。	Moved {0} back. The app works as usual.
+腾出了 {0}。	Freed {0}.
+完成，合并了 {0} 个文件	Done. Merged {0} files
+合并了 {0} 个重复文件。每个位置的文件都还在，只占一份空间。	Merged {0} duplicate files. The files are still in every location, but take up the space of only one copy.
+没合并的（内容不完全相同、文件正被打开、不在同一块盘）记在左下角的「运行记录」里。	Files that weren't merged (contents not identical, file open, or not on the same drive) are listed in the "Run log" at the bottom left.
+一键清理	One-click cleanup
+还有操作在进行中	An operation is still in progress
+现在关闭可能留下搬了一半的文件夹。确定要关闭吗？	Closing now may leave a folder half moved. Are you sure you want to close?
+继续等待	Keep waiting
+仍然关闭	Close anyway
+进度卡片已收起，进度见窗口底部和任务栏图标；做完会弹窗告诉你。	The progress card is hidden. You can follow progress at the bottom of the window and on the taskbar icon; a message will pop up when it's done.
+C 盘快满时提醒你？	Remind you when C: is almost full?
+开启后，每次登录电脑和每天中午，Windows 会在后台检查一次 C 盘。剩余空间低于 20 GB 时在屏幕右下角提醒你（每天最多一次），空间够就什么都不显示。\n\n不需要一直开着本工具，也不需要开机启动。以后可以在「自动提醒」页随时关掉。	Once this is on, Windows checks drive C: in the background each time you sign in and every day at noon. When free space drops below 20 GB, a reminder appears at the bottom right of the screen (at most once a day). If there's enough space, nothing is shown.\n\nClearC doesn't need to stay open or start with Windows. You can turn this off anytime on the "Reminders" page.
+以后再说	Not now
+开启提醒	Turn on reminder
+提醒已开启	Reminder turned on
+在「自动提醒」页可以改提醒的界限，或者关掉。	You can change the reminder threshold or turn it off on the "Reminders" page.
+版本 {0}	Version {0}
+==== C 盘清理工具 {0} 启动；Windows {1}；屏幕可用区域 {2:N0} x {3:N0}	==== ClearC {0} started; Windows {1}; usable screen area {2:N0} x {3:N0}
+自动删除超过保存时间的旧记录	Automatically delete records older than the retention period
+{0} 条，保存时间 {1} 个月	{0} entries, kept for {1} months
+使用前请先阅读安全风险提示	Please read the safety notice before use
+本工具会按你的选择删除或搬移电脑上的文件。删除的文件可能无法恢复，存在资料丢失的风险。\n\n每次删除前，请确认这些资料确实不再需要、删除不会给你带来损失；重要资料请先备份。因使用本工具造成的资料丢失或其他损失，责任由使用者自行承担，开发者不承担责任。\n\n完整说明随时可以在左侧「帮助」里查看。	ClearC deletes or moves files on your PC based on your choices. Deleted files may not be recoverable, so there is a risk of data loss.\n\nBefore each deletion, make sure you really no longer need the data and that deleting it won't cause you any loss; back up important data first. You are solely responsible for any data loss or other damage caused by using ClearC; the developer accepts no liability.\n\nYou can read the full details anytime under "Help" on the left.
+我已阅读并了解上述风险，同意自行承担使用本工具的后果。	I have read and understood the risks above, and I agree to take responsibility for the consequences of using ClearC.
+退出	Exit
+同意并继续	Agree and continue
+{0:yyyy-MM-dd HH:mm:ss}  已同意（版本 {1}）	{0:yyyy-MM-dd HH:mm:ss}  Agreed (version {1})
+用户已同意安全风险提示	User agreed to the safety notice
+  跳过（在个人文件夹里，不删）：{0}	  Skipped (in personal folders, not deleted): {0}
+跳过：在个人文件夹里，不删	Skipped: in personal folders, not deleted
+用户临时文件	User temp files
+各软件运行时的临时文件，关掉软件就没用了	Temporary files created by apps while running; no longer needed once the apps are closed
+系统临时文件	System temp files
+系统和安装程序的临时文件	Temporary files from Windows and installers
+Windows 更新下载缓存	Windows Update download cache
+已装完的更新安装包，下次更新会重新下载需要的部分	Packages for updates that are already installed; the next update downloads whatever it needs again
+系统升级残留目录	Leftover upgrade folders
+大版本升级留下的临时目录	Temporary folders left by major Windows upgrades
+崩溃转储与错误报告	Crash dumps and error reports
+蓝屏和程序崩溃时留下的调试文件，只对微软工程师有用	Debug files left by blue screens and app crashes; only useful to Microsoft engineers
+系统组件日志	System component logs
+Windows 更新的安装日志	Windows Update installation logs
+缩略图缓存	Thumbnail cache
+文件夹里图片的小预览图，打开文件夹时会重新生成	Small previews of images in folders; rebuilt when you open the folder
+Chrome 浏览器缓存	Chrome cache
+网页缓存。请先关闭浏览器。不影响密码、书签、历史记录	Web page cache. Close the browser first. Passwords, bookmarks and history are not affected
+Edge 浏览器缓存	Edge cache
+pip 缓存	pip cache
+Python 装包时下载的安装包副本，再装时会重新下载	Copies of packages downloaded when installing Python packages; downloaded again when needed
+npm 缓存	npm cache
+Node.js 装包时的下载缓存	Download cache from installing Node.js packages
+Clash Verge 代理日志	Clash Verge proxy logs
+代理软件的运行日志，会无限增长。建议在它设置里把日志等级改成 warn	Run logs of the proxy app, which grow without limit. Consider setting the log level to warn in its settings
+Intel XTU 超频日志	Intel XTU overclocking logs
+Intel 超频组件的日志，会无限增长	Logs of the Intel overclocking component, which grow without limit
+Apple 设备系统更新包	Apple device update packages
+给 iPhone/iPad 升级时下载的固件，装完就没用了	Firmware downloaded to update an iPhone/iPad; no longer needed once installed
+Dell 更新程序缓存	Dell Update cache
+戴尔驱动更新工具下载的安装包	Installers downloaded by Dell's driver update tool
+罗技 Options+ 缓存	Logitech Options+ cache
+罗技驱动的更新包缓存	Cached update packages for Logitech drivers
+NVIDIA 安装包与着色器缓存	NVIDIA installers and shader cache
+显卡驱动安装包和游戏着色器缓存，游戏首次启动会重建	Graphics driver installers and game shader cache; rebuilt the first time a game starts
+Intel 显卡着色器缓存	Intel graphics shader cache
+核显着色器缓存	Shader cache for integrated graphics
+Cursor 状态库备份	Cursor state database backup
+Cursor 编辑器状态库的备份副本，主文件保留	Backup copy of the Cursor editor's state database; the main file is kept
+清空回收站	Empty Recycle Bin
+回收站里是你以前删掉、但还能找回的文件。清空后就永远找不回了，请先打开回收站确认里面没有要的东西	The Recycle Bin holds files you deleted earlier that can still be restored. Once it's emptied, they're gone for good. Open the Recycle Bin first to make sure there's nothing you need
+Windows 传递优化缓存	Windows Delivery Optimization cache
+Windows 更新的点对点分发缓存	Peer-to-peer distribution cache for Windows Update
+NI 安装包缓存	NI installer cache
+LabVIEW 等 NI 软件的安装媒体缓存。软件本身不受影响；以后修复或重装时需重新下载	Installation media cache for NI software such as LabVIEW. The software itself isn't affected; repairing or reinstalling it later will require downloading again
+上一版 Windows 的完整副本。删后不能回退到上一版系统（系统升级 10 天后会自动删）	A full copy of your previous version of Windows. After deleting it, you can't go back to the previous version (Windows deletes it automatically 10 days after an upgrade)
+执行	Run
+重建 Windows 搜索索引	Rebuild Windows Search index
+搜索索引膨胀时可重建，重建后通常只剩 1 到 2 GB。重建期间（约 1 小时）搜文件会变慢	Rebuild the search index if it has grown too large; afterward it's usually only 1 to 2 GB. File searches are slower while it rebuilds (about 1 hour)
+关闭休眠 (hiberfil.sys)	Turn off hibernation (hiberfil.sys)
+休眠文件约等于内存大小。关闭后睡眠不受影响，只是没有「休眠」和「快速启动」	The hibernation file is about the size of your RAM. Turning it off doesn't affect Sleep; you just lose "Hibernate" and "Fast Startup"
+禁用 XTU 超频日志服务	Disable XTU overclocking log service
+外星人 Command Center 的 CPU 超频组件，会持续写几 GB 日志。不超频可禁用，AWCC 的风扇和性能档位不受影响	The CPU overclocking component of Alienware Command Center, which keeps writing several GB of logs. If you don't overclock, you can disable it; AWCC's fan and performance modes aren't affected
+WinSxS 组件清理 (DISM)	WinSxS component cleanup (DISM)
+清掉系统更新替换下来的旧组件，通常能省 2 到 10 GB。耗时 10 到 20 分钟，完成后建议重启	Removes old components replaced by Windows updates, usually saving 2 to 10 GB. Takes 10 to 20 minutes; restarting afterward is recommended
+微信/QQ 缓存 (Roaming)	WeChat/QQ cache (Roaming)
+微信、QQ、企业微信、腾讯会议的聊天图片、视频和缓存。搬之前要先退出它们，开着的话会提醒你	Chat images, videos and cache from WeChat, QQ, WeCom and Tencent Meeting. Quit them before moving; you'll be reminded if any are still open
+微信/QQ 缓存 (Local)	WeChat/QQ cache (Local)
+微信、QQ 等腾讯软件的本地缓存	Local cache of WeChat, QQ and other Tencent apps
+微信文件 (旧版)	WeChat files (old version)
+微信 3.x 的聊天记录和接收的文件	Chat history and received files from WeChat 3.x
+微信文件 (新版)	WeChat files (new version)
+微信 4.x 的聊天记录、图片、视频和接收的文件，通常是 C 盘最大的一块	Chat history, images, videos and received files from WeChat 4.x; usually the biggest item on C:
+企业微信文件	WeCom files
+企业微信的聊天记录、图片、文件和缓存	WeCom chat history, images, files and cache
+QQ 文件	QQ files
+QQ 的聊天记录和接收的文件	QQ chat history and received files
+飞书聊天记录	Feishu chat history
+飞书的聊天记录、图片、文件和缓存。搬之前要先退出飞书	Feishu chat history, images, files and cache. Quit Feishu before moving
+钉钉聊天记录	DingTalk chat history
+钉钉的聊天记录、图片和缓存（每个账号一个以 _v2 结尾的文件夹）。搬之前要先退出钉钉	DingTalk chat history, images and cache (one folder ending in _v2 per account). Quit DingTalk before moving
+Telegram 聊天记录	Telegram chat history
+Telegram 电脑版的本地数据、缓存和程序本身。搬之前要先退出 Telegram	Local data, cache and the program itself for Telegram Desktop. Quit Telegram before moving
+桌面上的所有文件。搬后桌面照常显示，文件实际在 D 盘	All files on your Desktop. After moving, the Desktop shows them as usual, but the files are actually on drive D:
+下载文件夹。搬后浏览器照常下载到这里，文件实际在 D 盘	The Downloads folder. After moving, browsers still download here as usual, but the files are actually on drive D:
+用户目录 .cache	User folder .cache
+各类开发工具的缓存（HuggingFace 模型、uv、playwright 等）。删了会重新下载；也可搬走	Caches of various developer tools (HuggingFace models, uv, playwright, etc.). Deleted items are downloaded again; you can also move them
+conda 环境 (.conda)	conda environments (.conda)
+conda 创建的 Python 环境。搬走后照常使用；删了要重建环境	Python environments created by conda. They work as usual after moving; if deleted, the environments must be rebuilt
+pip --user 安装的包	Packages installed with pip --user
+用 pip install --user 装的 Python 包。有 conda 的话多半已不用，可删；不确定就搬走	Python packages installed with pip install --user. If you use conda, they're probably no longer used and can be deleted; if unsure, move them
+  完成  {0,-26} 释放 {1}	  Done  {0,-26} freed {1}
+系统设置	System settings
+每周自动清理：{0}	Weekly cleanup: {0}
+清理：{0}	Cleanup: {0}
+C 盘多出 	Freed on C: 
+  关闭 {0}	  Closing {0}
+原文件夹还被占用，关闭占用的程序后重试（第 {0} / {1} 次）：{2}	The original folder is still in use. Closing the programs using it and retrying (attempt {0} of {1}): {2}
+  已经搬过（是链接），跳过 {0}	  Already moved (it's a link), skipping {0}
+  {0} 由 OneDrive 管理，不搬	  {0} is managed by OneDrive, not moving
+  {0} 已在目标盘	  {0} is already on the target drive
+统计 {0} 的大小	Measuring the size of {0}
+{0} 里有 {1} 个特殊项目（链接，或用 Windows 压缩功能压过的文件，比如 {2}）。复制时可能漏掉它们，为了不丢东西，这个文件夹不搬，原目录未动	{0} contains {1} special items (links, or files compressed with Windows compression, such as {2}). They could be missed during copying, so to avoid losing anything this folder won't be moved. The original folder was left untouched
+搬家失败	Move failed
+统计上次留下的副本 {0}	Measuring the copy left from last time: {0}
+核对 {0} 是不是这个文件夹的旧副本	Verifying whether {0} is an old copy of this folder
+目标盘上的 {0} 里有 {1} 个文件在 C 盘上没有，可能是唯一的一份，保留不动；这次搬到新文件夹 {2}	{1} files in {0} on the target drive don't exist on C: and may be the only copy, so they're left untouched. Moving to a new folder this time: {2}
+保留旧副本，改用新文件夹	Old copy kept, using a new folder
+  {0} 里已有上次复制的 {1}，这次只补有变化的文件	  {0} already has {1} copied last time; only changed files will be copied this time
+{0} 只剩 {1}，还需要约 {2}，放不下，原目录未动	{0} has only {1} left, but about {2} is needed. Not enough space; the original folder was left untouched
+  搬 {0} ({1}) -> {2}	  Moving {0} ({1}) -> {2}
+复制失败（robocopy 代码 {0}，可能是空间不够或有文件被占用），原目录未动	Copy failed (robocopy code {0}; possibly not enough space or a file is in use). The original folder was left untouched
+复制完成，核对两边大小	Copy finished, verifying sizes on both sides
+核对不一致（源 {0:N0} 个文件 {1}，目标 {2:N0} 个文件 {3}），原目录未动	Verification mismatch (source {0:N0} files, {1}; target {2:N0} files, {3}). The original folder was left untouched
+  核对通过：{0:N0} 个文件，{1}	  Verified: {0:N0} files, {1}
+把 {0} 换成指向 {1} 的链接	Replacing {0} with a link to {1}
+  以前留下的备份已改名为 {0}，确认没用后可手动删除	  An earlier backup was renamed to {0}; you can delete it manually once you're sure it's not needed
+还有程序开着里面的文件。请彻底退出相关的聊天软件（微信、QQ、企业微信、飞书、钉钉等，包括屏幕右下角托盘里的图标），关掉打开着这个文件夹的窗口，再点一次「执行」	Some programs still have files in it open. Fully quit the related chat apps (WeChat, QQ, WeCom, Feishu, DingTalk, etc., including their icons in the system tray at the bottom right of the screen), close any windows that have this folder open, then click "Run" again
+本工具就放在这个文件夹里，请把工具挪到别处再运行	ClearC itself is in this folder. Move ClearC somewhere else and run it again
+已复制到 {0}，但原文件夹被占用，还没换成链接：{1}。再搬时直接用这份副本，只补差异，很快就好	Copied to {0}, but the original folder is in use and hasn't been replaced with a link yet: {1}. Next time you move it, this copy is reused and only the differences are copied, so it'll be quick
+  {0}（系统提示：{1}）	  {0} (system message: {1})
+搬家未完成：原文件夹被占用	Move not finished: the original folder is in use
+建链接失败，已改回原目录，副本在 {0}	Couldn't create the link. The original folder was restored; the copy is in {0}
+补复制最后写入的文件	Copying the last files written
+已搬好，但最后几个文件没补复制过去，C 盘上的旧文件夹先保留：{0}	Moved, but the last few files weren't copied over, so the old folder on C: is kept for now: {0}
+{0:N0} 个文件，{1}，两边已核对一致	{0:N0} files, {1}, verified identical on both sides
+搬家后保留 C 盘旧文件夹	Old folder on C: kept after moving
+链接已建好，删除 C 盘上的原目录	Link created, deleting the original folder on C:
+已搬好，但 C 盘上的备份没删干净（有文件被占用），过后可手动删除：{0}	Moved, but the backup on C: wasn't fully deleted (some files are in use). You can delete it manually later: {0}
+搬家后 C 盘旧文件夹没删干净	Old folder on C: not fully deleted after moving
+  完成  {0}  ->  {1}	  Done  {0}  ->  {1}
+搬家后删除 C 盘上的原文件夹	Deleted the original folder on C: after moving
+数据已在 {0}	Data is now in {0}
+路径为空	Path is empty
+整块磁盘不能删	A whole drive can't be deleted
+C 盘个人文件夹（桌面、文档、下载、图片、视频、音乐等）里的东西不删	Items in your personal folders on C: (Desktop, Documents, Downloads, Pictures, Videos, Music, etc.) aren't deleted
+系统文件夹，删了 Windows 可能出问题	System folder; deleting it may cause problems with Windows
+程序总文件夹不能删	The main programs folder can't be deleted
+系统自带的程序，不能删	Built-in Windows app; can't be deleted
+软件的安装文件夹，请到「软件管理」里卸载，不要直接删	App installation folder. Uninstall it in "Apps" instead of deleting it directly
+系统文件，请用「省空间」里的功能处理	System file. Use the options in "Save space" to handle it
+系统文件夹，不能整个删	System folder; can't be deleted as a whole
+用户目录本身不能整个删	The user folder itself can't be deleted as a whole
+这是软件数据的总文件夹，只能删里面具体的项目	This is the main folder for app data; only specific items inside it can be deleted
+系统保存密码、证书和密钥的地方，删了会丢失登录信息和证书	This is where Windows stores passwords, certificates and keys; deleting it would lose sign-in info and certificates
+软件的安装包缓存，删了以后这些软件可能没法修复、升级或卸载	Installer cache for apps; after deleting it, these apps may not be able to repair, update or uninstall
+本工具自己的设置和日志	ClearC's own settings and logs
+这是搬家后的数据（CDriveMoved 文件夹），C 盘上的链接指向这里。要处理请到「搬家管理」	This is moved data (the CDriveMoved folder) that a link on C: points to. To manage it, go to "Moved folders"
+这里是搬家后的数据，C 盘上的链接指向这里。要处理请到「搬家管理」	This is moved data that a link on C: points to. To manage it, go to "Moved folders"
+整块磁盘请用系统压缩，不要整盘压	For a whole drive, use System compression instead of compressing the entire drive
+系统文件夹请用上面的「系统压缩」	For system folders, use "System compression" above
+这个文件夹里有虚拟磁盘（{0}），压缩会让它变慢，甚至出错。可以压缩里面别的子文件夹，虚拟磁盘请用「省空间」页里的「压缩虚拟磁盘」	This folder contains a virtual disk ({0}). Compressing it would slow the disk down or even cause errors. You can compress other subfolders inside it; for the virtual disk, use "Compact virtual disk" on the "Save space" page
+正常：数据在 {0} 盘，C 盘这里只留了一个指向它的链接，不占 C 盘空间，软件照常使用	OK: the data is on drive {0}:, and only a link to it is left here on C:. It takes no space on C:, and the app works as usual
+链接断了：目标文件夹不在了（硬盘拔了、或者盘符变了？）	Link broken: the target folder is gone (was the drive unplugged, or did its drive letter change?)
+。在 {0} 找到一份同名的，可以改指向它	. Found a folder with the same name in {0}; you can point the link to it
+没搬完：C 盘原文件夹还在，目标盘上也有一份。可以在原来搬它的地方（「清理 C 盘」或「软件管理」）再搬一次，只补差异；也可以删掉这份副本，删之前会先核对，副本里有不少 C 盘上没有的文件就不删	Not fully moved: the original folder is still on C:, and there's also a copy on the target drive. You can move it again from where you moved it before ("Clean up C:" or "Apps"), which copies only the differences. You can also delete this copy; it's verified first and won't be deleted if it has many files that aren't on C:
+C 盘上的链接不见了（软件卸载了，或者链接被删了）。软件还在用的话，可以重建链接；软件已经卸载的话，打开看看，确认不要了再自己删掉这份数据	The link on C: is gone (the app was uninstalled, or the link was deleted). If the app is still in use, you can rebuild the link. If it was uninstalled, open the data to check it, and delete it yourself once you're sure you don't need it
+已经不在了	No longer exists
+这一项现在不是正常的搬家状态，没法搬回	This item isn't in a normal moved state, so it can't be moved back
+C 盘只剩 {0}，放不下 {1}（还要留 2 GB 余量）	C: has only {0} left, not enough for {1} (2 GB must also be kept free)
+搬回 C 盘失败	Couldn't move back to C:
+复制回 C 盘失败（robocopy 代码 {0}），什么都没改，复制了一半的临时文件夹在 {1}	Copying back to C: failed (robocopy code {0}). Nothing was changed; the partly copied temporary folder is in {1}
+核对两边是否一致	Verifying both sides match
+核对不一致（目标盘 {0:N0} 个文件，复制回来 {1:N0} 个），什么都没改	Verification mismatch (target drive {0:N0} files, copied back {1:N0}). Nothing was changed
+C 盘上的链接拆不掉（可能被占用），什么都没改；复制回来的数据在 {0}	Couldn't remove the link on C: (it may be in use). Nothing was changed; the copied-back data is in {0}
+换回文件夹失败，已恢复原来的链接；复制回来的数据在 {0}	Couldn't switch back to a folder, so the original link was restored; the copied-back data is in {0}
+搬回 C 盘	Move back to C:
+{0:N0} 个文件，{1}，已核对	{0:N0} files, {1}, verified
+已搬回 C 盘，但有几个最后写入的文件没补复制过来，目标盘上的那份先保留：{0}	Moved back to C:, but the last few files written weren't copied back, so the copy on the target drive is kept for now: {0}
+搬回后保留目标盘副本	Copy on target drive kept after moving back
+已搬回，但目标盘上的旧副本没删干净：{0}	Moved back, but the old copy on the target drive wasn't fully deleted: {0}
+搬回后删除目标盘上的旧副本	Deleted the old copy on the target drive after moving back
+目标 {0} 不存在	Target {0} doesn't exist
+C 盘上 {0} 是一个真文件夹，不能覆盖	{0} on C: is a real folder and can't be overwritten
+重建链接	Rebuild link
+建链接失败	Couldn't create link
+重建链接失败	Couldn't rebuild link
+C 盘原文件夹不在，这份副本可能是唯一的一份，不删	The original folder on C: is gone, so this copy may be the only one. Not deleting it
+这份副本正被 {0} 的链接使用，不能删	This copy is in use by the link at {0} and can't be deleted
+核对副本里有没有 C 盘上没有的文件	Verifying whether the copy has files that aren't on C:
+核对不了，不删	Couldn't verify, so not deleting
+副本里有 {0} 个文件在 C 盘原文件夹里没有（或比 C 盘上的新），这份副本可能是唯一的一份，所以不删。请打开两边对比后再决定	{0} files in the copy aren't in the original folder on C: (or are newer than those on C:). This copy may be the only one, so it won't be deleted. Open both folders and compare them before deciding
+没删多余副本（副本里有 C 盘没有的文件）	Extra copy not deleted (it has files that aren't on C:)
+没删干净，可能有文件被占用	Not fully deleted; some files may be in use
+删除没搬完留下的多余副本	Deleted the extra copy left by an unfinished move
+{0}，C 盘原文件夹 {1} 保留	{0}; the original folder {1} on C: is kept
+安装程序没有写明这个软件装在哪个文件夹，没法确定要搬什么	The installer doesn't say which folder this app is installed in, so it's not clear what to move
+这个软件本来就不在 C 盘	This app isn't on C: to begin with
+已经搬过了，C 盘上这里只剩一个链接。要搬回来请到「搬家管理」	Already moved; only a link is left here on C:. To move it back, go to "Moved folders"
+它所在的文件夹 {0} 已经搬到其他盘了，这个软件的文件其实已经不在 C 盘	Its folder {0} has already been moved to another drive, so this app's files are no longer on C:
+安装程序没有写明软件装在哪个文件夹（只知道它的图标在 {0} 里），为了不搬错，不搬	The installer doesn't say which folder the app is installed in (only that its icon is in {0}). To avoid moving the wrong thing, it won't be moved
+记录的安装位置是一个总文件夹，里面还有很多别的东西，不能整个搬	The recorded install location is a shared parent folder that contains many other things, so it can't be moved as a whole
+这是系统或硬件驱动的文件夹，不能搬	This is a system or hardware driver folder and can't be moved
+微软的软件或 Windows 自带的组件，由系统统一管理更新和修复，不能搬	Microsoft software or a built-in Windows component. Windows manages its updates and repairs, so it can't be moved
+装在个人文件夹（桌面、文档、下载等）里，不动	Installed in personal folders (Desktop, Documents, Downloads, etc.), so it's left alone
+微软的软件（Office、Visual Studio、.NET、Edge 等）由微软的安装程序统一管理更新和修复，搬走后容易出错，不搬	Microsoft software (Office, Visual Studio, .NET, Edge, etc.) is updated and repaired by Microsoft's own installers and often breaks after being moved, so it won't be moved
+本工具就放在这个文件夹里，请把工具挪到别处再搬	This tool is in this folder. Move the tool somewhere else first, then move the folder
+这个文件夹里还装着别的软件「{0}」，整个搬会连它一起搬走。可以单独搬「{1}」	This folder also contains another app, "{0}", which would be moved along with it. You can move "{1}" on its own
+它装在「{0}」的文件夹里面，是那个软件的一部分。要搬请搬「{1}」	It's installed inside the "{0}" folder and is part of that app. To move it, move "{1}" instead
+这个软件带有系统服务或驱动（{0}）。服务和驱动在开机时就要加载，搬走后可能启动失败，甚至影响开机，所以不搬	This app includes system services or drivers ({0}). Services and drivers load at startup, so after a move they may fail to start or even keep Windows from starting. It won't be moved
+资源管理器（桌面、文件夹窗口、右键菜单）	File Explorer (desktop, folder windows, right-click menu)
+  没能把 {0} 的权限设成和原来一样：{1}	  Couldn't restore the original permissions on {0}: {1}
+WSL：{0}	WSL: {0}
+Linux 子系统的虚拟磁盘。在 Linux 里删了文件，这个文件不会自动变小，压缩一下就能把空间还给 Windows。要换位置可以用命令 wsl --manage {0} --move D:\\WSL	Virtual disk of the Windows Subsystem for Linux. Deleting files inside Linux doesn't shrink this file; compacting it gives the space back to Windows. To change its location, run wsl --manage {0} --move D:\\WSL
+Docker Desktop 数据盘	Docker Desktop data disk
+Docker 的镜像和容器都在里面。先在 Docker 里删掉不用的镜像（docker system prune），再压缩。换位置在 Docker Desktop 设置 → Resources → Disk image location	Holds Docker's images and containers. First delete unused images in Docker (docker system prune), then compact it. To change its location, go to Docker Desktop Settings → Resources → Disk image location
+Hyper-V 虚拟磁盘：{0}	Hyper-V virtual disk: {0}
+压缩前要先关掉用它的虚拟机	Shut down the virtual machine that uses it before compacting
+安卓模拟器（Android Studio）	Android emulator (Android Studio)
+Android 模拟器的系统镜像和数据	Android emulator system images and data
+VirtualBox 虚拟机	VirtualBox virtual machines
+VirtualBox 的虚拟机和虚拟磁盘	VirtualBox virtual machines and virtual disks
+VMware 虚拟机	VMware virtual machines
+VMware 的虚拟机和虚拟磁盘	VMware virtual machines and virtual disks
+。可以整个搬到其他盘，原位置留链接，软件照常使用。搬之前要关掉模拟器或虚拟机	. You can move the whole folder to another drive and leave a link in the original location; the software keeps working as usual. Close the emulator or virtual machine before moving
+先关掉 WSL（wsl --shutdown），虚拟磁盘不在使用中才能压缩	Shut down WSL first (wsl --shutdown). The virtual disk can only be compacted when it isn't in use
+压缩 {0}（diskpart，可能要几分钟）	Compacting {0} (diskpart, may take a few minutes)
+压缩虚拟磁盘	Compact virtual disk
+正在压缩系统文件，通常要 10 到 30 分钟，期间可以照常用电脑	Compressing system files. This usually takes 10 to 30 minutes; you can keep using your PC in the meantime
+正在解压系统文件，通常要 10 到 30 分钟	Decompressing system files. This usually takes 10 to 30 minutes
+开启系统压缩（CompactOS）	Turn on system compression (CompactOS)
+关闭系统压缩（CompactOS）	Turn off system compression (CompactOS)
+C 盘可用空间变化 {0}	Free space on C: changed by {0}
+页面文件恢复系统默认	Page file restored to system default
+由系统自动管理，重启后生效	Managed automatically by Windows; takes effect after restart
+页面文件改到其他盘	Page file moved to another drive
+C 盘不再放页面文件，大小由系统自动管理，重启后生效	No page file on C: anymore; size managed automatically by Windows; takes effect after restart
+修改页面文件失败，已恢复系统默认	Couldn't change the page file; restored the system default
+关闭休眠	Turn off hibernation
+没有「休眠」和「快速启动」了，睡眠不受影响	"Hibernate" and "Fast Startup" are no longer available; Sleep is not affected
+休眠文件改为精简	Hibernation file set to reduced size
+只保留快速启动，不能手动休眠	Only Fast Startup is kept; manual hibernation is unavailable
+恢复完整休眠	Restore full hibernation
+统计大小	Measuring size
+进行中…	In progress…
+已搬 {0} 到 {1}	Moved {0} to {1}
+部分完成：搬了 {0}；{1}	Partly done: moved {0}; {1}
+差最后一步：	One last step: 
+没搬成：	Not moved: 
+不用搬（已经搬过或不在 C 盘）	No need to move (already moved or not on C:)
+已完成，释放 {0}	Done, freed {0}
+已清理，释放 {0}	Cleaned up, freed {0}
+出错：	Error: 
+{0} {1}：{2}	{0} {1}: {2}
+全部完成。C 盘现在剩余 {0}	All done. C: now has {0} free
+固态硬盘，{0} 线程并行	SSD, {0} threads in parallel
+机械硬盘，单线程按顺序读	HDD, single thread, sequential reads
+类型未知，2 线程	Unknown type, 2 threads
+磁盘：	Disk: 
+提示：快速列举不可用，已改用普通方式列举文件（结果相同，只是慢一些）。	Note: Fast enumeration isn't available, so files are being listed the regular way (same results, just slower).
+  跳过（C 盘个人文件夹，受保护）：{0}	  Skipped (personal folder on C:, protected): {0}
+  跳过（文件在扫描后被修改过）：{0}	  Skipped (file was modified after the scan): {0}
+  没有删除（和保留的那份内容不完全相同，或保留的那份已不在）：{0}	  Not deleted (not identical to the kept copy, or the kept copy is gone): {0}
+  [{0}/{1}] 已删除  {2}	  [{0}/{1}] Deleted  {2}
+  删除失败  {0}：{1}	  Couldn't delete  {0}: {1}
+删除完成：{0} 个文件，{1}。	Deletion complete: {0} files, {1}.
+没有删掉（代码 {0}，可能文件正被占用，或者在提示里选了取消）	Not deleted (code {0}; a file may be in use, or Cancel was chosen in the prompt)
+没删干净，可能有文件正被占用	Not everything was deleted; some files may be in use
+空间地图：移到回收站	Space map: Move to Recycle Bin
+空间地图：永久删除	Space map: Delete permanently
+，失败：	, failed: 
+统计压缩前的实际占用	Measuring actual size before compression
+正在压缩 {0}	Compressing {0}
+  文件夹不在了：{0}	  Folder no longer exists: {0}
+  进不去：{0}	  Can't access: {0}
+压缩文件夹（NTFS）	Compress folder (NTFS)
+实际占用 {0} → {1}	Size on disk {0} → {1}
+检查有没有别的程序在用它的文件	Checking whether other programs are using its files
+这些程序正在使用它的组件：{0}。文件夹被它们占着，搬不了。输入法、右键菜单、杀毒、驱动这一类软件一般都不适合搬。	These programs are using its components: {0}. They're holding the folder, so it can't be moved. Software such as input methods, right-click menu extensions, antivirus and drivers is generally not suitable for moving.
+软件没搬：组件正被别的程序使用	App not moved: its components are in use by other programs
+关闭正在运行的程序	Closing running programs
+软件搬到其他盘：{0}	App moved to another drive: {0}
+安装文件夹整个搬走，原位置留链接	Whole install folder moved; link left in the original location
+卸载应用商店软件	Uninstall Microsoft Store app
+约 {0}	About {0}
+失败：	Failed: 
+软件残留：移到回收站（{0}）	App leftovers: Move to Recycle Bin ({0})
+没删掉，可能被占用	Not deleted; it may be in use
+  跳过（文件在扫描后变了）：{0}	  Skipped (file changed since the scan): {0}
+  跳过（和保留的那份内容不完全相同）：{0}	  Skipped (not identical to the kept copy): {0}
+  没合并：{0}：{1}	  Not merged: {0}: {1}
+合并为一份失败	Merge into one copy failed
+合并为一份（硬链接）	Merge into one copy (hard link)
+和 {0} 共用一份，腾出 {1}	Shares one copy with {0}, freed {1}
+C 盘清理	ClearC
+使用反馈	Feedback
+清理	Clean up
+清理 C 盘	Clean up C:
+重复文件	Duplicates
+省空间	Save space
+分析	Analyze
+空间地图	Space map
+软件管理	Apps
+管理	Manage
+搬家管理	Moved folders
+自动提醒	Reminders
+操作日志	Activity log
+帮助	Help
+分析占用	Analyze usage
+列出 C 盘上最占地方的文件夹和超过 1 GB 的文件，结果写在运行记录里	Lists the largest folders on C: and files over 1 GB; results are written to the Run log
+扫描	Scan
+「一键清理」会自动扫描并处理默认选中的项目。也可以先扫描，再逐项选择删除、搬到其他盘或跳过。	"One-click cleanup" scans automatically and handles the items selected by default. You can also scan first, then choose for each item whether to delete it, move it to another drive or skip it.
+自动扫描，清掉所有安全项和默认选中的项目，并把微信、QQ、飞书、钉钉等聊天记录搬到空间最大的其他盘。不会关闭休眠、不清空回收站，个人文件夹（桌面、文档、下载等）里的东西一律不删。	Scans automatically, cleans up all safe items and items selected by default, and moves chat history from WeChat, QQ, Feishu, DingTalk and others to the other drive with the most free space. It doesn't turn off hibernation or empty the Recycle Bin, and never deletes anything in your personal folders (Desktop, Documents, Downloads, etc.).
+可用	Free
+已用	Used
+搬家目标	Move destination
+选择文件夹…	Choose folder…
+聊天记录等搬到这里，C 盘原位置留一个链接，软件照常使用。	Chat history and similar data are moved here. A link is left in the original location on C:, and apps keep working as usual.
+点「扫描」看看 C 盘里有什么可以清理	Click "Scan" to see what can be cleaned up on C:
+往下翻一屏	Scroll down one page
+停止	Stop
+开始查找	Start search
+找出内容完全相同的文件，每组只留一份，其余删除。	Finds files with identical content, keeps one per group and deletes the rest.
+查找条件	Search criteria
+查找位置	Locations
+不在这里找了，移除	Remove this location from the search
+添加文件夹…	Add folder…
+系统目录、Program Files、AppData 和开发环境（.git、node_modules、conda）会自动跳过。	System folders, Program Files, AppData and development environments (.git, node_modules, conda) are skipped automatically.
+文件类型	File types
+其他扩展名	Other extensions
+全部重置	Reset all
+上面没有的类型，用空格隔开，例如 .dwg .step .sldprt	Types not listed above, separated by spaces, e.g. .dwg .step .sldprt
+文件大小	File size
+从	From
+到	to
+怎样算重复	Match by
+名字和内容都相同	Same name and content
+只看内容，名字不同也算	Content only, even if names differ
+比对方式	Comparison method
+快速	Fast
+16 MB 以内的文件读全文；更大的读头尾和 16 处抽样（每个约 1 MB）。删除前再逐字节完整比对。	Files up to 16 MB are read in full; larger ones are read at the start, the end and 16 sample points (about 1 MB each). Before deleting, files are compared again in full, byte by byte.
+完整比对	Full comparison
+每个可疑文件都读完全部内容。大视频多的时候会慢很多。	Reads the full contents of every candidate file. Much slower when there are many large videos.
+快速模式下大文件只抽样读约 1 MB；删除前都会逐字节完整核对，有任何不同就不删。	In fast mode, only about 1 MB of each large file is sampled. Before deleting, every file is fully verified byte by byte, and nothing is deleted if there is any difference.
+每组只留一份：	Keep one per group:
+留最新的	Keep newest
+留最早的	Keep oldest
+优先留 C 盘以外的	Prefer copies not on C:
+全部取消	Deselect all
+只有内容逐字节完全相同才算重复。	Only files that are identical byte for byte count as duplicates.
+C 盘个人文件夹里的文件受保护，不会删除	Files in personal folders on C: are protected and won't be deleted
+位置	Location
+修改时间	Modified
+注意	Note
+打开位置	Open location
+设置好条件后，点右上角「开始查找」	Set your criteria, then click "Start search" at the top right
+不删 C 盘个人文件夹里的文件	Don't delete files in personal folders on C:
+桌面、文档、下载、图片、视频、音乐等 C 盘个人文件夹里的副本一律保留，只删其他位置的副本	Copies in personal folders on C: (Desktop, Documents, Downloads, Pictures, Videos, Music, etc.) are always kept; only copies in other locations are deleted
+放入回收站，可以恢复	Move to Recycle Bin (can be restored)
+合并为一份	Merge into one copy
+勾选的副本换成指向保留那份的硬链接：每个位置的文件都还在，只占一份空间。只适用于同一块盘上的副本	Replaces the checked copies with hard links to the kept copy: the file stays in every location but takes up space only once. Only works for copies on the same drive
+删除勾选的文件	Delete checked files
+扫描整块盘，看清每个文件夹占了多少。双击文件夹往里点，一层层找到真正的大户。	Scans the whole drive to show how much space each folder takes. Double-click a folder to open it and work your way down to what's really taking up space.
+最大的文件	Largest files
+和上次比	Since last scan
+回到上一级文件夹	Go up one folder
+上一级	Up
+还没有扫描	Not scanned yet
+选一块盘，点「扫描」。C 盘通常一两分钟就能扫完。	Choose a drive and click "Scan". Drive C: usually takes a minute or two.
+上次	Previous
+这次	Current
+变化	Change
+点右上角「扫描」，看看这块盘的空间都去哪了	Click "Scan" at the top right to see where the space on this drive has gone
+压缩（不删文件）	Compress (keeps files)
+用 NTFS 压缩这个文件夹：文件照常打开、照常修改，只是占的空间变小。适合不常用的资料、旧项目	Compresses this folder with NTFS compression: files open and edit as usual, they just take up less space. Good for rarely used material and old projects
+删除…	Delete…
+刷新	Refresh
+不删任何文件也能腾出空间：系统压缩、把大系统文件挪到其他盘、压缩不常用的文件夹和虚拟磁盘。	Free up space without deleting any files: system compression, moving large system files to another drive, and compressing rarely used folders and virtual disks.
+系统压缩（CompactOS）	System compression (CompactOS)
+Windows 自带的功能：把系统文件压缩存放，通常能省 2 到 4 GB，不影响使用。压缩要 10 到 30 分钟，期间可以照常用电脑。固态硬盘几乎感觉不到变慢；很老的机械硬盘电脑不建议开。	A built-in Windows feature that stores system files compressed. It usually saves 2 to 4 GB and doesn't affect everyday use. Compression takes 10 to 30 minutes, and you can keep using your PC in the meantime. On an SSD you'll barely notice any slowdown; it isn't recommended for very old PCs with hard disk drives.
+页面文件（pagefile.sys）	Page file (pagefile.sys)
+内存不够用时，Windows 把暂时用不到的数据放进这个文件，通常有几个 GB 到十几 GB。可以把它放到其他硬盘，C 盘就不再占这块空间。要重启电脑才生效。改了以后蓝屏时可能无法保存完整的内存转储，对普通用户没有影响；如果有问题，随时点「恢复系统默认」。	When memory runs low, Windows moves data it doesn't need right now into this file, which is usually anywhere from a few GB to more than ten GB. You can put it on another drive so it no longer takes up space on C:. Takes effect after you restart your PC. Afterwards, Windows may not be able to save a complete memory dump after a blue screen, which doesn't affect most users; if anything goes wrong, click "Restore system default" at any time.
+恢复系统默认	Restore system default
+休眠文件（hiberfil.sys）	Hibernation file (hiberfil.sys)
+休眠和「快速启动」用的文件，大小约等于内存的四成到七成。「只留快速启动」能缩小到原来的一半左右，开机速度不变，只是不能手动休眠；「关闭休眠」整个删掉它，睡眠不受影响，只是没有休眠和快速启动。	Used by hibernation and "Fast Startup"; its size is about 40% to 70% of your memory. "Keep Fast Startup only" shrinks it to about half, and startup is just as fast, but you can't hibernate manually. "Turn off hibernation" deletes it entirely; Sleep is not affected, but there is no hibernation or Fast Startup.
+只留快速启动（缩小）	Keep Fast Startup only (smaller)
+压缩文件夹（NTFS 压缩）	Compress folders (NTFS compression)
+文件照常打开、照常修改，只是占的空间变小。文档、代码、日志、旧项目通常能省一半；照片、视频、压缩包本身已经压缩过，几乎省不了。也可以在「空间地图」里选中文件夹直接压缩。	Files open and edit as usual, they just take up less space. Documents, code, logs and old projects often shrink by half; photos, videos and archives are already compressed and barely shrink. You can also select a folder in "Space map" and compress it directly.
+虚拟磁盘、模拟器和虚拟机	Virtual disks, emulators and virtual machines
+WSL、Docker、安卓模拟器、虚拟机的磁盘文件动辄几十 GB，而且在里面删了东西也不会自动变小。压缩能把空出来的部分还给 Windows；文件夹形式的可以整个搬到其他盘。	Disk files for WSL, Docker, Android emulators and virtual machines often run to tens of GB, and they don't shrink when you delete things inside them. Compacting returns the freed space to Windows; those stored as folders can be moved to another drive as a whole.
+这台电脑上没找到 WSL、Docker、安卓模拟器或虚拟机的磁盘。	No disks for WSL, Docker, Android emulators or virtual machines were found on this PC.
+去找重复文件	Find duplicates
+合并重复文件	Merge duplicates
+同一块盘上内容完全相同的文件，可以合并成一份：每个位置的文件都还在，只占一份空间。在「重复文件」页找完后，点「合并为一份」。	Files with identical content on the same drive can be merged into one copy: the file stays in every location but takes up space only once. After searching on the "Duplicates" page, click "Merge into one copy".
+装过的软件按占用空间从大到小排。装在 C 盘的可以「搬到其他盘」，软件照常使用、不用重装；不用的可以直接卸载，卸载后再检查有没有残留文件夹。	Installed apps are sorted by size, largest first. Apps installed on C: can be moved with "Move to another drive" and keep working without reinstalling; apps you no longer use can be uninstalled, and then checked for leftover folders.
+全部	All
+装在 C 盘的	On C:
+按名字或发行商搜索	Search by name or publisher
+不用了	No thanks
+检查残留	Check leftovers
+把整个安装文件夹搬到其他盘，C 盘原位置留一个链接，软件照常使用，不用重装	Moves the whole install folder to another drive and leaves a link in the original location on C:. The app keeps working without reinstalling
+正在读取已安装的软件…	Reading installed apps…
+搬到其他盘的文件夹都在这里：看链接是否正常，需要时搬回 C 盘，或修复断掉的链接。	All folders moved to other drives are listed here. Check that their links work, move them back to C: when needed, or repair broken links.
+打开	Open
+修复链接	Repair link
+删除多余副本	Delete extra copy
+还没有搬过文件夹。在「清理 C 盘」里把项目选成「搬到其他盘」并执行，就会出现在这里。	No folders have been moved yet. In "Clean up C:", set an item to "Move to another drive" and run it, and it will appear here.
+C 盘快满时提醒你，每周自动清一次缓存，并记下空间的变化。两项都默认关闭，打开开关才生效。开启后由 Windows 自己定时运行，不需要一直开着本工具，也不需要开机启动。	Reminds you when C: is almost full, cleans caches automatically once a week, and records how space changes. Both are off by default and only take effect when you turn them on. Once on, Windows runs them on a schedule, so this tool doesn't need to stay open or start with Windows.
+C 盘空间不足时提醒我	Remind me when C: is low on space
+剩余空间低于	When free space is below
+时，在屏幕右下角弹出提醒（每天最多一次）	show a reminder in the lower-right corner of the screen (at most once a day)
+每周自动清理一次	Clean up automatically once a week
+不用开着本工具。每周日中午 12:30（错过了就在下次开机后）由 Windows 任务计划在后台自动做一遍「可以放心删」里的项目：临时文件、各类缓存和日志。不搬家、不清空回收站、不碰任何个人文件夹，也不会关闭正在运行的软件（被占用的文件直接跳过）。做完在右下角告诉你释放了多少，每一项都记在「操作日志」里。	This tool doesn't need to be open. Every Sunday at 12:30 PM (or after the next startup if that time is missed), Windows Task Scheduler runs the items under "Safe to delete" in the background: temporary files, caches and logs. It doesn't move anything, doesn't empty the Recycle Bin, never touches personal folders, and doesn't close running apps (files in use are simply skipped). When it's done, a notification in the lower-right corner tells you how much was freed, and every item is recorded in the "Activity log".
+C 盘空间变化	Space on C: over time
+柱子越高表示 C 盘已经用掉的越多（每天取最后一次记录）。每次打开本工具、每次定时检查都会记一笔。想知道是哪些文件夹变大了，到「空间地图」扫一遍，再选「和上次比」。	The taller the bar, the more of C: is used (the last record of each day). A record is added every time you open this tool and at every scheduled check. To find out which folders grew, scan in "Space map", then choose "Since last scan".
+打开日志文件夹	Open log folder
+删除、搬运、合并、压缩、卸载和系统设置的每一次改动都记在这里，可以按类别、时间和关键字查找。	Every deletion, move, merge, compression, uninstall and system setting change is recorded here. You can search by category, time and keyword.
+日志保存时间	Keep logs for
+半年（默认）	6 months (default)
+搬运	Move
+7 天	7 days
+30 天	30 days
+按文件名、文件夹或操作搜索	Search by file name, folder or action
+时间	Time
+类别	Category
+操作	Action
+对象	Item
+详情	Details
+还没有操作记录	No activity yet
+收起	Hide
+全部项目	All items
+在后台继续	Continue in background
+C 盘清理工具	ClearC
+微信	WeChat
+企业微信	WeCom
+腾讯会议	Tencent Meeting
+飞书	Feishu
+钉钉	DingTalk
+Android 模拟器	Android emulator
+日志	Log
+切换界面语言	Switch UI language
+{0} 项	{0} items
+'@
+# 英文的帮助页（整页替换中文的那一页）
+$script:helpEnXaml = @'
+    <!-- ==================== Help: instructions, safety notice, feedback ==================== -->
+    <Grid x:Name="PageHelp" Grid.Column="1" Grid.Row="0" Visibility="Collapsed">
+      <ScrollViewer x:Name="HelpScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+        <StackPanel Margin="30,24,30,28" MaxWidth="880" HorizontalAlignment="Left">
+          <TextBlock Text="Help" Style="{StaticResource PageTitle}"/>
+          <TextBlock Style="{StaticResource PageSub}" Text="How to use ClearC, the safety notice, and how to contact the developer."/>
+          <Border x:Name="RiskCard" Background="#FFF6F6" BorderBrush="#F3C4C8" BorderThickness="1" CornerRadius="12" Padding="24,20,24,20" Margin="0,20,0,0">
+            <DockPanel>
+              <TextBlock DockPanel.Dock="Left" Text="&#xE7BA;" FontFamily="{StaticResource Icons}" FontSize="20" Foreground="#D70015" VerticalAlignment="Top" Margin="0,1,14,0"/>
+              <StackPanel>
+                <TextBlock Text="Safety notice" Style="{StaticResource HelpHead}" Foreground="#A1000F"/>
+                <DockPanel Margin="0,8,0,0">
+                  <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                  <TextBlock Style="{StaticResource HelpPara}"><Run>Deleting removes files from your PC. Files that aren't moved to the Recycle Bin usually can't be recovered after deletion, which may lead to data loss.</Run></TextBlock>
+                </DockPanel>
+                <DockPanel Margin="0,8,0,0">
+                  <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                  <TextBlock Style="{StaticResource HelpPara}"><Run>Before each deletion, make sure you really no longer need these files and that deleting them won't cause you any loss. Back up important files first.</Run></TextBlock>
+                </DockPanel>
+                <DockPanel Margin="0,8,0,0">
+                  <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                  <TextBlock Style="{StaticResource HelpPara}"><Run>ClearC only does what you choose. For any data loss or other damage caused by deleting or moving files with ClearC, </Run><Run FontWeight="SemiBold" Foreground="#A1000F">you are solely responsible; the developer accepts no liability</Run><Run>.</Run></TextBlock>
+                </DockPanel>
+                <DockPanel Margin="0,8,0,0">
+                  <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                  <TextBlock Style="{StaticResource HelpPara}"><Run>By continuing to use ClearC, you confirm that you understand and accept these risks.</Run></TextBlock>
+                </DockPanel>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
+            <StackPanel>
+              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                <TextBlock Text="&#xE768;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <TextBlock Text="Getting started" Style="{StaticResource HelpHead}"/>
+              </StackPanel>
+              <DockPanel Margin="0,10,0,0">
+                <Border DockPanel.Dock="Left" Width="22" Height="22" CornerRadius="11" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0">
+                  <TextBlock Text="1" Foreground="White" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">One-click cleanup</Run><Run>: on the "Clean up C:" page, click "One-click cleanup". ClearC scans first, then handles the items selected by default: it deletes caches, temporary files and logs, and moves chat history from WeChat, QQ, WeCom, Feishu, DingTalk and similar apps to the other drive with the most free space. Before it starts, it lists every item for you to confirm.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,10,0,0">
+                <Border DockPanel.Dock="Left" Width="22" Height="22" CornerRadius="11" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0">
+                  <TextBlock Text="2" Foreground="White" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Choose for yourself</Run><Run>: click "Scan" first, choose "Delete", "Move to another drive" or "Skip" on each row, then click "Run selected" at the bottom right.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,10,0,0">
+                <Border DockPanel.Dock="Left" Width="22" Height="22" CornerRadius="11" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0">
+                  <TextBlock Text="3" Foreground="White" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Find duplicates</Run><Run>: switch to "Duplicates" on the left, choose the locations and criteria, then click "Start search". After checking the selection, click "Delete checked files".</Run></TextBlock>
+              </DockPanel>
+            </StackPanel>
+          </Border>
+          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
+            <StackPanel>
+              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                <TextBlock Text="&#xEDA2;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <TextBlock Text="Clean up C:" Style="{StaticResource HelpHead}"/>
+              </StackPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>The list is split into groups. </Run><Run FontWeight="SemiBold">Safe to delete</Run><Run>: caches, temporary files and logs, which apps rebuild automatically. </Run><Run FontWeight="SemiBold">Needs confirmation</Run><Run>: items that come at a cost (for example, after deleting Windows.old you can't go back to your previous version of Windows, and after emptying the Recycle Bin you can't get back files you deleted earlier). These are skipped by default; read the description before selecting them. </Run><Run FontWeight="SemiBold">Chat history</Run><Run> and </Run><Run FontWeight="SemiBold">other movable folders</Run><Run>: this data can't be deleted, only moved as a whole to another drive.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Nothing in your personal folders is ever deleted</Run><Run>: cleanup never deletes any file in your personal folders on C: (Desktop, Documents, Downloads, Pictures, Videos, Music, Favorites, OneDrive and so on). Even if you select one by mistake, it is skipped automatically. Desktop and Downloads offer only "Move to another drive" (your files are kept as they are), and they are skipped by default.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>After a scan, the top of the list shows how many items were found and how many groups they fall into; each group heading also shows its item count. When there are many items, scroll down the page; a hint at the bottom tells you how many more are below.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Chat apps that can be moved</Run><Run>: WeChat (new and old versions), QQ, WeCom, Tencent Meeting, Feishu, DingTalk and Telegram. The scan lists whichever of these are installed on your PC; apps that aren't installed don't appear.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>The </Run><Run FontWeight="SemiBold">Move destination</Run><Run> defaults to the local drive with the most free space. You can pick a different drive from the drop-down list, or click "Choose folder…". Only local hard drives can be used; network drives, cloud drives and USB flash drives can't.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">How moving works</Run><Run>: ClearC closes the apps using the folder, copies it to the target drive, verifies the size on both sides, replaces the original location with a link, and finally deletes the original folder on C:. Afterwards only a link remains at the original location on C: (it takes up almost no space). When an app opens the original path, Windows automatically redirects reads and writes to the target drive, so the app notices no change and you don't need to change any settings.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>Please </Run><Run FontWeight="SemiBold">don't delete, rename or move</Run><Run> the CDriveMoved folder on the target drive, or WeChat, QQ and other apps won't be able to find their chat history and files.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>When you move chat history and the chat app is still open, you'll be asked to quit it first. After copying, ClearC verifies the number of files and their size on both sides again, and deletes the original folder on C: only if not a single file is missing. If the original folder is still in use by another program, the copy already made is kept; quit the related apps and run the move again, and only changed files are copied, so it finishes quickly.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Analyze usage</Run><Run> lists the largest folders on C: and files over 1 GB. The results appear in the "Run log" at the bottom left.</Run></TextBlock>
+              </DockPanel>
+            </StackPanel>
+          </Border>
+          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
+            <StackPanel>
+              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                <TextBlock Text="&#xE8C8;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <TextBlock Text="Duplicates" Style="{StaticResource HelpHead}"/>
+              </StackPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Search locations</Run><Run>: click a chip to select or deselect it. Use "Add folder…" to add your own locations; those with a small × can be removed. System folders, program folders and development environments are skipped automatically.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">File type, file size</Run><Run>: only the selected types and size range are searched; the narrower the range, the faster the search. Choose "Custom" to enter a size yourself.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">What counts as a duplicate</Run><Run>: by default, both the file name and the content must match. With "Content only", files with different names but the same content also count. Either way, files count as duplicates only if their content is identical byte for byte.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Comparison method</Run><Run>: "Quick" reads only samples of large files; "Full comparison" reads every file completely, which is slower but more thorough. In Quick mode, files are still fully verified byte for byte before deletion, and nothing is deleted if there is any difference.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Results</Run><Run>: each group lists all copies. By default the newest copy in each group is kept and the rest are selected; you can instead keep the oldest, prefer keeping copies outside C:, or select them yourself. "Open location" shows the file in File Explorer.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Personal folders on C: are protected</Run><Run>: "Don't delete files in personal folders on C:" is on by default. Copies in Desktop, Documents, Downloads, Pictures, Videos, Music and similar locations show a small lock and can't be selected or deleted; only copies elsewhere are deleted. If you really want to delete copies in these locations, clear that checkbox and confirm again.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>Files are </Run><Run FontWeight="SemiBold">moved to the Recycle Bin</Run><Run> by default, so anything deleted by mistake can be restored from there. Clearing "Move to Recycle Bin" deletes files permanently, and they can't be recovered. Items marked "Caution" are in program folders or WeChat data; check them carefully before deleting.</Run></TextBlock>
+              </DockPanel>
+            </StackPanel>
+          </Border>
+          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
+            <StackPanel>
+              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                <TextBlock Text="&#xE7B8;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <TextBlock Text="Save space (without deleting files)" Style="{StaticResource HelpHead}"/>
+              </StackPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">System compression (CompactOS)</Run><Run>: built into Windows, it stores system files compressed, usually saving 2 to 4 GB without affecting everyday use.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Page file</Run><Run>: moves pagefile.sys to another drive, freeing a few GB on C:. It takes effect after a restart, and you can restore the Windows default at any time.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Hibernation file</Run><Run>: "Keep Fast Startup only" shrinks hiberfil.sys by about half; "Turn off hibernation" removes it entirely.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Compress folders</Run><Run>: uses NTFS compression. Files open and edit as usual; they just take up less space. Good for documents, code and old projects.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Virtual disks</Run><Run>: WSL and Docker virtual disks don't shrink automatically when you delete files inside them; compacting them gives the space back to Windows. Android emulator and virtual machine folders can be moved to another drive as a whole.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Merge duplicate files</Run><Run>: on the "Duplicates" page, click "Merge into one copy". Duplicate files on the same drive then take up the space of just one copy, while the file stays in every location. After merging, editing the file in one location changes it in all the others, so this suits photos, videos and installers you won't change again.</Run></TextBlock>
+              </DockPanel>
+            </StackPanel>
+          </Border>
+          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
+            <StackPanel>
+              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                <TextBlock Text="&#xE9D9;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <TextBlock Text="Space map" Style="{StaticResource HelpHead}"/>
+              </StackPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Scan</Run><Run>: choose a drive and click "Scan" to measure the size of every folder. It only looks and changes nothing. Drive C: usually takes a minute or two.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Drill down</Run><Run>: double-click a folder to open the next level, and click "Up one level" to go back. The blue bar on each row shows how large it is within the current level.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Largest files</Run><Run>: lists the 500 largest files over 50 MB on the drive. </Run><Run FontWeight="SemiBold">Compare with last scan</Run><Run>: compares with the previous scan and lists folders that grew or shrank by more than 100 MB, so you can find what has been slowly eating up your space.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>Select a row to </Run><Run FontWeight="SemiBold">Open location</Run><Run>, </Run><Run FontWeight="SemiBold">Compress (keeps files)</Run><Run> or </Run><Run FontWeight="SemiBold">Delete</Run><Run>. When deleting, you can choose "Move to Recycle Bin" (can be restored) or "Delete permanently" (frees space immediately); either way, you must tick the confirmation box first.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>Items with a </Run><Run FontWeight="SemiBold">small lock</Run><Run> can't be deleted here: system folders, app installation folders (uninstall those on the "Apps" page), personal folders on C:, and moved data (the CDriveMoved folder).</Run></TextBlock>
+              </DockPanel>
+            </StackPanel>
+          </Border>
+          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
+            <StackPanel>
+              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                <TextBlock Text="&#xE71D;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <TextBlock Text="Apps" Style="{StaticResource HelpHead}"/>
+              </StackPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>Lists all installed apps (including Microsoft Store apps), sorted by size from largest to smallest. You can show only apps installed on C:, or search by name.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Uninstall</Run><Run> opens the app's own uninstaller; just follow its prompts. When it's done, come back here and click "</Run><Run FontWeight="SemiBold">Check leftovers</Run><Run>". ClearC looks for folders named after the app that remain after uninstalling, and moves them to the Recycle Bin once you confirm.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>A publisher's top-level folder (such as Tencent or Microsoft) is never treated as leftovers, and neither are built-in Windows programs.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Move to another drive</Run><Run>: for apps installed on C:, the whole installation folder can be moved to another drive, leaving a link at the original location on C:. Shortcuts, the Start menu, uninstalling and automatic updates all keep working, with no reinstall needed. The copy on C: is deleted only after ClearC verifies that the files on both sides are identical; if the app is running, you'll be asked before it's closed.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>Apps that aren't suitable for moving are never forced; ClearC tells you why. These include apps with system services or drivers (antivirus, VPN, drivers, remote control and so on), apps that add right-click menus to File Explorer, input methods, Microsoft's own software (Office, Visual Studio and so on), built-in Windows components, apps whose folder contains links or files compressed with Windows compression (they could be missed when copying), and apps that don't state which folder they're installed in. For Microsoft Store apps, use "Move" in Windows Settings → Apps.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>Moved apps appear in "</Run><Run FontWeight="SemiBold">Moved folders</Run><Run>", where you can "Move back to C:" at any time. When an app gets a major upgrade later, a few installers will reinstall it on C:; just move it again then.</Run></TextBlock>
+              </DockPanel>
+            </StackPanel>
+          </Border>
+          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
+            <StackPanel>
+              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                <TextBlock Text="&#xE8AB;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <TextBlock Text="Moved folders" Style="{StaticResource HelpHead}"/>
+              </StackPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>Every folder moved to another drive is listed here, each with its current status.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">OK</Run><Run>: the data is on the target drive, and the original location on C: holds only a link to it, which takes no space on C:. Apps work as usual. If needed, you can "</Run><Run FontWeight="SemiBold">Move back to C:</Run><Run>": the data is copied back, the link is removed only after the copy is verified, and finally the copy on the target drive is deleted.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Broken link</Run><Run>: the target drive was unplugged or its drive letter changed. Plug the drive back in (or change the drive letter back) to fix it. If a copy with the same name is found on another drive, use "Repair link" to point the link to it.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Incomplete</Run><Run>: the original folder is still on C:, and there is a copy on the target drive. You can run the move again on "Clean up C:" (only the differences are copied), or delete the extra copy.</Run></TextBlock>
+              </DockPanel>
+            </StackPanel>
+          </Border>
+          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
+            <StackPanel>
+              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                <TextBlock Text="&#xE823;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <TextBlock Text="Reminders" Style="{StaticResource HelpHead}"/>
+              </StackPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Low-space reminder</Run><Run>: when turned on, ClearC checks drive C: 2 minutes after each sign-in and again at noon every day. If free space falls below the value you set (20 GB by default), a reminder appears at the bottom right of the screen, at most once a day; if there is enough space, nothing is shown.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Weekly cleanup</Run><Run>: when turned on, temporary files, caches and logs are cleaned up automatically every Sunday. It doesn't move anything, doesn't empty the Recycle Bin and doesn't touch personal folders; files in use are simply skipped.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>Windows Task Scheduler runs ClearC on schedule for both, so </Run><Run FontWeight="SemiBold">you don't need to keep ClearC open or set it to start with Windows</Run><Run>. The task names start with CleanC. Both are </Run><Run FontWeight="SemiBold">off by default</Run><Run>, and turning a switch off deletes its task.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>Please keep ClearC in a fixed location (such as D:\Tools) and don't delete it. If you move it, open it once and the tasks will switch to the new location automatically.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Space on C: over time</Run><Run>: free space is recorded each time you open ClearC and at each scheduled check, and shown as a bar chart of the last 30 days.</Run></TextBlock>
+              </DockPanel>
+            </StackPanel>
+          </Border>
+          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
+            <StackPanel>
+              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                <TextBlock Text="&#xE81C;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <TextBlock Text="Activity log" Style="{StaticResource HelpHead}"/>
+              </StackPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>Every change made by </Run><Run FontWeight="SemiBold">deleting, moving, merging, compressing, uninstalling and system settings</Run><Run> is recorded: when, what was done, to which file or folder, and the result. Only the actions are recorded; file contents are never saved.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>You can filter by category (Delete, Move, Merge…), time (7 days, 30 days, All) and keyword. The logs are plain .txt files, one per month; click "Open log folder" to read them directly in Notepad.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Records are kept for 6 months by default</Run><Run>; you can change this to anywhere from 1 month to 2 years, or keep them forever. Each time you open ClearC, records older than the retention period are deleted automatically and can't be recovered. When you shorten the retention period, ClearC first tells you the date before which records will be deleted.</Run></TextBlock>
+              </DockPanel>
+            </StackPanel>
+          </Border>
+          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
+            <StackPanel>
+              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                <TextBlock Text="&#xE897;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <TextBlock Text="Common questions" Style="{StaticResource HelpHead}"/>
+              </StackPanel>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Why does ClearC need administrator rights?</Run><LineBreak/><Run>Cleaning locations such as system temporary files and the Windows Update cache requires administrator rights.</Run></TextBlock>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Can I close the window while it's running?</Run><LineBreak/><Run>Please don't close the window until the work is done. You can click "Continue in background" to collapse the progress card; progress is still shown at the bottom of the window and on the taskbar icon.</Run></TextBlock>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Where can I see the details?</Run><LineBreak/><Run>For the deletions and moves that were made, see "Activity log" on the left. For technical details of what the program did, see "Run log" at the bottom left; the full file is at %TEMP%\CleanC-run.log.</Run></TextBlock>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Less space freed than expected?</Run><LineBreak/><Run>Files moved to the Recycle Bin only free up space after you empty the Recycle Bin, and files in use by other programs are skipped.</Run></TextBlock>
+            </StackPanel>
+          </Border>
+          <Border x:Name="FeedbackCard" Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
+            <StackPanel>
+              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                <TextBlock Text="&#xE8BD;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <TextBlock Text="Feedback" Style="{StaticResource HelpHead}"/>
+              </StackPanel>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,8,0,0" Text="If you run into a problem, find a bug or have a suggestion, feel free to contact the developer directly."/>
+              <Border Background="#F5F5F7" CornerRadius="10" Padding="18,14" Margin="0,14,0,0">
+                <DockPanel>
+                  <Button x:Name="BtnCopyWx" DockPanel.Dock="Right" Style="{StaticResource Primary}" Content="Copy WeChat ID" Padding="18,7" VerticalAlignment="Center"/>
+                  <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Width="40" Height="40" CornerRadius="20" Background="#E6F4EA">
+                      <TextBlock Text="&#xE8BD;" FontFamily="{StaticResource Icons}" FontSize="18" Foreground="#248A3D" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
+                      <TextBlock Text="Developer's WeChat" Style="{StaticResource Caption}"/>
+                      <TextBlock x:Name="DevWx" Text="45915504" FontSize="20" FontWeight="SemiBold" Margin="0,1,0,0" TextOptions.TextFormattingMode="Ideal"/>
+                    </StackPanel>
+                  </StackPanel>
+                </DockPanel>
+              </Border>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,14,0,0" Text="Including a screenshot of the problem and the diagnostic info helps find the cause faster. Diagnostic info includes the app version, Windows version, space on C: and the recent run log (which contains folder paths), so you may want to review it before sending."/>
+              <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                <Button x:Name="BtnCopyDiag" Content="Copy diagnostic info" Margin="0,0,8,0"/>
+                <Button x:Name="BtnOpenLog" Content="Open run log file"/>
+                <TextBlock x:Name="CopyHint" Style="{StaticResource Caption}" Foreground="#248A3D" Margin="14,0,0,0"/>
+              </StackPanel>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+    </Grid>
+'@
+
+# ---------- 界面语言：设置里的 Lang=zh / en；没设过就跟系统显示语言走（中文系统用中文，其他用英文） ----------
+function Get-UiLang {
+    try {
+        $f = Join-Path $env:LOCALAPPDATA 'CleanC\settings.txt'
+        if (Test-Path -LiteralPath $f) { foreach ($l in [IO.File]::ReadAllLines($f, [Text.Encoding]::UTF8)) { if ($l -match '^\s*Lang\s*=\s*(zh|en)\s*$') { return $matches[1] } } }
+    } catch {}
+    if ([Globalization.CultureInfo]::CurrentUICulture.Name -like 'zh*') { return 'zh' }
+    return 'en'
+}
+$script:Lang = Get-UiLang
+$script:L10n = $null
+if ($script:Lang -eq 'en') {
+    $script:L10n = New-Object 'System.Collections.Generic.Dictionary[string,string]'
+    $unesc = { param($x) $x.Replace('\\', [string][char]1).Replace('\t', "`t").Replace('\r', "`r").Replace('\n', "`n").Replace([string][char]1, '\') }
+    foreach ($l in ($script:l10nData -split "`r?`n")) {
+        $i = $l.IndexOf("`t"); if ($i -le 0) { continue }
+        $script:L10n[(& $unesc $l.Substring(0, $i))] = (& $unesc $l.Substring($i + 1))
+    }
+}
+try { [L10n]::Map = $script:L10n } catch {}
+
 Invoke-Expression $engine
 $catalog = Get-Catalog
 
@@ -2154,7 +3465,7 @@ $catalog = Get-Catalog
 #   /check      检查 C 盘剩余空间，低于设定值时在右下角提醒（每天最多一次）
 #   /autoclean  每周自动清理一次「安全清理」里的缓存，做完在右下角告诉你
 # ============================================================
-function Show-Toast([string]$Title, [string]$Text, [string[]]$Buttons = @('好'), [int]$AutoClose = 0) {
+function Show-Toast([string]$Title, [string]$Text, [string[]]$Buttons = @((T '好')), [int]$AutoClose = 0) {
     $x = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent" ResizeMode="NoResize" ShowInTaskbar="True" Topmost="True"
@@ -2175,6 +3486,7 @@ function Show-Toast([string]$Title, [string]$Text, [string[]]$Buttons = @('好')
   </Border>
 </Window>
 '@
+    $x = $x.Replace('C 盘清理工具', (T 'C 盘清理工具'))
     $w = [Windows.Markup.XamlReader]::Parse($x)
     $w.FindName('TTitle').Text = $Title
     $w.FindName('TText').Text = $Text
@@ -2214,8 +3526,8 @@ if ($script:mode -match '(?i)/check') {
     $today = (Get-Date).ToString('yyyy-MM-dd')
     if ($free -lt $gb * 1GB -and (Get-Setting 'LastRemind' '') -ne $today) {
         Set-Setting 'LastRemind' $today
-        $ans = Show-Toast -Title ("C 盘只剩 {0} 了" -f (GB $free)) -Text ("低于你设定的 {0} GB。打开 C 盘清理工具，看看能清掉或搬走什么？`n（在工具的「自动提醒」页可以关掉这个提醒）" -f $gb) -Buttons @('稍后', '打开清理工具')
-        if ($ans -eq '打开清理工具' -and $env:CLEANC_SELF) { Start-Process -FilePath $env:CLEANC_SELF }
+        $ans = Show-Toast -Title ((T "C 盘只剩 {0} 了") -f (GB $free)) -Text ((T "低于你设定的 {0} GB。打开 C 盘清理工具，看看能清掉或搬走什么？`n（在工具的「自动提醒」页可以关掉这个提醒）") -f $gb) -Buttons @((T '稍后'), (T '打开清理工具'))
+        if ($ans -eq (T '打开清理工具') -and $env:CLEANC_SELF) { Start-Process -FilePath $env:CLEANC_SELF }
     }
     $global:CLEANC_UI_SHOWN = $true
     return
@@ -2224,8 +3536,8 @@ if ($script:mode -match '(?i)/autoclean') {
     [void](Prune-OpLog (Get-LogMonths))
     $r = Invoke-AutoClean
     Add-History
-    OpLog '删除' '每周自动清理完成' '' ("C 盘多出 {0}；{1}" -f (GB $r.Freed), ($r.Items -join '；'))
-    [void](Show-Toast -Title '每周自动清理完成' -Text ("C 盘多出 {0}。只清了临时文件、缓存和日志，没有碰任何个人文件。每一项都记在「操作日志」里。" -f (GB $r.Freed)) -Buttons @('好') -AutoClose 30)
+    OpLog '删除' (T '每周自动清理完成') '' ((T "C 盘多出 {0}；{1}") -f (GB $r.Freed), ($r.Items -join (T '；')))
+    [void](Show-Toast -Title (T '每周自动清理完成') -Text ((T "C 盘多出 {0}。只清了临时文件、缓存和日志，没有碰任何个人文件。每一项都记在「操作日志」里。") -f (GB $r.Freed)) -Buttons @((T '好')) -AutoClose 30)
     $global:CLEANC_UI_SHOWN = $true
     return
 }
@@ -3037,6 +4349,12 @@ if ($script:mode -match '(?i)/autoclean') {
           </StackPanel>
         </StackPanel>
         <StackPanel DockPanel.Dock="Bottom">
+          <Button x:Name="BtnLang" Style="{StaticResource LinkButton}" Foreground="#6E6E73" Padding="11,6" HorizontalAlignment="Left" ToolTip="中文 / English">
+            <StackPanel Orientation="Horizontal">
+              <TextBlock Text="&#xE774;" FontFamily="{StaticResource Icons}" FontSize="13" VerticalAlignment="Center" Margin="0,0,9,0"/>
+              <TextBlock x:Name="BtnLangText" Text="English" VerticalAlignment="Center"/>
+            </StackPanel>
+          </Button>
           <Button x:Name="BtnFeedback" Style="{StaticResource LinkButton}" Foreground="#6E6E73" Padding="11,6" HorizontalAlignment="Left">
             <StackPanel Orientation="Horizontal">
               <TextBlock Text="&#xE8BD;" FontFamily="{StaticResource Icons}" FontSize="13" VerticalAlignment="Center" Margin="0,0,9,0"/>
@@ -3867,7 +5185,7 @@ if ($script:mode -match '(?i)/autoclean') {
                   <GridViewColumn.CellTemplate>
                     <DataTemplate>
                       <Border CornerRadius="9" Padding="8,1,8,2" Background="{Binding CatBg}" HorizontalAlignment="Left">
-                        <TextBlock Text="{Binding Cat}" FontSize="11.5" Foreground="{Binding CatFg}"/>
+                        <TextBlock Text="{Binding CatText}" FontSize="11.5" Foreground="{Binding CatFg}"/>
                       </Border>
                     </DataTemplate>
                   </GridViewColumn.CellTemplate>
@@ -4336,6 +5654,30 @@ $script:sheetXaml = @'
 </Window>
 '@
 
+if ($script:Lang -eq 'en') {
+    # 换成英文的帮助页
+    try {
+        $ns = New-Object System.Xml.XmlNamespaceManager $xaml.NameTable
+        $ns.AddNamespace('w', 'http://schemas.microsoft.com/winfx/2006/xaml/presentation'); $ns.AddNamespace('x', 'http://schemas.microsoft.com/winfx/2006/xaml')
+        $old = $xaml.SelectSingleNode("//w:Grid[@x:Name='PageHelp']", $ns)
+        $frag = [xml]("<R xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml'>" + $script:helpEnXaml + '</R>')
+        $new = $frag.DocumentElement.SelectSingleNode("w:Grid[@x:Name='PageHelp']", $ns)
+        if ($old -and $new) { [void]$old.ParentNode.ReplaceChild($xaml.ImportNode($new, $true), $old) }
+    } catch {}
+    # 英文词更长：重复文件页左边那一列标签放宽一点
+    foreach ($cd in $xaml.SelectNodes("//*[local-name()='ColumnDefinition' and @Width='92']")) { $cd.SetAttribute('Width', '108') }
+    # 其余文字逐个查表
+    $attrs = @('Text', 'Content', 'ToolTip', 'Header', 'Title')
+    foreach ($el in $xaml.SelectNodes('//*')) {
+        foreach ($a in @($el.Attributes)) {
+            # 触发器里和数据比较的值（比如行的操作「删除」）也要换成同样的英文，否则颜色等样式对不上
+            $use = ($attrs -contains $a.LocalName) -or ($a.LocalName -eq 'Value' -and (($el.LocalName -eq 'Setter' -and ($attrs -contains [string]$el.GetAttribute('Property'))) -or $el.LocalName -in @('Condition', 'DataTrigger', 'Trigger')))
+            if ($use -and $a.Value -and -not $a.Value.StartsWith('{')) { $a.Value = T $a.Value }
+            elseif ($use -and $a.Value -like "*StringFormat='{}{0} 项'*") { $a.Value = $a.Value.Replace("{}{0} 项", '{}' + (T '{0} 项')) }
+        }
+        foreach ($c in @($el.ChildNodes)) { if ($c.NodeType -eq 'Text' -and $c.Value) { $c.Value = T $c.Value } }
+    }
+}
 $win = [Windows.Markup.XamlReader]::Load((New-Object System.Xml.XmlNodeReader $xaml))
 $ctl = @{}
 foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageMap','PageSave','PageApps','PageMoves','PageAuto','PageLog','BtnDupMerge',
@@ -4345,7 +5687,7 @@ foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageM
                'BtnMovesRefresh','MovesInfo','MovesList','EmptyMoves','EmptyMovesText',
                'AutoRemindOn','AutoRemindGB','AutoRemindNote','AutoCleanOn','AutoCleanNote','HistInfo','HistChart','HistLast','HistFirst',
                'BtnLogOpenDir','BtnLogRefresh','LogKeep','LogKeepNote','LogCats','LogRange','LogSearch','LogCount','LogList','EmptyLog','EmptyLogText',
-               'NavHelp','PageHelp','HelpScroll','FeedbackCard','RiskCard','BtnFeedback','BtnCopyWx','BtnCopyDiag','BtnOpenLog','CopyHint','DevWx',
+               'BtnLang','BtnLangText','NavHelp','PageHelp','HelpScroll','FeedbackCard','RiskCard','BtnFeedback','BtnCopyWx','BtnCopyDiag','BtnOpenLog','CopyHint','DevWx',
                'NavClean','NavDup','PageClean','PageDup','AppVer','BtnLog','BtnLogText','BtnLogHide','LogPanel','Dim',
                'CapFree','CapTotal','CapBar','CapReclaim','EmptyClean','EmptyCleanText','EmptyDup','EmptyDupText','SizeCustomRow',
                'DestPick','BtnDestBrowse','DestHint','BtnOneClick','BtnScan','BtnRun','BtnHogs','Hint','List','Summary','Log',
@@ -4396,32 +5738,32 @@ $ctl.BtnFeedback.Add_Click({
     $ctl.FeedbackCard.BringIntoView()
 })
 $ctl.BtnCopyWx.Add_Click({
-    try { [System.Windows.Clipboard]::SetText($script:devWechat); $ctl.BtnCopyWx.Content = '已复制' } catch { $ctl.BtnCopyWx.Content = '复制失败，请手动输入' }
+    try { [System.Windows.Clipboard]::SetText($script:devWechat); $ctl.BtnCopyWx.Content = (T '已复制') } catch { $ctl.BtnCopyWx.Content = (T '复制失败，请手动输入') }
 })
 $ctl.BtnCopyDiag.Add_Click({
     $c = $null; try { $c = New-Object System.IO.DriveInfo 'C:\' } catch {}
     $info = @(
-        "C 盘清理工具 $script:AppVersion"
-        ("Windows {0}，{1} 位" -f [Environment]::OSVersion.Version, $(if ([Environment]::Is64BitOperatingSystem) { 64 } else { 32 }))
-        $(if ($c) { "C 盘剩余 {0} / 共 {1}" -f (Fmt $c.AvailableFreeSpace), (Fmt $c.TotalSize) } else { '' })
-        ("屏幕可用区域 {0:N0} x {1:N0}" -f [System.Windows.SystemParameters]::WorkArea.Width, [System.Windows.SystemParameters]::WorkArea.Height)
+        ((T "C 盘清理工具 {0}") -f $script:AppVersion)
+        ((T "Windows {0}，{1} 位") -f [Environment]::OSVersion.Version, $(if ([Environment]::Is64BitOperatingSystem) { 64 } else { 32 }))
+        $(if ($c) { (T "C 盘剩余 {0} / 共 {1}") -f (Fmt $c.AvailableFreeSpace), (Fmt $c.TotalSize) } else { '' })
+        ((T "屏幕可用区域 {0:N0} x {1:N0}") -f [System.Windows.SystemParameters]::WorkArea.Width, [System.Windows.SystemParameters]::WorkArea.Height)
         ''
-        '---- 最近的运行记录 ----'
+        (T '---- 最近的运行记录 ----')
     )
     $tail = @()
     try { $tail = @(Get-Content -LiteralPath $script:logFile -Encoding UTF8 -Tail 80 -ErrorAction Stop) } catch { $tail = @(($ctl.Log.Text -split "`r?`n") | Select-Object -Last 80) }
-    try { [System.Windows.Clipboard]::SetText((($info + $tail) -join "`r`n")); Show-CopyHint '已复制，可以直接粘贴到微信里发给开发者' }
-    catch { Show-CopyHint '复制失败，可以点「打开运行记录文件」再手动复制' }
+    try { [System.Windows.Clipboard]::SetText((($info + $tail) -join "`r`n")); Show-CopyHint (T '已复制，可以直接粘贴到微信里发给开发者') }
+    catch { Show-CopyHint (T '复制失败，可以点「打开运行记录文件」再手动复制') }
 })
 $ctl.BtnOpenLog.Add_Click({
     if (Test-Path -LiteralPath $script:logFile) { Start-Process -FilePath "$env:SystemRoot\System32\notepad.exe" -ArgumentList ('"{0}"' -f $script:logFile) }
-    else { Show-CopyHint '还没有运行记录' }
+    else { Show-CopyHint (T '还没有运行记录') }
 })
 
 # ---------- 运行记录：默认收起，左下角打开 ----------
 function Set-LogVisible([bool]$on) {
     $ctl.LogPanel.Visibility = if ($on) { 'Visible' } else { 'Collapsed' }
-    $ctl.BtnLogText.Text = if ($on) { '收起运行记录' } else { '运行记录' }
+    $ctl.BtnLogText.Text = if ($on) { (T '收起运行记录') } else { (T '运行记录') }
     if ($on) { $ctl.Log.ScrollToEnd() }
 }
 $ctl.BtnLog.Add_Click({ Set-LogVisible ($ctl.LogPanel.Visibility -ne 'Visible') })
@@ -4430,7 +5772,7 @@ $ctl.BtnLogHide.Add_Click({ Set-LogVisible $false })
 # ---------- 对话框：代替系统消息框。返回点中的按钮文字；按 Esc 或关掉窗口返回 $Cancel ----------
 #   Kind：info 蓝色信息 / warn 橙色提醒 / danger 红色删除 / done 绿色完成
 function Show-Sheet {
-    param([string]$Title, [string]$Text = '', [string[]]$Items = $null, [string[]]$Buttons = @('好'),
+    param([string]$Title, [string]$Text = '', [string[]]$Items = $null, [string[]]$Buttons = @((T '好')),
           [string]$Primary = '', [string]$Cancel = '', [string]$Kind = 'info', [string]$Confirm = '')
     if (-not $Primary) { $Primary = $Buttons[-1] }
     if (-not $Cancel)  { $Cancel = $Buttons[0] }
@@ -4439,7 +5781,7 @@ function Show-Sheet {
     if (-not $sw) {
         # 万一自绘对话框出问题，退回系统消息框，保证流程能走下去
         $body = $Text; if ($Items) { $body += "`n`n" + (($Items | ForEach-Object { "  · $_" }) -join "`n") }
-        if ($Confirm) { $body += "`n`n" + $Confirm + "（点「是」表示你确认这一点）" }
+        if ($Confirm) { $body += "`n`n" + $Confirm + (T "（点「是」表示你确认这一点）") }
         if ($Buttons.Count -le 1) { [System.Windows.MessageBox]::Show($win, $body, $Title) | Out-Null; return $Buttons[0] }
         $r = [System.Windows.MessageBox]::Show($win, $body, $Title, 'YesNo')
         if ($r -eq 'Yes') { return $Primary } else { return $Cancel }
@@ -4491,6 +5833,7 @@ function Show-Sheet {
 }
 
 $sync = [hashtable]::Synchronized(@{})
+$sync.L10n = $script:L10n   # 后台任务用同一张翻译表
 $sync.Log = [System.Collections.Queue]::Synchronized((New-Object System.Collections.Queue))
 $script:worker = $null
 $script:op = $null
@@ -4507,9 +5850,9 @@ function Fmt($b) {
 }
 function FmtSpan([TimeSpan]$ts) {
     $sec = [int][math]::Floor($ts.TotalSeconds)
-    if ($sec -ge 3600) { "{0} 小时 {1} 分" -f [int][math]::Floor($sec / 3600), [int][math]::Floor(($sec % 3600) / 60) }
-    elseif ($sec -ge 60) { "{0} 分 {1} 秒" -f [int][math]::Floor($sec / 60), ($sec % 60) }
-    else { "$sec 秒" }
+    if ($sec -ge 3600) { (T "{0} 小时 {1} 分") -f [int][math]::Floor($sec / 3600), [int][math]::Floor(($sec % 3600) / 60) }
+    elseif ($sec -ge 60) { (T "{0} 分 {1} 秒") -f [int][math]::Floor($sec / 60), ($sec % 60) }
+    else { ((T "{0} 秒") -f $sec) }
 }
 function DriveFree([string]$d) { try { [double](New-Object System.IO.DriveInfo $d).AvailableFreeSpace } catch { [double]0 } }
 function Clamp01($x) { [math]::Max(0.0, [math]::Min(1.0, [double]$x)) }
@@ -4531,12 +5874,12 @@ function Set-Lines($tb, $lines) {
 }
 
 $script:movePhases = @(
-    @('kill',    '关闭占用这些文件的聊天软件（开着的话没法搬）'),
-    @('measure', '统计要搬多少'),
-    @('copy',    '复制到目标盘'),
-    @('verify',  '核对复制是否完整'),
-    @('link',    '把原位置换成链接（软件照常找得到；被占用时会关掉占用的程序重试）'),
-    @('cleanup', '删除 C 盘上的原目录，腾出空间')
+    @('kill',    (T '关闭占用这些文件的聊天软件（开着的话没法搬）')),
+    @('measure', (T '统计要搬多少')),
+    @('copy',    (T '复制到目标盘')),
+    @('verify',  (T '核对复制是否完整')),
+    @('link',    (T '把原位置换成链接（软件照常找得到；被占用时会关掉占用的程序重试）')),
+    @('cleanup', (T '删除 C 盘上的原目录，腾出空间'))
 )
 function Move-Checklist($p) {
     $cur = [string]$p.MovePhase
@@ -4547,9 +5890,9 @@ function Move-Checklist($p) {
         if ($order[$i] -eq 'kill' -and -not $p.HasKill) { continue }
         $text = $script:movePhases[$i][1]
         if ($p.MoveBack) {
-            $text = @{ kill = '关闭占用这些文件的软件'; measure = '统计要搬回多少'; copy = '复制回 ' + $p.MoveDest; verify = '核对复制是否完整'; link = '拆掉链接，换回真正的文件夹'; cleanup = '删除目标盘上的那份' }[$order[$i]]
+            $text = @{ kill = (T '关闭占用这些文件的软件'); measure = (T '统计要搬回多少'); copy = (T '复制回 ') + $p.MoveDest; verify = (T '核对复制是否完整'); link = (T '拆掉链接，换回真正的文件夹'); cleanup = (T '删除目标盘上的那份') }[$order[$i]]
         }
-        elseif ($order[$i] -eq 'copy' -and $p.MoveDest) { $text = '复制到 ' + $p.MoveDest; if ($p.MoveReuse) { $text = '补复制有变化的文件到 ' + $p.MoveDest + '（上次的副本接着用）' } }
+        elseif ($order[$i] -eq 'copy' -and $p.MoveDest) { $text = (T '复制到 ') + $p.MoveDest; if ($p.MoveReuse) { $text = (T '补复制有变化的文件到 ') + $p.MoveDest + (T '（上次的副本接着用）') } }
         if ($i -lt $ci)      { $lines += ,@(('✓  ' + $text), '#248A3D', $false) }
         elseif ($i -eq $ci)  { $lines += ,@(('▶  ' + $text), '#0071E3', $true) }
         else                 { $lines += ,@(('○  ' + $text), '#AEAEB2', $false) }
@@ -4562,8 +5905,8 @@ function Plan-Lines {
     foreach ($x in $script:runPlan) {
         $v = if ($sync.Status) { $sync.Status[$x.Idx] } else { $null }
         $kind = if ($v) { [string]$v[1] } else { 'wait' }
-        $text = if ($v) { [string]$v[0] } else { '等待' }
-        $lines += ,@(("{0}  {1}：{2}" -f $marks[$kind], $x.Name, $text), $script:statusColor[$kind], ($kind -eq 'run'))
+        $text = if ($v) { [string]$v[0] } else { (T '等待') }
+        $lines += ,@(((T "{0}  {1}：{2}") -f $marks[$kind], $x.Name, $text), $script:statusColor[$kind], ($kind -eq 'run'))
     }
     return ,$lines
 }
@@ -4571,9 +5914,9 @@ function Plan-Lines {
 function Show-Overlay {
     $ctl.Overlay.Visibility = 'Visible'
     $ctl.OvClose.Visibility = 'Collapsed'; $ctl.OvHide.Visibility = 'Visible'
-    $ctl.OvNote.Text = '可以最小化窗口，任务栏图标上也有进度。做完前不要关闭本窗口。'
+    $ctl.OvNote.Text = (T '可以最小化窗口，任务栏图标上也有进度。做完前不要关闭本窗口。')
     $ctl.OvBar.IsIndeterminate = $true; $ctl.OvSubBar.Visibility = 'Collapsed'
-    $ctl.OvStep.Text = '准备中…'; $ctl.OvWhat.Text = ''; $ctl.OvDetail.Text = ''; $ctl.OvChecklist.Inlines.Clear()
+    $ctl.OvStep.Text = (T '准备中…'); $ctl.OvWhat.Text = ''; $ctl.OvDetail.Text = ''; $ctl.OvChecklist.Inlines.Clear()
     $showPlan = ($sync.Mode -eq 'run') -and $script:runPlan
     $ctl.OvPlanBox.Visibility = if ($showPlan) { 'Visible' } else { 'Collapsed' }
     if ($showPlan) { Set-Lines $ctl.OvPlan (Plan-Lines) }
@@ -4585,12 +5928,12 @@ function Start-Op([string]$title, [switch]$NoCard) {
                                           SubStart = (Get-Date); FreeC0 = [double]0; DestDrive = ''; DestFree0 = [double]0; Detail = ''; MoveItem = $false })
     $script:op = @{ Title = $title; Start = (Get-Date) }
     $ctl.OpPanel.Visibility = 'Visible'
-    $ctl.OpTitle.Text = $title; $ctl.OpTime.Text = '已用 0 秒'; $ctl.OpDetail.Text = ''; $ctl.OpSubTime.Text = ''
+    $ctl.OpTitle.Text = $title; $ctl.OpTime.Text = (T '已用 0 秒'); $ctl.OpDetail.Text = ''; $ctl.OpSubTime.Text = ''
     $ctl.OpBar.IsIndeterminate = $true; $ctl.OpBar.Value = 0
     $ctl.OpSubBar.Visibility = 'Collapsed'
-    $ctl.OvTitle.Text = $title; $ctl.OvTime.Text = '已用 0 秒'
+    $ctl.OvTitle.Text = $title; $ctl.OvTime.Text = (T '已用 0 秒')
     if (-not $NoCard) { Show-Overlay }
-    UI-Log ("开始：{0}" -f $title)
+    UI-Log ((T "开始：{0}") -f $title)
 }
 
 # 结束：进度条拉满，显示总用时。执行和删除会在卡片上留下结果，等用户点「关闭」
@@ -4599,21 +5942,21 @@ function End-Op([string]$result, [switch]$KeepCard, [string]$headline = '', $rep
     $el = (Get-Date) - $script:op.Start
     $ctl.OpBar.IsIndeterminate = $false; $ctl.OpBar.Value = 100
     $ctl.OpSubBar.Visibility = 'Collapsed'
-    $ctl.OpTitle.Text = "{0}：{1}" -f $script:op.Title, $result
-    $ctl.OpTime.Text = "共用时 " + (FmtSpan $el)
+    $ctl.OpTitle.Text = (T "{0}：{1}") -f $script:op.Title, $result
+    $ctl.OpTime.Text = (T "共用时 ") + (FmtSpan $el)
     $script:lastElapsed = $el
     if ($win.TaskbarItemInfo) { $win.TaskbarItemInfo.ProgressState = 'None' }
     $ctl.OpDetail.Text = ''; $ctl.OpSubTime.Text = ''
-    UI-Log ("{0}：{1}，共用时 {2}" -f $script:op.Title, $result, (FmtSpan $el))
+    UI-Log ((T "{0}：{1}，共用时 {2}") -f $script:op.Title, $result, (FmtSpan $el))
     if ($KeepCard -and $ctl.Overlay.Visibility -eq 'Visible') {
-        $ctl.OvTitle.Text = $script:op.Title + '：已完成'
-        $ctl.OvTime.Text = "共用时 " + (FmtSpan $el)
+        $ctl.OvTitle.Text = $script:op.Title + (T '：已完成')
+        $ctl.OvTime.Text = (T "共用时 ") + (FmtSpan $el)
         $ctl.OvBar.IsIndeterminate = $false; $ctl.OvBar.Value = 100
         $ctl.OvSubBar.Visibility = 'Collapsed'
         $ctl.OvStep.Text = if ($headline) { $headline } else { $result }
         $ctl.OvWhat.Text = ''; $ctl.OvDetail.Text = ''; $ctl.OvChecklist.Inlines.Clear()
         if ($reportLines) { $ctl.OvPlanBox.Visibility = 'Visible'; Set-Lines $ctl.OvPlan $reportLines }
-        $ctl.OvNote.Text = '每一项的结果也显示在列表里；详细过程可以在左下角「运行记录」里查看。'
+        $ctl.OvNote.Text = (T '每一项的结果也显示在列表里；详细过程可以在左下角「运行记录」里查看。')
         $ctl.OvClose.Visibility = 'Visible'; $ctl.OvHide.Visibility = 'Collapsed'
         $script:cardShowsResult = $true
     } else {
@@ -4639,39 +5982,39 @@ function Update-Op {
     if ($sync.Mode -eq 'dup') {
         $ph = [DupFinder]::Phase
         if ($ph -eq 'list') {
-            $stepLine = '第 1 步：列出所有文件'
-            $what = '先把每个位置里的文件名和大小都看一遍，名字和大小都对得上的才可能是重复文件。'
-            $detail = "已看过 {0:N0} 个文件夹、{1:N0} 个文件    {2}" -f [DupFinder]::DirsSeen, [DupFinder]::FilesSeen, (Shorten ([DupFinder]::Current))
+            $stepLine = (T '第 1 步：列出所有文件')
+            $what = (T '先把每个位置里的文件名和大小都看一遍，名字和大小都对得上的才可能是重复文件。')
+            $detail = (T "已看过 {0:N0} 个文件夹、{1:N0} 个文件    {2}") -f [DupFinder]::DirsSeen, [DupFinder]::FilesSeen, (Shorten ([DupFinder]::Current))
         } elseif ($ph -eq 'quick' -or $ph -eq 'deep') {
             if ($script:op.PhaseName -ne $ph) { $script:op.PhaseName = $ph; $script:op.PhaseStart = $now }
             $etaEl = $now - $script:op.PhaseStart
             $tot = [double][DupFinder]::BytesTotal
             if ($ph -eq 'quick') {
-                $stepLine = "第 2 步：快速筛选 {0:N0} 个同名同大小的文件" -f [DupFinder]::FilesTotal
-                $what = '每个文件只读开头和结尾各 64 KB，内容明显不同的在这一步就排除掉。'
+                $stepLine = (T "第 2 步：快速筛选 {0:N0} 个同名同大小的文件") -f [DupFinder]::FilesTotal
+                $what = (T '每个文件只读开头和结尾各 64 KB，内容明显不同的在这一步就排除掉。')
             } else {
-                $how = if ($ctl.SpeedExact.IsChecked) { '每个文件读完全部内容' } else { '小文件读全文，大文件抽 16 处' }
-                $stepLine = "第 3 步：比对剩下的 {0:N0} 个文件" -f [DupFinder]::FilesTotal
-                $what = "确认内容是否真的相同（$how）。"
+                $how = if ($ctl.SpeedExact.IsChecked) { (T '每个文件读完全部内容') } else { (T '小文件读全文，大文件抽 16 处') }
+                $stepLine = (T "第 3 步：比对剩下的 {0:N0} 个文件") -f [DupFinder]::FilesTotal
+                $what = ((T "确认内容是否真的相同（{0}）。") -f $how)
             }
             if ($tot -gt 0) { $frac = [math]::Min(0.99, [DupFinder]::BytesDone / $tot) } else { $frac = 0.99 }
-            $detail = "{0:N0} / {1:N0} 个，已读 {2} / {3}" -f [DupFinder]::FilesDone, [DupFinder]::FilesTotal, (Fmt ([DupFinder]::BytesDone)), (Fmt $tot)
+            $detail = (T "{0:N0} / {1:N0} 个，已读 {2} / {3}") -f [DupFinder]::FilesDone, [DupFinder]::FilesTotal, (Fmt ([DupFinder]::BytesDone)), (Fmt $tot)
             if ($sync.DriveNote) { $detail += "    " + $sync.DriveNote }
         } elseif ($ph -eq 'finish') {
-            $stepLine = '整理结果'
+            $stepLine = (T '整理结果')
         }
     }
     elseif ($p -and $p.Steps -gt 0) {
         $step = [math]::Max(1, [int]$p.Step)
-        $stepLine = "第 {0} / {1} 项：{2}" -f $step, $p.Steps, $p.StepName
+        $stepLine = (T "第 {0} / {1} 项：{2}") -f $step, $p.Steps, $p.StepName
         if ($sync.Mode -eq 'run') {
             $what = [string]$p.StepNote
-            if ($p.MoveItem -and [int]$p.PathCount -gt 1 -and [int]$p.PathNo -gt 0) { $what = "第 {0} / {1} 个文件夹：{2}" -f $p.PathNo, $p.PathCount, $p.MovePath }
-            elseif ($p.MoveItem -and $p.MovePath) { $what = "从 {0} 搬到 {1}" -f $p.MovePath, $p.MoveDest }
+            if ($p.MoveItem -and [int]$p.PathCount -gt 1 -and [int]$p.PathNo -gt 0) { $what = (T "第 {0} / {1} 个文件夹：{2}") -f $p.PathNo, $p.PathCount, $p.MovePath }
+            elseif ($p.MoveItem -and $p.MovePath) { $what = (T "从 {0} 搬到 {1}") -f $p.MovePath, $p.MoveDest }
         } elseif ($sync.Mode -eq 'scan') {
-            $what = '统计这一项占了多少空间。扫描只是查看，不会删除任何东西。'
+            $what = (T '统计这一项占了多少空间。扫描只是查看，不会删除任何东西。')
         } elseif ($sync.Mode -eq 'dupdel') {
-            $what = '删除前会再确认保留的那份还在、内容相同；抽样判定的文件会逐字节核对。'
+            $what = (T '删除前会再确认保留的那份还在、内容相同；抽样判定的文件会逐字节核对。')
         }
         $kind = [string]$p.SubKind
         $subEl = $now - [datetime]$p.SubStart
@@ -4685,10 +6028,10 @@ function Update-Op {
             $subShow = $true
             if ($tot -gt 0) { $subFrac = [math]::Min(0.99, (Clamp01 ($done / $tot))) }
             $speed = if ($subEl.TotalSeconds -gt 1) { [math]::Max([double]0, [double]($done - $base)) / $subEl.TotalSeconds } else { 0 }
-            $detail = "已复制 {0} / {1}，{2}/秒" -f (Fmt $done), (Fmt $tot), (Fmt $speed)
-            if ($base -gt 0) { $detail = "上次已复制 {0}，正在补有变化的文件：{1} / {2}" -f (Fmt $base), (Fmt $done), (Fmt $tot) }
-            if ($speed -gt 0 -and $subEl.TotalSeconds -gt 5 -and $tot -gt $done) { $subTime = "这一项还要约 " + (FmtSpan ([TimeSpan]::FromSeconds(($tot - $done) / $speed))) }
-            else { $subTime = "这一项已用 " + (FmtSpan $subEl) }
+            $detail = (T "已复制 {0} / {1}，{2}/秒") -f (Fmt $done), (Fmt $tot), (Fmt $speed)
+            if ($base -gt 0) { $detail = (T "上次已复制 {0}，正在补有变化的文件：{1} / {2}") -f (Fmt $base), (Fmt $done), (Fmt $tot) }
+            if ($speed -gt 0 -and $subEl.TotalSeconds -gt 5 -and $tot -gt $done) { $subTime = (T "这一项还要约 ") + (FmtSpan ([TimeSpan]::FromSeconds(($tot - $done) / $speed))) }
+            else { $subTime = (T "这一项已用 ") + (FmtSpan $subEl) }
             $etaOk = $false
         } elseif ($kind -eq 'delete') {
             $fc = DriveFree 'C:'
@@ -4696,47 +6039,47 @@ function Update-Op {
             $tot  = [double]$p.SubTotal
             $subShow = $true
             if ($tot -gt 0) { $subFrac = [math]::Min(0.99, (Clamp01 ($done / $tot))) }
-            $detail = if ($tot -gt 0) { "已释放 {0} / 约 {1}" -f (Fmt ([math]::Max([double]0, [double]$done))), (Fmt $tot) } else { [string]$p.Detail }
-            $subTime = "这一项已用 " + (FmtSpan $subEl)
+            $detail = if ($tot -gt 0) { (T "已释放 {0} / 约 {1}") -f (Fmt ([math]::Max([double]0, [double]$done))), (Fmt $tot) } else { [string]$p.Detail }
+            $subTime = (T "这一项已用 ") + (FmtSpan $subEl)
             $etaOk = $false
         } elseif ($kind -eq 'verify') {
             $vt = [double][DupFinder]::VerifyTotal
             $subShow = $true
             if ($vt -gt 0) { $subFrac = [math]::Min(0.99, [DupFinder]::VerifyDone / $vt) }
-            $detail = "逐字节核对 {0}：{1} / {2}" -f (Shorten ([IO.Path]::GetFileName([string]$p.Detail))), (Fmt ([DupFinder]::VerifyDone)), (Fmt $vt)
-            $subTime = "删除前核对"
+            $detail = (T "逐字节核对 {0}：{1} / {2}") -f (Shorten ([IO.Path]::GetFileName([string]$p.Detail))), (Fmt ([DupFinder]::VerifyDone)), (Fmt $vt)
+            $subTime = (T "删除前核对")
         } elseif ($kind -eq 'slow') {
             $subShow = $true
             $detail = [string]$p.Detail
-            $subTime = "这一项已用 " + (FmtSpan $subEl)
+            $subTime = (T "这一项已用 ") + (FmtSpan $subEl)
             $etaOk = $false
         } elseif ($kind -eq 'measure') {
             $subShow = $true
-            $detail = "{0}：已数 {1:N0} 个文件，{2}" -f [string]$p.Detail, [DirStat]::Files, (Fmt ([DirStat]::Bytes))
-            $subTime = "这一项已用 " + (FmtSpan $subEl)
+            $detail = (T "{0}：已数 {1:N0} 个文件，{2}") -f [string]$p.Detail, [DirStat]::Files, (Fmt ([DirStat]::Bytes))
+            $subTime = (T "这一项已用 ") + (FmtSpan $subEl)
         } elseif ($kind -eq 'action') {
             $subShow = $true
             $detail = [string]$p.Detail
-            $subTime = "这一项已用 " + (FmtSpan $subEl)
+            $subTime = (T "这一项已用 ") + (FmtSpan $subEl)
         }
         $sf = if ($subFrac -ne $null) { $subFrac } else { 0 }
         $frac = [math]::Min(0.99, (($step - 1) + $sf) / [double]$p.Steps)
     }
-    elseif ($sync.Mode -eq 'hogs') { $stepLine = '统计 C 盘各目录的大小'; $what = '找出 C 盘上最占地方的文件夹和大文件，目录多时要几分钟。' }
+    elseif ($sync.Mode -eq 'hogs') { $stepLine = (T '统计 C 盘各目录的大小'); $what = (T '找出 C 盘上最占地方的文件夹和大文件，目录多时要几分钟。') }
     elseif ($sync.Mode -eq 'map') {
-        $stepLine = "扫描 {0}" -f $sync.MapRoot
-        $what = '把每个文件夹里的文件大小数一遍。只是查看，不会改动任何东西。'
-        $detail = "已看过 {0:N0} 个文件夹、{1:N0} 个文件，{2}    {3}" -f [DiskMap]::DirsSeen, [DiskMap]::FilesSeen, (Fmt ([DiskMap]::BytesSeen)), (Shorten ([DiskMap]::Current))
+        $stepLine = (T "扫描 {0}") -f $sync.MapRoot
+        $what = (T '把每个文件夹里的文件大小数一遍。只是查看，不会改动任何东西。')
+        $detail = (T "已看过 {0:N0} 个文件夹、{1:N0} 个文件，{2}    {3}") -f [DiskMap]::DirsSeen, [DiskMap]::FilesSeen, (Fmt ([DiskMap]::BytesSeen)), (Shorten ([DiskMap]::Current))
         if ([double]$sync.MapUsed -gt 0) { $frac = [math]::Min(0.99, [double][DiskMap]::BytesSeen / [double]$sync.MapUsed) }
     }
 
-    $timeText = "已用 " + (FmtSpan $el)
+    $timeText = (T "已用 ") + (FmtSpan $el)
     if ($frac -ne $null -and $etaOk -and $frac -gt 0.03 -and $etaEl.TotalSeconds -gt 3) {
-        $timeText += "，预计还要 " + (FmtSpan ([TimeSpan]::FromSeconds($etaEl.TotalSeconds * (1 - $frac) / $frac)))
+        $timeText += (T "，预计还要 ") + (FmtSpan ([TimeSpan]::FromSeconds($etaEl.TotalSeconds * (1 - $frac) / $frac)))
     }
 
     # ---- 底部进度条 ----
-    $ctl.OpTitle.Text = if ($stepLine) { "{0}，{1}" -f $script:op.Title, $stepLine } else { $script:op.Title }
+    $ctl.OpTitle.Text = if ($stepLine) { (T "{0}，{1}") -f $script:op.Title, $stepLine } else { $script:op.Title }
     $ctl.OpTime.Text = $timeText
     if ($frac -ne $null) { $ctl.OpBar.IsIndeterminate = $false; $ctl.OpBar.Value = 100 * $frac } else { $ctl.OpBar.IsIndeterminate = $true }
     $ctl.OpDetail.Text = $detail
@@ -4756,7 +6099,7 @@ function Update-Op {
     if ($ctl.Overlay.Visibility -eq 'Visible') {
         $ctl.OvTime.Text = $timeText
         if ($frac -ne $null) { $ctl.OvBar.IsIndeterminate = $false; $ctl.OvBar.Value = 100 * $frac } else { $ctl.OvBar.IsIndeterminate = $true }
-        $ctl.OvStep.Text = if ($stepLine) { $stepLine } else { '准备中…' }
+        $ctl.OvStep.Text = if ($stepLine) { $stepLine } else { (T '准备中…') }
         $ctl.OvWhat.Text = $what
         $ctl.OvDetail.Text = if ($subTime) { "$detail        $subTime" } else { $detail }
         if ($subShow) {
@@ -4770,7 +6113,7 @@ function Update-Op {
 
 function Shorten($p) { if (-not $p) { return '' }; if ($p.Length -le 80) { $p } else { '…' + $p.Substring($p.Length - 79) } }
 
-$script:AppVersion = '2.1'
+$script:AppVersion = '2.2'
 $script:logFile = Join-Path ([IO.Path]::GetTempPath()) 'CleanC-run.log'
 function Write-LogFile([string]$m) { try { [IO.File]::AppendAllText($script:logFile, ("{0:yyyy-MM-dd HH:mm:ss}  {1}`r`n" -f (Get-Date), $m), [Text.Encoding]::UTF8) } catch {} }
 function UI-Log($m) { $ctl.Log.AppendText("$m`r`n"); $ctl.Log.ScrollToEnd(); Write-LogFile ([string]$m) }
@@ -4783,13 +6126,13 @@ function UI-Status {
     $used = [math]::Max([double]0, [double]($total - $free))
     $rec = [math]::Min([double]$script:reclaim, [double]$used)
     $ctl.CapFree.Text = Fmt $free
-    $ctl.CapTotal.Text = "共 {0}，已用 {1}" -f (Fmt $total), (Fmt $used)
+    $ctl.CapTotal.Text = (T "共 {0}，已用 {1}") -f (Fmt $total), (Fmt $used)
     $star = [System.Windows.GridUnitType]::Star
     $cols = $ctl.CapBar.ColumnDefinitions
     $cols[0].Width = New-Object System.Windows.GridLength ([math]::Max([double]0.0001, [double]($used - $rec))), $star
     $cols[1].Width = New-Object System.Windows.GridLength ([math]::Max([double]0, [double]$rec)), $star
     $cols[2].Width = New-Object System.Windows.GridLength ([math]::Max([double]0.0001, [double]$free)), $star
-    $ctl.CapReclaim.Text = if ($rec -gt 0) { "可释放约 " + (Fmt $rec) } else { '可释放（扫描后显示）' }
+    $ctl.CapReclaim.Text = if ($rec -gt 0) { (T "可释放约 ") + (Fmt $rec) } else { (T '可释放（扫描后显示）') }
 }
 function UI-Busy($b) {
     $ctl.BtnScan.IsEnabled = -not $b; $ctl.BtnHogs.IsEnabled = -not $b; $ctl.BtnOneClick.IsEnabled = -not $b
@@ -4823,8 +6166,8 @@ function Update-CleanOverview {
     if (-not $col -or $col.Count -eq 0) { $ctl.CleanOverview.Visibility = 'Collapsed'; Update-CleanMore; return }
     $order = New-Object System.Collections.Generic.List[string]; $cnt = @{}
     foreach ($r in $col) { if (-not $cnt.ContainsKey($r.GroupTitle)) { $order.Add($r.GroupTitle); $cnt[$r.GroupTitle] = 0 }; $cnt[$r.GroupTitle]++ }
-    $parts = @($order | ForEach-Object { "{0} {1} 项" -f $_, $cnt[$_] })
-    $ctl.CleanOverviewText.Text = "扫描到 {0} 项，分成 {1} 类：{2}。每一项都可以单独选「删除」「搬走」或「跳过」，往下滚动查看全部。" -f $col.Count, $order.Count, ($parts -join '、')
+    $parts = @($order | ForEach-Object { (T "{0} {1} 项") -f $_, $cnt[$_] })
+    $ctl.CleanOverviewText.Text = (T "扫描到 {0} 项，分成 {1} 类：{2}。每一项都可以单独选「删除」「搬走」或「跳过」，往下滚动查看全部。") -f $col.Count, $order.Count, ($parts -join (T '、'))
     $ctl.CleanOverview.Visibility = 'Visible'
     $script:cleanItems = $null
     $ctl.CleanScroll.ScrollToTop()
@@ -4853,7 +6196,7 @@ function Update-CleanMore {
     foreach ($c in $script:cleanItems) {
         try { if ($c.TransformToAncestor($sv).Transform((New-Object System.Windows.Point 0, 0)).Y + 20 -gt $bottom) { $below++ } } catch {}
     }
-    $ctl.CleanMoreText.Text = if ($below -gt 0) { "下面还有 {0} 项" -f $below } else { '下面还有内容' }
+    $ctl.CleanMoreText.Text = if ($below -gt 0) { (T "下面还有 {0} 项") -f $below } else { (T '下面还有内容') }
     $ctl.CleanMore.Visibility = 'Visible'
 }
 function Build-Rows($sizes) {
@@ -4866,12 +6209,13 @@ function Build-Rows($sizes) {
         $r = New-Object RowItem
         $r.Idx = $it.Idx; $r.Group = $it.G; $r.Name = $it.N; $r.Note = $it.Note; $r.Actions = $it.Actions; $r.Action = $it.Def
         # 组名「安全清理（缓存、临时文件……）」拆成标题和说明两行显示
-        $gp = ([string]$it.G).Split([char]0xFF08, 2)
+        $gt = T ([string]$it.G)
+        $gp = $gt.Split([char]0xFF08, 2); if ($gp.Count -lt 2) { $gp = $gt.Split([char]'(', 2) }
         $r.GroupTitle = $gp[0].Trim()
-        $r.GroupNote = if ($gp.Count -gt 1) { $gp[1].TrimEnd([char]0xFF09) } else { '' }
+        $r.GroupNote = if ($gp.Count -gt 1) { $gp[1].TrimEnd([char]0xFF09).TrimEnd(')') } else { '' }
         $r.First = -not $seen.ContainsKey($it.G); $seen[$it.G] = $true
-        $r.SizeText = if ($b -lt 0) { '运行后知道' } else { Fmt $b }
-        if ($b -gt 0 -and $it.Def -ne '跳过') { $total += $b }
+        $r.SizeText = if ($b -lt 0) { (T '运行后知道') } else { Fmt $b }
+        if ($b -gt 0 -and $it.Def -ne (T '跳过')) { $total += $b }
         $col.Add($r)
     }
     $script:rows = $col
@@ -4880,11 +6224,11 @@ function Build-Rows($sizes) {
     $view.GroupDescriptions.Clear()
     $view.GroupDescriptions.Add((New-Object System.Windows.Data.PropertyGroupDescription 'Group'))
     $ctl.EmptyClean.Visibility = if ($col.Count -gt 0) { 'Collapsed' } else { 'Visible' }
-    if ($col.Count -eq 0) { $ctl.EmptyCleanText.Text = 'C 盘上没找到可以清理的东西' }
+    if ($col.Count -eq 0) { $ctl.EmptyCleanText.Text = (T 'C 盘上没找到可以清理的东西') }
     Update-CleanOverview
     $script:reclaim = $total
     UI-Status
-    $ctl.Summary.Text = ("共 {0} 项。按当前选择，可释放约 {1}。" -f $col.Count, (GB $total))
+    $ctl.Summary.Text = ((T "共 {0} 项。按当前选择，可释放约 {1}。") -f $col.Count, (GB $total))
 }
 
 # 用户在列表里改了某一行的操作，就重算「可释放约多少」
@@ -4894,31 +6238,31 @@ function Update-CleanSummary {
     $tot = [double]0; $n = 0; $sig = ''
     foreach ($r in $script:rows) {
         $sig += [string]$r.Action
-        if ($r.Action -ne '跳过') { $n++; $b = [double]$sync.Sizes[$r.Idx]; if ($b -gt 0) { $tot += $b } }
+        if ($r.Action -ne (T '跳过')) { $n++; $b = [double]$sync.Sizes[$r.Idx]; if ($b -gt 0) { $tot += $b } }
     }
     if ($sig -eq $script:planSig) { return }
     $script:planSig = $sig
     $script:reclaim = $tot
     UI-Status
-    $ctl.Summary.Text = if ($n -gt 0) { "已选 {0} 项，可释放约 {1}。" -f $n, (GB $tot) } else { '没有选中任何项目。' }
+    $ctl.Summary.Text = if ($n -gt 0) { (T "已选 {0} 项，可释放约 {1}。") -f $n, (GB $tot) } else { (T '没有选中任何项目。') }
     $ctl.BtnRun.IsEnabled = ($n -gt 0)
 }
 
 function Do-Scan([switch]$Quiet) {
-    $ctl.Summary.Text = '正在扫描，大目录可能要一两分钟…'
-    if (-not $script:rows) { $ctl.EmptyCleanText.Text = '正在扫描…' }
+    $ctl.Summary.Text = (T '正在扫描，大目录可能要一两分钟…')
+    if (-not $script:rows) { $ctl.EmptyCleanText.Text = (T '正在扫描…') }
     $sync.Mode = 'scan'; $sync.Sizes = $null
-    if (-not $Quiet) { Start-Op '扫描可清理项' }
+    if (-not $Quiet) { Start-Op (T '扫描可清理项') }
     UI-Busy $true
     Start-Worker @'
 $sizes = @{}
 $cat = Get-Catalog; $i = 0
-foreach ($it in $cat) { $i++; SetP @{ Steps = $cat.Count; Step = $i; StepName = $it.N; SubKind = 'measure'; SubStart = (Get-Date); Detail = '统计大小' }; $sizes[$it.Idx] = Measure-Item $it }
+foreach ($it in $cat) { $i++; SetP @{ Steps = $cat.Count; Step = $i; StepName = $it.N; SubKind = 'measure'; SubStart = (Get-Date); Detail = (T '统计大小') }; $sizes[$it.Idx] = Measure-Item $it }
 $sync.Sizes = $sizes
 '@ $null
 }
 
-$ctl.BtnScan.Add_Click({ UI-Log "开始扫描..."; Do-Scan })
+$ctl.BtnScan.Add_Click({ UI-Log (T "开始扫描..."); Do-Scan })
 
 $ctl.BtnHogs.Add_Click({
     Show-Page 'map'
@@ -4938,7 +6282,7 @@ function Fill-DestChoices([string]$keep) {
     $first = $true
     foreach ($d in $drives) {
         $path = Join-Path $d.RootDirectory.FullName 'CDriveMoved'
-        $label = "{0}    空闲 {1}{2}" -f $path, (Fmt $d.AvailableFreeSpace), $(if ($first) { '，空间最大' } else { '' })
+        $label = (T "{0}    空闲 {1}{2}") -f $path, (Fmt $d.AvailableFreeSpace), $(if ($first) { (T '，空间最大') } else { '' })
         $item = New-Object System.Windows.Controls.ComboBoxItem
         $item.Content = $label; $item.Tag = $path
         [void]$ctl.DestPick.Items.Add($item)
@@ -4947,30 +6291,30 @@ function Fill-DestChoices([string]$keep) {
     if ($script:customDest) {
         $free = DriveFree ($script:customDest.Substring(0, 2))
         $item = New-Object System.Windows.Controls.ComboBoxItem
-        $item.Content = "{0}    空闲 {1}，自选" -f $script:customDest, (Fmt $free); $item.Tag = $script:customDest
+        $item.Content = (T "{0}    空闲 {1}，自选") -f $script:customDest, (Fmt $free); $item.Tag = $script:customDest
         [void]$ctl.DestPick.Items.Add($item)
     }
     if ($ctl.DestPick.Items.Count -eq 0) {
         $item = New-Object System.Windows.Controls.ComboBoxItem
-        $item.Content = '这台电脑只有 C 盘，没有可以搬去的磁盘'; $item.Tag = ''
+        $item.Content = (T '这台电脑只有 C 盘，没有可以搬去的磁盘'); $item.Tag = ''
         [void]$ctl.DestPick.Items.Add($item)
     }
     $ctl.DestPick.SelectedIndex = 0
     if ($drives.Count -gt 0) {
-        $ctl.DestHint.Text = "已自动选了空闲最多的 {0} 盘（剩 {1}）。也可以从下拉框换一块盘，或点「选择文件夹」。只列本机硬盘：网络盘、网盘、U 盘不能做链接目标。" -f $drives[0].Name.Substring(0, 1), (Fmt $drives[0].AvailableFreeSpace)
+        $ctl.DestHint.Text = (T "已自动选了空闲最多的 {0} 盘（剩 {1}）。也可以从下拉框换一块盘，或点「选择文件夹」。只列本机硬盘：网络盘、网盘、U 盘不能做链接目标。") -f $drives[0].Name.Substring(0, 1), (Fmt $drives[0].AvailableFreeSpace)
     } else {
-        $ctl.DestHint.Text = '这台电脑只有 C 盘，不能搬家；其他清理照常可以做。'
+        $ctl.DestHint.Text = (T '这台电脑只有 C 盘，不能搬家；其他清理照常可以做。')
     }
     if ($keep) { for ($i = 0; $i -lt $ctl.DestPick.Items.Count; $i++) { if ([string]$ctl.DestPick.Items[$i].Tag -ieq $keep) { $ctl.DestPick.SelectedIndex = $i } } }
 }
 function Get-Dest { $i = $ctl.DestPick.SelectedItem; if ($i) { [string]$i.Tag } else { '' } }
 $ctl.BtnDestBrowse.Add_Click({
     $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
-    $dlg.Description = '选择搬家目标文件夹（要在 C 盘以外的本机硬盘上）'
+    $dlg.Description = (T '选择搬家目标文件夹（要在 C 盘以外的本机硬盘上）')
     if ($dlg.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { return }
     $path = $dlg.SelectedPath.TrimEnd('\')
-    if ($path.Length -lt 2 -or $path.Substring(0, 2) -ieq $env:SystemDrive) { Show-Sheet -Kind warn -Title '请选 C 盘以外的位置' -Text '搬到 C 盘自己身上腾不出空间。' | Out-Null; return }
-    if ((DriveTypeOf ($path.Substring(0, 2))) -ne 'Fixed') { Show-Sheet -Kind warn -Title '只能选本机硬盘' -Text '网络盘、网盘和 U 盘不能做链接目标，拔掉或断网后软件会找不到数据。' | Out-Null; return }
+    if ($path.Length -lt 2 -or $path.Substring(0, 2) -ieq $env:SystemDrive) { Show-Sheet -Kind warn -Title (T '请选 C 盘以外的位置') -Text (T '搬到 C 盘自己身上腾不出空间。') | Out-Null; return }
+    if ((DriveTypeOf ($path.Substring(0, 2))) -ne 'Fixed') { Show-Sheet -Kind warn -Title (T '只能选本机硬盘') -Text (T '网络盘、网盘和 U 盘不能做链接目标，拔掉或断网后软件会找不到数据。') | Out-Null; return }
     if ($path.Length -le 2) { $path = $path.Substring(0, 2) + '\CDriveMoved' }   # 选了整个盘（E:\），就在盘下建 CDriveMoved
     $script:customDest = $path
     Fill-DestChoices $path
@@ -4991,21 +6335,21 @@ function Get-BusyApps([string[]]$apps) {
     return ,$names
 }
 
-function Invoke-RunSelected([string]$title = '执行所选操作') {
+function Invoke-RunSelected([string]$title = (T '执行所选操作')) {
     $plan = @()
     foreach ($r in $script:rows) {
-        if ($r.Action -ne '跳过') {
+        if ($r.Action -ne (T '跳过')) {
             $b = if ($sync.Sizes) { [double]$sync.Sizes[$r.Idx] } else { 0 }
             $plan += @{ Idx = $r.Idx; Action = $r.Action; Name = $r.Name; Bytes = [math]::Max([double]0, [double]$b) }
         }
     }
-    if (-not $plan) { Show-Sheet -Title '没有选中任何操作' -Text '在列表里把要处理的项目选成「删除」或「搬到其他盘」，再点「执行所选操作」。' | Out-Null; return }
+    if (-not $plan) { Show-Sheet -Title (T '没有选中任何操作') -Text (T '在列表里把要处理的项目选成「删除」或「搬到其他盘」，再点「执行所选操作」。') | Out-Null; return }
     $dest = Get-Dest
     $cat0 = @{}; foreach ($c in $catalog) { $cat0[$c.Idx] = $c }
-    $moves = @($plan | Where-Object { $_.Action -eq '搬到其他盘' })
+    $moves = @($plan | Where-Object { $_.Action -eq (T '搬到其他盘') })
     $moveBytes = [double]0; foreach ($x in $moves) { $moveBytes += $x.Bytes }
     if ($moves) {
-        if (-not $dest -or -not (Test-Path ($dest.Substring(0, 3)))) { Show-Sheet -Kind warn -Title '没有可用的搬家目标' -Text '请在「搬家目标」里选一个 C 盘以外的本机硬盘。' | Out-Null; return }
+        if (-not $dest -or -not (Test-Path ($dest.Substring(0, 3)))) { Show-Sheet -Kind warn -Title (T '没有可用的搬家目标') -Text (T '请在「搬家目标」里选一个 C 盘以外的本机硬盘。') | Out-Null; return }
         $destFree = DriveFree ($dest.Substring(0, 2))
         # 上次没搬完留下的副本会直接接着用，只补差异；这种情况下由搬家时逐个文件夹核对空间
         $reuseAny = $false
@@ -5016,22 +6360,22 @@ function Invoke-RunSelected([string]$title = '执行所选操作') {
             }
         }
         if (-not $reuseAny -and $destFree -lt $moveBytes * 1.05) {
-            Show-Sheet -Kind warn -Title ("{0} 盘放不下" -f $dest.Substring(0, 1)) -Text ("{0} 只剩 {1}，要搬的东西有 {2}。请换一个目标，或少选几项搬家。" -f $dest.Substring(0, 2), (GB $destFree), (GB $moveBytes)) | Out-Null; return
+            Show-Sheet -Kind warn -Title ((T "{0} 盘放不下") -f $dest.Substring(0, 1)) -Text ((T "{0} 只剩 {1}，要搬的东西有 {2}。请换一个目标，或少选几项搬家。") -f $dest.Substring(0, 2), (GB $destFree), (GB $moveBytes)) | Out-Null; return
         }
     }
     $total = [double]0; foreach ($x in $plan) { $total += $x.Bytes }
-    $items = @($plan | ForEach-Object { "{0}　{1}" -f $_.Action, $_.Name })
-    $text = "涉及约 {0}。大文件夹搬家可能要几十分钟，进度会显示在窗口中间，做完会告诉你结果。" -f (GB $total)
-    if ($moves) { $text += "`n`n要搬的东西会放到 $dest。" }
+    $items = @($plan | ForEach-Object { (T "{0}　{1}") -f $_.Action, $_.Name })
+    $text = (T "涉及约 {0}。大文件夹搬家可能要几十分钟，进度会显示在窗口中间，做完会告诉你结果。") -f (GB $total)
+    if ($moves) { $text += ((T "`n`n要搬的东西会放到 {0}。") -f $dest) }
     # 有删除项时，必须勾选「确认不会带来损失」才能开始
-    $dels = @($plan | Where-Object { $_.Action -eq '删除' })
+    $dels = @($plan | Where-Object { $_.Action -eq (T '删除') })
     $ack = ''
     if ($dels) {
-        $text += "`n`n其中 {0} 项会删除文件，删除后可能无法恢复。请确认这些资料不再需要。" -f $dels.Count
-        $ack = '我已确认要删除的内容不再需要，删除不会给我带来损失；因删除造成的后果由我自己承担。'
+        $text += (T "`n`n其中 {0} 项会删除文件，删除后可能无法恢复。请确认这些资料不再需要。") -f $dels.Count
+        $ack = (T '我已确认要删除的内容不再需要，删除不会给我带来损失；因删除造成的后果由我自己承担。')
     }
     $kind = if ($dels) { 'warn' } else { 'info' }
-    if ((Show-Sheet -Kind $kind -Title ("执行 {0} 项操作？" -f $plan.Count) -Text $text -Items $items -Buttons @('取消', '开始') -Primary '开始' -Cancel '取消' -Confirm $ack) -ne '开始') { return }
+    if ((Show-Sheet -Kind $kind -Title ((T "执行 {0} 项操作？") -f $plan.Count) -Text $text -Items $items -Buttons @((T '取消'), (T '开始')) -Primary (T '开始') -Cancel (T '取消') -Confirm $ack) -ne (T '开始')) { return }
 
     # 要搬聊天软件的数据时，先看它们是不是开着：开着的话文件被占用，搬不成功，必须先退出
     $skipped = @(); $skipWho = ''
@@ -5040,21 +6384,21 @@ function Invoke-RunSelected([string]$title = '执行所选操作') {
         $need = @($chatMoves | ForEach-Object { $cat0[$_.Idx].Apps } | Select-Object -Unique)
         $busy = Get-BusyApps $need
         if ($busy.Count -gt 0) {
-            $who = $busy -join '、'
+            $who = @($busy | ForEach-Object { T $_ }) -join (T '、')
             $affected = @($chatMoves | Where-Object { $x = $_; @($cat0[$x.Idx].Apps | Where-Object { $busy -contains $_ }).Count -gt 0 })
-            $ans = Show-Sheet -Kind warn -Title "需要先退出$who" `
-                -Text ("{0}正在使用要搬的文件夹。不退出的话里面的文件一直被占用，搬家不会成功。`n`n点「退出并继续」会替你关掉它们（包括右下角托盘里的）。退出前请确认没有正在发送或下载的文件。搬完后照常打开即可，聊天记录和文件都在。" -f $who) `
-                -Items @($affected | ForEach-Object { $_.Name }) -Buttons @('取消', '这次不搬这几项', '退出并继续') -Primary '退出并继续' -Cancel '取消'
-            if ($ans -eq '取消') { return }
-            if ($ans -eq '这次不搬这几项') {
+            $ans = Show-Sheet -Kind warn -Title ((T "需要先退出{0}") -f $who) `
+                -Text ((T "{0}正在使用要搬的文件夹。不退出的话里面的文件一直被占用，搬家不会成功。`n`n点「退出并继续」会替你关掉它们（包括右下角托盘里的）。退出前请确认没有正在发送或下载的文件。搬完后照常打开即可，聊天记录和文件都在。") -f $who) `
+                -Items @($affected | ForEach-Object { $_.Name }) -Buttons @((T '取消'), (T '这次不搬这几项'), (T '退出并继续')) -Primary (T '退出并继续') -Cancel (T '取消')
+            if ($ans -eq (T '取消')) { return }
+            if ($ans -eq (T '这次不搬这几项')) {
                 $skipIdx = @{}; foreach ($x in $affected) { $skipIdx[$x.Idx] = $true }
                 $skipped = @($affected); $skipWho = $who
                 $plan = @($plan | Where-Object { -not $skipIdx.ContainsKey($_.Idx) })
                 $moves = @($moves | Where-Object { -not $skipIdx.ContainsKey($_.Idx) })
-                UI-Log ("{0} 没有退出，这次不搬：{1}" -f $who, (($skipped | ForEach-Object { $_.Name }) -join '、'))
+                UI-Log ((T "{0} 没有退出，这次不搬：{1}") -f $who, (($skipped | ForEach-Object { $_.Name }) -join (T '、')))
                 if (-not $plan) { return }
             } else {
-                UI-Log ("已同意退出 {0}，开始执行后会先关掉它们" -f $who)
+                UI-Log ((T "已同意退出 {0}，开始执行后会先关掉它们") -f $who)
             }
         }
     }
@@ -5063,15 +6407,15 @@ function Invoke-RunSelected([string]$title = '执行所选操作') {
     $planned = @{}; foreach ($x in $plan) { $planned[$x.Idx] = $true }
     $skipSet = @{}; foreach ($x in $skipped) { $skipSet[$x.Idx] = $true }
     foreach ($r in $script:rows) {
-        if ($planned.ContainsKey($r.Idx)) { $r.Status = '等待'; $r.StatusBrush = '#86868B' }
-        elseif ($skipSet.ContainsKey($r.Idx)) { $r.Status = "这次没搬：$skipWho 没有退出"; $r.StatusBrush = '#B25000' }
+        if ($planned.ContainsKey($r.Idx)) { $r.Status = (T '等待'); $r.StatusBrush = '#86868B' }
+        elseif ($skipSet.ContainsKey($r.Idx)) { $r.Status = ((T "这次没搬：{0} 没有退出") -f $skipWho); $r.StatusBrush = '#B25000' }
         else { $r.Status = ''; $r.StatusBrush = '#86868B' }
     }
     $script:runFreeC0 = [double](FreeC)
     $script:runPlan = $plan
     $sync.Mode = 'run'; Start-Op $title; UI-Busy $true
-    if ($moves) { UI-Log ("搬家目标：{0}" -f $dest) }
-    UI-Log ("开始执行 {0} 项..." -f $plan.Count)
+    if ($moves) { UI-Log ((T "搬家目标：{0}") -f $dest) }
+    UI-Log ((T "开始执行 {0} 项...") -f $plan.Count)
     Start-Worker @'
 $plan = $arg.Plan; $dest = $arg.Dest
 $cat = @{}; foreach ($it in (Get-Catalog)) { $cat[$it.Idx] = $it }
@@ -5083,31 +6427,31 @@ foreach ($p in $ordered) {
     $it = $cat[$p.Idx]
     SetP @{ Steps = $ordered.Count; Step = $si; StepName = ("{0} {1}" -f $p.Action, $it.N); StepIdx = $p.Idx; StepNote = $it.Note; MoveItem = $false
             SubKind = 'none'; SubDone = [double]0; SubTotal = [double]$p.Bytes; SubStart = (Get-Date); Detail = '' }
-    SetStatus $p.Idx '进行中…' 'run'
+    SetStatus $p.Idx (T '进行中…') 'run'
     Log ("[{0}] {1}" -f $p.Action, $it.N)
     $res = @{}
     try {
-        if ($p.Action -eq '搬到其他盘') {
+        if ($p.Action -eq (T '搬到其他盘')) {
             New-Item -ItemType Directory -Path $dest -Force | Out-Null
             Invoke-Move $it $dest $res
             if ($res.Wait -gt 0) { $sync.WaitCount = [int]$sync.WaitCount + $res.Wait }
-            if ($res.Done -gt 0 -and $res.Fail -eq 0 -and $res.Wait -eq 0) { $t = "已搬 {0} 到 {1}" -f (GB $res.Moved), ($res.Dest -join '；'); $k = 'ok' }
-            elseif ($res.Done -gt 0) { $t = "部分完成：搬了 {0}；{1}" -f (GB $res.Moved), $res.Msgs[-1]; $k = 'warn' }
-            elseif ($res.Wait -gt 0 -and $res.Fail -eq 0) { $t = "差最后一步：" + $res.Msgs[-1]; $k = 'warn' }
-            elseif ($res.Fail -gt 0) { $t = "没搬成：" + $res.Msgs[0]; $k = 'fail' }
-            else { $t = '不用搬（已经搬过或不在 C 盘）'; $k = 'skip' }
+            if ($res.Done -gt 0 -and $res.Fail -eq 0 -and $res.Wait -eq 0) { $t = (T "已搬 {0} 到 {1}") -f (GB $res.Moved), ($res.Dest -join (T '；')); $k = 'ok' }
+            elseif ($res.Done -gt 0) { $t = (T "部分完成：搬了 {0}；{1}") -f (GB $res.Moved), $res.Msgs[-1]; $k = 'warn' }
+            elseif ($res.Wait -gt 0 -and $res.Fail -eq 0) { $t = (T "差最后一步：") + $res.Msgs[-1]; $k = 'warn' }
+            elseif ($res.Fail -gt 0) { $t = (T "没搬成：") + $res.Msgs[0]; $k = 'fail' }
+            else { $t = (T '不用搬（已经搬过或不在 C 盘）'); $k = 'skip' }
         } else {
             Invoke-Delete $it $res
-            $t = if ($it.Act -and -not $it.Paths) { "已完成，释放 {0}" -f (GB $res.Freed) } else { "已清理，释放 {0}" -f (GB $res.Freed) }
+            $t = if ($it.Act -and -not $it.Paths) { (T "已完成，释放 {0}") -f (GB $res.Freed) } else { (T "已清理，释放 {0}") -f (GB $res.Freed) }
             $k = 'ok'
         }
-    } catch { $t = "出错：" + $_.Exception.Message; $k = 'fail'; Log "  $t" }
+    } catch { $t = (T "出错：") + $_.Exception.Message; $k = 'fail'; Log "  $t" }
     SetStatus $p.Idx $t $k
     $mark = switch ($k) { 'ok' { '✓' } 'warn' { '!' } 'fail' { '✗' } default { '·' } }
-    [void]$summary.Add(("{0} {1}：{2}" -f $mark, $it.N, $t))
+    [void]$summary.Add(((T "{0} {1}：{2}") -f $mark, $it.N, $t))
 }
 $sync.RunSummary = $summary
-Log ("全部完成。C 盘现在剩余 {0}" -f (GB (FreeC)))
+Log ((T "全部完成。C 盘现在剩余 {0}") -f (GB (FreeC)))
 '@ @{ Plan = $plan; Dest = $dest }
 }
 $ctl.BtnRun.Add_Click({ Invoke-RunSelected })
@@ -5126,7 +6470,7 @@ $script:runAfterScan = $false
 $ctl.BtnOneClick.Add_Click({
     Show-Page 'clean'
     $script:oneClickPending = $true
-    UI-Log '一键清理：先扫描...'
+    UI-Log (T '一键清理：先扫描...')
     Do-Scan
 })
 
@@ -5150,18 +6494,18 @@ function Add-Root($path, $label, $on, $detail, [bool]$removable = $false) {
 $downloads = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders' -ErrorAction SilentlyContinue).'{374DE290-123F-4565-9164-39C4925E467B}'
 if ($downloads) { $downloads = [Environment]::ExpandEnvironmentVariables($downloads) } else { $downloads = "$env:USERPROFILE\Downloads" }
 foreach ($pair in @(
-    @('桌面', [Environment]::GetFolderPath('Desktop')),
-    @('文档', [Environment]::GetFolderPath('MyDocuments')),
-    @('下载', $downloads),
-    @('图片', [Environment]::GetFolderPath('MyPictures')),
-    @('视频', [Environment]::GetFolderPath('MyVideos')),
-    @('音乐', [Environment]::GetFolderPath('MyMusic')))) {
+    @((T '桌面'), [Environment]::GetFolderPath('Desktop')),
+    @((T '文档'), [Environment]::GetFolderPath('MyDocuments')),
+    @((T '下载'), $downloads),
+    @((T '图片'), [Environment]::GetFolderPath('MyPictures')),
+    @((T '视频'), [Environment]::GetFolderPath('MyVideos')),
+    @((T '音乐'), [Environment]::GetFolderPath('MyMusic')))) {
     Add-Root $pair[1] $pair[0] $true $pair[1]
 }
 foreach ($d in [System.IO.DriveInfo]::GetDrives()) {
     try {
         if ($d.DriveType -eq 'Fixed' -and $d.IsReady -and ($d.Name.TrimEnd('\') -ine $env:SystemDrive)) {
-            Add-Root $d.RootDirectory.FullName ("整个 {0} 盘" -f $d.Name.Substring(0, 1)) $true ("{0}  已用 {1}" -f $d.Name, (Fmt ($d.TotalSize - $d.TotalFreeSpace)))
+            Add-Root $d.RootDirectory.FullName ((T "整个 {0} 盘") -f $d.Name.Substring(0, 1)) $true ((T "{0}  已用 {1}") -f $d.Name, (Fmt ($d.TotalSize - $d.TotalFreeSpace)))
         }
     } catch {}
 }
@@ -5176,21 +6520,21 @@ function Tint([string]$hex, [double]$a) {
 
 # ---------- 文件类型：每类一个颜色，结果列表里用同一个颜色标出文件类型 ----------
 $script:typeDefs = @(
-    @{ L = 'Word 文档';  C = '#2B579A'; E = '.doc .docx .docm .dot .dotx .wps .rtf .odt' }
-    @{ L = 'Excel 表格'; C = '#217346'; E = '.xls .xlsx .xlsm .xlsb .csv .et .ods' }
-    @{ L = 'PPT 演示';   C = '#C43E1C'; E = '.ppt .pptx .pptm .pps .ppsx .dps .odp .key' }
+    @{ L = (T 'Word 文档');  C = '#2B579A'; E = '.doc .docx .docm .dot .dotx .wps .rtf .odt' }
+    @{ L = (T 'Excel 表格'); C = '#217346'; E = '.xls .xlsx .xlsm .xlsb .csv .et .ods' }
+    @{ L = (T 'PPT 演示');   C = '#C43E1C'; E = '.ppt .pptx .pptm .pps .ppsx .dps .odp .key' }
     @{ L = 'PDF';        C = '#B30B00'; E = '.pdf .ofd .caj .xps' }
-    @{ L = '文本';       C = '#5B6573'; E = '.txt .md .markdown .rst' }
-    @{ L = '电子书';     C = '#8A5A2B'; E = '.epub .mobi .azw .azw3 .djvu' }
-    @{ L = '照片图片';   C = '#0F8A7E'; E = '.jpg .jpeg .png .gif .bmp .heic .heif .webp .tif .tiff .svg' }
-    @{ L = 'RAW 原片';   C = '#5C7F1A'; E = '.raw .cr2 .cr3 .nef .arw .dng .orf .rw2 .raf .srw' }
-    @{ L = '设计稿';     C = '#7A3FC2'; E = '.psd .psb .ai .sketch .fig .xd .cdr .indd' }
-    @{ L = 'CAD 图纸';   C = '#0B6E99'; E = '.dwg .dxf .step .stp .igs .iges .sldprt .sldasm .slddrw .prt .asm .x_t .x_b .stl .3mf .ipt .iam .catpart .catproduct' }
-    @{ L = '视频';       C = '#B4235A'; E = '.mp4 .mov .avi .mkv .wmv .flv .m4v .ts .webm .mpg .mpeg .3gp .rmvb' }
-    @{ L = '音频';       C = '#C27C0E'; E = '.mp3 .wav .flac .m4a .aac .ogg .wma .ape .opus' }
-    @{ L = '压缩包';     C = '#6B4F3A'; E = '.zip .rar .7z .tar .gz .tgz .bz2 .xz .zst' }
-    @{ L = '安装包';     C = '#3B4A63'; E = '.exe .msi .msix .appx .apk .dmg .pkg' }
-    @{ L = '磁盘镜像';   C = '#5B4B8A'; E = '.iso .img .vhd .vhdx .vmdk .wim .esd' }
+    @{ L = (T '文本');       C = '#5B6573'; E = '.txt .md .markdown .rst' }
+    @{ L = (T '电子书');     C = '#8A5A2B'; E = '.epub .mobi .azw .azw3 .djvu' }
+    @{ L = (T '照片图片');   C = '#0F8A7E'; E = '.jpg .jpeg .png .gif .bmp .heic .heif .webp .tif .tiff .svg' }
+    @{ L = (T 'RAW 原片');   C = '#5C7F1A'; E = '.raw .cr2 .cr3 .nef .arw .dng .orf .rw2 .raf .srw' }
+    @{ L = (T '设计稿');     C = '#7A3FC2'; E = '.psd .psb .ai .sketch .fig .xd .cdr .indd' }
+    @{ L = (T 'CAD 图纸');   C = '#0B6E99'; E = '.dwg .dxf .step .stp .igs .iges .sldprt .sldasm .slddrw .prt .asm .x_t .x_b .stl .3mf .ipt .iam .catpart .catproduct' }
+    @{ L = (T '视频');       C = '#B4235A'; E = '.mp4 .mov .avi .mkv .wmv .flv .m4v .ts .webm .mpg .mpeg .3gp .rmvb' }
+    @{ L = (T '音频');       C = '#C27C0E'; E = '.mp3 .wav .flac .m4a .aac .ogg .wma .ape .opus' }
+    @{ L = (T '压缩包');     C = '#6B4F3A'; E = '.zip .rar .7z .tar .gz .tgz .bz2 .xz .zst' }
+    @{ L = (T '安装包');     C = '#3B4A63'; E = '.exe .msi .msix .appx .apk .dmg .pkg' }
+    @{ L = (T '磁盘镜像');   C = '#5B4B8A'; E = '.iso .img .vhd .vhdx .vmdk .wim .esd' }
 )
 $script:extColor = @{}
 foreach ($d in $script:typeDefs) { foreach ($e in ($d.E -split '\s+')) { $script:extColor[$e] = $d.C } }
@@ -5248,7 +6592,7 @@ function Get-SelectedExt {
     return ,$set.ToArray()
 }
 
-$script:typeAll = New-Chip '全部类型' '#1C2433' '不限文件类型'
+$script:typeAll = New-Chip (T '全部类型') '#1C2433' (T '不限文件类型')
 $script:typeAll.IsChecked = $true
 [void]$ctl.TypeChips.Children.Add($script:typeAll)
 $script:typeAll.Add_Click({ Sync-TypeChips $this })
@@ -5268,12 +6612,12 @@ $ctl.ExtraExt.Add_TextChanged({
 
 # ---------- 文件大小：常用区间一键选，也可以手填「从…到…」 ----------
 $script:sizeDefs = @(
-    @{ L = '不限';          Min = 0;     Max = 0 }
-    @{ L = '1 MB 以上';     Min = 1MB;   Max = 0 }
+    @{ L = (T '不限');          Min = 0;     Max = 0 }
+    @{ L = (T '1 MB 以上');     Min = 1MB;   Max = 0 }
     @{ L = '1–10 MB';       Min = 1MB;   Max = 10MB }
     @{ L = '10–100 MB';     Min = 10MB;  Max = 100MB }
     @{ L = '100 MB–1 GB';   Min = 100MB; Max = 1GB }
-    @{ L = '1 GB 以上';     Min = 1GB;   Max = 0 }
+    @{ L = (T '1 GB 以上');     Min = 1GB;   Max = 0 }
 )
 $script:sizeRadios = New-Object System.Collections.ArrayList
 
@@ -5305,8 +6649,8 @@ function Read-SizeBox($box, $unit) {
 function Get-SizeRange {
     $min = Read-SizeBox $ctl.SizeMin $ctl.SizeMinUnit
     $max = Read-SizeBox $ctl.SizeMax $ctl.SizeMaxUnit
-    if ($null -eq $min -or $null -eq $max) { return @{ Ok = $false; Err = '大小只能填数字，比如 1.5' } }
-    if ($max -gt 0 -and $max -lt $min) { return @{ Ok = $false; Err = '「到」要比「从」大' } }
+    if ($null -eq $min -or $null -eq $max) { return @{ Ok = $false; Err = (T '大小只能填数字，比如 1.5') } }
+    if ($max -gt 0 -and $max -lt $min) { return @{ Ok = $false; Err = (T '「到」要比「从」大') } }
     return @{ Ok = $true; Min = $min; Max = $max }
 }
 function Size-Text([double]$b) {
@@ -5330,7 +6674,7 @@ foreach ($d in $script:sizeDefs) {
     $rb.Add_Click({ Apply-SizePreset $this })
 }
 $script:sizeCustom = New-Object System.Windows.Controls.RadioButton
-$script:sizeCustom.Content = '自定义'; $script:sizeCustom.GroupName = 'dupsize'; $script:sizeCustom.Style = $radioStyle
+$script:sizeCustom.Content = (T '自定义'); $script:sizeCustom.GroupName = 'dupsize'; $script:sizeCustom.Style = $radioStyle
 [void]$ctl.SizeChips.Children.Add($script:sizeCustom)
 $script:sizeCustom.Add_Click({ $ctl.SizeCustomRow.Visibility = 'Visible'; [void]$ctl.SizeMin.Focus(); Update-FilterSummary })
 foreach ($c in @($ctl.SizeMin, $ctl.SizeMax)) { $c.Add_TextChanged({ On-SizeEdited }) }
@@ -5339,25 +6683,25 @@ foreach ($c in @($ctl.SizeMinUnit, $ctl.SizeMaxUnit)) { $c.Add_SelectionChanged(
 # ---------- 条件摘要：收起面板后也能看到当前条件 ----------
 function Update-FilterSummary {
     if ($null -eq $script:typeAll -or $null -eq $script:sizeCustom) { return }
-    if ($script:typeAll.IsChecked) { $types = '全部类型' }
+    if ($script:typeAll.IsChecked) { $types = (T '全部类型') }
     else {
         $names = @($script:chips | Where-Object { $_.Btn.IsChecked } | ForEach-Object { $_.Label })
         $extra = Parse-ExtraExt
         if ($extra.Count -gt 0) { $names += ($extra -join ' ') }
-        $types = if ($names.Count -gt 3) { ($names[0..2] -join '、') + " 等 $($names.Count) 类" } else { $names -join '、' }
+        $types = if ($names.Count -gt 3) { ($names[0..2] -join (T '、')) + ((T " 等 {0} 类") -f $($names.Count)) } else { $names -join (T '、') }
     }
     $r = Get-SizeRange
-    if (-not $r.Ok) { $size = '大小填写有误' }
-    elseif ($r.Min -le 1 -and $r.Max -le 0) { $size = '不限大小' }
-    elseif ($r.Max -le 0) { $size = (Size-Text $r.Min) + ' 以上' }
-    elseif ($r.Min -le 1) { $size = (Size-Text $r.Max) + ' 以下' }
-    else { $size = "{0} 到 {1}" -f (Size-Text $r.Min), (Size-Text $r.Max) }
-    $ctl.SizeHint.Text = if ($r.Ok) { '留空表示不限' } else { $r.Err }
+    if (-not $r.Ok) { $size = (T '大小填写有误') }
+    elseif ($r.Min -le 1 -and $r.Max -le 0) { $size = (T '不限大小') }
+    elseif ($r.Max -le 0) { $size = (Size-Text $r.Min) + (T ' 以上') }
+    elseif ($r.Min -le 1) { $size = (Size-Text $r.Max) + (T ' 以下') }
+    else { $size = (T "{0} 到 {1}") -f (Size-Text $r.Min), (Size-Text $r.Max) }
+    $ctl.SizeHint.Text = if ($r.Ok) { (T '留空表示不限') } else { $r.Err }
     $ctl.SizeHint.Foreground = if ($r.Ok) { Brush '#86868B' } else { Brush '#D70015' }
-    $mode = if ($ctl.ModeName.IsChecked) { '文件名和内容都相同' } else { '只要内容相同' }
-    $mode += if ($ctl.SpeedExact.IsChecked) { '，完整比对' } else { '，快速比对' }
+    $mode = if ($ctl.ModeName.IsChecked) { (T '文件名和内容都相同') } else { (T '只要内容相同') }
+    $mode += if ($ctl.SpeedExact.IsChecked) { (T '，完整比对') } else { (T '，快速比对') }
     $n = @($script:roots | Where-Object { $_.Enabled }).Count
-    $ctl.FilterSummary.Text = "{0}，{1}，{2}，{3} 个位置" -f $types, $size, $mode, $n
+    $ctl.FilterSummary.Text = (T "{0}，{1}，{2}，{3} 个位置") -f $types, $size, $mode, $n
 }
 foreach ($c in @($ctl.ModeName, $ctl.ModeContent, $ctl.SpeedFast, $ctl.SpeedExact)) { $c.Add_Click({ Update-FilterSummary }) }
 # 点胶囊 = 勾选/取消；点自己加的文件夹上的小叉 = 移除
@@ -5374,7 +6718,7 @@ Apply-SizePreset $script:sizeRadios[1].Btn
 
 $ctl.BtnAddRoot.Add_Click({
     $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
-    $dlg.Description = '选择要查找重复文件的文件夹'
+    $dlg.Description = (T '选择要查找重复文件的文件夹')
     if ($dlg.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
         $sp = $dlg.SelectedPath; $nm = Split-Path $sp -Leaf; if (-not $nm) { $nm = $sp }
         Add-Root $sp $nm $true $sp $true; Update-FilterSummary
@@ -5392,9 +6736,9 @@ function Build-DupRows($groups, [int]$totalGroups) {
         $gid++
         if ($gid -gt 3000) { break }
         $kept.Add($g)
-        $meta  = "{0} × {1} 份，可释放 {2}" -f (Fmt $g.Size), $g.Files.Count, (Fmt $g.Waste)
-        if ($g.Verified) { $badge = '已完整比对'; $tip = '每个文件都读完了全部内容，内容完全相同。'; $bbg = '#E6F4EA'; $bfg = '#1E7B34' }
-        else { $badge = '抽样判定'; $tip = '文件名、大小和 16 处抽样内容都相同。删除前会逐字节完整比对，有任何不同就不删。'; $bbg = '#EFEFF4'; $bfg = '#6E6E73' }
+        $meta  = (T "{0} × {1} 份，可释放 {2}") -f (Fmt $g.Size), $g.Files.Count, (Fmt $g.Waste)
+        if ($g.Verified) { $badge = (T '已完整比对'); $tip = (T '每个文件都读完了全部内容，内容完全相同。'); $bbg = '#E6F4EA'; $bfg = '#1E7B34' }
+        else { $badge = (T '抽样判定'); $tip = (T '文件名、大小和 16 处抽样内容都相同。删除前会逐字节完整比对，有任何不同就不删。'); $bbg = '#EFEFF4'; $bfg = '#6E6E73' }
         $list = New-Object System.Collections.ArrayList
         foreach ($f in $g.Files) {
             $r = New-Object DupRow
@@ -5416,11 +6760,11 @@ function Build-DupRows($groups, [int]$totalGroups) {
     $script:dupRows = $col; $script:dupByGroup = $byGroup; $script:dupGroups = $kept; $script:dupWaste = $waste
     $ctl.DupList.ItemsSource = $col
     $ctl.EmptyDup.Visibility = if ($col.Count -gt 0) { 'Collapsed' } else { 'Visible' }
-    $ctl.EmptyDupText.Text = '没有找到重复文件'
+    $ctl.EmptyDupText.Text = (T '没有找到重复文件')
     $view = [System.Windows.Data.CollectionViewSource]::GetDefaultView($col)
     $view.GroupDescriptions.Clear()
     $view.GroupDescriptions.Add((New-Object System.Windows.Data.PropertyGroupDescription 'GroupId'))
-    if ($totalGroups -gt 3000) { UI-Log ("一共找到 {0} 组，只显示可释放空间最大的前 3000 组。删完这些后再查一次即可看到剩下的。" -f $totalGroups) }
+    if ($totalGroups -gt 3000) { UI-Log ((T "一共找到 {0} 组，只显示可释放空间最大的前 3000 组。删完这些后再查一次即可看到剩下的。") -f $totalGroups) }
     [DupRow]::Dirty = $false
     Update-DupSummary
 }
@@ -5430,10 +6774,10 @@ function Update-DupSummary {
     $n = 0; $b = [double]0
     foreach ($r in $script:dupRows) { if ($r.ToDelete) { $n++; $b += $r.Size } }
     $locked = 0; foreach ($r in $script:dupRows) { if (-not $r.CanDelete) { $locked++ } }
-    if ($script:dupRows.Count -eq 0) { $ctl.DupSummary.Text = '没有找到重复文件。' }
+    if ($script:dupRows.Count -eq 0) { $ctl.DupSummary.Text = (T '没有找到重复文件。') }
     else {
-        $ctl.DupSummary.Text = ("找到 {0} 组重复文件。已勾选 {1} 个，删除后释放 {2}。" -f $script:dupByGroup.Count, $n, (Fmt $b))
-        if ($locked -gt 0) { $ctl.DupSummary.Text += (" C 盘个人文件夹里的 {0} 个副本受保护，不会删。" -f $locked) }
+        $ctl.DupSummary.Text = ((T "找到 {0} 组重复文件。已勾选 {1} 个，删除后释放 {2}。") -f $script:dupByGroup.Count, $n, (Fmt $b))
+        if ($locked -gt 0) { $ctl.DupSummary.Text += ((T " C 盘个人文件夹里的 {0} 个副本受保护，不会删。") -f $locked) }
     }
     $ctl.BtnDupDelete.IsEnabled = ($n -gt 0) -and (-not $script:worker)
     $ctl.BtnDupMerge.IsEnabled = ($n -gt 0) -and (-not $script:worker)
@@ -5480,15 +6824,15 @@ function Apply-Protect {
     [DupRow]::Dirty = $false
     Update-DupSummary
 }
-$ctl.DupProtect.Add_Checked({ if (-not $script:protSync) { Apply-Protect; UI-Log '已打开保护：C 盘个人文件夹里的文件不会删除' } })
+$ctl.DupProtect.Add_Checked({ if (-not $script:protSync) { Apply-Protect; UI-Log (T '已打开保护：C 盘个人文件夹里的文件不会删除') } })
 $ctl.DupProtect.Add_Unchecked({
     if ($script:protSync) { return }
-    $ans = Show-Sheet -Kind danger -Title '允许删除 C 盘个人文件夹里的文件？' `
-        -Text '桌面、文档、下载、图片、视频、音乐等文件夹里通常是你自己的资料。关掉保护后，这些位置的重复副本也可能被勾选删除。每组仍会至少保留一份。' `
-        -Confirm '我已确认删除这些位置的副本不会给我带来损失；因删除造成的后果由我自己承担。' -Buttons @('保持保护', '允许删除') -Primary '允许删除' -Cancel '保持保护'
-    if ($ans -ne '允许删除') { $script:protSync = $true; $ctl.DupProtect.IsChecked = $true; $script:protSync = $false; return }
+    $ans = Show-Sheet -Kind danger -Title (T '允许删除 C 盘个人文件夹里的文件？') `
+        -Text (T '桌面、文档、下载、图片、视频、音乐等文件夹里通常是你自己的资料。关掉保护后，这些位置的重复副本也可能被勾选删除。每组仍会至少保留一份。') `
+        -Confirm (T '我已确认删除这些位置的副本不会给我带来损失；因删除造成的后果由我自己承担。') -Buttons @((T '保持保护'), (T '允许删除')) -Primary (T '允许删除') -Cancel (T '保持保护')
+    if ($ans -ne (T '允许删除')) { $script:protSync = $true; $ctl.DupProtect.IsChecked = $true; $script:protSync = $false; return }
     Apply-Protect
-    UI-Log '已关闭保护：C 盘个人文件夹里的重复副本也可以勾选删除（勾选不会自动改变，需要时点「留最新的」等重新勾选）'
+    UI-Log (T '已关闭保护：C 盘个人文件夹里的重复副本也可以勾选删除（勾选不会自动改变，需要时点「留最新的」等重新勾选）')
 })
 
 $ctl.BtnKeepNew.Add_Click({ Pick-Dup 'new' })
@@ -5507,12 +6851,12 @@ $ctl.DupList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickEv
 
 $ctl.BtnDupScan.Add_Click({
     $paths = @($script:roots | Where-Object { $_.Enabled } | ForEach-Object { $_.Path })
-    if (-not $paths) { Show-Sheet -Title '还没选查找位置' -Text '请在「查找位置」里至少勾选一个文件夹或磁盘。' | Out-Null; $ctl.FilterExpander.IsExpanded = $true; return }
+    if (-not $paths) { Show-Sheet -Title (T '还没选查找位置') -Text (T '请在「查找位置」里至少勾选一个文件夹或磁盘。') | Out-Null; $ctl.FilterExpander.IsExpanded = $true; return }
     $range = Get-SizeRange
-    if (-not $range.Ok) { Show-Sheet -Kind warn -Title '文件大小填写有误' -Text $range.Err | Out-Null; $ctl.FilterExpander.IsExpanded = $true; return }
+    if (-not $range.Ok) { Show-Sheet -Kind warn -Title (T '文件大小填写有误') -Text $range.Err | Out-Null; $ctl.FilterExpander.IsExpanded = $true; return }
     $ext = Get-SelectedExt
     $script:dupRows = $null; $script:dupByGroup = @{}; $ctl.DupList.ItemsSource = $null
-    $ctl.EmptyDup.Visibility = 'Visible'; $ctl.EmptyDupText.Text = '正在查找…'
+    $ctl.EmptyDup.Visibility = 'Visible'; $ctl.EmptyDupText.Text = (T '正在查找…')
     $arg = @{
         Roots     = [string[]]$paths
         Min       = [long][math]::Max([double]1, [double]$range.Min)
@@ -5524,10 +6868,10 @@ $ctl.BtnDupScan.Add_Click({
     $sync.DriveNote = ''
     $ctl.FilterExpander.IsExpanded = $false
     $sync.Mode = 'dup'; $sync.DupResult = $null
-    Start-Op '查找重复文件'
-    $ctl.DupProgressText.Text = '正在查找…'
+    Start-Op (T '查找重复文件')
+    $ctl.DupProgressText.Text = (T '正在查找…')
     UI-Busy $true
-    UI-Log ("开始查找重复文件：{0}。位置：{1}" -f $ctl.FilterSummary.Text, ($paths -join '；'))
+    UI-Log ((T "开始查找重复文件：{0}。位置：{1}") -f $ctl.FilterSummary.Text, ($paths -join (T '；')))
     Start-Worker @'
 $ext = $null; if ($arg.Ext) { $ext = [string[]]$arg.Ext }
 # 看每块盘是固态还是机械：固态多线程并行读，机械硬盘单线程顺序读（并行反而让磁头来回跳）
@@ -5541,18 +6885,18 @@ foreach ($L in $letters) {
         $pd = Get-PhysicalDisk -ErrorAction Stop | Where-Object { $_.DeviceId -eq [string]$part.DiskNumber } | Select-Object -First 1
         if ($pd) { $kind = [string]$pd.MediaType }
     } catch {}
-    if ($kind -eq 'SSD' -or $kind -eq 'SCM') { $n = $cpu; $desc = "固态硬盘，$n 线程并行" }
-    elseif ($kind -eq 'HDD') { $n = 1; $desc = '机械硬盘，单线程按顺序读' }
-    else { $n = 2; $desc = '类型未知，2 线程' }
+    if ($kind -eq 'SSD' -or $kind -eq 'SCM') { $n = $cpu; $desc = ((T "固态硬盘，{0} 线程并行") -f $n) }
+    elseif ($kind -eq 'HDD') { $n = 1; $desc = (T '机械硬盘，单线程按顺序读') }
+    else { $n = 2; $desc = (T '类型未知，2 线程') }
     [void]$spec.Add("$($L):=$n"); $notes += "$($L): $desc"
 }
-if ($notes) { Log ("磁盘：" + ($notes -join '；')); $sync.DriveNote = ($notes -join '；') }
+if ($notes) { Log ((T "磁盘：") + ($notes -join (T '；'))); $sync.DriveNote = ($notes -join (T '；')) }
 $sync.DupResult = [DupFinder]::Find([string[]]$arg.Roots, [long]$arg.Min, [long]$arg.Max, [bool]$arg.MatchName, $ext, [bool]$arg.Exact, [string[]]$spec)
-if (-not [DupFinder]::UsedFastEnum) { Log '提示：快速列举不可用，已改用普通方式列举文件（结果相同，只是慢一些）。' }
+if (-not [DupFinder]::UsedFastEnum) { Log (T '提示：快速列举不可用，已改用普通方式列举文件（结果相同，只是慢一些）。') }
 '@ $arg
 })
 
-$ctl.BtnDupStop.Add_Click({ [DupFinder]::Cancel = $true; UI-Log "正在停止..." })
+$ctl.BtnDupStop.Add_Click({ [DupFinder]::Cancel = $true; UI-Log (T "正在停止...") })
 
 $ctl.BtnDupDelete.Add_Click({
     $plan = New-Object System.Collections.ArrayList
@@ -5570,22 +6914,22 @@ $ctl.BtnDupDelete.Add_Click({
         }
     }
     if ($plan.Count -eq 0) {
-        if ($allChecked) { Show-Sheet -Kind warn -Title '每组至少要留一份' -Text "有 $allChecked 组把所有副本都勾上了，这些组不会删除。" | Out-Null }
+        if ($allChecked) { Show-Sheet -Kind warn -Title (T '每组至少要留一份') -Text ((T "有 {0} 组把所有副本都勾上了，这些组不会删除。") -f $allChecked) | Out-Null }
         return
     }
     $recycle = [bool]$ctl.DupRecycle.IsChecked
     $script:lastRecycle = $recycle
-    $msg = "每组至少保留一份没勾选的。"
-    $msg += if ($recycle) { "文件会放进回收站，可以恢复；清空回收站后才真正释放空间。" } else { "文件会被永久删除，不能恢复。" }
-    if ($allChecked) { $msg += "`n`n另有 $allChecked 组所有副本都被勾选，这些组会跳过。" }
-    if ($risky)      { $msg += "`n`n其中 $risky 个文件带有「注意」提示（程序目录或微信数据），请确认确实要删。" }
-    $btnDel = if ($recycle) { '移到回收站' } else { '永久删除' }
-    $ack = '我已确认这些文件删除后不会给我带来损失；因删除造成的后果由我自己承担。'
-    if ((Show-Sheet -Kind danger -Title ("删除 {0} 个重复文件，释放 {1}？" -f $plan.Count, (Fmt $bytes)) -Text $msg -Buttons @('取消', $btnDel) -Primary $btnDel -Cancel '取消' -Confirm $ack) -ne $btnDel) { return }
+    $msg = (T "每组至少保留一份没勾选的。")
+    $msg += if ($recycle) { (T "文件会放进回收站，可以恢复；清空回收站后才真正释放空间。") } else { (T "文件会被永久删除，不能恢复。") }
+    if ($allChecked) { $msg += ((T "`n`n另有 {0} 组所有副本都被勾选，这些组会跳过。") -f $allChecked) }
+    if ($risky)      { $msg += ((T "`n`n其中 {0} 个文件带有「注意」提示（程序目录或微信数据），请确认确实要删。") -f $risky) }
+    $btnDel = if ($recycle) { (T '移到回收站') } else { (T '永久删除') }
+    $ack = (T '我已确认这些文件删除后不会给我带来损失；因删除造成的后果由我自己承担。')
+    if ((Show-Sheet -Kind danger -Title ((T "删除 {0} 个重复文件，释放 {1}？") -f $plan.Count, (Fmt $bytes)) -Text $msg -Buttons @((T '取消'), $btnDel) -Primary $btnDel -Cancel (T '取消') -Confirm $ack) -ne $btnDel) { return }
     $sync.Mode = 'dupdel'; $sync.DupDeleted = $null
-    Start-Op ("删除 {0} 个重复文件" -f $plan.Count)
+    Start-Op ((T "删除 {0} 个重复文件") -f $plan.Count)
     UI-Busy $true
-    UI-Log ("开始删除 {0} 个重复文件..." -f $plan.Count)
+    UI-Log ((T "开始删除 {0} 个重复文件...") -f $plan.Count)
     Start-Worker @'
 Add-Type -AssemblyName Microsoft.VisualBasic
 $done = New-Object System.Collections.ArrayList
@@ -5594,11 +6938,11 @@ foreach ($p in $arg.Plan) {
     $i++
     SetP @{ Steps = $total; Step = $i; StepName = [IO.Path]::GetFileName($p.Path); SubKind = 'none' }
     # 再保险：保护打开时，C 盘个人文件夹里的文件无论如何不删
-    if ($arg.Protect -and (Test-Personal $p.Path)) { Log "  跳过（C 盘个人文件夹，受保护）：$($p.Path)"; continue }
+    if ($arg.Protect -and (Test-Personal $p.Path)) { Log ((T "  跳过（C 盘个人文件夹，受保护）：{0}") -f $($p.Path)); continue }
     # 删之前再确认一次：要删的文件大小没变，并且至少有一份保留的副本还在、大小相同
     $fi = Get-Item -LiteralPath $p.Path -Force -ErrorAction SilentlyContinue
     if (-not $fi) { [void]$done.Add($p.Path); continue }
-    if ($fi.Length -ne $p.Size) { Log "  跳过（文件在扫描后被修改过）：$($p.Path)"; continue }
+    if ($fi.Length -ne $p.Size) { Log ((T "  跳过（文件在扫描后被修改过）：{0}") -f $($p.Path)); continue }
     $kept = $false
     foreach ($k in $p.Keep) {
         $ki = Get-Item -LiteralPath $k -Force -ErrorAction SilentlyContinue
@@ -5609,7 +6953,7 @@ foreach ($p in $arg.Plan) {
         if ([DupFinder]::SameContent($k, $p.Path)) { $kept = $true; break }
     }
     SetP @{ SubKind = 'none' }
-    if (-not $kept) { Log "  没有删除（和保留的那份内容不完全相同，或保留的那份已不在）：$($p.Path)"; continue }
+    if (-not $kept) { Log ((T "  没有删除（和保留的那份内容不完全相同，或保留的那份已不在）：{0}") -f $($p.Path)); continue }
     try {
         if ($fi.Attributes -band [IO.FileAttributes]::ReadOnly) { $fi.Attributes = $fi.Attributes -bxor [IO.FileAttributes]::ReadOnly }
         if ($arg.Recycle) {
@@ -5618,10 +6962,10 @@ foreach ($p in $arg.Plan) {
             [IO.File]::Delete($p.Path)
         }
         [void]$done.Add($p.Path); $freed += $p.Size
-        if ($total -le 200 -or $i % 100 -eq 0) { Log ("  [{0}/{1}] 已删除  {2}" -f $i, $total, $p.Path) }
-    } catch { Log "  删除失败  $($p.Path)：$($_.Exception.Message)" }
+        if ($total -le 200 -or $i % 100 -eq 0) { Log ((T "  [{0}/{1}] 已删除  {2}") -f $i, $total, $p.Path) }
+    } catch { Log ((T "  删除失败  {0}：{1}") -f $($p.Path), $($_.Exception.Message)) }
 }
-Log ("删除完成：{0} 个文件，{1}。" -f $done.Count, $(if ($freed -ge 1GB) { "{0:N2} GB" -f ($freed / 1GB) } else { "{0:N1} MB" -f ($freed / 1MB) }))
+Log ((T "删除完成：{0} 个文件，{1}。") -f $done.Count, $(if ($freed -ge 1GB) { "{0:N2} GB" -f ($freed / 1GB) } else { "{0:N1} MB" -f ($freed / 1MB) }))
 $sync.DupDeleted = $done
 '@ @{ Plan = $plan; Recycle = $recycle; Protect = [bool]$ctl.DupProtect.IsChecked }
 })
@@ -5633,15 +6977,15 @@ function Open-Location([string]$path) {
     if (-not $path) { return }
     if (Test-Path -LiteralPath $path -PathType Leaf) { Start-Process -FilePath "$env:SystemRoot\explorer.exe" -ArgumentList ("/select,`"{0}`"" -f $path) }
     elseif (Test-Path -LiteralPath $path) { Start-Process -FilePath "$env:SystemRoot\explorer.exe" -ArgumentList ("`"{0}`"" -f $path) }
-    else { Show-Sheet -Kind warn -Title '这个位置不存在' -Text $path | Out-Null }
+    else { Show-Sheet -Kind warn -Title (T '这个位置不存在') -Text $path | Out-Null }
 }
 function Fixed-Drives([switch]$NoSystem) {
     @([IO.DriveInfo]::GetDrives() | Where-Object {
         try { $_.DriveType -eq 'Fixed' -and $_.IsReady -and (-not $NoSystem -or $_.Name.TrimEnd('\') -ine $env:SystemDrive) } catch { $false } })
 }
 function Ask-Restart([string]$why) {
-    if ((Show-Sheet -Kind info -Title '需要重启电脑才生效' -Text $why -Buttons @('稍后自己重启', '现在重启') -Primary '现在重启' -Cancel '稍后自己重启') -eq '现在重启') {
-        & "$env:SystemRoot\System32\shutdown.exe" /r /t 15 /c "C 盘清理工具：15 秒后重启，让刚才的设置生效" | Out-Null
+    if ((Show-Sheet -Kind info -Title (T '需要重启电脑才生效') -Text $why -Buttons @((T '稍后自己重启'), (T '现在重启')) -Primary (T '现在重启') -Cancel (T '稍后自己重启')) -eq (T '现在重启')) {
+        & "$env:SystemRoot\System32\shutdown.exe" /r /t 15 /c (T "C 盘清理工具：15 秒后重启，让刚才的设置生效") | Out-Null
     }
 }
 function Shorten-Mid([string]$p, [int]$n = 70) { if (-not $p -or $p.Length -le $n) { return $p }; return $p.Substring(0, 24) + '…' + $p.Substring($p.Length - ($n - 25)) }
@@ -5655,7 +6999,7 @@ function Fill-MapDrives {
     $ctl.MapDrive.Items.Clear()
     foreach ($d in (Fixed-Drives)) {
         $it = New-Object System.Windows.Controls.ComboBoxItem
-        $it.Content = "{0}  已用 {1} / 共 {2}" -f $d.Name.TrimEnd('\'), (Fmt ($d.TotalSize - $d.AvailableFreeSpace)), (Fmt $d.TotalSize)
+        $it.Content = (T "{0}  已用 {1} / 共 {2}") -f $d.Name.TrimEnd('\'), (Fmt ($d.TotalSize - $d.AvailableFreeSpace)), (Fmt $d.TotalSize)
         $it.Tag = $d.RootDirectory.FullName
         [void]$ctl.MapDrive.Items.Add($it)
         if ($it.Tag -ieq $keep) { $ctl.MapDrive.SelectedItem = $it }
@@ -5669,11 +7013,11 @@ function Start-MapScan([string]$root) {
     $sync.MapRoot = $root; $sync.MapResult = $null
     [DiskMap]::Cancel = $false
     $sync.Mode = 'map'
-    Start-Op ("扫描 {0}" -f $root)
+    Start-Op ((T "扫描 {0}") -f $root)
     UI-Busy $true; $ctl.BtnMapStop.IsEnabled = $true
-    $ctl.EmptyMap.Visibility = 'Visible'; $ctl.EmptyMapText.Text = '正在扫描…'
+    $ctl.EmptyMap.Visibility = 'Visible'; $ctl.EmptyMapText.Text = (T '正在扫描…')
     $ctl.MapList.ItemsSource = $null; $ctl.MapGrow.ItemsSource = $null
-    UI-Log ("空间地图：开始扫描 {0}" -f $root)
+    UI-Log ((T "空间地图：开始扫描 {0}") -f $root)
     Start-Worker @'
 $L = $arg.Root.Substring(0, 1).ToUpper(); $n = 4
 try {
@@ -5686,7 +7030,7 @@ $sync.MapResult = [DiskMap]::Scan($arg.Root, $n)
 '@ @{ Root = $root }
 }
 $ctl.BtnMapScan.Add_Click({ if ($ctl.MapDrive.SelectedItem) { Start-MapScan ([string]$ctl.MapDrive.SelectedItem.Tag) } })
-$ctl.BtnMapStop.Add_Click({ [DiskMap]::Cancel = $true; UI-Log '空间地图：正在停止…' })
+$ctl.BtnMapStop.Add_Click({ [DiskMap]::Cancel = $true; UI-Log (T '空间地图：正在停止…') })
 
 function New-MapRow($name, $path, [double]$size, [double]$max, [double]$parent, [bool]$isDir, $node, [string]$meta, [string]$kind) {
     $r = New-Object MapRow
@@ -5721,25 +7065,25 @@ function Show-MapLevel($node) {
             $k = $x.K; $p = $k.FullPath()
             if ($k.IsLink) {
                 $t = LinkTarget $p
-                [void]$rows.Add((New-MapRow $k.Name $p 0 $max $node.Size $false $k ("链接，指向 " + $(if ($t) { $t } else { '其他位置' }) + "（多半是搬家留下的，不占这块盘）") 'link'))
+                [void]$rows.Add((New-MapRow $k.Name $p 0 $max $node.Size $false $k ((T "链接，指向 ") + $(if ($t) { $t } else { (T '其他位置') }) + (T "（多半是搬家留下的，不占这块盘）")) 'link'))
                 continue
             }
             $when = if ($k.LastWrite -gt 0) { try { [DateTime]::FromFileTime($k.LastWrite).ToString('yyyy-MM-dd') } catch { '' } } else { '' }
-            $meta = "{0:N0} 个文件" -f $k.Files
-            if ($when) { $meta += " · 最近修改 $when" }
-            if ($k.Denied) { $meta += ' · 部分内容没有权限读取' }
+            $meta = (T "{0:N0} 个文件") -f $k.Files
+            if ($when) { $meta += ((T " · 最近修改 {0}") -f $when) }
+            if ($k.Denied) { $meta += (T ' · 部分内容没有权限读取') }
             [void]$rows.Add((New-MapRow $k.Name $p $k.Size $max $node.Size $true $k $meta 'dir'))
         } else {
             $f = $x.F
-            [void]$rows.Add((New-MapRow $f.Name $f.FullName $f.Length $max $node.Size $false $null ("文件 · 修改于 {0:yyyy-MM-dd}" -f $f.LastWriteTime) 'file'))
+            [void]$rows.Add((New-MapRow $f.Name $f.FullName $f.Length $max $node.Size $false $null ((T "文件 · 修改于 {0:yyyy-MM-dd}") -f $f.LastWriteTime) 'file'))
         }
     }
     $ctl.MapList.ItemsSource = $rows
     $ctl.MapPath.Text = $path
-    $ctl.MapInfo.Text = "这一层共 {0}，{1:N0} 个文件{2}" -f (Fmt $node.Size), $node.Files, $(if ($script:mapScanAt) { " · 扫描于 {0:HH:mm}" -f $script:mapScanAt } else { '' })
+    $ctl.MapInfo.Text = (T "这一层共 {0}，{1:N0} 个文件{2}") -f (Fmt $node.Size), $node.Files, $(if ($script:mapScanAt) { (T " · 扫描于 {0:HH:mm}") -f $script:mapScanAt } else { '' })
     $ctl.BtnMapUp.IsEnabled = ($null -ne $node.Parent)
     $ctl.EmptyMap.Visibility = if ($rows.Count -gt 0) { 'Collapsed' } else { 'Visible' }
-    if ($rows.Count -eq 0) { $ctl.EmptyMapText.Text = '这个文件夹是空的' }
+    if ($rows.Count -eq 0) { $ctl.EmptyMapText.Text = (T '这个文件夹是空的') }
     Update-MapSel
 }
 function Show-MapFiles {
@@ -5749,14 +7093,14 @@ function Show-MapFiles {
     $tot = if ($script:mapRoot) { [double]$script:mapRoot.Size } else { 0 }
     foreach ($f in $big) {
         if (-not (Test-Path -LiteralPath $f.Path)) { continue }
-        [void]$rows.Add((New-MapRow ([IO.Path]::GetFileName($f.Path)) $f.Path $f.Size $max $tot $false $null ("{0} · 修改于 {1:yyyy-MM-dd}" -f (Split-Path $f.Path -Parent), $f.Modified) 'file'))
+        [void]$rows.Add((New-MapRow ([IO.Path]::GetFileName($f.Path)) $f.Path $f.Size $max $tot $false $null ((T "{0} · 修改于 {1:yyyy-MM-dd}") -f (Split-Path $f.Path -Parent), $f.Modified) 'file'))
     }
     $ctl.MapList.ItemsSource = $rows
-    $ctl.MapPath.Text = "最大的 {0} 个文件" -f $rows.Count
-    $ctl.MapInfo.Text = '只列出 50 MB 以上的文件，最多 500 个'
+    $ctl.MapPath.Text = (T "最大的 {0} 个文件") -f $rows.Count
+    $ctl.MapInfo.Text = (T '只列出 50 MB 以上的文件，最多 500 个')
     $ctl.BtnMapUp.IsEnabled = $false
     $ctl.EmptyMap.Visibility = if ($rows.Count -gt 0) { 'Collapsed' } else { 'Visible' }
-    if ($rows.Count -eq 0) { $ctl.EmptyMapText.Text = '没有超过 50 MB 的文件' }
+    if ($rows.Count -eq 0) { $ctl.EmptyMapText.Text = (T '没有超过 50 MB 的文件') }
     Update-MapSel
 }
 function Set-MapView([string]$v) {
@@ -5773,7 +7117,7 @@ function Set-MapView([string]$v) {
         $has = $script:growRows -and $script:growRows.Count -gt 0
         $ctl.EmptyMap.Visibility = if ($has) { 'Collapsed' } else { 'Visible' }
         $ctl.EmptyMapText.Text = $script:growNote
-        $ctl.MapPath.Text = '和上次扫描相比'
+        $ctl.MapPath.Text = (T '和上次扫描相比')
         $ctl.MapInfo.Text = $script:growNote
         Update-MapSel
     }
@@ -5795,8 +7139,8 @@ function Update-MapSel {
     $ctl.BtnMapOpen.IsEnabled = $r -and -not $busy
     $ctl.BtnMapDelete.IsEnabled = $r -and -not $r.Locked -and -not $busy -and $r.Size -gt 0
     $ctl.BtnMapCompress.IsEnabled = $r -and $r.IsDir -and -not $busy -and -not (Get-CompressBlock $r.Path)
-    if (-not $r) { $ctl.MapSel.Text = '选中一行可以打开位置、压缩或删除。系统文件夹、软件安装文件夹、C 盘个人文件夹和搬家后的数据带小锁，不能在这里删。'; return }
-    $ctl.MapSel.Text = if ($r.Locked) { "{0}：不能在这里删（{1}）" -f $r.Name, $r.LockTip } else { "{0}  {1}" -f $r.Name, $r.SizeText }
+    if (-not $r) { $ctl.MapSel.Text = (T '选中一行可以打开位置、压缩或删除。系统文件夹、软件安装文件夹、C 盘个人文件夹和搬家后的数据带小锁，不能在这里删。'); return }
+    $ctl.MapSel.Text = if ($r.Locked) { (T "{0}：不能在这里删（{1}）") -f $r.Name, $r.LockTip } else { "{0}  {1}" -f $r.Name, $r.SizeText }
 }
 $ctl.MapList.Add_SelectionChanged({ Update-MapSel })
 $ctl.BtnMapOpen.Add_Click({ $r = $ctl.MapList.SelectedItem; if ($r) { Open-Location $r.Path } })
@@ -5828,14 +7172,14 @@ function Update-Growth($root) {
         foreach ($x in @($list | Sort-Object { $_.D } -Descending | Select-Object -First 60)) {
             $g = New-Object GrowRow
             $g.Path = $x.P
-            $g.Before = if ($x.Had) { Fmt $x.B } else { '不到 100 MB' }
-            $g.Now = if ($x.N -gt 0) { Fmt $x.N } else { '不到 100 MB' }
+            $g.Before = if ($x.Had) { Fmt $x.B } else { (T '不到 100 MB') }
+            $g.Now = if ($x.N -gt 0) { Fmt $x.N } else { (T '不到 100 MB') }
             $g.Change = $(if ($x.D -gt 0) { '+' } else { '−' }) + (Fmt ([math]::Abs($x.D)))
             $g.ChangeBrush = if ($x.D -gt 0) { '#D70015' } else { '#248A3D' }
             $script:growRows.Add($g)
         }
-        $script:growNote = if ($script:growRows.Count -gt 0) { "上次扫描在 $oldAt。红色是变大的，绿色是变小的（只列变化超过 100 MB 的文件夹）" } else { "和上次（$oldAt）相比，没有文件夹变化超过 100 MB" }
-    } else { $script:growNote = '这是第一次扫描这块盘。下次再扫描，就能看到哪些文件夹变大了' }
+        $script:growNote = if ($script:growRows.Count -gt 0) { ((T "上次扫描在 {0}。红色是变大的，绿色是变小的（只列变化超过 100 MB 的文件夹）") -f $oldAt) } else { ((T "和上次（{0}）相比，没有文件夹变化超过 100 MB") -f $oldAt) }
+    } else { $script:growNote = (T '这是第一次扫描这块盘。下次再扫描，就能看到哪些文件夹变大了') }
     $out = New-Object System.Collections.Generic.List[string]
     $out.Add(("# {0:yyyy-MM-dd HH:mm}" -f (Get-Date)))
     foreach ($l in $snap) { $out.Add($l) }
@@ -5848,15 +7192,15 @@ $ctl.BtnMapDelete.Add_Click({
     $r = $ctl.MapList.SelectedItem
     if (-not $r -or $script:worker) { return }
     $why = Get-DeleteBlock $r.Path
-    if ($why) { Show-Sheet -Kind warn -Title '这一项不能删' -Text $why | Out-Null; return }
-    $kind = if ($r.IsDir) { '文件夹' } else { '文件' }
-    $text = "{0}`n`n「移到回收站」可以恢复，但要清空回收站后才真正腾出空间；「永久删除」马上腾出空间，删了就找不回来。" -f $r.Path
-    $ans = Show-Sheet -Kind danger -Title ("删除这个{0}（{1}）？" -f $kind, $r.SizeText) -Text $text `
-        -Confirm '我已确认这些资料不再需要，删除不会给我带来损失；因删除造成的后果由我自己承担。' -Buttons @('取消', '永久删除', '移到回收站') -Primary '移到回收站' -Cancel '取消'
-    if ($ans -ne '移到回收站' -and $ans -ne '永久删除') { return }
+    if ($why) { Show-Sheet -Kind warn -Title (T '这一项不能删') -Text $why | Out-Null; return }
+    $kind = if ($r.IsDir) { (T '文件夹') } else { (T '文件') }
+    $text = (T "{0}`n`n「移到回收站」可以恢复，但要清空回收站后才真正腾出空间；「永久删除」马上腾出空间，删了就找不回来。") -f $r.Path
+    $ans = Show-Sheet -Kind danger -Title ((T "删除这个{0}（{1}）？") -f $kind, $r.SizeText) -Text $text `
+        -Confirm (T '我已确认这些资料不再需要，删除不会给我带来损失；因删除造成的后果由我自己承担。') -Buttons @((T '取消'), (T '永久删除'), (T '移到回收站')) -Primary (T '移到回收站') -Cancel (T '取消')
+    if ($ans -ne (T '移到回收站') -and $ans -ne (T '永久删除')) { return }
     $sync.Mode = 'mapdel'; $sync.MapDel = $null
     $script:mapDelRow = $r
-    Start-Op ("删除 {0}" -f $r.Name)
+    Start-Op ((T "删除 {0}") -f $r.Name)
     UI-Busy $true
     Start-Worker @'
 $p = $arg.Path; $res = @{ Ok = $false; Msg = '' }
@@ -5867,38 +7211,38 @@ else {
     if ($arg.Recycle) {
         $rc = [FsTools]::Recycle($p, [long]$sync.Hwnd)
         $res.Ok = -not (Test-Path -LiteralPath $p)
-        if (-not $res.Ok) { $res.Msg = "没有删掉（代码 $rc，可能文件正被占用，或者在提示里选了取消）" }
+        if (-not $res.Ok) { $res.Msg = ((T "没有删掉（代码 {0}，可能文件正被占用，或者在提示里选了取消）") -f $rc) }
     } else {
         if ($arg.IsDir) { & "$sys32\cmd.exe" /c rd /s /q "\\?\$p" 2>$null | Out-Null } else { Remove-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue }
         $res.Ok = -not (Test-Path -LiteralPath $p)
-        if (-not $res.Ok) { $res.Msg = '没删干净，可能有文件正被占用' }
+        if (-not $res.Ok) { $res.Msg = (T '没删干净，可能有文件正被占用') }
     }
-    $how = if ($arg.Recycle) { '空间地图：移到回收站' } else { '空间地图：永久删除' }
-    OpLog '删除' $how $p ("{0}{1}" -f (GB $arg.Size), $(if ($res.Ok) { '' } else { '，失败：' + $res.Msg }))
+    $how = if ($arg.Recycle) { (T '空间地图：移到回收站') } else { (T '空间地图：永久删除') }
+    OpLog '删除' $how $p ("{0}{1}" -f (GB $arg.Size), $(if ($res.Ok) { '' } else { (T '，失败：') + $res.Msg }))
 }
 $sync.MapDel = $res
-'@ @{ Path = $r.Path; Recycle = ($ans -eq '移到回收站'); IsDir = [bool]$r.IsDir; Size = [double]$r.Size }
+'@ @{ Path = $r.Path; Recycle = ($ans -eq (T '移到回收站')); IsDir = [bool]$r.IsDir; Size = [double]$r.Size }
 })
 
 # 压缩文件夹（NTFS）：空间地图和「省空间」页共用
 function Start-FolderCompress([string]$path) {
     if ($script:worker) { return }
     $why = Get-CompressBlock $path
-    if ($why) { Show-Sheet -Kind warn -Title '这个文件夹不适合这样压缩' -Text $why | Out-Null; return }
-    $ans = Show-Sheet -Title '压缩这个文件夹？' -Text ("{0}`n`n用 Windows 自带的 NTFS 压缩：文件照常打开、照常修改，只是占的空间变小。文档、代码、日志通常能省一半；照片、视频、压缩包几乎省不了。文件多的话要几分钟。" -f $path) -Buttons @('取消', '压缩') -Primary '压缩' -Cancel '取消'
-    if ($ans -ne '压缩') { return }
+    if ($why) { Show-Sheet -Kind warn -Title (T '这个文件夹不适合这样压缩') -Text $why | Out-Null; return }
+    $ans = Show-Sheet -Title (T '压缩这个文件夹？') -Text ((T "{0}`n`n用 Windows 自带的 NTFS 压缩：文件照常打开、照常修改，只是占的空间变小。文档、代码、日志通常能省一半；照片、视频、压缩包几乎省不了。文件多的话要几分钟。") -f $path) -Buttons @((T '取消'), (T '压缩')) -Primary (T '压缩') -Cancel (T '取消')
+    if ($ans -ne (T '压缩')) { return }
     $sync.Mode = 'fcompress'; $sync.FcResult = $null
-    Start-Op '压缩文件夹'
+    Start-Op (T '压缩文件夹')
     UI-Busy $true
     Start-Worker @'
 $p = $arg.Path
-SetP @{ Steps = 2; Step = 1; StepName = '统计压缩前的实际占用'; SubKind = 'action'; SubStart = (Get-Date); Detail = $p }
+SetP @{ Steps = 2; Step = 1; StepName = (T '统计压缩前的实际占用'); SubKind = 'action'; SubStart = (Get-Date); Detail = $p }
 $before = [double][FsTools]::OnDiskTree($p)
-SetP @{ Step = 2; StepName = '压缩'; SubStart = (Get-Date); Detail = "正在压缩 $p" }
-if (-not (Test-Path -LiteralPath $p -PathType Container)) { Log "  文件夹不在了：$p" }
+SetP @{ Step = 2; StepName = (T '压缩'); SubStart = (Get-Date); Detail = ((T "正在压缩 {0}") -f $p) }
+if (-not (Test-Path -LiteralPath $p -PathType Container)) { Log ((T "  文件夹不在了：{0}") -f $p) }
 else {
     $inside = $false
-    try { Set-Location -LiteralPath $p -ErrorAction Stop; $inside = ((Get-Location).ProviderPath.TrimEnd('\') -ieq $p.TrimEnd('\')) } catch { Log "  进不去：$p" }
+    try { Set-Location -LiteralPath $p -ErrorAction Stop; $inside = ((Get-Location).ProviderPath.TrimEnd('\') -ieq $p.TrimEnd('\')) } catch { Log ((T "  进不去：{0}") -f $p) }
     if ($inside) {
         & "$sys32\compact.exe" /c /s /a /i /q '*' 2>&1 | Out-Null
         # 虚拟磁盘文件压缩后会变慢、甚至出错，压完再把它们解压回去
@@ -5907,7 +7251,7 @@ else {
 }
 try { [Environment]::CurrentDirectory = $env:SystemRoot; Set-Location -LiteralPath $env:SystemRoot } catch {}
 $after = [double][FsTools]::OnDiskTree($p)
-OpLog '压缩' '压缩文件夹（NTFS）' $p ("实际占用 {0} → {1}" -f (GB $before), (GB $after))
+OpLog '压缩' (T '压缩文件夹（NTFS）') $p ((T "实际占用 {0} → {1}") -f (GB $before), (GB $after))
 $sync.FcResult = @{ Path = $p; Before = $before; After = $after }
 '@ @{ Path = $path }
 }
@@ -5934,7 +7278,7 @@ function Load-Moves {
     $script:moveRows = $col
     $ctl.MovesList.ItemsSource = $col
     $ctl.EmptyMoves.Visibility = if ($col.Count -gt 0) { 'Collapsed' } else { 'Visible' }
-    $ctl.MovesInfo.Text = if ($col.Count -gt 0) { "共 {0} 个文件夹，正在统计大小…" -f $col.Count } else { '' }
+    $ctl.MovesInfo.Text = if ($col.Count -gt 0) { (T "共 {0} 个文件夹，正在统计大小…") -f $col.Count } else { '' }
     if ($col.Count -gt 0 -and -not $script:worker) {
         $sync.Mode = 'movesize'
         UI-Busy $true
@@ -5956,23 +7300,23 @@ $ctl.MovesList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::Click
     $b = $e.OriginalSource
     if (-not ($b -is [System.Windows.Controls.Button]) -or -not ($b.Tag -is [MoveRow])) { return }
     $r = $b.Tag
-    if ($script:worker) { Show-Sheet -Title '请等当前操作做完' -Text '另一个操作还在进行中。' | Out-Null; return }
+    if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return }
     switch ($b.Name) {
         'MvOpen' { if (Test-Path -LiteralPath $r.Dst) { Open-Location $r.Dst } else { Open-Location $r.Src } }
         'MvFix' {
             $t = if ($r.FixTarget) { $r.FixTarget } else { $r.Dst }
-            if ((Show-Sheet -Title '修复链接？' -Text ("让 C 盘上的 {0} 重新指向 {1}。修好后软件就能照常找到数据。" -f $r.Src, $t) -Buttons @('取消', '修复') -Primary '修复' -Cancel '取消') -ne '修复') { return }
+            if ((Show-Sheet -Title (T '修复链接？') -Text ((T "让 C 盘上的 {0} 重新指向 {1}。修好后软件就能照常找到数据。") -f $r.Src, $t) -Buttons @((T '取消'), (T '修复')) -Primary (T '修复') -Cancel (T '取消')) -ne (T '修复')) { return }
             $res = @{}; Invoke-FixLink $r.Src $t $res
-            if ($res.Ok) { Show-Sheet -Kind done -Title '链接已修复' -Text ("{0} → {1}" -f $r.Src, $t) | Out-Null } else { Show-Sheet -Kind warn -Title '没修好' -Text $res.Msg | Out-Null }
+            if ($res.Ok) { Show-Sheet -Kind done -Title (T '链接已修复') -Text ("{0} → {1}" -f $r.Src, $t) | Out-Null } else { Show-Sheet -Kind warn -Title (T '没修好') -Text $res.Msg | Out-Null }
             Load-Moves
         }
         'MvDrop' {
-            $ans = Show-Sheet -Kind danger -Title ("删除多余的副本（{0}）？" -f $r.SizeText) `
-                -Text ("C 盘上的原文件夹 {0} 还在，软件用的是它；目标盘上的 {1} 是上次没搬完留下的副本。删掉它可以腾出目标盘的空间，C 盘不受影响。" -f $r.Src, $r.Dst) `
-                -Confirm '我已确认 C 盘上的原文件夹还在，删掉这份副本不会给我带来损失。' -Buttons @('取消', '删除副本') -Primary '删除副本' -Cancel '取消'
-            if ($ans -ne '删除副本') { return }
+            $ans = Show-Sheet -Kind danger -Title ((T "删除多余的副本（{0}）？") -f $r.SizeText) `
+                -Text ((T "C 盘上的原文件夹 {0} 还在，软件用的是它；目标盘上的 {1} 是上次没搬完留下的副本。删掉它可以腾出目标盘的空间，C 盘不受影响。") -f $r.Src, $r.Dst) `
+                -Confirm (T '我已确认 C 盘上的原文件夹还在，删掉这份副本不会给我带来损失。') -Buttons @((T '取消'), (T '删除副本')) -Primary (T '删除副本') -Cancel (T '取消')
+            if ($ans -ne (T '删除副本')) { return }
             $sync.Mode = 'movedrop'; $sync.MoveRes = $null
-            Start-Op '删除多余的副本'; UI-Busy $true
+            Start-Op (T '删除多余的副本'); UI-Busy $true
             Start-Worker @'
 SetP @{ Steps = 1; Step = 1; StepName = $arg.Rec.Dst; SubKind = 'action'; SubStart = (Get-Date) }
 $res = @{}; Invoke-DropCopy $arg.Rec $res; $sync.MoveRes = $res
@@ -5980,24 +7324,24 @@ $res = @{}; Invoke-DropCopy $arg.Rec $res; $sync.MoveRes = $res
         }
         'MvBack' {
             $free = [double](FreeC)
-            $text = "把 {0} 复制回 C 盘的 {1}，核对一致后拆掉链接、换回真正的文件夹，最后删除目标盘上的那份。`n`nC 盘现在剩 {2}，这个文件夹约 {3}。" -f $r.Dst, $r.Src, (GB $free), $r.SizeText
-            if ((Show-Sheet -Title ("把「{0}」搬回 C 盘？" -f $r.Name) -Text $text -Buttons @('取消', '搬回') -Primary '搬回' -Cancel '取消') -ne '搬回') { return }
+            $text = (T "把 {0} 复制回 C 盘的 {1}，核对一致后拆掉链接、换回真正的文件夹，最后删除目标盘上的那份。`n`nC 盘现在剩 {2}，这个文件夹约 {3}。") -f $r.Dst, $r.Src, (GB $free), $r.SizeText
+            if ((Show-Sheet -Title ((T "把「{0}」搬回 C 盘？") -f $r.Name) -Text $text -Buttons @((T '取消'), (T '搬回')) -Primary (T '搬回') -Cancel (T '取消')) -ne (T '搬回')) { return }
             $rec = @{ Src = $r.Src; Dst = $r.Dst; Idx = 0 }; $apps = @()
             foreach ($c in $catalog) { if (@($c.Paths) -contains $r.Src) { $rec.Idx = $c.Idx; $apps = @($c.Apps) } }
             $inside = Get-ProcsInside @($r.Src, $r.Dst)
             if (-not $apps -and $inside.Count -gt 0) {
-                $who = $inside -join '、'
-                if ((Show-Sheet -Kind warn -Title "需要先退出$who" -Text "$who 正在从这个文件夹运行，不退出的话没法搬回。点「退出并继续」会替你关掉它们（没保存的内容请先保存）。" -Buttons @('取消', '退出并继续') -Primary '退出并继续' -Cancel '取消') -ne '退出并继续') { return }
+                $who = $inside -join (T '、')
+                if ((Show-Sheet -Kind warn -Title ((T "需要先退出{0}") -f $who) -Text ((T "{0} 正在从这个文件夹运行，不退出的话没法搬回。点「退出并继续」会替你关掉它们（没保存的内容请先保存）。") -f $who) -Buttons @((T '取消'), (T '退出并继续')) -Primary (T '退出并继续') -Cancel (T '取消')) -ne (T '退出并继续')) { return }
             }
             if ($apps) {
                 $busy = Get-BusyApps $apps
                 if ($busy.Count -gt 0) {
-                    $who = $busy -join '、'
-                    if ((Show-Sheet -Kind warn -Title "需要先退出$who" -Text "$who 正在使用这个文件夹，不退出的话没法搬回。点「退出并继续」会替你关掉它们。" -Buttons @('取消', '退出并继续') -Primary '退出并继续' -Cancel '取消') -ne '退出并继续') { return }
+                    $who = @($busy | ForEach-Object { T $_ }) -join (T '、')
+                    if ((Show-Sheet -Kind warn -Title ((T "需要先退出{0}") -f $who) -Text ((T "{0} 正在使用这个文件夹，不退出的话没法搬回。点「退出并继续」会替你关掉它们。") -f $who) -Buttons @((T '取消'), (T '退出并继续')) -Primary (T '退出并继续') -Cancel (T '取消')) -ne (T '退出并继续')) { return }
                 }
             }
             $sync.Mode = 'moveback'; $sync.MoveRes = $null
-            Start-Op ("搬回 C 盘：{0}" -f $r.Name); UI-Busy $true
+            Start-Op ((T "搬回 C 盘：{0}") -f $r.Name); UI-Busy $true
             Start-Worker @'
 SetP @{ Steps = 1; Step = 1; StepName = $arg.Rec.Src }
 $res = @{}; Invoke-MoveBack $arg.Rec $res; $sync.MoveRes = $res
@@ -6011,22 +7355,22 @@ $res = @{}; Invoke-MoveBack $arg.Rec $res; $sync.MoveRes = $res
 # ------------------------------------------------------------
 function Load-Save {
     $on = Get-CompactOSOn
-    $ctl.SaveCosState.Text = if ($on) { '当前：已开启，系统文件已压缩存放' } else { '当前：未开启' }
+    $ctl.SaveCosState.Text = if ($on) { (T '当前：已开启，系统文件已压缩存放') } else { (T '当前：未开启') }
     $ctl.BtnCosOn.IsEnabled = -not $on; $ctl.BtnCosOff.IsEnabled = $on
     $pf = Get-PageFileInfo
-    $desc = @($pf.Files | ForEach-Object { "{0}（约 {1}）" -f $_.Path, (Fmt ($_.MB * 1MB)) }) -join '、'
-    if (-not $desc) { $desc = '没有页面文件' }
-    $ctl.SavePfState.Text = "当前：$desc" + $(if ($pf.Auto) { '，由系统自动管理' } else { '' })
+    $desc = @($pf.Files | ForEach-Object { (T "{0}（约 {1}）") -f $_.Path, (Fmt ($_.MB * 1MB)) }) -join (T '、')
+    if (-not $desc) { $desc = (T '没有页面文件') }
+    $ctl.SavePfState.Text = ((T "当前：{0}") -f $desc) + $(if ($pf.Auto) { (T '，由系统自动管理') } else { '' })
     $ctl.SavePfDrive.Items.Clear()
     foreach ($d in (Fixed-Drives -NoSystem)) {
         $it = New-Object System.Windows.Controls.ComboBoxItem
-        $it.Content = "{0}  空闲 {1}" -f $d.Name.TrimEnd('\'), (Fmt $d.AvailableFreeSpace); $it.Tag = $d.Name.TrimEnd('\')
+        $it.Content = (T "{0}  空闲 {1}") -f $d.Name.TrimEnd('\'), (Fmt $d.AvailableFreeSpace); $it.Tag = $d.Name.TrimEnd('\')
         [void]$ctl.SavePfDrive.Items.Add($it)
     }
     if ($ctl.SavePfDrive.Items.Count -gt 0) { $ctl.SavePfDrive.SelectedIndex = 0 }
     $ctl.BtnPfMove.IsEnabled = $ctl.SavePfDrive.Items.Count -gt 0
     $h = Get-HiberInfo
-    $ctl.SaveHibState.Text = if (-not $h.Exists) { '当前：已关闭休眠，没有 hiberfil.sys' } elseif ($h.Reduced) { "当前：精简（只留快速启动），占 $(Fmt $h.Bytes)" } else { "当前：完整休眠，占 $(Fmt $h.Bytes)" }
+    $ctl.SaveHibState.Text = if (-not $h.Exists) { (T '当前：已关闭休眠，没有 hiberfil.sys') } elseif ($h.Reduced) { ((T "当前：精简（只留快速启动），占 {0}") -f $(Fmt $h.Bytes)) } else { ((T "当前：完整休眠，占 {0}") -f $(Fmt $h.Bytes)) }
     $col = New-Object 'System.Collections.ObjectModel.ObservableCollection[VdiskRow]'
     foreach ($v in (Get-VDisks)) {
         $r = New-Object VdiskRow
@@ -6045,12 +7389,12 @@ foreach ($b in @($ctl.BtnCosOn, $ctl.BtnCosOff)) {
     $b.Add_Click({
         if ($script:worker) { return }
         $on = [object]::ReferenceEquals($this, $ctl.BtnCosOn)
-        $t = if ($on) { '开启系统压缩？' } else { '关闭系统压缩？' }
-        $x = if ($on) { 'Windows 会把系统文件压缩存放，通常省 2 到 4 GB。要 10 到 30 分钟，期间可以照常用电脑，不需要重启。' } else { '系统文件会解压回原样，C 盘会多用 2 到 4 GB。要 10 到 30 分钟。' }
-        $btn = if ($on) { '开启' } else { '关闭' }
-        if ((Show-Sheet -Title $t -Text $x -Buttons @('取消', $btn) -Primary $btn -Cancel '取消') -ne $btn) { return }
+        $t = if ($on) { (T '开启系统压缩？') } else { (T '关闭系统压缩？') }
+        $x = if ($on) { (T 'Windows 会把系统文件压缩存放，通常省 2 到 4 GB。要 10 到 30 分钟，期间可以照常用电脑，不需要重启。') } else { (T '系统文件会解压回原样，C 盘会多用 2 到 4 GB。要 10 到 30 分钟。') }
+        $btn = if ($on) { (T '开启') } else { (T '关闭') }
+        if ((Show-Sheet -Title $t -Text $x -Buttons @((T '取消'), $btn) -Primary $btn -Cancel (T '取消')) -ne $btn) { return }
         $sync.Mode = 'compactos'; $sync.CosRes = $null
-        Start-Op $(if ($on) { '开启系统压缩' } else { '关闭系统压缩' }); UI-Busy $true
+        Start-Op $(if ($on) { (T '开启系统压缩') } else { (T '关闭系统压缩') }); UI-Busy $true
         Start-Worker @'
 SetP @{ Steps = 1; Step = 1; StepName = 'compact.exe'; SubKind = 'slow'; SubStart = (Get-Date); Detail = '' }
 $res = @{}; Invoke-CompactOS ([bool]$arg.On) $res; $sync.CosRes = $res
@@ -6060,28 +7404,28 @@ $res = @{}; Invoke-CompactOS ([bool]$arg.On) $res; $sync.CosRes = $res
 $ctl.BtnPfMove.Add_Click({
     $d = [string]$ctl.SavePfDrive.SelectedItem.Tag
     if (-not $d) { return }
-    $ans = Show-Sheet -Kind warn -Title ("把页面文件改到 {0} 盘？" -f $d.Substring(0, 1)) -Text ("C 盘不再放页面文件，改为放在 {0}\pagefile.sys，大小由系统自动管理。重启后生效，C 盘会多出几个 GB。{0} 必须是一直插着的本机硬盘。" -f $d) -Buttons @('取消', '改到这块盘') -Primary '改到这块盘' -Cancel '取消'
-    if ($ans -ne '改到这块盘') { return }
+    $ans = Show-Sheet -Kind warn -Title ((T "把页面文件改到 {0} 盘？") -f $d.Substring(0, 1)) -Text ((T "C 盘不再放页面文件，改为放在 {0}\pagefile.sys，大小由系统自动管理。重启后生效，C 盘会多出几个 GB。{0} 必须是一直插着的本机硬盘。") -f $d) -Buttons @((T '取消'), (T '改到这块盘')) -Primary (T '改到这块盘') -Cancel (T '取消')
+    if ($ans -ne (T '改到这块盘')) { return }
     $err = Set-PageFile $d
-    if ($err) { Show-Sheet -Kind warn -Title '没改成' -Text $err | Out-Null } else { Load-Save; Ask-Restart '页面文件的新位置要重启电脑后才生效。' }
+    if ($err) { Show-Sheet -Kind warn -Title (T '没改成') -Text $err | Out-Null } else { Load-Save; Ask-Restart (T '页面文件的新位置要重启电脑后才生效。') }
 })
 $ctl.BtnPfAuto.Add_Click({
-    if ((Show-Sheet -Title '页面文件恢复系统默认？' -Text '恢复成 Windows 自动管理（通常放在 C 盘）。重启后生效。' -Buttons @('取消', '恢复') -Primary '恢复' -Cancel '取消') -ne '恢复') { return }
+    if ((Show-Sheet -Title (T '页面文件恢复系统默认？') -Text (T '恢复成 Windows 自动管理（通常放在 C 盘）。重启后生效。') -Buttons @((T '取消'), (T '恢复')) -Primary (T '恢复') -Cancel (T '取消')) -ne (T '恢复')) { return }
     $err = Set-PageFile ''
-    if ($err) { Show-Sheet -Kind warn -Title '没改成' -Text $err | Out-Null } else { Load-Save; Ask-Restart '页面文件的设置要重启电脑后才生效。' }
+    if ($err) { Show-Sheet -Kind warn -Title (T '没改成') -Text $err | Out-Null } else { Load-Save; Ask-Restart (T '页面文件的设置要重启电脑后才生效。') }
 })
 foreach ($b in @($ctl.BtnHibReduced, $ctl.BtnHibOff, $ctl.BtnHibFull)) {
     $b.Add_Click({
         $mode = if ([object]::ReferenceEquals($this, $ctl.BtnHibOff)) { 'off' } elseif ([object]::ReferenceEquals($this, $ctl.BtnHibFull)) { 'full' } else { 'reduced' }
-        $txt = @{ off = '整个删掉休眠文件。睡眠不受影响，但没有「休眠」和「快速启动」了，开机可能慢几秒。'; reduced = '休眠文件缩小到一半左右，只保留「快速启动」，开机速度不变，只是不能手动休眠。'; full = '恢复完整的休眠功能，休眠文件会变回约等于内存四到七成的大小。' }[$mode]
-        if ((Show-Sheet -Title '修改休眠设置？' -Text $txt -Buttons @('取消', '好') -Primary '好' -Cancel '取消') -ne '好') { return }
+        $txt = @{ off = (T '整个删掉休眠文件。睡眠不受影响，但没有「休眠」和「快速启动」了，开机可能慢几秒。'); reduced = (T '休眠文件缩小到一半左右，只保留「快速启动」，开机速度不变，只是不能手动休眠。'); full = (T '恢复完整的休眠功能，休眠文件会变回约等于内存四到七成的大小。') }[$mode]
+        if ((Show-Sheet -Title (T '修改休眠设置？') -Text $txt -Buttons @((T '取消'), (T '好')) -Primary (T '好') -Cancel (T '取消')) -ne (T '好')) { return }
         Set-Hiber $mode
         Load-Save
     })
 }
 $ctl.BtnFolderCompress.Add_Click({
     $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
-    $dlg.Description = '选择要压缩的文件夹'
+    $dlg.Description = (T '选择要压缩的文件夹')
     if ($dlg.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Start-FolderCompress $dlg.SelectedPath }
 })
 $ctl.VdList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent, [System.Windows.RoutedEventHandler]{
@@ -6089,19 +7433,19 @@ $ctl.VdList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickEve
     $b = $e.OriginalSource
     if (-not ($b -is [System.Windows.Controls.Button]) -or -not ($b.Tag -is [VdiskRow])) { return }
     $r = $b.Tag
-    if ($script:worker) { Show-Sheet -Title '请等当前操作做完' -Text '另一个操作还在进行中。' | Out-Null; return }
+    if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return }
     switch ($b.Name) {
         'VdOpen' { Open-Location $r.Path }
         'VdCompact' {
             $apps = @(); if ($r.Kind -eq 'docker') { $apps = @('Docker Desktop') }
             if ($apps) {
                 $busy = Get-BusyApps $apps
-                if ($busy.Count -gt 0) { Show-Sheet -Kind warn -Title '请先退出 Docker Desktop' -Text '在任务栏右下角的 Docker 图标上右键，选「Quit Docker Desktop」，再回来压缩。' | Out-Null; return }
+                if ($busy.Count -gt 0) { Show-Sheet -Kind warn -Title (T '请先退出 Docker Desktop') -Text (T '在任务栏右下角的 Docker 图标上右键，选「Quit Docker Desktop」，再回来压缩。') | Out-Null; return }
             }
-            $extra = if ($r.Kind -eq 'wsl' -or $r.Kind -eq 'docker') { '压缩前会先关闭所有 WSL（wsl --shutdown），正在 WSL 里运行的程序会被结束。' } else { '用这个磁盘的虚拟机要先关掉。' }
-            if ((Show-Sheet -Title ("压缩「{0}」？" -f $r.Name) -Text ("{0}`n`n现在 {1}。{2}压缩不会删除里面的任何数据，只把已经空出来的部分还给 Windows，可能要几分钟。" -f $r.Path, $r.SizeText, $extra) -Buttons @('取消', '压缩') -Primary '压缩' -Cancel '取消') -ne '压缩') { return }
+            $extra = if ($r.Kind -eq 'wsl' -or $r.Kind -eq 'docker') { (T '压缩前会先关闭所有 WSL（wsl --shutdown），正在 WSL 里运行的程序会被结束。') } else { (T '用这个磁盘的虚拟机要先关掉。') }
+            if ((Show-Sheet -Title ((T "压缩「{0}」？") -f $r.Name) -Text ((T "{0}`n`n现在 {1}。{2}压缩不会删除里面的任何数据，只把已经空出来的部分还给 Windows，可能要几分钟。") -f $r.Path, $r.SizeText, $extra) -Buttons @((T '取消'), (T '压缩')) -Primary (T '压缩') -Cancel (T '取消')) -ne (T '压缩')) { return }
             $sync.Mode = 'vdisk'; $sync.VdRes = $null
-            Start-Op ("压缩虚拟磁盘：{0}" -f $r.Name); UI-Busy $true
+            Start-Op ((T "压缩虚拟磁盘：{0}") -f $r.Name); UI-Busy $true
             Start-Worker @'
 SetP @{ Steps = 1; Step = 1; StepName = (Split-Path $arg.Path -Leaf); SubKind = 'slow'; SubStart = (Get-Date); Detail = '' }
 $res = @{}; Invoke-CompactVdisk $arg.Path $arg.Kind $res; $sync.VdRes = $res
@@ -6109,18 +7453,18 @@ $res = @{}; Invoke-CompactVdisk $arg.Path $arg.Kind $res; $sync.VdRes = $res
         }
         'VdMove' {
             $dest = Get-Dest
-            if (-not $dest) { Show-Sheet -Kind warn -Title '没有可用的搬家目标' -Text '请先在「清理 C 盘」页的「搬家目标」里选一块 C 盘以外的硬盘。' | Out-Null; return }
-            $apps = switch -Wildcard ($r.Name) { '安卓*' { @('Android 模拟器') } 'VirtualBox*' { @('VirtualBox') } 'VMware*' { @('VMware') } default { @() } }
+            if (-not $dest) { Show-Sheet -Kind warn -Title (T '没有可用的搬家目标') -Text (T '请先在「清理 C 盘」页的「搬家目标」里选一块 C 盘以外的硬盘。') | Out-Null; return }
+            $apps = switch -Wildcard ($r.Name) { (T '安卓*') { @('Android 模拟器') } 'VirtualBox*' { @('VirtualBox') } 'VMware*' { @('VMware') } default { @() } }
             $busy = if ($apps) { Get-BusyApps $apps } else { @() }
-            $who = $busy -join '、'
-            $text = "{0}（{1}）整个搬到 {2}，原位置留一个链接，软件照常使用。" -f $r.Path, $r.SizeText, $dest
-            if ($busy.Count -gt 0) { $text += "`n`n$who 正在运行，搬之前会替你关掉它们（正在运行的模拟器或虚拟机会被结束）。" }
-            if ((Show-Sheet -Title ("把「{0}」搬到其他盘？" -f $r.Name) -Text $text -Buttons @('取消', '搬') -Primary '搬' -Cancel '取消') -ne '搬') { return }
+            $who = @($busy | ForEach-Object { T $_ }) -join (T '、')
+            $text = (T "{0}（{1}）整个搬到 {2}，原位置留一个链接，软件照常使用。") -f $r.Path, $r.SizeText, $dest
+            if ($busy.Count -gt 0) { $text += ((T "`n`n{0} 正在运行，搬之前会替你关掉它们（正在运行的模拟器或虚拟机会被结束）。") -f $who) }
+            if ((Show-Sheet -Title ((T "把「{0}」搬到其他盘？") -f $r.Name) -Text $text -Buttons @((T '取消'), (T '搬')) -Primary (T '搬') -Cancel (T '取消')) -ne (T '搬')) { return }
             $defs = Get-ChatApps; $k = @(); $dd = @()
             foreach ($a in $apps) { $k += $defs[$a].P; $dd += $defs[$a].Dirs }
             $item = @{ N = $r.Name; Paths = @($r.Path); Apps = $apps; Kill = @($k); KillDirs = @($dd) }
             $sync.Mode = 'vmove'; $sync.VmRes = $null
-            Start-Op ("搬到其他盘：{0}" -f $r.Name); UI-Busy $true
+            Start-Op ((T "搬到其他盘：{0}") -f $r.Name); UI-Busy $true
             Start-Worker @'
 New-Item -ItemType Directory -Path $arg.Dest -Force | Out-Null
 SetP @{ Steps = 1; Step = 1; StepName = $arg.Item.N; StepNote = '' }
@@ -6136,10 +7480,10 @@ $res = @{}; Invoke-Move $arg.Item $arg.Dest $res; $sync.VmRes = $res
 $script:appRows = $null; $script:leftApp = $null
 function Load-Apps {
     if ($script:worker) { return }
-    $ctl.EmptyApps.Visibility = 'Visible'; $ctl.EmptyAppsText.Text = '正在读取已安装的软件，并统计每个占多少空间…'
+    $ctl.EmptyApps.Visibility = 'Visible'; $ctl.EmptyAppsText.Text = (T '正在读取已安装的软件，并统计每个占多少空间…')
     $ctl.AppsList.ItemsSource = $null
     $sync.Mode = 'apps'; $sync.AppsResult = $null
-    Start-Op '统计已安装的软件' -NoCard
+    Start-Op (T '统计已安装的软件') -NoCard
     UI-Busy $true
     Start-Worker @'
 $out = New-Object System.Collections.ArrayList
@@ -6197,9 +7541,9 @@ function Filter-Apps {
         $col.Add($r); $tot += $r.Size
     }
     $ctl.AppsList.ItemsSource = $col
-    $ctl.AppsInfo.Text = "{0} 个软件，合计约 {1}" -f $col.Count, (Fmt $tot)
+    $ctl.AppsInfo.Text = (T "{0} 个软件，合计约 {1}") -f $col.Count, (Fmt $tot)
     $ctl.EmptyApps.Visibility = if ($col.Count -gt 0) { 'Collapsed' } else { 'Visible' }
-    if ($col.Count -eq 0) { $ctl.EmptyAppsText.Text = '没有符合条件的软件' }
+    if ($col.Count -eq 0) { $ctl.EmptyAppsText.Text = (T '没有符合条件的软件') }
 }
 foreach ($c in @($ctl.AppsAll, $ctl.AppsC, $ctl.AppsStore)) { $c.Add_Checked({ Filter-Apps }) }
 $ctl.AppsSearch.Add_TextChanged({ Filter-Apps })
@@ -6211,7 +7555,7 @@ function Build-AppRows($list) {
         $r.Name = $a.Name; $r.Publisher = $a.Publisher; $r.Version = $a.Version; $r.Location = $a.Location; $r.Uninstall = $a.Uninstall
         $r.Kind = $a.Kind; $r.PackageName = $a.Package; $r.Size = [long]$a.Size
         $r.Icon = if ($a.Name) { $a.Name.Substring(0, 1).ToUpper() } else { '?' }
-        $r.SizeText = if ($a.Size -gt 0) { $(if ($a.Measured) { '' } else { '约 ' }) + (Fmt $a.Size) } else { '—' }
+        $r.SizeText = if ($a.Size -gt 0) { $(if ($a.Measured) { '' } else { (T '约 ') }) + (Fmt $a.Size) } else { '—' }
         $r.OnC = (-not $a.Location) -or $a.Location.StartsWith($env:SystemDrive, [StringComparison]::OrdinalIgnoreCase)
         $r.LocReg = [bool]$a.LocReg
         $movedTo = ''
@@ -6226,10 +7570,10 @@ function Build-AppRows($list) {
         $r.Date = $d
         $parts = @()
         if ($a.Publisher) { $parts += $a.Publisher }
-        if ($a.Version) { $parts += ('版本 ' + $a.Version) }
-        if ($d) { $parts += ('安装于 ' + $d) }
-        if ($a.Kind -eq 'store') { $parts += '应用商店' }
-        if ($movedTo) { $parts += ("已搬到 {0}" -f $movedTo.TrimEnd('\')) } elseif ($a.Location) { $parts += $a.Location } else { $parts += '没有记录安装位置' }
+        if ($a.Version) { $parts += ((T '版本 ') + $a.Version) }
+        if ($d) { $parts += ((T '安装于 ') + $d) }
+        if ($a.Kind -eq 'store') { $parts += (T '应用商店') }
+        if ($movedTo) { $parts += ((T "已搬到 {0}") -f $movedTo.TrimEnd('\')) } elseif ($a.Location) { $parts += $a.Location } else { $parts += (T '没有记录安装位置') }
         $r.Meta = $parts -join ' · '
         $rows.Add($r)
     }
@@ -6238,17 +7582,17 @@ function Build-AppRows($list) {
 }
 # 软件整个搬到其他盘
 function Start-AppMove($r) {
-    UI-Log ("检查「{0}」能不能搬" -f $r.Name)
+    UI-Log ((T "检查「{0}」能不能搬") -f $r.Name)
     $win.Cursor = [System.Windows.Input.Cursors]::Wait
     try { $why = Get-AppMoveBlock $r $sync.AppsResult } finally { $win.Cursor = $null }
     if ($why -eq 'store') {
-        $ans = Show-Sheet -Title '应用商店的软件由 Windows 管理' -Text ("「{0}」是从应用商店装的，本工具不能搬它。`n`n有的应用可以在 Windows 设置里换盘：设置 → 应用 → 已安装的应用，点它右边的「…」，选「移动」（没有这个选项就是不支持）。" -f $r.Name) -Buttons @('好', '打开 Windows 设置') -Primary '打开 Windows 设置' -Cancel '好'
-        if ($ans -eq '打开 Windows 设置') { try { Start-Process 'ms-settings:appsfeatures' } catch {} }
+        $ans = Show-Sheet -Title (T '应用商店的软件由 Windows 管理') -Text ((T "「{0}」是从应用商店装的，本工具不能搬它。`n`n有的应用可以在 Windows 设置里换盘：设置 → 应用 → 已安装的应用，点它右边的「…」，选「移动」（没有这个选项就是不支持）。") -f $r.Name) -Buttons @((T '好'), (T '打开 Windows 设置')) -Primary (T '打开 Windows 设置') -Cancel (T '好')
+        if ($ans -eq (T '打开 Windows 设置')) { try { Start-Process 'ms-settings:appsfeatures' } catch {} }
         return
     }
-    if ($why) { Show-Sheet -Kind warn -Title ("「{0}」不适合搬" -f $r.Name) -Text $why | Out-Null; return }
+    if ($why) { Show-Sheet -Kind warn -Title ((T "「{0}」不适合搬") -f $r.Name) -Text $why | Out-Null; return }
     $dest = Get-Dest
-    if (-not $dest) { Show-Sheet -Kind warn -Title '没有可用的搬家目标' -Text '这台电脑没有 C 盘以外的硬盘，或者还没选搬家目标。请先在「清理 C 盘」页的「搬家目标」里选一块硬盘。' | Out-Null; return }
+    if (-not $dest) { Show-Sheet -Kind warn -Title (T '没有可用的搬家目标') -Text (T '这台电脑没有 C 盘以外的硬盘，或者还没选搬家目标。请先在「清理 C 盘」页的「搬家目标」里选一块硬盘。') | Out-Null; return }
     $loc = ([string]$r.Location).TrimEnd('\')
     # 资源管理器加载了它的组件（右键菜单、图标叠加等）时，文件夹会一直被占着
     $ex = @()
@@ -6256,36 +7600,36 @@ function Start-AppMove($r) {
         try { foreach ($m in $p.Modules) { if (([string]$m.FileName).StartsWith("$loc\", [StringComparison]::OrdinalIgnoreCase)) { $ex += $m.ModuleName } } } catch {}
     }
     if ($ex.Count -gt 0) {
-        Show-Sheet -Kind warn -Title ("「{0}」不适合搬" -f $r.Name) -Text ("它给资源管理器装了右键菜单之类的组件（{0}），桌面和文件夹窗口一直开着这些文件，文件夹被占着搬不了。这类软件通常不大，建议留在 C 盘。" -f (@($ex | Select-Object -Unique -First 3) -join '、')) | Out-Null
+        Show-Sheet -Kind warn -Title ((T "「{0}」不适合搬") -f $r.Name) -Text ((T "它给资源管理器装了右键菜单之类的组件（{0}），桌面和文件夹窗口一直开着这些文件，文件夹被占着搬不了。这类软件通常不大，建议留在 C 盘。") -f (@($ex | Select-Object -Unique -First 3) -join (T '、'))) | Out-Null
         return
     }
     $running = Get-ProcsInside @($loc)
-    $small = if ($r.Size -gt 0 -and $r.Size -lt 100MB) { "`n`n它只占 {0}，搬走腾出的空间不多。" -f $r.SizeText } else { '' }
-    $text = "把安装文件夹 {0}（{1}）整个搬到 {2}，C 盘原位置留一个链接。桌面快捷方式、开始菜单、卸载和自动更新都照常可用，不用重装。`n`n搬之前先核对两边的文件完全一致，再删掉 C 盘上的那份。{3}" -f $loc, $r.SizeText, $dest, $small
-    if ($running.Count -gt 0) { $text += "`n`n{0} 正在运行，搬之前会替你关掉（没保存的内容请先保存）。" -f ($running -join '、') }
-    $text += "`n`n要注意：{0} 盘要一直接着；以后软件大版本升级时，个别安装程序会把它重新装回 C 盘，到时在这里再搬一次就好。要搬回来，到「搬家管理」点「搬回 C 盘」。" -f $dest.Substring(0, 1)
-    $btn = if ($running.Count -gt 0) { '关掉并搬走' } else { '搬到其他盘' }
-    if ((Show-Sheet -Title ("把「{0}」搬到其他盘？" -f $r.Name) -Text $text -Buttons @('取消', $btn) -Primary $btn -Cancel '取消') -ne $btn) { return }
+    $small = if ($r.Size -gt 0 -and $r.Size -lt 100MB) { (T "`n`n它只占 {0}，搬走腾出的空间不多。") -f $r.SizeText } else { '' }
+    $text = (T "把安装文件夹 {0}（{1}）整个搬到 {2}，C 盘原位置留一个链接。桌面快捷方式、开始菜单、卸载和自动更新都照常可用，不用重装。`n`n搬之前先核对两边的文件完全一致，再删掉 C 盘上的那份。{3}") -f $loc, $r.SizeText, $dest, $small
+    if ($running.Count -gt 0) { $text += (T "`n`n{0} 正在运行，搬之前会替你关掉（没保存的内容请先保存）。") -f ($running -join (T '、')) }
+    $text += (T "`n`n要注意：{0} 盘要一直接着；以后软件大版本升级时，个别安装程序会把它重新装回 C 盘，到时在这里再搬一次就好。要搬回来，到「搬家管理」点「搬回 C 盘」。") -f $dest.Substring(0, 1)
+    $btn = if ($running.Count -gt 0) { (T '关掉并搬走') } else { (T '搬到其他盘') }
+    if ((Show-Sheet -Title ((T "把「{0}」搬到其他盘？") -f $r.Name) -Text $text -Buttons @((T '取消'), $btn) -Primary $btn -Cancel (T '取消')) -ne $btn) { return }
     $item = @{ N = $r.Name; Paths = @($loc); Apps = @(); Kill = @(); KillDirs = @()
-        BusyHint = '还有程序开着里面的文件。请退出这个软件（包括屏幕右下角托盘里的图标），关掉打开着这个文件夹的窗口，再搬一次；已经复制好的部分下次直接用，很快' }
+        BusyHint = (T '还有程序开着里面的文件。请退出这个软件（包括屏幕右下角托盘里的图标），关掉打开着这个文件夹的窗口，再搬一次；已经复制好的部分下次直接用，很快') }
     $sync.Mode = 'appmove'; $sync.AmRes = $null; $script:appMoveRow = $r
-    Start-Op ("搬到其他盘：{0}" -f $r.Name); UI-Busy $true
+    Start-Op ((T "搬到其他盘：{0}") -f $r.Name); UI-Busy $true
     Start-Worker @'
 $p = $arg.Item.Paths[0]
 New-Item -ItemType Directory -Path $arg.Dest -Force | Out-Null
-SetP @{ Steps = 1; Step = 1; StepName = $arg.Item.N; StepNote = ''; SubKind = 'action'; SubStart = (Get-Date); Detail = '检查有没有别的程序在用它的文件' }
+SetP @{ Steps = 1; Step = 1; StepName = $arg.Item.N; StepNote = ''; SubKind = 'action'; SubStart = (Get-Date); Detail = (T '检查有没有别的程序在用它的文件') }
 $res = @{ Done = 0; Fail = 0; Wait = 0; Moved = [double]0; Dest = @(); Msgs = @() }
 $held = Get-ModuleHolders $p
 if ($held.Count -gt 0) {
-    $m = "这些程序正在使用它的组件：{0}。文件夹被它们占着，搬不了。输入法、右键菜单、杀毒、驱动这一类软件一般都不适合搬。" -f ($held -join '、')
-    $res.Msgs = @($m); OpLog '搬运' '软件没搬：组件正被别的程序使用' $p ($held -join '、')
+    $m = (T "这些程序正在使用它的组件：{0}。文件夹被它们占着，搬不了。输入法、右键菜单、杀毒、驱动这一类软件一般都不适合搬。") -f ($held -join (T '、'))
+    $res.Msgs = @($m); OpLog '搬运' (T '软件没搬：组件正被别的程序使用') $p ($held -join (T '、'))
 } else {
     try { $arg.Item.Sddl = (Get-Acl -LiteralPath $p).GetSecurityDescriptorSddlForm('Access') } catch {}
     # 先关掉从这个文件夹运行的程序（确认框里已经告诉过用户），否则正在写的文件会让复制失败
-    SetP @{ Detail = '关闭正在运行的程序' }
+    SetP @{ Detail = (T '关闭正在运行的程序') }
     [void](Close-Holders $arg.Item $p)
     Invoke-Move $arg.Item $arg.Dest $res
-    if ($res.Done -gt 0) { OpLog '搬运' ("软件搬到其他盘：{0}" -f $arg.Item.N) "$p → $($res.Dest -join '；')" '安装文件夹整个搬走，原位置留链接' }
+    if ($res.Done -gt 0) { OpLog '搬运' ((T "软件搬到其他盘：{0}") -f $arg.Item.N) "$p → $($res.Dest -join (T '；'))" (T '安装文件夹整个搬走，原位置留链接') }
 }
 $sync.AmRes = $res
 '@ @{ Item = $item; Dest = $dest }
@@ -6305,20 +7649,20 @@ $ctl.AppsList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickE
     if (-not ($b -is [System.Windows.Controls.Button]) -or -not ($b.Tag -is [AppRow])) { return }
     $r = $b.Tag
     if ($b.Name -eq 'AppOpen') {
-        if ($r.Location -and (Test-Path -LiteralPath $r.Location)) { Open-Location $r.Location } else { Show-Sheet -Title '没有记录安装位置' -Text '这个软件的安装程序没有写明装在哪里。' | Out-Null }
+        if ($r.Location -and (Test-Path -LiteralPath $r.Location)) { Open-Location $r.Location } else { Show-Sheet -Title (T '没有记录安装位置') -Text (T '这个软件的安装程序没有写明装在哪里。') | Out-Null }
         return
     }
-    if ($script:worker) { Show-Sheet -Title '请等当前操作做完' -Text '另一个操作还在进行中。' | Out-Null; return }
+    if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return }
     if ($b.Name -eq 'AppMove') { Start-AppMove $r; return }
-    $txt = if ($r.Kind -eq 'store') { "从应用商店卸载 {0}（{1}）。" -f $r.Name, $r.SizeText } else { "会打开 {0} 自带的卸载程序，按它的提示一步步操作即可。卸载完回到这里点「检查残留」，看看还有没有剩下的文件夹。" -f $r.Name }
-    if ((Show-Sheet -Kind warn -Title ("卸载「{0}」？" -f $r.Name) -Text ($txt + "`n`n卸载会删除这个软件，它保存在软件里的数据可能一起被删掉。") -Buttons @('取消', '卸载') -Primary '卸载' -Cancel '取消') -ne '卸载') { return }
+    $txt = if ($r.Kind -eq 'store') { (T "从应用商店卸载 {0}（{1}）。") -f $r.Name, $r.SizeText } else { (T "会打开 {0} 自带的卸载程序，按它的提示一步步操作即可。卸载完回到这里点「检查残留」，看看还有没有剩下的文件夹。") -f $r.Name }
+    if ((Show-Sheet -Kind warn -Title ((T "卸载「{0}」？") -f $r.Name) -Text ($txt + (T "`n`n卸载会删除这个软件，它保存在软件里的数据可能一起被删掉。")) -Buttons @((T '取消'), (T '卸载')) -Primary (T '卸载') -Cancel (T '取消')) -ne (T '卸载')) { return }
     if ($r.Kind -eq 'store') {
         $sync.Mode = 'uninst'; $sync.UninstRes = $null
-        Start-Op ("卸载 {0}" -f $r.Name); UI-Busy $true
+        Start-Op ((T "卸载 {0}") -f $r.Name); UI-Busy $true
         Start-Worker @'
 $ok = $true; $msg = ''
 try { Remove-AppxPackage -Package $arg.Pkg -ErrorAction Stop } catch { $ok = $false; $msg = $_.Exception.Message }
-OpLog '卸载' '卸载应用商店软件' $arg.Name $(if ($ok) { "约 $(GB $arg.Size)" } else { '失败：' + $msg })
+OpLog '卸载' (T '卸载应用商店软件') $arg.Name $(if ($ok) { ((T "约 {0}") -f $(GB $arg.Size)) } else { (T '失败：') + $msg })
 $sync.UninstRes = @{ Ok = $ok; Msg = $msg; Name = $arg.Name }
 '@ @{ Pkg = $r.PackageName; Name = $r.Name; Size = [double]$r.Size }
         return
@@ -6326,11 +7670,11 @@ $sync.UninstRes = @{ Ok = $ok; Msg = $msg; Name = $arg.Name }
     $pc = Split-Command $r.Uninstall
     try {
         if ($pc[1]) { Start-Process -FilePath $pc[0] -ArgumentList $pc[1] -ErrorAction Stop } else { Start-Process -FilePath $pc[0] -ErrorAction Stop }
-        OpLog '卸载' '打开卸载程序' $r.Name $r.Uninstall
+        OpLog '卸载' (T '打开卸载程序') $r.Name $r.Uninstall
         $script:leftApp = $r
-        $ctl.AppsLeftText.Text = "已打开「{0}」的卸载程序。卸载完成后点「检查残留」，看看还剩下哪些文件夹。" -f $r.Name
+        $ctl.AppsLeftText.Text = (T "已打开「{0}」的卸载程序。卸载完成后点「检查残留」，看看还剩下哪些文件夹。") -f $r.Name
         $ctl.AppsLeftBox.Visibility = 'Visible'
-    } catch { Show-Sheet -Kind warn -Title '打不开卸载程序' -Text ("{0}`n`n{1}" -f $r.Uninstall, $_.Exception.Message) | Out-Null }
+    } catch { Show-Sheet -Kind warn -Title (T '打不开卸载程序') -Text ("{0}`n`n{1}" -f $r.Uninstall, $_.Exception.Message) | Out-Null }
 })
 $ctl.BtnAppsLeftClose.Add_Click({ $ctl.AppsLeftBox.Visibility = 'Collapsed'; $script:leftApp = $null })
 # 卸载后可能留下的文件夹：以软件名命名的、装在原来位置的。发行商的总文件夹（比如 Tencent）不算
@@ -6392,18 +7736,18 @@ $ctl.BtnAppsLeft.Add_Click({
     foreach ($k in 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*', 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*', 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*') {
         foreach ($p in @(Get-ItemProperty $k -ErrorAction SilentlyContinue)) { if ([string]$p.DisplayName -eq $r.Name) { $still = $true } }
     }
-    if ($still) { Show-Sheet -Title '看起来还没卸载完' -Text ("系统里还登记着「{0}」。等卸载程序走完，再点「检查残留」。" -f $r.Name) | Out-Null; return }
+    if ($still) { Show-Sheet -Title (T '看起来还没卸载完') -Text ((T "系统里还登记着「{0}」。等卸载程序走完，再点「检查残留」。") -f $r.Name) | Out-Null; return }
     $left = Find-Leftovers $r
     if (-not $left -or $left.Count -eq 0) {
-        Show-Sheet -Kind done -Title '没发现残留' -Text ("「{0}」已经卸载干净了。" -f $r.Name) | Out-Null
+        Show-Sheet -Kind done -Title (T '没发现残留') -Text ((T "「{0}」已经卸载干净了。") -f $r.Name) | Out-Null
         $ctl.AppsLeftBox.Visibility = 'Collapsed'; $script:leftApp = $null; Load-Apps; return
     }
-    $items = @($left | ForEach-Object { "{0}（{1}）" -f $_.Path, (Fmt $_.Bytes) })
-    $ans = Show-Sheet -Kind danger -Title ("「{0}」留下了 {1} 个文件夹" -f $r.Name, $left.Count) -Text '这些文件夹以软件名命名，多半是卸载后剩下的设置和缓存。会移到回收站，需要的话还能恢复。' -Items $items `
-        -Confirm '我已确认这些是已卸载软件留下的，删除不会给我带来损失。' -Buttons @('先不删', '移到回收站') -Primary '移到回收站' -Cancel '先不删'
-    if ($ans -ne '移到回收站') { return }
+    $items = @($left | ForEach-Object { (T "{0}（{1}）") -f $_.Path, (Fmt $_.Bytes) })
+    $ans = Show-Sheet -Kind danger -Title ((T "「{0}」留下了 {1} 个文件夹") -f $r.Name, $left.Count) -Text (T '这些文件夹以软件名命名，多半是卸载后剩下的设置和缓存。会移到回收站，需要的话还能恢复。') -Items $items `
+        -Confirm (T '我已确认这些是已卸载软件留下的，删除不会给我带来损失。') -Buttons @((T '先不删'), (T '移到回收站')) -Primary (T '移到回收站') -Cancel (T '先不删')
+    if ($ans -ne (T '移到回收站')) { return }
     $sync.Mode = 'leftdel'; $sync.LeftRes = $null
-    Start-Op ("清理「{0}」的残留" -f $r.Name); UI-Busy $true
+    Start-Op ((T "清理「{0}」的残留") -f $r.Name); UI-Busy $true
     Start-Worker @'
 $n = 0; $i = 0
 foreach ($x in $arg.Items) {
@@ -6413,7 +7757,7 @@ foreach ($x in $arg.Items) {
     [void][FsTools]::Recycle($x.Path, [long]$sync.Hwnd)
     $ok = -not (Test-Path -LiteralPath $x.Path)
     if ($ok) { $n++ }
-    OpLog '删除' ("软件残留：移到回收站（{0}）" -f $arg.Name) $x.Path $(if ($ok) { GB $x.Bytes } else { '没删掉，可能被占用' })
+    OpLog '删除' ((T "软件残留：移到回收站（{0}）") -f $arg.Name) $x.Path $(if ($ok) { GB $x.Bytes } else { (T '没删掉，可能被占用') })
 }
 $sync.LeftRes = @{ Count = $n; Name = $arg.Name }
 '@ @{ Items = $left; Name = $r.Name }
@@ -6438,8 +7782,8 @@ function Test-TempPath([string]$path) {
 function Get-ExeVersion([string]$path) { try { return [version]([Diagnostics.FileVersionInfo]::GetVersionInfo($path).FileVersion) } catch { return $null } }
 function Register-CleanTask([string]$name, [string]$desc, [string]$argsText, [string]$trigger) {
     $exe = [string]$env:CLEANC_SELF
-    if (-not $exe -or -not (Test-Path -LiteralPath $exe)) { return '只有 exe 版本支持定时任务' }
-    if (Test-TempPath $exe) { return "本工具现在是从临时文件夹运行的（$exe），比如直接在压缩包里双击打开的。这个位置过后会被清掉，任务就找不到本工具了。`n`n请先把本工具复制到一个固定的位置（比如 D:\工具），从那里打开，再开启。" }
+    if (-not $exe -or -not (Test-Path -LiteralPath $exe)) { return (T '只有 exe 版本支持定时任务') }
+    if (Test-TempPath $exe) { return ((T "本工具现在是从临时文件夹运行的（{0}），比如直接在压缩包里双击打开的。这个位置过后会被清掉，任务就找不到本工具了。`n`n请先把本工具复制到一个固定的位置（比如 D:\工具），从那里打开，再开启。") -f $exe) }
     $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
     $esc = [Security.SecurityElement]
     $xml = @"
@@ -6470,11 +7814,11 @@ function Register-CleanTask([string]$name, [string]$desc, [string]$argsText, [st
 # 两个任务的内容。提醒任务有两个触发时间：每次登录电脑 2 分钟后、每天中午 12 点（错过了就在下次开机后补一次）
 function Enable-AutoTask([bool]$isRemind) {
     if ($isRemind) {
-        return (Register-CleanTask $script:taskRemind 'C 盘清理工具：每次登录电脑后和每天中午各检查一次 C 盘剩余空间，低于设定值时提醒（每天最多一次）。在工具的「自动提醒」页关掉开关即可删除本任务。' '/check' `
+        return (Register-CleanTask $script:taskRemind (T 'C 盘清理工具：每次登录电脑后和每天中午各检查一次 C 盘剩余空间，低于设定值时提醒（每天最多一次）。在工具的「自动提醒」页关掉开关即可删除本任务。') '/check' `
             ('<LogonTrigger><UserId>{USER}</UserId><Delay>PT2M</Delay></LogonTrigger>' +
              '<CalendarTrigger><StartBoundary>2026-01-01T12:00:00</StartBoundary><ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay></CalendarTrigger>'))
     }
-    return (Register-CleanTask $script:taskClean 'C 盘清理工具：每周日自动清理一次临时文件、缓存和日志（不搬家、不清空回收站、不碰个人文件夹）。在工具的「自动提醒」页关掉开关即可删除本任务。' '/autoclean' '<CalendarTrigger><StartBoundary>2026-01-04T12:30:00</StartBoundary><ScheduleByWeek><DaysOfWeek><Sunday/></DaysOfWeek><WeeksInterval>1</WeeksInterval></ScheduleByWeek></CalendarTrigger>')
+    return (Register-CleanTask $script:taskClean (T 'C 盘清理工具：每周日自动清理一次临时文件、缓存和日志（不搬家、不清空回收站、不碰个人文件夹）。在工具的「自动提醒」页关掉开关即可删除本任务。') '/autoclean' '<CalendarTrigger><StartBoundary>2026-01-04T12:30:00</StartBoundary><ScheduleByWeek><DaysOfWeek><Sunday/></DaysOfWeek><WeeksInterval>1</WeeksInterval></ScheduleByWeek></CalendarTrigger>')
 }
 # 打开工具时检查一次：本工具挪了位置、或者任务是旧版本建的（提醒没有「登录后检查」），就按现在的位置和设置重建
 function Repair-AutoTasks {
@@ -6497,7 +7841,7 @@ function Repair-AutoTasks {
         }
         if ($repoint -or ($noLogon -and $cmd -ieq $exe)) {
             $err = Enable-AutoTask $isRemind
-            if (-not $err) { OpLog '系统设置' '更新任务计划' $tn $(if ($repoint) { "改用 $exe（原来的 $cmd 不在了或版本更旧）" } else { '加上「登录电脑后检查」' }) }
+            if (-not $err) { OpLog '系统设置' (T '更新任务计划') $tn $(if ($repoint) { ((T "改用 {0}（原来的 {1} 不在了或版本更旧）") -f $exe, $cmd) } else { (T '加上「登录电脑后检查」') }) }
         }
     }
 }
@@ -6513,14 +7857,14 @@ function Load-Auto {
     $gb = Get-Setting 'RemindGB' '20'
     $idx = [array]::IndexOf(@('10', '20', '30', '50'), $gb); if ($idx -lt 0) { $idx = 1 }
     $ctl.AutoRemindGB.SelectedIndex = $idx
-    $where = "不用开着本工具，也不用设置开机启动。开启后会在 Windows「任务计划程序」里建一个任务（{0}）：每次登录电脑 2 分钟后、以及每天中午 12 点，Windows 会在后台运行一下本工具（{1}）检查 C 盘，空间够就什么都不显示，查完马上退出。关掉开关就删除这个任务。`n请把本工具放在固定的位置，不要删掉；挪了位置后打开一次，任务会自动改用新位置。"
-    $ctl.AutoRemindNote.Text = if ($hasExe) { $where -f $script:taskRemind, $exe } else { '只有 exe 版本支持自动提醒。' }
+    $where = (T "不用开着本工具，也不用设置开机启动。开启后会在 Windows「任务计划程序」里建一个任务（{0}）：每次登录电脑 2 分钟后、以及每天中午 12 点，Windows 会在后台运行一下本工具（{1}）检查 C 盘，空间够就什么都不显示，查完马上退出。关掉开关就删除这个任务。`n请把本工具放在固定的位置，不要删掉；挪了位置后打开一次，任务会自动改用新位置。")
+    $ctl.AutoRemindNote.Text = if ($hasExe) { $where -f $script:taskRemind, $exe } else { (T '只有 exe 版本支持自动提醒。') }
     $moved = ''
-    foreach ($t in @($script:taskRemind, $script:taskClean)) { if (Test-CleanTask $t) { $c = Get-TaskCommand $t; if ($c -and $hasExe -and ($c -ine $exe)) { $moved = '本工具的位置变了，请把开关关掉再打开一次，让任务改用现在的位置。' } } }
+    foreach ($t in @($script:taskRemind, $script:taskClean)) { if (Test-CleanTask $t) { $c = Get-TaskCommand $t; if ($c -and $hasExe -and ($c -ine $exe)) { $moved = (T '本工具的位置变了，请把开关关掉再打开一次，让任务改用现在的位置。') } } }
     if ($moved) { $ctl.AutoRemindNote.Text += "`n" + $moved }
     $last = ''
-    foreach ($row in (Read-OpLog)) { if ($row.What -eq '每周自动清理完成') { $last = "上次自动清理：{0}，{1}" -f $row.Time, $row.Detail; break } }
-    $ctl.AutoCleanNote.Text = if ($hasExe) { ("任务名：{0}。" -f $script:taskClean) + $(if ($last) { "`n$last" } else { '' }) } else { '只有 exe 版本支持每周自动清理。' }
+    foreach ($row in (Read-OpLog)) { if ($row.What -in @('每周自动清理完成', (T '每周自动清理完成'))) { $last = (T "上次自动清理：{0}，{1}") -f $row.Time, $row.Detail; break } }
+    $ctl.AutoCleanNote.Text = if ($hasExe) { ((T "任务名：{0}。") -f $script:taskClean) + $(if ($last) { "`n$last" } else { '' }) } else { (T '只有 exe 版本支持每周自动清理。') }
     $script:autoSync = $false
     Draw-History
 }
@@ -6536,7 +7880,7 @@ function Draw-History {
         $b = New-Object HistBar
         $b.H = [math]::Max([double]3, 140.0 * $ratio)
         $b.Fill = if ($ratio -ge 0.95) { '#FF3B30' } elseif ($ratio -ge 0.85) { '#FF9F0A' } else { '#0071E3' }
-        $b.Tip = "{0}：已用 {1}，剩余 {2}" -f $k, (Fmt $used), (Fmt $x.Free)
+        $b.Tip = (T "{0}：已用 {1}，剩余 {2}") -f $k, (Fmt $used), (Fmt $x.Free)
         $b.Label = $k
         $bars.Add($b)
     }
@@ -6545,23 +7889,23 @@ function Draw-History {
         $f = $days[$keys[0]]; $l = $days[$keys[-1]]
         $ctl.HistFirst.Text = $keys[0]; $ctl.HistLast.Text = $keys[-1]
         $d = $l.Free - $f.Free
-        $ctl.HistInfo.Text = "最近 {0} 天有记录：C 盘剩余从 {1} 变成 {2}（{3}{4}）。蓝色正常，橙色表示用掉了八成五以上，红色表示快满了。" -f $keys.Count, (Fmt $f.Free), (Fmt $l.Free), $(if ($d -ge 0) { '多了 ' } else { '少了 ' }), (Fmt ([math]::Abs($d)))
-    } else { $ctl.HistInfo.Text = '还没有记录。每次打开本工具都会记一笔。'; $ctl.HistFirst.Text = ''; $ctl.HistLast.Text = '' }
+        $ctl.HistInfo.Text = (T "最近 {0} 天有记录：C 盘剩余从 {1} 变成 {2}（{3}{4}）。蓝色正常，橙色表示用掉了八成五以上，红色表示快满了。") -f $keys.Count, (Fmt $f.Free), (Fmt $l.Free), $(if ($d -ge 0) { (T '多了 ') } else { (T '少了 ') }), (Fmt ([math]::Abs($d)))
+    } else { $ctl.HistInfo.Text = (T '还没有记录。每次打开本工具都会记一笔。'); $ctl.HistFirst.Text = ''; $ctl.HistLast.Text = '' }
 }
 $ctl.AutoRemindGB.Add_SelectionChanged({
     if ($script:autoSync) { return }
     $gb = @('10', '20', '30', '50')[[math]::Max(0, $ctl.AutoRemindGB.SelectedIndex)]
     Set-Setting 'RemindGB' $gb
-    OpLog '系统设置' '空间不足提醒的界限' "$gb GB" ''
+    OpLog '系统设置' (T '空间不足提醒的界限') "$gb GB" ''
 })
 foreach ($sw in @($ctl.AutoRemindOn, $ctl.AutoCleanOn)) {
     $sw.Add_Checked({
         if ($script:autoSync) { return }
         $isRemind = [object]::ReferenceEquals($this, $ctl.AutoRemindOn)
         $err = Enable-AutoTask $isRemind
-        if ($isRemind) { $what = '开启空间不足提醒'; $tn = $script:taskRemind } else { $what = '开启每周自动清理'; $tn = $script:taskClean }
-        if ($err) { Show-Sheet -Kind warn -Title '没开成' -Text $err | Out-Null; Load-Auto; return }
-        OpLog '系统设置' $what $tn ("任务计划：{0}" -f [string]$env:CLEANC_SELF)
+        if ($isRemind) { $what = (T '开启空间不足提醒'); $tn = $script:taskRemind } else { $what = (T '开启每周自动清理'); $tn = $script:taskClean }
+        if ($err) { Show-Sheet -Kind warn -Title (T '没开成') -Text $err | Out-Null; Load-Auto; return }
+        OpLog '系统设置' $what $tn ((T "任务计划：{0}") -f [string]$env:CLEANC_SELF)
         Load-Auto
     })
     $sw.Add_Unchecked({
@@ -6569,7 +7913,7 @@ foreach ($sw in @($ctl.AutoRemindOn, $ctl.AutoCleanOn)) {
         $isRemind = [object]::ReferenceEquals($this, $ctl.AutoRemindOn)
         $tn = if ($isRemind) { $script:taskRemind } else { $script:taskClean }
         Remove-CleanTask $tn
-        OpLog '系统设置' $(if ($isRemind) { '关闭空间不足提醒' } else { '关闭每周自动清理' }) $tn '已删除任务计划'
+        OpLog '系统设置' $(if ($isRemind) { (T '关闭空间不足提醒') } else { (T '关闭每周自动清理') }) $tn (T '已删除任务计划')
         Load-Auto
     })
 }
@@ -6595,7 +7939,7 @@ function Read-OpLog {
             $t = [datetime]::MinValue
             [void][datetime]::TryParseExact($a[0], 'yyyy-MM-dd HH:mm:ss', $inv, 'None', [ref]$t)
             $r = New-Object LogRow
-            $r.Time = $a[0]; $r.When = $t; $r.Cat = $a[1]; $r.What = $a[2]
+            $r.Time = $a[0]; $r.When = $t; $r.Cat = $a[1]; $r.CatText = T $a[1]; $r.What = $a[2]
             $r.Target = if ($a.Count -gt 3) { $a[3] } else { '' }
             $r.Detail = if ($a.Count -gt 4) { $a[4] } else { '' }
             $lk = $script:logCatLook[$r.Cat]; if (-not $lk) { $lk = @('#EFEFF4', '#6E6E73') }
@@ -6621,21 +7965,21 @@ function Filter-Log {
         $col.Add($r)
     }
     $ctl.LogList.ItemsSource = $col
-    $ctl.LogCount.Text = "{0:N0} 条" -f $col.Count
+    $ctl.LogCount.Text = (T "{0:N0} 条") -f $col.Count
     $ctl.EmptyLog.Visibility = if ($col.Count -gt 0) { 'Collapsed' } else { 'Visible' }
-    $ctl.EmptyLogText.Text = if ($script:logAll.Count -eq 0) { '还没有操作记录。删除、搬运等操作做完后会出现在这里' } else { '没有符合条件的记录' }
+    $ctl.EmptyLogText.Text = if ($script:logAll.Count -eq 0) { (T '还没有操作记录。删除、搬运等操作做完后会出现在这里') } else { (T '没有符合条件的记录') }
 }
 $script:logKeepSync = $false
 function Update-LogKeepNote {
     $m = Get-LogMonths
-    $keepText = switch ($m) { 0 { '永久保存' } 1 { '1 个月' } 3 { '3 个月' } 6 { '半年' } 12 { '1 年' } 24 { '2 年' } default { "$m 个月" } }
+    $keepText = switch ($m) { 0 { (T '永久保存') } 1 { (T '1 个月') } 3 { (T '3 个月') } 6 { (T '半年') } 12 { (T '1 年') } 24 { (T '2 年') } default { ((T "{0} 个月") -f $m) } }
     $cut = (Get-Date).Date.AddMonths(-$m)
     $lines = @(
-        ("·  日志是普通的 txt 文件，放在 {0}，每个月一个，可以用记事本直接打开。" -f $script:opLogDir)
-        '·  删除、搬运、合并、压缩、卸载和系统设置的每一次改动都会记下来：什么时间、做了什么、对哪个文件或文件夹、结果怎样。只记操作，不保存文件内容。'
+        ((T "·  日志是普通的 txt 文件，放在 {0}，每个月一个，可以用记事本直接打开。") -f $script:opLogDir)
+        (T '·  删除、搬运、合并、压缩、卸载和系统设置的每一次改动都会记下来：什么时间、做了什么、对哪个文件或文件夹、结果怎样。只记操作，不保存文件内容。')
     )
-    if ($m -gt 0) { $lines += ("·  当前保存 {0}：每次打开本工具时，会自动删除 {1:yyyy-MM-dd}（{0}前）之前的记录，删掉后找不回来。" -f $keepText, $cut) }
-    else { $lines += '·  当前设置为永久保存：记录不会自动删除，日志文件会越来越多（通常每月几十 KB 到几 MB）。' }
+    if ($m -gt 0) { $lines += ((T "·  当前保存 {0}：每次打开本工具时，会自动删除 {1:yyyy-MM-dd}（{0}前）之前的记录，删掉后找不回来。") -f $keepText, $cut) }
+    else { $lines += (T '·  当前设置为永久保存：记录不会自动删除，日志文件会越来越多（通常每月几十 KB 到几 MB）。') }
     $ctl.LogKeepNote.Text = $lines -join "`n"
 }
 function Load-Log {
@@ -6657,13 +8001,13 @@ $ctl.LogKeep.Add_SelectionChanged({
     if ($new -eq $old) { return }
     if ($new -gt 0 -and ($old -eq 0 -or $new -lt $old)) {
         $cut = (Get-Date).Date.AddMonths(-$new)
-        $ans = Show-Sheet -Kind warn -Title ("保存时间改成「{0}」？" -f $ctl.LogKeep.SelectedItem.Content) -Text ("{0:yyyy-MM-dd} 之前的操作记录会马上删除，删掉后找不回来。" -f $cut) -Buttons @('取消', '改') -Primary '改' -Cancel '取消'
-        if ($ans -ne '改') { Load-Log; return }
+        $ans = Show-Sheet -Kind warn -Title ((T "保存时间改成「{0}」？") -f $ctl.LogKeep.SelectedItem.Content) -Text ((T "{0:yyyy-MM-dd} 之前的操作记录会马上删除，删掉后找不回来。") -f $cut) -Buttons @((T '取消'), (T '改')) -Primary (T '改') -Cancel (T '取消')
+        if ($ans -ne (T '改')) { Load-Log; return }
     }
     Set-Setting 'LogMonths' ([string]$new)
-    OpLog '日志' '修改日志保存时间' ([string]$ctl.LogKeep.SelectedItem.Content) ''
+    OpLog '日志' (T '修改日志保存时间') ([string]$ctl.LogKeep.SelectedItem.Content) ''
     $n = Prune-OpLog $new
-    if ($n -gt 0) { OpLog '日志' '删除超过保存时间的旧记录' '' ("{0} 条" -f $n) }
+    if ($n -gt 0) { OpLog '日志' (T '删除超过保存时间的旧记录') '' ((T "{0} 条") -f $n) }
     Load-Log
 })
 
@@ -6688,15 +8032,15 @@ $ctl.BtnDupMerge.Add_Click({
         }
     }
     if ($plan.Count -eq 0) {
-        Show-Sheet -Title '没有可以合并的' -Text '合并只适用于同一块盘上的副本：勾选的副本要和没勾选（保留）的那份在同一块盘上。' | Out-Null
+        Show-Sheet -Title (T '没有可以合并的') -Text (T '合并只适用于同一块盘上的副本：勾选的副本要和没勾选（保留）的那份在同一块盘上。') | Out-Null
         return
     }
-    $text = "合并后，每个位置的文件都还在，打开、复制都和原来一样，只是这几个位置共用一份空间。`n`n要注意：合并后它们其实是同一个文件，改了其中一个位置，其他位置也会跟着变。所以适合照片、视频、安装包、压缩包这类不会再改的文件。"
-    if ($skip -gt 0) { $text += "`n`n另有 $skip 个勾选的副本和保留的那份不在同一块盘上，不能合并，会跳过。" }
-    $ans = Show-Sheet -Title ("合并 {0} 个重复文件，腾出 {1}？" -f $plan.Count, (Fmt $bytes)) -Text $text -Confirm '我知道合并后改动一个位置，其他位置会跟着变。' -Buttons @('取消', '合并') -Primary '合并' -Cancel '取消'
-    if ($ans -ne '合并') { return }
+    $text = (T "合并后，每个位置的文件都还在，打开、复制都和原来一样，只是这几个位置共用一份空间。`n`n要注意：合并后它们其实是同一个文件，改了其中一个位置，其他位置也会跟着变。所以适合照片、视频、安装包、压缩包这类不会再改的文件。")
+    if ($skip -gt 0) { $text += ((T "`n`n另有 {0} 个勾选的副本和保留的那份不在同一块盘上，不能合并，会跳过。") -f $skip) }
+    $ans = Show-Sheet -Title ((T "合并 {0} 个重复文件，腾出 {1}？") -f $plan.Count, (Fmt $bytes)) -Text $text -Confirm (T '我知道合并后改动一个位置，其他位置会跟着变。') -Buttons @((T '取消'), (T '合并')) -Primary (T '合并') -Cancel (T '取消')
+    if ($ans -ne (T '合并')) { return }
     $sync.Mode = 'merge'; $sync.DupMerged = $null
-    Start-Op ("合并 {0} 个重复文件" -f $plan.Count)
+    Start-Op ((T "合并 {0} 个重复文件") -f $plan.Count)
     UI-Busy $true
     Start-Worker @'
 $done = New-Object System.Collections.ArrayList
@@ -6707,16 +8051,16 @@ foreach ($p in $arg.Plan) {
     if ($arg.Protect -and (Test-Personal $p.Path)) { continue }
     $fi = Get-Item -LiteralPath $p.Path -Force -ErrorAction SilentlyContinue
     $ki = Get-Item -LiteralPath $p.Keep -Force -ErrorAction SilentlyContinue
-    if (-not $fi -or -not $ki -or $fi.Length -ne $p.Size -or $ki.Length -ne $p.Size) { Log "  跳过（文件在扫描后变了）：$($p.Path)"; continue }
+    if (-not $fi -or -not $ki -or $fi.Length -ne $p.Size -or $ki.Length -ne $p.Size) { Log ((T "  跳过（文件在扫描后变了）：{0}") -f $($p.Path)); continue }
     if (-not $p.Verified) {
         SetP @{ SubKind = 'verify'; Detail = $p.Path }
-        if (-not [DupFinder]::SameContent($p.Keep, $p.Path)) { Log "  跳过（和保留的那份内容不完全相同）：$($p.Path)"; SetP @{ SubKind = 'none' }; continue }
+        if (-not [DupFinder]::SameContent($p.Keep, $p.Path)) { Log ((T "  跳过（和保留的那份内容不完全相同）：{0}") -f $($p.Path)); SetP @{ SubKind = 'none' }; continue }
         SetP @{ SubKind = 'none' }
     }
     $err = [FsTools]::MergeHardLink($p.Keep, $p.Path)
-    if ($err) { Log "  没合并：$($p.Path)：$err"; OpLog '合并' '合并为一份失败' $p.Path $err; continue }
+    if ($err) { Log ((T "  没合并：{0}：{1}") -f $($p.Path), $err); OpLog '合并' (T '合并为一份失败') $p.Path $err; continue }
     [void]$done.Add($p.Path)
-    OpLog '合并' '合并为一份（硬链接）' $p.Path ("和 {0} 共用一份，腾出 {1}" -f $p.Keep, (GB $p.Size))
+    OpLog '合并' (T '合并为一份（硬链接）') $p.Path ((T "和 {0} 共用一份，腾出 {1}") -f $p.Keep, (GB $p.Size))
 }
 $sync.DupMerged = $done
 '@ @{ Plan = $plan; Protect = [bool]$ctl.DupProtect.IsChecked }
@@ -6733,7 +8077,7 @@ $timer.Add_Tick({
     if ($Error.Count -gt 0 -and -not [object]::ReferenceEquals($Error[0], $script:lastErrObj)) {
         $script:lastErrObj = $Error[0]
         $em = [string]$Error[0]
-        if ($em -ne $script:lastErrMsg) { $script:lastErrMsg = $em; Write-LogFile ("[内部] " + $em + "  @ " + ([string]$Error[0].InvocationInfo.PositionMessage).Split([char]10)[0]) }
+        if ($em -ne $script:lastErrMsg) { $script:lastErrMsg = $em; Write-LogFile ((T "[内部] ") + $em + "  @ " + ([string]$Error[0].InvocationInfo.PositionMessage).Split([char]10)[0]) }
     }
 
     if ([DupRow]::Dirty -and -not $script:worker) { [DupRow]::Dirty = $false; Update-DupSummary }
@@ -6750,46 +8094,46 @@ $timer.Add_Tick({
     if ($script:worker -and $script:worker.Handle.IsCompleted) {
         $w = $script:worker; $script:worker = $null
         $script:movedTargets = $null
-        try { $w.PS.EndInvoke($w.Handle) | Out-Null } catch { UI-Log "后台出错：$($_.Exception.Message)" }
-        foreach ($er in @($w.PS.Streams.Error | Select-Object -First 5)) { UI-Log "后台出错：$er" }
+        try { $w.PS.EndInvoke($w.Handle) | Out-Null } catch { UI-Log ((T "后台出错：{0}") -f $($_.Exception.Message)) }
+        foreach ($er in @($w.PS.Streams.Error | Select-Object -First 5)) { UI-Log ((T "后台出错：{0}") -f $er) }
         $w.PS.Dispose(); $w.RS.Dispose()
 
         if ($sync.Mode -eq 'scan' -and $sync.Sizes) {
-            Build-Rows $sync.Sizes; End-Op '完成'
+            Build-Rows $sync.Sizes; End-Op (T '完成')
             if ($script:oneClickPending) { $script:oneClickPending = $false; $script:runAfterScan = $true }
         }
         elseif ($sync.Mode -eq 'run') {
             $after = [double](FreeC); $freed = $after - $script:runFreeC0
             $cardWasOpen = ($ctl.Overlay.Visibility -eq 'Visible')
-            $head = "C 盘剩余：{0} → {1}，释放了 {2}" -f (GB $script:runFreeC0), (GB $after), (GB ([math]::Max([double]0, [double]$freed)))
+            $head = (T "C 盘剩余：{0} → {1}，释放了 {2}") -f (GB $script:runFreeC0), (GB $after), (GB ([math]::Max([double]0, [double]$freed)))
             $waitNote = ''
             if ([int]$sync.WaitCount -gt 0) {
-                $waitNote = "有 {0} 个文件夹已经复制好，但原文件夹还被别的程序占着，没换成链接。彻底退出相关的聊天软件（包括右下角托盘图标）后再点一次「执行」，会接着用复制好的副本，很快完成。" -f [int]$sync.WaitCount
+                $waitNote = (T "有 {0} 个文件夹已经复制好，但原文件夹还被别的程序占着，没换成链接。彻底退出相关的聊天软件（包括右下角托盘图标）后再点一次「执行」，会接着用复制好的副本，很快完成。") -f [int]$sync.WaitCount
                 $head += "`n" + $waitNote
             }
-            End-Op ("完成，释放 {0}，C 盘现在剩余 {1}" -f (GB ([math]::Max([double]0, [double]$freed))), (GB $after)) -KeepCard -headline $head -reportLines (Plan-Lines)
+            End-Op ((T "完成，释放 {0}，C 盘现在剩余 {1}") -f (GB ([math]::Max([double]0, [double]$freed))), (GB $after)) -KeepCard -headline $head -reportLines (Plan-Lines)
             if ($ctl.Overlay.Visibility -eq 'Visible') { $script:askRemind = $true } else { $script:askRemindNow = $true }
-            $ctl.Summary.Text = "已完成：C 盘从剩余 {0} 变成 {1}。每一项的结果写在列表里；想看还剩什么，再点「扫描」。" -f (GB $script:runFreeC0), (GB $after)
+            $ctl.Summary.Text = (T "已完成：C 盘从剩余 {0} 变成 {1}。每一项的结果写在列表里；想看还剩什么，再点「扫描」。") -f (GB $script:runFreeC0), (GB $after)
             $script:reclaim = [double]0
             $lines = @(); if ($sync.RunSummary) { $lines = @($sync.RunSummary) }
             $shown = @($lines | Select-Object -First 22)
-            if ($lines.Count -gt 22) { $shown += ("……另有 {0} 项，见左下角「运行记录」" -f ($lines.Count - 22)) }
-            if (-not $cardWasOpen) { $script:pendingDialog = @{ Title = '执行完成'; Kind = $(if ($waitNote) { 'warn' } else { 'done' }); Items = $shown
-                Text = "共用时 {0}。C 盘剩余 {1} → {2}，释放 {3}。{4}" -f (FmtSpan $script:lastElapsed), (GB $script:runFreeC0), (GB $after), (GB ([math]::Max([double]0, [double]$freed))), $(if ($waitNote) { "`n`n" + $waitNote } else { '' }) } }
+            if ($lines.Count -gt 22) { $shown += ((T "……另有 {0} 项，见左下角「运行记录」") -f ($lines.Count - 22)) }
+            if (-not $cardWasOpen) { $script:pendingDialog = @{ Title = (T '执行完成'); Kind = $(if ($waitNote) { 'warn' } else { 'done' }); Items = $shown
+                Text = (T "共用时 {0}。C 盘剩余 {1} → {2}，释放 {3}。{4}") -f (FmtSpan $script:lastElapsed), (GB $script:runFreeC0), (GB $after), (GB ([math]::Max([double]0, [double]$freed))), $(if ($waitNote) { "`n`n" + $waitNote } else { '' }) } }
             try { [System.Media.SystemSounds]::Asterisk.Play() } catch {}
             Fill-DestChoices
         }
-        elseif ($sync.Mode -eq 'hogs') { End-Op '完成' }
+        elseif ($sync.Mode -eq 'hogs') { End-Op (T '完成') }
         elseif ($sync.Mode -eq 'dup') {
             $res = $sync.DupResult
             $cnt = if ($res) { $res.Count } else { 0 }
             $stopped = [DupFinder]::Cancel
-            $ctl.DupProgressText.Text = ("{0}看过 {1:N0} 个文件夹、{2:N0} 个文件，找到 {3:N0} 组重复。" -f $(if ($stopped) { '已停止。' } else { '查找完成。' }), [DupFinder]::DirsSeen, [DupFinder]::FilesSeen, $cnt)
-            End-Op $(if ($stopped) { "已停止，找到 $cnt 组" } else { "完成，找到 $cnt 组" })
+            $ctl.DupProgressText.Text = ((T "{0}看过 {1:N0} 个文件夹、{2:N0} 个文件，找到 {3:N0} 组重复。") -f $(if ($stopped) { (T '已停止。') } else { (T '查找完成。') }), [DupFinder]::DirsSeen, [DupFinder]::FilesSeen, $cnt)
+            End-Op $(if ($stopped) { ((T "已停止，找到 {0} 组") -f $cnt) } else { ((T "完成，找到 {0} 组") -f $cnt) })
             if ($res) { Build-DupRows $res $cnt } else { Build-DupRows @() 0 }
             if ($script:dupRows -and $script:dupRows.Count -gt 0) {
                 Pick-Dup 'new'
-                UI-Log '已自动勾选：每组留最新的一份，其余删除。可以改勾选，或点上面的按钮换一种留法。'
+                UI-Log (T '已自动勾选：每组留最新的一份，其余删除。可以改勾选，或点上面的按钮换一种留法。')
             }
         }
         elseif ($sync.Mode -eq 'dupdel') {
@@ -6805,11 +8149,11 @@ $timer.Add_Tick({
             Build-DupRows $left $left.Count
             $nDel = if ($sync.DupDeleted) { $sync.DupDeleted.Count } else { 0 }
             $cardWasOpen = ($ctl.Overlay.Visibility -eq 'Visible')
-            $bin = if ($script:lastRecycle) { "`n`n文件在回收站里，清空回收站后才真正释放磁盘空间。" } else { '' }
-            $binShort = if ($script:lastRecycle) { '文件在回收站里，清空回收站后才真正释放空间。' } else { '' }
-            End-Op ("完成，删除了 {0} 个文件" -f $nDel) -KeepCard -headline ("删除了 {0} 个重复文件。{1}" -f $nDel, $binShort) -reportLines @(,@('没删的（内容和保留的那份不完全相同，或文件被占用）记在左下角的「运行记录」里。', '#6E6E73', $false))
+            $bin = if ($script:lastRecycle) { (T "`n`n文件在回收站里，清空回收站后才真正释放磁盘空间。") } else { '' }
+            $binShort = if ($script:lastRecycle) { (T '文件在回收站里，清空回收站后才真正释放空间。') } else { '' }
+            End-Op ((T "完成，删除了 {0} 个文件") -f $nDel) -KeepCard -headline ((T "删除了 {0} 个重复文件。{1}") -f $nDel, $binShort) -reportLines @(,@((T '没删的（内容和保留的那份不完全相同，或文件被占用）记在左下角的「运行记录」里。'), '#6E6E73', $false))
             try { [System.Media.SystemSounds]::Asterisk.Play() } catch {}
-            if (-not $cardWasOpen) { $script:pendingDialog = @{ Title = '删除完成'; Kind = 'done'; Text = ("删除了 {0} 个重复文件，共用时 {1}。{2}`n`n没删的（内容和保留的那份不完全相同，或文件被占用）记在「运行记录」里。" -f $nDel, (FmtSpan $script:lastElapsed), $bin) } }
+            if (-not $cardWasOpen) { $script:pendingDialog = @{ Title = (T '删除完成'); Kind = 'done'; Text = ((T "删除了 {0} 个重复文件，共用时 {1}。{2}`n`n没删的（内容和保留的那份不完全相同，或文件被占用）记在「运行记录」里。") -f $nDel, (FmtSpan $script:lastElapsed), $bin) } }
         }
         elseif ($sync.Mode -eq 'map') {
             $root = $sync.MapResult
@@ -6817,97 +8161,97 @@ $timer.Add_Tick({
             if ($root) {
                 $script:mapRoot = $root; $script:mapCur = $root; $script:mapScanAt = Get-Date
                 $script:movedTargets = $null
-                if (-not $stopped) { try { Update-Growth $root } catch { $script:growNote = '没能和上次比较' } } else { $script:growNote = '这次扫描中途停止了，不和上次比较' }
-                End-Op ("完成，{0:N0} 个文件，共 {1}" -f $root.Files, (Fmt $root.Size))
+                if (-not $stopped) { try { Update-Growth $root } catch { $script:growNote = (T '没能和上次比较') } } else { $script:growNote = (T '这次扫描中途停止了，不和上次比较') }
+                End-Op ((T "完成，{0:N0} 个文件，共 {1}") -f $root.Files, (Fmt $root.Size))
                 if ($script:mapView -eq 'grow') { Set-MapView 'grow' } elseif ($script:mapView -eq 'files') { Show-MapFiles } else { Show-MapLevel $root }
-                if ($stopped) { $ctl.MapInfo.Text = '扫描中途停止了，下面只是已经看过的部分' }
+                if ($stopped) { $ctl.MapInfo.Text = (T '扫描中途停止了，下面只是已经看过的部分') }
                 Add-History
-            } else { End-Op '没有完成' }
+            } else { End-Op (T '没有完成') }
             $ctl.BtnMapStop.IsEnabled = $false
         }
         elseif ($sync.Mode -eq 'mapdel') {
             $res = $sync.MapDel; $r = $script:mapDelRow
             if ($res -and $res.Ok) {
-                End-Op ("已删除 {0}" -f $r.Name)
+                End-Op ((T "已删除 {0}") -f $r.Name)
                 if ($r.Node) { [DiskMap]::Detach($r.Node) } elseif ($script:mapCur -and (Split-Path $r.Path -Parent) -ieq $script:mapCur.FullPath().TrimEnd('\')) { [DiskMap]::DropFile($script:mapCur, $r.Size) }
                 if ($script:mapView -eq 'files') { Show-MapFiles } else { Show-MapLevel $script:mapCur }
             } else {
-                End-Op '没有删掉'
-                $script:pendingDialog = @{ Title = '没有删掉'; Kind = 'warn'; Text = $(if ($res) { $res.Msg } else { '' }) }
+                End-Op (T '没有删掉')
+                $script:pendingDialog = @{ Title = (T '没有删掉'); Kind = 'warn'; Text = $(if ($res) { $res.Msg } else { '' }) }
             }
         }
         elseif ($sync.Mode -eq 'fcompress') {
             $x = $sync.FcResult
             if ($x) {
                 $saved = [math]::Max([double]0, $x.Before - $x.After)
-                End-Op ("完成，省了 {0}" -f (Fmt $saved))
-                $ctl.SaveFcState.Text = "上次压缩：{0}，实际占用 {1} → {2}，省了 {3}" -f $x.Path, (Fmt $x.Before), (Fmt $x.After), (Fmt $saved)
-                $script:pendingDialog = @{ Title = '压缩完成'; Kind = 'done'; Text = ("{0}`n`n实际占用 {1} → {2}，省了 {3}。文件照常使用。" -f $x.Path, (Fmt $x.Before), (Fmt $x.After), (Fmt $saved)) }
-            } else { End-Op '没有完成' }
+                End-Op ((T "完成，省了 {0}") -f (Fmt $saved))
+                $ctl.SaveFcState.Text = (T "上次压缩：{0}，实际占用 {1} → {2}，省了 {3}") -f $x.Path, (Fmt $x.Before), (Fmt $x.After), (Fmt $saved)
+                $script:pendingDialog = @{ Title = (T '压缩完成'); Kind = 'done'; Text = ((T "{0}`n`n实际占用 {1} → {2}，省了 {3}。文件照常使用。") -f $x.Path, (Fmt $x.Before), (Fmt $x.After), (Fmt $saved)) }
+            } else { End-Op (T '没有完成') }
         }
         elseif ($sync.Mode -eq 'compactos') {
             $x = $sync.CosRes
-            End-Op '完成'
-            if ($x) { $script:pendingDialog = @{ Title = '系统压缩完成'; Kind = 'done'; Text = ("C 盘可用空间变化：{0}{1}" -f $(if ($x.Delta -ge 0) { '多了 ' } else { '少了 ' }), (Fmt ([math]::Abs($x.Delta)))) } }
+            End-Op (T '完成')
+            if ($x) { $script:pendingDialog = @{ Title = (T '系统压缩完成'); Kind = 'done'; Text = ((T "C 盘可用空间变化：{0}{1}") -f $(if ($x.Delta -ge 0) { (T '多了 ') } else { (T '少了 ') }), (Fmt ([math]::Abs($x.Delta)))) } }
             if ($ctl.PageSave.Visibility -eq 'Visible') { Load-Save }
         }
         elseif ($sync.Mode -eq 'vdisk') {
             $x = $sync.VdRes
-            End-Op '完成'
+            End-Op (T '完成')
             if ($x) {
-                $t = if ($x.After -lt $x.Before) { "{0} → {1}，省了 {2}。" -f (Fmt $x.Before), (Fmt $x.After), (Fmt ($x.Before - $x.After)) } else { "大小没有变化（{0}）。可能里面本来就没有可回收的空间，或者虚拟磁盘还在使用中。`n`n{1}" -f (Fmt $x.After), $x.Out }
-                $script:pendingDialog = @{ Title = '虚拟磁盘压缩完成'; Kind = $(if ($x.After -lt $x.Before) { 'done' } else { 'info' }); Text = $t }
+                $t = if ($x.After -lt $x.Before) { (T "{0} → {1}，省了 {2}。") -f (Fmt $x.Before), (Fmt $x.After), (Fmt ($x.Before - $x.After)) } else { (T "大小没有变化（{0}）。可能里面本来就没有可回收的空间，或者虚拟磁盘还在使用中。`n`n{1}") -f (Fmt $x.After), $x.Out }
+                $script:pendingDialog = @{ Title = (T '虚拟磁盘压缩完成'); Kind = $(if ($x.After -lt $x.Before) { 'done' } else { 'info' }); Text = $t }
             }
             Load-Save
         }
         elseif ($sync.Mode -eq 'vmove') {
             $res = $sync.VmRes
             $ok = $res -and $res.Done -gt 0
-            End-Op $(if ($ok) { "已搬 {0}" -f (GB $res.Moved) } else { '没搬成' })
+            End-Op $(if ($ok) { (T "已搬 {0}") -f (GB $res.Moved) } else { (T '没搬成') })
             $msg = if ($res -and $res.Msgs) { ($res.Msgs -join "`n") } else { '' }
-            $script:pendingDialog = @{ Title = $(if ($ok) { '搬好了' } else { '没搬成' }); Kind = $(if ($ok) { 'done' } else { 'warn' }); Text = $(if ($ok) { "已搬到 {0}。原位置留了链接，软件照常使用。{1}" -f ($res.Dest -join '；'), $msg } else { $msg }) }
+            $script:pendingDialog = @{ Title = $(if ($ok) { (T '搬好了') } else { (T '没搬成') }); Kind = $(if ($ok) { 'done' } else { 'warn' }); Text = $(if ($ok) { (T "已搬到 {0}。原位置留了链接，软件照常使用。{1}") -f ($res.Dest -join (T '；')), $msg } else { $msg }) }
             Load-Save; Fill-DestChoices
         }
         elseif ($sync.Mode -eq 'appmove') {
             $res = $sync.AmRes; $r = $script:appMoveRow
             $ok = $res -and $res.Done -gt 0
-            End-Op $(if ($ok) { "已搬 {0}" -f (GB $res.Moved) } else { '没搬成' })
+            End-Op $(if ($ok) { (T "已搬 {0}") -f (GB $res.Moved) } else { (T '没搬成') })
             $msg = if ($res -and $res.Msgs) { ($res.Msgs -join "`n") } else { '' }
             if ($ok) {
-                $script:pendingDialog = @{ Title = ("「{0}」搬好了" -f $r.Name); Kind = 'done'
-                    Text = ("已搬到 {0}，C 盘腾出约 {1}。原位置留了链接，快捷方式和开始菜单照常能打开。建议现在打开一次这个软件，确认一切正常。`n`n要搬回来，到「搬家管理」点「搬回 C 盘」。{2}" -f ($res.Dest -join '；'), (GB $res.Moved), $(if ($msg) { "`n`n$msg" } else { '' })) }
-            } else { $script:pendingDialog = @{ Title = '没搬成'; Kind = 'warn'; Text = $(if ($msg) { $msg } else { '没有搬，原文件夹没动。' }) } }
+                $script:pendingDialog = @{ Title = ((T "「{0}」搬好了") -f $r.Name); Kind = 'done'
+                    Text = ((T "已搬到 {0}，C 盘腾出约 {1}。原位置留了链接，快捷方式和开始菜单照常能打开。建议现在打开一次这个软件，确认一切正常。`n`n要搬回来，到「搬家管理」点「搬回 C 盘」。{2}") -f ($res.Dest -join (T '；')), (GB $res.Moved), $(if ($msg) { "`n`n$msg" } else { '' })) }
+            } else { $script:pendingDialog = @{ Title = (T '没搬成'); Kind = 'warn'; Text = $(if ($msg) { $msg } else { (T '没有搬，原文件夹没动。') }) } }
             $script:runAfterApps = $true
             Fill-DestChoices
         }
         elseif ($sync.Mode -eq 'apps') {
-            End-Op '完成'
-            if ($sync.AppsResult) { Build-AppRows $sync.AppsResult } else { $ctl.EmptyAppsText.Text = '没读到已安装的软件' }
+            End-Op (T '完成')
+            if ($sync.AppsResult) { Build-AppRows $sync.AppsResult } else { $ctl.EmptyAppsText.Text = (T '没读到已安装的软件') }
         }
         elseif ($sync.Mode -eq 'uninst') {
             $x = $sync.UninstRes
-            End-Op $(if ($x -and $x.Ok) { '已卸载' } else { '没卸载成' })
-            if ($x -and -not $x.Ok) { $script:pendingDialog = @{ Title = '没卸载成'; Kind = 'warn'; Text = $x.Msg } }
+            End-Op $(if ($x -and $x.Ok) { (T '已卸载') } else { (T '没卸载成') })
+            if ($x -and -not $x.Ok) { $script:pendingDialog = @{ Title = (T '没卸载成'); Kind = 'warn'; Text = $x.Msg } }
             $script:runAfterApps = $true
         }
         elseif ($sync.Mode -eq 'leftdel') {
             $x = $sync.LeftRes
-            End-Op '完成'
+            End-Op (T '完成')
             $ctl.AppsLeftBox.Visibility = 'Collapsed'; $script:leftApp = $null
-            if ($x) { $script:pendingDialog = @{ Title = '残留已清理'; Kind = 'done'; Text = ("「{0}」留下的 {1} 个文件夹已移到回收站。清空回收站后才真正腾出空间。" -f $x.Name, $x.Count) } }
+            if ($x) { $script:pendingDialog = @{ Title = (T '残留已清理'); Kind = 'done'; Text = ((T "「{0}」留下的 {1} 个文件夹已移到回收站。清空回收站后才真正腾出空间。") -f $x.Name, $x.Count) } }
             $script:runAfterApps = $true
         }
         elseif ($sync.Mode -eq 'movesize') {
             $t = $sync.MoveTotal
-            if ($t -and $script:moveRows) { $ctl.MovesInfo.Text = "共 {0} 个文件夹，其中 {1} 个正常，已经帮 C 盘腾出约 {2}。" -f $script:moveRows.Count, $t.Count, (Fmt $t.Bytes) }
+            if ($t -and $script:moveRows) { $ctl.MovesInfo.Text = (T "共 {0} 个文件夹，其中 {1} 个正常，已经帮 C 盘腾出约 {2}。") -f $script:moveRows.Count, $t.Count, (Fmt $t.Bytes) }
         }
         elseif ($sync.Mode -eq 'moveback' -or $sync.Mode -eq 'movedrop') {
             $x = $sync.MoveRes
             $ok = $x -and $x.Ok
             $back = ($sync.Mode -eq 'moveback')
-            End-Op $(if ($ok) { '完成' } else { '没有完成' })
-            if ($ok) { $script:pendingDialog = @{ Title = $(if ($back) { '已搬回 C 盘' } else { '多余的副本已删除' }); Kind = 'done'; Text = $(if ($x.Msg) { $x.Msg } elseif ($back) { "搬回了 {0}，软件照常使用。" -f (Fmt $x.Bytes) } else { "腾出了 {0}。" -f (Fmt $x.Bytes) }) } }
-            else { $script:pendingDialog = @{ Title = '没有完成'; Kind = 'warn'; Text = $(if ($x) { $x.Msg } else { '' }) } }
+            End-Op $(if ($ok) { (T '完成') } else { (T '没有完成') })
+            if ($ok) { $script:pendingDialog = @{ Title = $(if ($back) { (T '已搬回 C 盘') } else { (T '多余的副本已删除') }); Kind = 'done'; Text = $(if ($x.Msg) { $x.Msg } elseif ($back) { (T "搬回了 {0}，软件照常使用。") -f (Fmt $x.Bytes) } else { (T "腾出了 {0}。") -f (Fmt $x.Bytes) }) } }
+            else { $script:pendingDialog = @{ Title = (T '没有完成'); Kind = 'warn'; Text = $(if ($x) { $x.Msg } else { '' }) } }
             $script:runAfterMoves = $true
             Fill-DestChoices
         }
@@ -6923,14 +8267,14 @@ $timer.Add_Tick({
             }
             Build-DupRows $left $left.Count
             $n = $done.Count
-            End-Op ("完成，合并了 {0} 个文件" -f $n) -KeepCard -headline ("合并了 {0} 个重复文件。每个位置的文件都还在，只占一份空间。" -f $n) -reportLines @(,@('没合并的（内容不完全相同、文件正被打开、不在同一块盘）记在左下角的「运行记录」里。', '#6E6E73', $false))
+            End-Op ((T "完成，合并了 {0} 个文件") -f $n) -KeepCard -headline ((T "合并了 {0} 个重复文件。每个位置的文件都还在，只占一份空间。") -f $n) -reportLines @(,@((T '没合并的（内容不完全相同、文件正被打开、不在同一块盘）记在左下角的「运行记录」里。'), '#6E6E73', $false))
         }
         $sync.Mode = $null
         UI-Status; UI-Busy $false
         if ($script:runAfterScan) {
             $script:runAfterScan = $false
             Apply-OneClick
-            Invoke-RunSelected '一键清理'
+            Invoke-RunSelected (T '一键清理')
         }
         if ($script:runAfterApps) { $script:runAfterApps = $false; Load-Apps }
         if ($script:runAfterMoves) { $script:runAfterMoves = $false; Load-Moves }
@@ -6946,12 +8290,12 @@ $timer.Add_Tick({
 $win.Add_Closing({
     param($s, $e)
     if ($script:worker) {
-        $e.Cancel = ((Show-Sheet -Kind warn -Title '还有操作在进行中' -Text '现在关闭可能留下搬了一半的文件夹。确定要关闭吗？' -Buttons @('继续等待', '仍然关闭') -Primary '继续等待' -Cancel '继续等待') -ne '仍然关闭')
+        $e.Cancel = ((Show-Sheet -Kind warn -Title (T '还有操作在进行中') -Text (T '现在关闭可能留下搬了一半的文件夹。确定要关闭吗？') -Buttons @((T '继续等待'), (T '仍然关闭')) -Primary (T '继续等待') -Cancel (T '继续等待')) -ne (T '仍然关闭'))
         if (-not $e.Cancel) { [DupFinder]::Cancel = $true }
     }
 })
 
-$ctl.OvHide.Add_Click({ $ctl.Overlay.Visibility = 'Collapsed'; UI-Log '进度卡片已收起，进度见窗口底部和任务栏图标；做完会弹窗告诉你。' })
+$ctl.OvHide.Add_Click({ $ctl.Overlay.Visibility = 'Collapsed'; UI-Log (T '进度卡片已收起，进度见窗口底部和任务栏图标；做完会弹窗告诉你。') })
 $ctl.OvClose.Add_Click({
     $ctl.Overlay.Visibility = 'Collapsed'; $script:cardShowsResult = $false
     if ($script:askRemind) { $script:askRemind = $false; Ask-EnableRemind }
@@ -6961,12 +8305,12 @@ function Ask-EnableRemind {
     $exe = [string]$env:CLEANC_SELF
     if (-not $exe -or -not (Test-Path -LiteralPath $exe) -or (Test-TempPath $exe) -or (Get-Setting 'AskedRemind' '') -eq '1' -or (Test-CleanTask $script:taskRemind)) { return }
     Set-Setting 'AskedRemind' '1'
-    $ans = Show-Sheet -Title 'C 盘快满时提醒你？' -Text "开启后，每次登录电脑和每天中午，Windows 会在后台检查一次 C 盘。剩余空间低于 20 GB 时在屏幕右下角提醒你（每天最多一次），空间够就什么都不显示。`n`n不需要一直开着本工具，也不需要开机启动。以后可以在「自动提醒」页随时关掉。" -Buttons @('以后再说', '开启提醒') -Primary '开启提醒' -Cancel '以后再说'
-    if ($ans -ne '开启提醒') { return }
+    $ans = Show-Sheet -Title (T 'C 盘快满时提醒你？') -Text (T "开启后，每次登录电脑和每天中午，Windows 会在后台检查一次 C 盘。剩余空间低于 20 GB 时在屏幕右下角提醒你（每天最多一次），空间够就什么都不显示。`n`n不需要一直开着本工具，也不需要开机启动。以后可以在「自动提醒」页随时关掉。") -Buttons @((T '以后再说'), (T '开启提醒')) -Primary (T '开启提醒') -Cancel (T '以后再说')
+    if ($ans -ne (T '开启提醒')) { return }
     $err = Enable-AutoTask $true
-    if ($err) { Show-Sheet -Kind warn -Title '没开成' -Text $err | Out-Null; return }
-    OpLog '系统设置' '开启空间不足提醒' $script:taskRemind ("任务计划：{0}" -f $exe)
-    Show-Sheet -Kind done -Title '提醒已开启' -Text '在「自动提醒」页可以改提醒的界限，或者关掉。' | Out-Null
+    if ($err) { Show-Sheet -Kind warn -Title (T '没开成') -Text $err | Out-Null; return }
+    OpLog '系统设置' (T '开启空间不足提醒') $script:taskRemind ((T "任务计划：{0}") -f $exe)
+    Show-Sheet -Kind done -Title (T '提醒已开启') -Text (T '在「自动提醒」页可以改提醒的界限，或者关掉。') | Out-Null
 }
 
 # 窗口大小跟着屏幕走：笔记本 150% 缩放时可用高度只有 690 左右，窗口太高会把下面的进度和记录挤出屏幕
@@ -6977,9 +8321,9 @@ $win.MinWidth  = [math]::Min([double]980,  [double]$wa.Width - 24)
 $win.MinHeight = [math]::Min([double]600,  [double]$wa.Height - 24)
 if ($wa.Height -lt 800) { $ctl.LogPanel.Height = 130 }
 $ctl.OvPlanScroll.MaxHeight = [math]::Max([double]80, [math]::Min([double]190, [double]$wa.Height - 560))
-$win.Title = "C 盘清理工具 $script:AppVersion"
-$ctl.AppVer.Text = "版本 $script:AppVersion"
-Write-LogFile ("==== C 盘清理工具 {0} 启动；Windows {1}；屏幕可用区域 {2:N0} x {3:N0}" -f $script:AppVersion, [Environment]::OSVersion.Version, $wa.Width, $wa.Height)
+$win.Title = ((T "C 盘清理工具 {0}") -f $script:AppVersion)
+$ctl.AppVer.Text = ((T "版本 {0}") -f $script:AppVersion)
+Write-LogFile ((T "==== C 盘清理工具 {0} 启动；Windows {1}；屏幕可用区域 {2:N0} x {3:N0}") -f $script:AppVersion, [Environment]::OSVersion.Version, $wa.Width, $wa.Height)
 
 $script:statusColor = @{ wait = '#86868B'; run = '#0071E3'; ok = '#248A3D'; warn = '#B25000'; fail = '#D70015'; skip = '#86868B' }
 $script:pendingDialog = $null
@@ -6990,9 +8334,25 @@ Update-FilterSummary
 Add-History
 try { Repair-AutoTasks } catch {}
 $pruned = Prune-OpLog (Get-LogMonths)
-if ($pruned -gt 0) { OpLog '日志' '自动删除超过保存时间的旧记录' '' ("{0} 条，保存时间 {1} 个月" -f $pruned, (Get-LogMonths)) }
+if ($pruned -gt 0) { OpLog '日志' (T '自动删除超过保存时间的旧记录') '' ((T "{0} 条，保存时间 {1} 个月") -f $pruned, (Get-LogMonths)) }
 $timer.Start()
 
+# 界面语言切换：存到设置里，关掉本窗口，用新语言重新打开
+$ctl.BtnLangText.Text = if ($script:Lang -eq 'en') { '中文' } else { 'English' }
+$ctl.BtnLang.Add_Click({
+    if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return }
+    $to = if ($script:Lang -eq 'en') { 'zh' } else { 'en' }
+    if ($to -eq 'en') { $t = '切换为英文界面？'; $x = "本工具会关闭，然后以英文界面重新打开。`n`nClearC will close and reopen in English."; $ok = '切换'; $no = '取消' }
+    else { $t = 'Switch to Chinese?'; $x = "ClearC will close and reopen in Chinese.`n`n本工具会关闭，然后以中文界面重新打开。"; $ok = 'Switch'; $no = 'Cancel' }
+    if ((Show-Sheet -Title $t -Text $x -Buttons @($no, $ok) -Primary $ok -Cancel $no) -ne $ok) { return }
+    Set-Setting 'Lang' $to
+    OpLog '系统设置' (T '切换界面语言') $to ''
+    try {
+        if ($env:CLEANC_SELF -and (Test-Path -LiteralPath $env:CLEANC_SELF)) { Start-Process -FilePath $env:CLEANC_SELF }
+        elseif ($script:selfScript) { Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList ('-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}"' -f $script:selfScript) }
+    } catch {}
+    $win.Close()
+})
 $ctl.CleanScroll.Add_ScrollChanged({ Update-CleanMore })
 $ctl.CleanMore.Add_Click({ $ctl.CleanScroll.PageDown() })
 # 第一次打开时先给出安全风险提示，勾选同意后才能使用；同意过就不再弹
@@ -7002,15 +8362,15 @@ $win.Add_ContentRendered({
     if ($script:riskShown) { return }
     $script:riskShown = $true
     if (Test-Path -LiteralPath $script:riskFile) { return }
-    $ans = Show-Sheet -Kind warn -Title '使用前请先阅读安全风险提示' `
-        -Text "本工具会按你的选择删除或搬移电脑上的文件。删除的文件可能无法恢复，存在资料丢失的风险。`n`n每次删除前，请确认这些资料确实不再需要、删除不会给你带来损失；重要资料请先备份。因使用本工具造成的资料丢失或其他损失，责任由使用者自行承担，开发者不承担责任。`n`n完整说明随时可以在左侧「帮助」里查看。" `
-        -Confirm '我已阅读并了解上述风险，同意自行承担使用本工具的后果。' -Buttons @('退出', '同意并继续') -Primary '同意并继续' -Cancel '退出'
-    if ($ans -ne '同意并继续') { $win.Close(); return }
+    $ans = Show-Sheet -Kind warn -Title (T '使用前请先阅读安全风险提示') `
+        -Text (T "本工具会按你的选择删除或搬移电脑上的文件。删除的文件可能无法恢复，存在资料丢失的风险。`n`n每次删除前，请确认这些资料确实不再需要、删除不会给你带来损失；重要资料请先备份。因使用本工具造成的资料丢失或其他损失，责任由使用者自行承担，开发者不承担责任。`n`n完整说明随时可以在左侧「帮助」里查看。") `
+        -Confirm (T '我已阅读并了解上述风险，同意自行承担使用本工具的后果。') -Buttons @((T '退出'), (T '同意并继续')) -Primary (T '同意并继续') -Cancel (T '退出')
+    if ($ans -ne (T '同意并继续')) { $win.Close(); return }
     try {
         New-Item -ItemType Directory -Path (Split-Path $script:riskFile) -Force | Out-Null
-        [IO.File]::WriteAllText($script:riskFile, ("{0:yyyy-MM-dd HH:mm:ss}  已同意（版本 {1}）" -f (Get-Date), $script:AppVersion), [Text.Encoding]::UTF8)
+        [IO.File]::WriteAllText($script:riskFile, ((T "{0:yyyy-MM-dd HH:mm:ss}  已同意（版本 {1}）") -f (Get-Date), $script:AppVersion), [Text.Encoding]::UTF8)
     } catch {}
-    Write-LogFile '用户已同意安全风险提示'
+    Write-LogFile (T '用户已同意安全风险提示')
 })
 $global:CLEANC_UI_SHOWN = $true   # 告诉外层 exe：界面已经正常打开
 $win.ShowDialog() | Out-Null

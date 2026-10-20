@@ -8,9 +8,9 @@ using System.Text;
 [assembly: AssemblyTitle("C盘清理工具")]
 [assembly: AssemblyDescription("清理 C 盘、把微信/QQ 搬到其他盘、查找重复文件")]
 [assembly: AssemblyProduct("C盘清理工具")]
-[assembly: AssemblyVersion("2.1.0.0")]
-[assembly: AssemblyFileVersion("2.1.0.0")]
-[assembly: AssemblyInformationalVersion("2.1")]
+[assembly: AssemblyVersion("2.2.0.0")]
+[assembly: AssemblyFileVersion("2.2.0.0")]
+[assembly: AssemblyInformationalVersion("2.2")]
 [assembly: System.Runtime.Versioning.TargetFramework(".NETFramework,Version=v4.8", FrameworkDisplayName = ".NET Framework 4.8")]
 
 // 启动器：把内置的 PowerShell 程序放进本进程里的 PowerShell 引擎运行（用 Windows 自带的 PowerShell 5.1，不需要另装任何东西）。
@@ -26,7 +26,9 @@ static class CleanCLauncher {
         try { File.WriteAllText(LogPath, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "\r\n" + shortMsg + "\r\n\r\n" + detail, Encoding.UTF8); } catch { }
         if (TestMode) { Console.Error.WriteLine("FAIL: " + shortMsg); return; }
         try {
-            MessageBoxW(IntPtr.Zero, "C盘清理工具没能启动：\r\n\r\n" + shortMsg + "\r\n\r\n详细信息已保存到：\r\n" + LogPath, "C盘清理工具", 0x10);
+            bool zh = System.Globalization.CultureInfo.CurrentUICulture.Name.StartsWith("zh", StringComparison.OrdinalIgnoreCase);
+            if (zh) MessageBoxW(IntPtr.Zero, "C盘清理工具没能启动：\r\n\r\n" + shortMsg + "\r\n\r\n详细信息已保存到：\r\n" + LogPath, "C盘清理工具", 0x10);
+            else MessageBoxW(IntPtr.Zero, "ClearC could not start:\r\n\r\n" + shortMsg + "\r\n\r\nDetails were saved to:\r\n" + LogPath, "ClearC", 0x10);
         } catch { }
     }
 
