@@ -1,5 +1,9 @@
 # 更新记录
 
+## 2.2
+- 界面支持中文和英文。左下角点「English / 中文」切换，切换后本工具会自动重新打开；第一次打开时跟随系统显示语言。
+- English UI: click "English / 中文" at the bottom left of the sidebar to switch; ClearC reopens in the chosen language. The first launch follows the Windows display language.
+
 ## 2.1
 - 「清理 C 盘」的列表改成和上面的卡片一起整页滚动，不再挤在底部一小块里。列表上方写明一共扫到几项、分几类，每组标题旁标出这一组的项目数；下面还有内容时，底部提示「下面还有几项」。
 - 自动提醒：除了每天中午，每次登录电脑 2 分钟后也检查一次。第一次清理完会问一次要不要开启提醒。本工具换了位置后打开一次，定时任务会自动改用新位置；从压缩包里直接打开（在临时文件夹里）时不让开启。

@@ -5,6 +5,8 @@
 
 <p align="center">Windows 10 / 11 上给 C 盘腾空间的小工具：清缓存、把聊天记录和软件搬到其他盘、找出大文件和重复文件。<br>单个 exe，双击就能用，不用安装。</p>
 
+<p align="center">中文 · <a href="#english">English</a></p>
+
 ---
 
 ## 能做什么
@@ -20,6 +22,8 @@
 | **搬家管理** | 所有搬走的文件夹和它们现在的状态。可以搬回 C 盘、修复断掉的链接、删掉没搬完留下的多余副本。 |
 | **自动提醒** | C 盘剩余空间低于设定值时在右下角提醒（每次登录电脑后和每天中午各检查一次）；每周自动清一次缓存。两项默认关闭，由 Windows 任务计划运行，不用一直开着本工具。 |
 | **操作日志** | 每一次删除、搬运、合并、压缩、卸载和系统设置改动都记成 txt，可以按类别和时间查看。默认保存半年，可以改。 |
+
+界面支持**中文和英文**，在左侧栏底部点「English / 中文」切换。
 
 ## 安全原则
 
@@ -108,3 +112,23 @@ build/build-roslyn.ps1   其他系统上构建 exe
 ## 许可证
 
 [MIT](LICENSE)
+
+---
+
+<a id="english"></a>
+
+## English
+
+ClearC frees up space on drive C: on Windows 10 / 11. It is a single exe that needs no installation and runs on the PowerShell 5.1 and .NET Framework 4.8 that ship with Windows.
+
+- **Clean up C:** lists what can be removed (caches, temp files, update leftovers) and what has a cost (Windows.old, Recycle Bin), each with Delete / Move / Skip.
+- **Move chat history and apps to another drive.** WeChat, QQ, WeCom, Tencent Meeting, Feishu, DingTalk and Telegram data, as well as installed apps, are copied to another drive, verified, and replaced by a directory link, so the software keeps working unchanged.
+- **Duplicates, Save space, Space map, Apps, Moved folders, Reminders, Activity log.** Find duplicate files or merge them into hard links. Use CompactOS, NTFS folder compression, page-file and hibernation settings, and WSL / Docker disk compaction. Browse folder sizes, uninstall apps and clean leftovers, move folders back, and get low-space reminders. Every change is logged.
+- **Safety rules.** Personal folders (Desktop, Documents, Downloads…) are never deleted, every deletion needs an explicit confirmation, and system locations are blocked.
+
+The interface is available in English and Chinese. Switch with "English / 中文" at the bottom of the sidebar; the first launch follows the Windows display language.
+
+Download the latest `ClearC-vX.X.exe` from [Releases](../../releases). The exe is not code-signed, so SmartScreen may warn; choose "More info → Run anyway", or build it yourself with `build\build.ps1`.
+
+**Disclaimer:** deleting files can lose data. Back up anything important. You use ClearC at your own risk, and the developer accepts no liability for any loss.
+
