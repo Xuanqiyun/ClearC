@@ -48,9 +48,23 @@ function New-MapRow($name, $path, [double]$size, [double]$max, [double]$parent, 
         'more' { $r.Glyph = [string][char]0xE712; $r.GlyphBrush = '#8E8E93' }
         default { $r.Glyph = [string][char]0xE8A5; $r.GlyphBrush = '#8E8E93' }
     }
-    $why = Get-DeleteBlock $path
+    $why = if ($path) { Get-DeleteBlock $path } else { '' }
+    if (-not $why -and $path -and (Test-ChatPath $path)) { $why = (T '聊天记录里的文件只能查看和打开位置；要腾地方，到「搬家管理」把整个聊天记录搬到其他盘') }
     $r.Locked = [bool]$why; $r.LockTip = $why
     return $r
+}
+# 路径在不在某个聊天软件的聊天记录文件夹里（这些只看不删，要腾地方就整体搬家）
+function Test-ChatPath([string]$path) {
+    if (-not $script:chatDirs) {
+        $script:chatDirs = New-Object System.Collections.Generic.List[string]
+        foreach ($c in $catalog) {
+            if (-not ([string]$c.G).StartsWith('聊天软件') -or -not $c.Paths) { continue }
+            foreach ($p in $c.Paths) { if ($p) { foreach ($it in @(Get-Item -Path $p -Force -ErrorAction SilentlyContinue)) { if ($it.PSIsContainer) { $script:chatDirs.Add($it.FullName.TrimEnd('\')) } } } }
+        }
+    }
+    $p = $path.TrimEnd('\')
+    foreach ($d in $script:chatDirs) { if ($p -ieq $d -or $p.StartsWith($d + '\', [StringComparison]::OrdinalIgnoreCase)) { return $true } }
+    return $false
 }
 function Show-MapLevel($node) {
     if (-not $node) { return }
@@ -100,8 +114,9 @@ function Show-MapLevel($node) {
         }
     }
     if ($restN -gt 0) {
-        $more = New-MapRow ((T "其余 {0:N0} 项") -f $restN) $path ([math]::Max([double]0, $restB)) $max $node.Size $false $null (T '这里只列出最大的 500 项；其余的可以点「打开位置」在资源管理器里看') 'more'
-        $more.Locked = $true; $more.LockTip = (T '这一行是合在一起的其余项目')
+        $more = New-MapRow ((T "其余 {0:N0} 项") -f $restN) '' ([math]::Max([double]0, $restB)) $max $node.Size $false $null (T '这里只列出最大的 500 项；其余的可以点「打开位置」在资源管理器里看') 'more'
+        $more.Locked = $true; $more.LockTip = (T '这一行是合在一起的其余项目'); $more.IsSummary = $true
+        $more.Bar = [math]::Min([double]160, $more.Bar)
         [void]$rows.Add($more)
     }
     $ctl.MapList.ItemsSource = $rows
@@ -549,6 +564,7 @@ $ctl.BtnMapExport.Add_Click({
     } else {
         $lines.Add((Csv-Line @((T '名称'), (T '路径'), (T '类型'), (T '大小（字节）'), (T '大小'), (T '文件数'), (T '最近修改'))))
         foreach ($r in $list) {
+            if ($r.IsSummary) { continue }
             $k = if ($r.IsDir) { (T '文件夹') } elseif ($r.Node -and $r.Node.IsLink) { (T '链接') } else { (T '文件') }
             $lines.Add((Csv-Line @($r.Name, $r.Path, $k, [long]$r.Size, $r.SizeText, $(if ($r.IsDir) { $r.FileCount } else { '' }), $r.When)))
         }
@@ -559,7 +575,7 @@ $ctl.BtnMapExport.Add_Click({
     $ans = Show-Sheet -Kind done -Title (T '已导出') -Text ((T "{0:N0} 行，已保存到：`n{1}") -f $list.Count, $dlg.FileName) -Buttons @((T '打开所在位置'), (T '好')) -Primary (T '好') -Cancel (T '好')
     if ($ans -eq (T '打开所在位置')) { Open-Location $dlg.FileName }
 })
-$ctl.BtnMapOpen.Add_Click({ $r = $ctl.MapList.SelectedItem; if ($r) { Open-Location $r.Path } })
+$ctl.BtnMapOpen.Add_Click({ $r = $ctl.MapList.SelectedItem; if ($r) { if ($r.IsSummary) { if ($script:mapCur) { Open-Location $script:mapCur.FullPath() } } else { Open-Location $r.Path } } })
 
 # 和上次比：把这次扫描的快照和上次的对比，列出变化最大的文件夹
 function Update-Growth($root) {

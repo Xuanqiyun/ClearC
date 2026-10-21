@@ -94,6 +94,9 @@
       </Setter>
     </Style>
     <Style TargetType="Button" BasedOn="{StaticResource Secondary}"/>
+    <!-- 列表自带的样式会把文字设成固定的深色，这里改回正文颜色（深色模式会跟着换） -->
+    <Style TargetType="ListView"><Setter Property="Foreground" Value="#1D1D1F"/></Style>
+    <Style TargetType="ListBox"><Setter Property="Foreground" Value="#1D1D1F"/></Style>
     <Style x:Key="Primary" TargetType="Button" BasedOn="{StaticResource Secondary}">
       <Setter Property="Background" Value="#0071E3"/>
       <Setter Property="Foreground" Value="White"/>
@@ -176,7 +179,7 @@
             <ControlTemplate.Triggers>
               <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="#DEDEE4"/></Trigger>
               <Trigger Property="IsChecked" Value="True">
-                <Setter TargetName="Bd" Property="Background" Value="White"/>
+                <Setter TargetName="Bd" Property="Background" Value="#FEFEFE"/>
                 <Setter TargetName="Bd" Property="Effect"><Setter.Value><DropShadowEffect BlurRadius="4" ShadowDepth="1" Direction="270" Opacity="0.16"/></Setter.Value></Setter>
                 <Setter Property="FontWeight" Value="SemiBold"/>
               </Trigger>
@@ -189,6 +192,7 @@
     <Style x:Key="ChipRadio" TargetType="RadioButton" BasedOn="{StaticResource Seg}"/>
     <!-- 每一行的「删除 / 搬到其他盘 / 跳过」：一个横排的列表当分段控件用，选中项绑定到这一行的操作 -->
     <Style x:Key="SegList" TargetType="ListBox">
+      <Setter Property="Foreground" Value="#1D1D1F"/>
       <Setter Property="Background" Value="#EBEBF0"/>
       <Setter Property="BorderThickness" Value="0"/>
       <Setter Property="Focusable" Value="False"/>
@@ -218,7 +222,7 @@
                   <ControlTemplate.Triggers>
                     <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="#DEDEE4"/></Trigger>
                     <Trigger Property="IsSelected" Value="True">
-                      <Setter TargetName="Bd" Property="Background" Value="White"/>
+                      <Setter TargetName="Bd" Property="Background" Value="#FEFEFE"/>
                       <Setter TargetName="Bd" Property="Effect"><Setter.Value><DropShadowEffect BlurRadius="4" ShadowDepth="1" Direction="270" Opacity="0.16"/></Setter.Value></Setter>
                       <Setter Property="FontWeight" Value="SemiBold"/>
                       <Setter Property="Foreground" Value="#1D1D1F"/>
@@ -486,6 +490,7 @@
 
     <!-- ===== 查找条件的折叠面板：左边一个小箭头，展开时转向下 ===== -->
     <Style TargetType="Expander">
+      <Setter Property="Foreground" Value="#1D1D1F"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Expander">

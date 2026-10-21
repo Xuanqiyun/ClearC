@@ -175,10 +175,13 @@ $timer.Add_Tick({
         elseif ($sync.Mode -eq 'update') {
             $u = $sync.Update
             End-Op (T '完成')
-            $cur = $null; [void][version]::TryParse([string]$script:AppVersion, [ref]$cur)
-            $new = $null; if ($u -and $u.Ok) { [void][version]::TryParse(([string]$u.Tag).TrimStart('v', 'V'), [ref]$new) }
+            if ($u -and $u.Ok -and -not ([string]$u.Tag).Trim()) { $u = @{ Ok = $false; Err = (T '返回的内容里没有版本号') } }   # 比如被网络登录页拦下来了
+            # 版本号补齐到四段再比（2.6 和 2.6.0 是同一个版本）
+            $norm = { param([string]$s) $v = $null; if ([version]::TryParse(([string]$s).Trim().TrimStart('v', 'V'), [ref]$v)) { New-Object Version ([math]::Max(0, $v.Major)), ([math]::Max(0, $v.Minor)), ([math]::Max(0, $v.Build)), ([math]::Max(0, $v.Revision)) } else { $null } }
+            $cur = & $norm $script:AppVersion
+            $new = if ($u -and $u.Ok) { & $norm $u.Tag } else { $null }
             $url = if ($u -and $u.Url -and ([string]$u.Url).StartsWith('https://github.com/')) { [string]$u.Url } else { $script:releasePage }
-            $open = { Start-Process $url }.GetNewClosure()
+            $open = { Start-Process -FilePath "$env:SystemRoot\explorer.exe" -ArgumentList $url }.GetNewClosure()   # 用资源管理器打开：浏览器不会以管理员身份运行
             if (-not $u -or -not $u.Ok) {
                 $script:pendingDialog = @{ Title = (T '没能检查新版本'); Kind = 'warn'; Text = ((T "连不上 GitHub：{0}`n`n可以直接打开下载页面看看。") -f $(if ($u) { $u.Err } else { '' }))
                     Buttons = @((T '好'), (T '打开下载页面')); Primary = (T '打开下载页面'); Cancel = (T '好'); Then = $open }
@@ -398,6 +401,7 @@ $ctl.OvPlanScroll.MaxHeight = [math]::Max([double]80, [math]::Min([double]190, [
 $win.Title = ((T "腾挪 ClearC {0}") -f $script:AppVersion)
 $ctl.AppVer.Text = ((T "版本 {0}") -f $script:AppVersion)
 Write-LogFile ((T "==== 腾挪 ClearC {0} 启动；Windows {1}；屏幕可用区域 {2:N0} x {3:N0}") -f $script:AppVersion, [Environment]::OSVersion.Version, $wa.Width, $wa.Height)
+if ($script:themeFail) { Write-LogFile ((T "深色界面没能打开，这次用浅色：{0}") -f $script:themeFail) }
 
 $script:statusColor = @{ wait = '#86868B'; run = '#0071E3'; ok = '#248A3D'; warn = '#B25000'; fail = '#D70015'; skip = '#86868B' }
 $script:pendingDialog = $null

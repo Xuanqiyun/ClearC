@@ -69,6 +69,11 @@ function Show-Toast([string]$Title, [string]$Text, [string[]]$Buttons = @((T '�
         $b.Padding = New-Object System.Windows.Thickness 14, 6, 14, 6; $b.Margin = New-Object System.Windows.Thickness 8, 0, 0, 0
         $b.Cursor = [System.Windows.Input.Cursors]::Hand
         if ($i -eq $Buttons.Count - 1) { $b.Background = New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color]::FromRgb(0, 0x71, 0xE3)); $b.Foreground = [System.Windows.Media.Brushes]::White; $b.BorderThickness = 0 }
+        elseif ([Theme]::Dark) {
+            $b.Background = New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color][System.Windows.Media.ColorConverter]::ConvertFromString('#3A3A3C'))
+            $b.Foreground = New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color][System.Windows.Media.ColorConverter]::ConvertFromString('#F2F2F7'))
+            $b.BorderThickness = 0
+        }
         $b.Add_Click({ $script:toastResult = [string]$this.Tag; [System.Windows.Window]::GetWindow($this).Close() })
         [void]$panel.Children.Add($b)
     }
@@ -107,8 +112,10 @@ if ($script:mode -match '(?i)/selftest') {
     Init-DriveThreads
     [DiskMap]::MftOff = ((Get-Setting 'FastScan' '1') -eq '0')
     $r = Invoke-SelfTest $script:AppVersion
-    $file = if ($env:CLEANC_REPORT) { $env:CLEANC_REPORT } else { Join-Path $script:appDir 'selftest.txt' }
-    try { New-Item -ItemType Directory -Force -Path (Split-Path $file) | Out-Null; [IO.File]::WriteAllText($file, (@($r.Lines) -join "`r`n"), (New-Object Text.UTF8Encoding $true)) } catch {}
+    $file = if ($env:CLEANC_REPORT) { [IO.Path]::GetFullPath($env:CLEANC_REPORT) } else { Join-Path $script:appDir 'selftest.txt' }
+    $dir = Split-Path $file
+    try { if ($dir) { New-Item -ItemType Directory -Force -Path $dir | Out-Null } } catch {}
+    try { [IO.File]::WriteAllText($file, (@($r.Lines) -join "`r`n"), (New-Object Text.UTF8Encoding $true)) } catch {}
     if (-not $env:CLEANC_QUIET) {
         $ans = Show-Toast -Title (T '扫描功能检查完了') -Text ((T "{0} 项正常，{1} 项提醒，{2} 项有问题") -f $r.Res.Pass, $r.Res.Warn, $r.Res.Fail) -Buttons @((T '好'), (T '打开结果'))
         if ($ans -eq (T '打开结果')) { Start-Process -FilePath "$env:SystemRoot\System32\notepad.exe" -ArgumentList ('"{0}"' -f $file) }

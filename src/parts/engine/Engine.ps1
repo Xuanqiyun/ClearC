@@ -1322,7 +1322,7 @@ function Invoke-SelfTest([string]$Version) {
     # 1. 批量读目录和 FindFirstFileEx 一样吗
     $step = 0; $steps = 4
     $step++; SetP @{ Steps = $steps; Step = $step; StepName = (T '核对批量读目录'); SubKind = 'action'; SubStart = (Get-Date); Detail = '' }
-    foreach ($d in @($env:SystemRoot, "$env:SystemRoot\System32", $env:ProgramFiles, $env:LOCALAPPDATA, $env:USERPROFILE)) {
+    foreach ($d in @($env:SystemRoot, "$env:SystemRoot\System32", $env:ProgramFiles, $env:LOCALAPPDATA)) {     # 不看个人文件夹：结果要发给开发者
         if (-not $d -or -not (Test-Path -LiteralPath $d)) { continue }
         $r = [DirReader]::Compare($d)
         & $add $(if ($r -match 'differ 0\b' -and $r -notmatch 'fell back') { 'pass' } elseif ($r -match '^batch \d') { 'fail' } else { 'warn' }) ("listing {0}: {1}" -f $d, $r)
@@ -1342,7 +1342,7 @@ function Invoke-SelfTest([string]$Version) {
     # 3. 和逐个文件夹扫描比
     $step++; SetP @{ Steps = $steps; Step = $step; StepName = (T '和逐个文件夹扫描对比'); SubKind = 'action'; SubStart = (Get-Date); Detail = '' }
     if ($tree) {
-        foreach ($p in @("$env:SystemRoot\System32", $env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:ProgramData, $env:LOCALAPPDATA, "$env:USERPROFILE\Documents")) {
+        foreach ($p in @("$env:SystemRoot\System32", $env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:ProgramData, $env:LOCALAPPDATA)) {
             if (Stopping) { break }
             if (-not $p -or -not (Test-Path -LiteralPath $p -PathType Container) -or (IsLink $p)) { continue }
             SetP @{ Detail = $p }
@@ -1360,15 +1360,23 @@ function Invoke-SelfTest([string]$Version) {
     if (Stopping) { return @{ Lines = $L; Res = $res; Stopped = $true } }
     # 4. 按变更日志更新：建、改、删几个文件，看看每次都对
     $step++; SetP @{ Steps = $steps; Step = $step; StepName = (T '试一下按变更日志更新'); SubKind = 'action'; SubStart = (Get-Date); Detail = '' }
-    if ($tree) {
-        $base = Join-Path $env:LOCALAPPDATA ('CleanC\selftest-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+    $own = Join-Path $env:LOCALAPPDATA 'CleanC'
+    try { New-Item -ItemType Directory -Force -Path $own | Out-Null } catch {}
+    # 上次没做完留下的测试文件夹（本工具自己建的）先清掉
+    foreach ($old in @(Get-ChildItem -LiteralPath $own -Directory -Filter 'selftest-*' -Force -ErrorAction SilentlyContinue)) { Remove-Item -LiteralPath $old.FullName -Recurse -Force -ErrorAction SilentlyContinue }
+    if ($tree -and ((IsLink $env:LOCALAPPDATA) -or (IsLink $own) -or (Get-LinkedAncestor $own) -or -not $own.StartsWith($sd, [StringComparison]::OrdinalIgnoreCase))) {
+        & $add 'warn' 'journal test skipped: the app folder is a link or not on the system drive'
+    } elseif ($tree) {
+        $base = Join-Path $own ('selftest-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
         $fs = $null
         $check = {
             param([string]$label, [scriptblock]$expect, [bool]$soft)
+            if (Stopping) { return }
             $s2 = [Diagnostics.Stopwatch]::StartNew()
             $t = $null; try { $t = [DiskMap]::GetTree($sd, $n, $false, $true) } catch {}
             $m = [string][DiskMap]::LastMethod; $ms = $s2.ElapsedMilliseconds
             $why = if ($t) { & $expect $t } else { 'no tree: ' + [DiskMap]::LastNote }
+            if (Stopping) { return }
             $kind = if ($why) { $(if ($soft) { 'warn' } else { 'fail' }) } elseif ($m -ne 'mft-usn') { 'warn' } else { 'pass' }
             & $add $kind ("journal {0}: method {1}, {2:N0} ms, changed {3}, unread {4}{5}" -f $label, $m, $ms, [DiskMap]::LastChanged, [DiskMap]::LastFailed, $(if ($why) { '; ' + $why } elseif ($m -ne 'mft-usn') { '; expected an incremental update' } else { '' }))
         }
@@ -1396,7 +1404,7 @@ function Invoke-SelfTest([string]$Version) {
     }
     $L.Add('')
     $L.Add(("summary: {0} pass, {1} warn, {2} fail, {3:N1} s" -f $res.Pass, $res.Warn, $res.Fail, ($all.ElapsedMilliseconds / 1000)))
-    return @{ Lines = $L; Res = $res; Stopped = $false }
+    return @{ Lines = $L; Res = $res; Stopped = [bool](Stopping) }
 }
 
 function Get-Hogs {

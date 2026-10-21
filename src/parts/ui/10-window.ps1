@@ -57,7 +57,14 @@ if ($script:Lang -eq 'en') {
         foreach ($c in @($el.ChildNodes)) { if ($c.NodeType -eq 'Text' -and $c.Value) { $c.Value = T $c.Value } }
     }
 }
-$win = if ([Theme]::Dark) { [Windows.Markup.XamlReader]::Parse([Theme]::Xaml($xaml.OuterXml)) } else { [Windows.Markup.XamlReader]::Load((New-Object System.Xml.XmlNodeReader $xaml)) }
+$win = $null; $script:themeFail = ''
+if ([Theme]::Dark) {
+    # 深色版本万一打不开，就用浅色打开（不然连换回浅色的按钮都看不到）
+    try { $win = [Windows.Markup.XamlReader]::Parse([Theme]::Xaml($xaml.OuterXml)) } catch { $script:themeFail = $_.Exception.Message; [Theme]::Dark = $false; $win = $null }
+}
+if (-not $win) { $win = [Windows.Markup.XamlReader]::Load((New-Object System.Xml.XmlNodeReader $xaml)) }
+# 深色的窗口标题栏
+$win.Add_SourceInitialized({ try { [Theme]::DarkTitle((New-Object System.Windows.Interop.WindowInteropHelper $win).Handle) } catch {} })
 $script:tUi = $script:startClock.Elapsed.TotalSeconds
 $ctl = @{}
 foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageMap','PageSave','PageApps','PageMoves','PageAuto','PageLog','BtnDupMerge',

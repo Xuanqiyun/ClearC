@@ -80,7 +80,9 @@ def analyze(path, winbg, winfg):
             txt = (el.get('Text') or el.get('Content') or '')[:30]
             bad[('#%02X%02X%02X' % fg[:3], '#%02X%02X%02X' % bg[:3])].append((r, t, txt))
     return n, bad
+worse = 0
 for name in sys.argv[1:]:
+    counts = {}
     for mode in ('light', 'dark'):
         p = name.replace('.dark.', '.light.') if mode == 'light' else name
         r = ET.parse(p).getroot()
@@ -89,6 +91,11 @@ for name in sys.argv[1:]:
         if wb is None: wb = (255, 255, 255, 255) if mode == 'light' else col('#2C2C2E')
         if wf is None: wf = (0, 0, 0, 255) if mode == 'light' else col('#F0F0F2')
         n, bad = analyze(p, wb, wf)
+        counts[mode] = sum(len(v) for v in bad.values())
         print('== %s %s: %d text elements, %d low-contrast pairs' % (p.split('/')[-1], mode, n, len(bad)))
         for (f, b), lst in sorted(bad.items(), key=lambda kv: min(x[0] for x in kv[1])):
             print('   fg %s on bg %s  ratio %.2f  x%d  e.g. %s "%s"' % (f, b, min(x[0] for x in lst), len(lst), lst[0][1], lst[0][2]))
+    # 浅色里本来就淡的（装饰性的箭头、占位文字）深色里也淡，这不算问题；深色比浅色多出来的才算
+    if counts.get('dark', 0) > counts.get('light', 0):
+        print('   FAIL: dark mode has more low-contrast text than light mode'); worse += 1
+sys.exit(1 if worse else 0)

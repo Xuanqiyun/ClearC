@@ -11,26 +11,30 @@ public static class Theme {
         int a = (int)(argb >> 24), r = (int)((argb >> 16) & 255), g = (int)((argb >> 8) & 255), b = (int)(argb & 255);
         if (a == 0) return c;                                        // 透明
         if (a < 255 && r < 48 && g < 48 && b < 48) return c;         // 阴影、半透明遮罩
+        if (role == 'b' && a == 255 && (argb & 0xFFFFFF) == 0xFEFEFE) return "#48484C";   // 浮起来的选中块（分段按钮）：比卡片亮
+        if (role == 'b' && a == 255 && (argb & 0xFFFFFF) == 0) return "#FFFFFF";          // 按钮上的黑色遮罩（按下变暗）：深色时改成变亮
         double h, s, l; ToHsl(r, g, b, out h, out s, out l);
         double chroma = (Math.Max(r, Math.Max(g, b)) - Math.Min(r, Math.Min(g, b))) / 255.0;
         bool gray = l >= 0.9 ? chroma < 0.025 : chroma < 0.08;
         double L, S = s;
+        if (role == 's') role = gray ? 's' : 'b';
         if (gray) {
             S = Math.Min(s, 0.06);
-            if (role == 'f') {
+            if (role == 's') L = Clamp(0.25 + (0.9 - l) * 0.4, 0.22, 0.34);   // 进度条的底槽、灰色小圆点（形状的填充色）
+            else if (role == 'f') {
                 if (r == 255 && g == 255 && b == 255) return c;      // 彩色按钮、色块上的白字
                 L = Clamp(1.06 - l, 0.30, 0.95);
             } else if (role == 'd') L = Clamp(0.19 + (0.96 - l) * 0.9, 0.17, 0.62);
             else {
                 if (l >= 0.985) L = 0.17;                            // 白：卡片
                 else if (l >= 0.94) L = 0.105 + (0.985 - l) * 0.5;   // 页面底色、卡片里的浅灰块
-                else if (l >= 0.80) L = 0.13 + (0.94 - l) * 0.15;    // 侧边栏、分段按钮的底槽、按下的浅灰：比卡片暗一点（和浅色时一样，白色的选中块浮在上面）
+                else if (l >= 0.80) L = Clamp(0.13 + (0.94 - l) * 1.0, 0.13, 0.30);   // 侧边栏、底槽、悬停和按下的浅灰：越深的浅灰换成越亮的深灰，悬停能看出来
                 else L = Clamp(0.30 + l * 0.25, 0.30, 0.45);         // 本来就深的底（提示条等）
             }
         } else if (l >= 0.85) {                                      // 浅的彩色底（提示框、标签）
             if (role == 'f') { L = 0.80; S = Math.Min(s, 0.7); }
             else if (role == 'd') { L = 0.34; S = Math.Min(s, 0.45); }
-            else { L = 0.19; S = Math.Min(s, 0.40); }
+            else { L = 0.24; S = Math.Min(s, 0.45); }
         } else if (l >= 0.65) {                                      // 偏浅的彩色（浅边框、焦点环）
             if (role == 'b') { L = 0.28; S = Math.Min(s, 0.5); }
             else if (role == 'd') { L = 0.42; S = Math.Min(s, 0.55); }
@@ -94,33 +98,42 @@ public static class Theme {
         return string.Format("#{0:X2}{1:X2}{2:X2}", (int)(br + (r - br) * k), (int)(bg + (g - bg) * k), (int)(bb + (b - bb) * k));
     }
 
-    // 整段 XAML 里的颜色按所在的属性换掉
-    static readonly System.Text.RegularExpressions.Regex TagRx = new System.Text.RegularExpressions.Regex(
-        "<(/?)([A-Za-z_][\\w.:]*)((?:[^>\"']|\"[^\"]*\"|'[^']*')*?)(/?)>", System.Text.RegularExpressions.RegexOptions.Compiled);
-    static readonly System.Text.RegularExpressions.Regex AttrRx = new System.Text.RegularExpressions.Regex(
-        "([\\w.:]+)(\\s*=\\s*)\"([^\"]*)\"", System.Text.RegularExpressions.RegexOptions.Compiled);
+    // 整段 XAML 里的颜色按所在的属性换掉（注释原样留着）
+    static System.Text.RegularExpressions.Regex tagRx, attrRx;
     public static string Xaml(string x) {
         if (!Dark || string.IsNullOrEmpty(x)) return x;
+        if (tagRx == null) {
+            attrRx = new System.Text.RegularExpressions.Regex("([\\w.:]+)(\\s*=\\s*)(?:\"([^\"]*)\"|'([^']*)')");
+            tagRx = new System.Text.RegularExpressions.Regex("<!--.*?-->|<!\\[CDATA\\[.*?\\]\\]>|<(/?)([A-Za-z_][\\w.:]*)((?:[^>\"']|\"[^\"]*\"|'[^']*')*?)(/?)>", System.Text.RegularExpressions.RegexOptions.Singleline);
+        }
         List<string> stack = new List<string>();
-        return TagRx.Replace(x, delegate (System.Text.RegularExpressions.Match m) {
+        return tagRx.Replace(x, delegate (System.Text.RegularExpressions.Match m) {
+            if (!m.Groups[2].Success) return m.Value;                  // 注释、CDATA
             string close = m.Groups[1].Value, name = m.Groups[2].Value, attrs = m.Groups[3].Value, self = m.Groups[4].Value;
-            if (close.Length > 0) { int i = stack.LastIndexOf(name); if (i >= 0) stack.RemoveRange(i, stack.Count - i); return m.Value; }
+            if (close.Length > 0) { for (int i = stack.Count - 1; i >= 0; i--) if (stack[i] == name || stack[i].StartsWith(name + "|")) { stack.RemoveRange(i, stack.Count - i); break; } return m.Value; }
             string prop = null, key = null;
-            foreach (System.Text.RegularExpressions.Match a in AttrRx.Matches(attrs)) {
-                if (a.Groups[1].Value == "Property") prop = a.Groups[3].Value;
-                else if (a.Groups[1].Value == "x:Key") key = a.Groups[3].Value;
+            foreach (System.Text.RegularExpressions.Match a in attrRx.Matches(attrs)) {
+                string av = a.Groups[3].Success ? a.Groups[3].Value : a.Groups[4].Value;
+                if (a.Groups[1].Value == "Property") prop = av;
+                else if (a.Groups[1].Value == "x:Key") key = av;
             }
             string local = name.Contains(":") ? name.Substring(name.IndexOf(':') + 1) : name;
-            string newAttrs = AttrRx.Replace(attrs, delegate (System.Text.RegularExpressions.Match a) {
-                string an = a.Groups[1].Value, v = a.Groups[3].Value;
+            string newAttrs = attrRx.Replace(attrs, delegate (System.Text.RegularExpressions.Match a) {
+                string an = a.Groups[1].Value; bool dq = a.Groups[3].Success; string v = dq ? a.Groups[3].Value : a.Groups[4].Value;
+                string bare = an.Contains(".") ? an.Substring(an.LastIndexOf('.') + 1) : an;   // TextElement.Foreground 之类
                 char role = '\0';
-                if (an == "Foreground" || an == "CaretBrush") role = 'f';
-                else if (an == "Background") role = 'b';
-                else if (an == "BorderBrush" || an == "Stroke") role = 'd';
-                else if (an == "Fill") role = Lightish(v) ? 'b' : 'f';
+                if (bare == "Foreground" || bare == "CaretBrush") role = 'f';
+                else if (bare == "Background") role = 'b';
+                else if (bare == "BorderBrush") role = 'd';
+                else if (bare == "Stroke") role = IsWhite(v) ? '\0' : 'd';           // 勾选框里的白色对勾不动
+                else if (bare == "Fill") role = IsWhite(v) ? '\0' : (Lightish(v) ? 's' : 'f');   // 开关的白色圆钮不动
                 else if (an == "Value" && prop != null) role = RoleOf(prop, v);
                 else if (an == "Color" && local != "DropShadowEffect") {
-                    for (int i = stack.Count - 1; i >= 0 && role == '\0'; i--) { int dot = stack[i].LastIndexOf('.'); if (dot > 0) role = RoleOf(stack[i].Substring(dot + 1), v); }
+                    for (int i = stack.Count - 1; i >= 0 && role == '\0'; i--) {
+                        string st = stack[i];
+                        if (st == "Setter.Value" && i > 0 && stack[i - 1].StartsWith("Setter|")) { role = RoleOf(stack[i - 1].Substring(7), v); break; }
+                        int dot = st.LastIndexOf('.'); if (dot > 0 && st.IndexOf('|') < 0) role = RoleOf(st.Substring(dot + 1), v);
+                    }
                     if (role == '\0') {
                         string k = key ?? "";
                         role = (k.IndexOf("Fg", StringComparison.OrdinalIgnoreCase) >= 0 || k.IndexOf("Text", StringComparison.OrdinalIgnoreCase) >= 0) ? 'f'
@@ -128,17 +141,28 @@ public static class Theme {
                     }
                 }
                 if (role == '\0' || (v.Length == 0) || (v[0] != '#' && v != "White" && v != "Black")) return a.Value;
-                return an + a.Groups[2].Value + "\"" + Map(v, role) + "\"";
+                string q = dq ? "\"" : "'";
+                return an + a.Groups[2].Value + q + Map(v, role) + q;
             });
-            if (self.Length == 0) stack.Add(name);
+            if (self.Length == 0) stack.Add(local == "Setter" && prop != null ? "Setter|" + prop : name);
             return "<" + name + newAttrs + self + ">";
         });
     }
+    static bool IsWhite(string v) { return v == "White" || string.Equals(v, "#FFFFFF", StringComparison.OrdinalIgnoreCase) || string.Equals(v, "#FFFFFFFF", StringComparison.OrdinalIgnoreCase); }
+    // 深色的窗口标题栏（Windows 10 2004 以后、Windows 11）
+    [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+    static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+    public static void DarkTitle(IntPtr hwnd) {
+        if (!Dark || hwnd == IntPtr.Zero) return;
+        try { int on = 1; if (DwmSetWindowAttribute(hwnd, 20, ref on, 4) != 0) DwmSetWindowAttribute(hwnd, 19, ref on, 4); } catch { }
+    }
     static char RoleOf(string prop, string v) {
+        if (prop.Contains(".")) prop = prop.Substring(prop.LastIndexOf('.') + 1);
         if (prop == "Foreground" || prop == "CaretBrush") return 'f';
         if (prop == "Background") return 'b';
-        if (prop == "BorderBrush" || prop == "Stroke") return 'd';
-        if (prop == "Fill") return Lightish(v) ? 'b' : 'f';
+        if (prop == "BorderBrush") return 'd';
+        if (prop == "Stroke") return IsWhite(v) ? '\0' : 'd';
+        if (prop == "Fill") return IsWhite(v) ? '\0' : (Lightish(v) ? 's' : 'f');
         return '\0';
     }
     static bool Lightish(string v) {

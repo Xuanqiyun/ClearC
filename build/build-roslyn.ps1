@@ -19,8 +19,11 @@ $obj = Join-Path $B 'obj'
 New-Item -ItemType Directory -Force -Path $obj, (Split-Path $Out -Parent) | Out-Null
 $pw = Split-Path ([System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
 
-# 源码分成了 src/parts/ 下的多个文件：先拼成 src/CleanC-UI.ps1
-if (Test-Path -LiteralPath (Join-Path $root 'src/parts/order.txt')) { & (Join-Path $B 'merge.ps1') }
+# 源码分成了 src/parts/ 下的多个文件：src/CleanC-UI.ps1 必须和它们一致，不一致就停下
+if (Test-Path -LiteralPath (Join-Path $root 'src/parts/order.txt')) {
+    & (Join-Path $B 'merge.ps1') -Check | Out-Host
+    if ($LASTEXITCODE) { throw 'src/CleanC-UI.ps1 and src/parts differ: run build/merge.ps1 after editing parts, or python build/split.py after editing CleanC-UI.ps1' }
+}
 $src = Get-Content $Script -Raw
 $row = [regex]::Match($src, '(?s)\$rowCode = @"\r?\n(.*?)\r?\n"@').Groups[1].Value
 $dup = [regex]::Match($src, "(?s)\`$dupCode = @'\r?\n(.*?)\r?\n'@").Groups[1].Value
