@@ -1,12 +1,13 @@
 # 更新记录
 
 ## 2.5
+- 改名为「**腾挪 ClearC**」（原名「C盘清理工具」）：把占地方的东西清掉、挪走，给 C 盘腾出空间。设置、操作日志和自动提醒都照旧，不用重新设置。
 - **扫描快得多**：NTFS 格式的盘（C 盘基本都是）直接读取盘上的文件表（MFT），不用一个个文件夹去看，几十万到上百万个文件一般几秒到十几秒就读完。读完会和直接列目录的结果核对；对不上或读不了（不是 NTFS、权限不够等）自动改回逐个文件夹扫描。
 - **同一次打开里再扫描只看改动**：按 Windows 的变更日志（USN），只重新读改过的那部分。关掉工具后不在 C 盘留任何缓存。
 - **一次读取，各页共用**：「清理 C 盘」「搬家管理」「软件管理」统计大小时也先读一次 C 盘的文件表，直接查出每个文件夹多大。这些数字只用于显示和估算；真正删除、搬家时，每一项都会重新统计、重新检查。
 - **逐个文件夹扫描也更快**：一次读一大批目录记录，多个线程一起数（固态硬盘线程多一些，机械硬盘少一些）。查找重复文件列举文件时也用这种方式。
 - 读文件表能看到逐个扫描进不去的文件夹（比如 System Volume Information），所以「和上次比」遇到两次扫描方式不同时会提示，免得把这部分误当成变大。
-- Much faster scans: NTFS drives are read straight from the file table (MFT) and checked against a direct listing, with an automatic fallback to the folder-by-folder scan; later scans in the same session only re-read what changed (USN journal). Clean up, Moved folders and Apps reuse the same table for size estimates; deleting and moving still measure and check every item again. The folder-by-folder scan reads directory entries in batches on several threads.
+- Renamed to 腾挪 ClearC (formerly C盘清理工具); settings, logs and reminders carry over. Much faster scans: NTFS drives are read straight from the file table (MFT) and checked against a direct listing, with an automatic fallback to the folder-by-folder scan; later scans in the same session only re-read what changed (USN journal). Clean up, Moved folders and Apps reuse the same table for size estimates; deleting and moving still measure and check every item again. The folder-by-folder scan reads directory entries in batches on several threads.
 
 ## 2.4
 - 「搬家管理」分成两页：**可以搬的**会自动列出 C 盘上还能搬走的东西，分聊天记录、装在 C 盘的软件、其他文件夹三组，标出大小；勾选后选好目标盘，一次搬好几项，搬之前列出全部项目和要先关掉的软件，中途可以取消。不适合搬的软件（带服务或驱动、给资源管理器装了右键菜单、微软的软件等）单独列出并写明原因。**已经搬走的**就是原来的列表；没搬完的项目在「可以搬的」里再搬一次，只补差异。

@@ -1,5 +1,5 @@
 ﻿<#
-C 盘清理工具（单文件版，双击「C盘清理工具.bat」运行）
+腾挪 ClearC（单文件版，双击「run-from-source.bat」运行）
 第一页 清理 C 盘：一键清理；或扫描后每项自选 删除 / 搬到其他盘 / 跳过；分析谁占空间。
 第二页 重复文件：按类型、大小区间查找名字和内容都相同的文件，每组只留一份，其余删除。
 #>
@@ -2935,7 +2935,7 @@ function OpLog([string]$cat, [string]$what, [string]$target = '', [string]$detai
             if (-not (Test-Path -LiteralPath $script:opLogDir)) { New-Item -ItemType Directory -Path $script:opLogDir -Force | Out-Null }
             $enc = New-Object System.Text.UTF8Encoding $true
             if (-not (Test-Path -LiteralPath $f)) {
-                [IO.File]::AppendAllText($f, "# C盘清理工具 操作日志（每行：时间、类别、操作、对象、详情，用 Tab 分隔）`r`n", $enc)
+                [IO.File]::AppendAllText($f, "# 腾挪 ClearC 操作日志（每行：时间、类别、操作、对象、详情，用 Tab 分隔）`r`n", $enc)
             }
             [IO.File]::AppendAllText($f, $line + "`r`n", $enc)
             return
@@ -3584,16 +3584,16 @@ function Get-Hogs {
 $script:l10nData = @'
 好	OK
 C 盘只剩 {0} 了	Only {0} left on C:
-低于你设定的 {0} GB。打开 C 盘清理工具，看看能清掉或搬走什么？\n（在工具的「自动提醒」页可以关掉这个提醒）	That's below the {0} GB you set. Open ClearC to see what can be cleaned up or moved?\n(You can turn off this reminder on the "Reminders" page.)
+低于你设定的 {0} GB。打开腾挪 ClearC，看看能清掉或搬走什么？\n（在工具的「自动提醒」页可以关掉这个提醒）	That's below the {0} GB you set. Open ClearC to see what can be cleaned up or moved?\n(You can turn off this reminder on the "Reminders" page.)
 稍后	Later
-打开清理工具	Open ClearC
+打开腾挪 ClearC	Open ClearC
 每周自动清理完成	Weekly cleanup finished
 C 盘多出 {0}；{1}	Freed {0} on C:; {1}
 ；	; 
 C 盘多出 {0}。只清了临时文件、缓存和日志，没有碰任何个人文件。每一项都记在「操作日志」里。	Freed {0} on C:. Only temporary files, caches and logs were cleaned; no personal files were touched. Every item is recorded in the "Activity log".
 已复制	Copied
 复制失败，请手动输入	Couldn't copy. Please type it in manually.
-C 盘清理工具 {0}	ClearC {0}
+腾挪 ClearC {0}	ClearC {0}
 Windows {0}，{1} 位	Windows {0}, {1}-bit
 C 盘剩余 {0} / 共 {1}	Free on C: {0} / {1} total
 屏幕可用区域 {0:N0} x {1:N0}	Screen work area {0:N0} x {1:N0}
@@ -3803,7 +3803,7 @@ CAD 图纸	CAD drawings
 需要重启电脑才生效	Restart your PC to apply
 稍后自己重启	Restart later
 现在重启	Restart now
-C 盘清理工具：15 秒后重启，让刚才的设置生效	ClearC: restarting in 15 seconds to apply the settings you just changed
+腾挪 ClearC：15 秒后重启，让刚才的设置生效	ClearC: restarting in 15 seconds to apply the settings you just changed
 {0}  已用 {1} / 共 {2}	{0}  {1} used / {2} total
 空间地图：开始扫描 {0}	Space map: started scanning {0}
 空间地图：正在停止…	Space map: stopping…
@@ -3950,8 +3950,8 @@ C 盘不再放页面文件，改为放在 {0}\\pagefile.sys，大小由系统自
 清理「{0}」的残留	Clean up leftovers of "{0}"
 只有 exe 版本支持定时任务	Only the exe version supports scheduled tasks
 本工具现在是从临时文件夹运行的（{0}），比如直接在压缩包里双击打开的。这个位置过后会被清掉，任务就找不到本工具了。\n\n请先把本工具复制到一个固定的位置（比如 D:\\工具），从那里打开，再开启。	ClearC is running from a temporary folder ({0}), for example because it was opened directly from inside a zip file. That location will be cleared later, and the task would no longer find ClearC.\n\nCopy ClearC to a permanent location first (for example D:\\Tools), open it from there, and then turn this on.
-C 盘清理工具：每次登录电脑后和每天中午各检查一次 C 盘剩余空间，低于设定值时提醒（每天最多一次）。在工具的「自动提醒」页关掉开关即可删除本任务。	ClearC: checks free space on C: after each sign-in and at noon every day, and reminds you when it falls below the set limit (at most once a day). To remove this task, turn off the switch on the "Reminders" page in ClearC.
-C 盘清理工具：每周日自动清理一次临时文件、缓存和日志（不搬家、不清空回收站、不碰个人文件夹）。在工具的「自动提醒」页关掉开关即可删除本任务。	ClearC: cleans up temporary files, caches, and logs automatically every Sunday (doesn't move anything, empty the Recycle Bin, or touch personal folders). To remove this task, turn off the switch on the "Reminders" page in ClearC.
+腾挪 ClearC：每次登录电脑后和每天中午各检查一次 C 盘剩余空间，低于设定值时提醒（每天最多一次）。在工具的「自动提醒」页关掉开关即可删除本任务。	ClearC: checks free space on C: after each sign-in and at noon every day, and reminds you when it falls below the set limit (at most once a day). To remove this task, turn off the switch on the "Reminders" page in ClearC.
+腾挪 ClearC：每周日自动清理一次临时文件、缓存和日志（不搬家、不清空回收站、不碰个人文件夹）。在工具的「自动提醒」页关掉开关即可删除本任务。	ClearC: cleans up temporary files, caches, and logs automatically every Sunday (doesn't move anything, empty the Recycle Bin, or touch personal folders). To remove this task, turn off the switch on the "Reminders" page in ClearC.
 更新任务计划	Update scheduled task
 改用 {0}（原来的 {1} 不在了或版本更旧）	Switched to {0} (the previous {1} is missing or older)
 加上「登录电脑后检查」	Added "Check after sign-in"
@@ -4074,7 +4074,7 @@ C 盘快满时提醒你？	Remind you when C: is almost full?
 提醒已开启	Reminder turned on
 在「自动提醒」页可以改提醒的界限，或者关掉。	You can change the reminder threshold or turn it off on the "Reminders" page.
 版本 {0}	Version {0}
-==== C 盘清理工具 {0} 启动；Windows {1}；屏幕可用区域 {2:N0} x {3:N0}	==== ClearC {0} started; Windows {1}; usable screen area {2:N0} x {3:N0}
+==== 腾挪 ClearC {0} 启动；Windows {1}；屏幕可用区域 {2:N0} x {3:N0}	==== ClearC {0} started; Windows {1}; usable screen area {2:N0} x {3:N0}
 自动删除超过保存时间的旧记录	Automatically delete records older than the retention period
 {0} 条，保存时间 {1} 个月	{0} entries, kept for {1} months
 使用前请先阅读安全风险提示	Please read the safety notice before use
@@ -4496,7 +4496,7 @@ C 盘空间变化	Space on C: over time
 收起	Hide
 全部项目	All items
 在后台继续	Continue in background
-C 盘清理工具	ClearC
+腾挪 ClearC	ClearC
 微信	WeChat
 企业微信	WeCom
 腾讯会议	Tencent Meeting
@@ -4625,7 +4625,7 @@ CSV 文件（可以用 Excel 打开）	CSV file (opens in Excel)
 其他类型	Other types
 各类文件占多少	Space by file type
 只统计扫描时记下的 1 MB 以上的文件。	Counts only the files of 1 MB or more recorded during the scan.
-由 C 盘清理工具 {0} 生成，{1:yyyy-MM-dd HH:mm}。报告里只有文件夹和文件的名字、大小，不含文件内容。	Generated by ClearC {0} on {1:yyyy-MM-dd HH:mm}. The report contains only folder and file names and sizes, no file contents.
+由腾挪 ClearC {0} 生成，{1:yyyy-MM-dd HH:mm}。报告里只有文件夹和文件的名字、大小，不含文件内容。	Generated by ClearC {0} on {1:yyyy-MM-dd HH:mm}. The report contains only folder and file names and sizes, no file contents.
 先扫描一块盘，再导出报告。	Scan a drive first, then export the report.
 网页报告	Web page report
 空间报告	Space report
@@ -5148,7 +5148,7 @@ function Show-Toast([string]$Title, [string]$Text, [string[]]$Buttons = @((T '�
     $x = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent" ResizeMode="NoResize" ShowInTaskbar="True" Topmost="True"
-        SizeToContent="Height" Width="400" FontFamily="Segoe UI, Microsoft YaHei UI" FontSize="13" Foreground="#1D1D1F" Title="C 盘清理工具">
+        SizeToContent="Height" Width="400" FontFamily="Segoe UI, Microsoft YaHei UI" FontSize="13" Foreground="#1D1D1F" Title="腾挪 ClearC">
   <Border Margin="14" Background="White" CornerRadius="14" BorderBrush="#D9D9DE" BorderThickness="1" Padding="20,16,20,14">
     <Border.Effect><DropShadowEffect BlurRadius="24" ShadowDepth="6" Direction="270" Opacity="0.22"/></Border.Effect>
     <StackPanel>
@@ -5156,7 +5156,7 @@ function Show-Toast([string]$Title, [string]$Text, [string[]]$Buttons = @((T '�
         <Border Width="22" Height="22" CornerRadius="6" Background="#0071E3">
           <TextBlock Text="&#xEDA2;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
         </Border>
-        <TextBlock Text="C 盘清理工具" Foreground="#6E6E73" FontSize="12" VerticalAlignment="Center" Margin="8,0,0,0"/>
+        <TextBlock Text="腾挪 ClearC" Foreground="#6E6E73" FontSize="12" VerticalAlignment="Center" Margin="8,0,0,0"/>
       </StackPanel>
       <TextBlock x:Name="TTitle" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap"/>
       <TextBlock x:Name="TText" Margin="0,6,0,0" Foreground="#3A3A3C" TextWrapping="Wrap" LineHeight="20"/>
@@ -5165,7 +5165,7 @@ function Show-Toast([string]$Title, [string]$Text, [string[]]$Buttons = @((T '�
   </Border>
 </Window>
 '@
-    $x = $x.Replace('C 盘清理工具', (T 'C 盘清理工具'))
+    $x = $x.Replace('腾挪 ClearC', (T '腾挪 ClearC'))
     $w = [Windows.Markup.XamlReader]::Parse($x)
     $w.FindName('TTitle').Text = $Title
     $w.FindName('TText').Text = $Text
@@ -5205,8 +5205,8 @@ if ($script:mode -match '(?i)/check') {
     $today = (Get-Date).ToString('yyyy-MM-dd')
     if ($free -lt $gb * 1GB -and (Get-Setting 'LastRemind' '') -ne $today) {
         Set-Setting 'LastRemind' $today
-        $ans = Show-Toast -Title ((T "C 盘只剩 {0} 了") -f (GB $free)) -Text ((T "低于你设定的 {0} GB。打开 C 盘清理工具，看看能清掉或搬走什么？`n（在工具的「自动提醒」页可以关掉这个提醒）") -f $gb) -Buttons @((T '稍后'), (T '打开清理工具'))
-        if ($ans -eq (T '打开清理工具') -and $env:CLEANC_SELF) { Start-Process -FilePath $env:CLEANC_SELF }
+        $ans = Show-Toast -Title ((T "C 盘只剩 {0} 了") -f (GB $free)) -Text ((T "低于你设定的 {0} GB。打开腾挪 ClearC，看看能清掉或搬走什么？`n（在工具的「自动提醒」页可以关掉这个提醒）") -f $gb) -Buttons @((T '稍后'), (T '打开腾挪 ClearC'))
+        if ($ans -eq (T '打开腾挪 ClearC') -and $env:CLEANC_SELF) { Start-Process -FilePath $env:CLEANC_SELF }
     }
     $global:CLEANC_UI_SHOWN = $true
     return
@@ -5227,7 +5227,7 @@ if ($script:mode -match '(?i)/autoclean') {
 [xml]$xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="C 盘清理" Width="1220" Height="860" MinWidth="980" MinHeight="620"
+        Title="腾挪 ClearC" Width="1220" Height="860" MinWidth="980" MinHeight="620"
         WindowStartupLocation="CenterScreen" FontFamily="Segoe UI, Microsoft YaHei UI" FontSize="13" Background="#F5F5F7"
         Foreground="#1D1D1F" UseLayoutRounding="True" SnapsToDevicePixels="True" TextOptions.TextFormattingMode="Display">
   <Window.Resources>
@@ -6047,7 +6047,7 @@ if ($script:mode -match '(?i)/autoclean') {
             <TextBlock Text="&#xEDA2;" FontFamily="{StaticResource Icons}" FontSize="18" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
           </Border>
           <StackPanel Margin="11,0,0,0" VerticalAlignment="Center">
-            <TextBlock Text="C 盘清理" FontSize="15" FontWeight="SemiBold" TextOptions.TextFormattingMode="Ideal"/>
+            <TextBlock Text="腾挪 ClearC" FontSize="15" FontWeight="SemiBold" TextOptions.TextFormattingMode="Ideal"/>
             <TextBlock x:Name="AppVer" Text="" FontSize="11.5" Foreground="#86868B" Margin="0,1,0,0"/>
           </StackPanel>
         </StackPanel>
@@ -7562,7 +7562,7 @@ $ctl.BtnCopyWx.Add_Click({
 $ctl.BtnCopyDiag.Add_Click({
     $c = $null; try { $c = New-Object System.IO.DriveInfo 'C:\' } catch {}
     $info = @(
-        ((T "C 盘清理工具 {0}") -f $script:AppVersion)
+        ((T "腾挪 ClearC {0}") -f $script:AppVersion)
         ((T "Windows {0}，{1} 位") -f [Environment]::OSVersion.Version, $(if ([Environment]::Is64BitOperatingSystem) { 64 } else { 32 }))
         $(if ($c) { (T "C 盘剩余 {0} / 共 {1}") -f (Fmt $c.AvailableFreeSpace), (Fmt $c.TotalSize) } else { '' })
         ((T "屏幕可用区域 {0:N0} x {1:N0}") -f [System.Windows.SystemParameters]::WorkArea.Width, [System.Windows.SystemParameters]::WorkArea.Height)
@@ -8959,7 +8959,7 @@ function Fixed-Drives([switch]$NoSystem) {
 }
 function Ask-Restart([string]$why) {
     if ((Show-Sheet -Kind info -Title (T '需要重启电脑才生效') -Text $why -Buttons @((T '稍后自己重启'), (T '现在重启')) -Primary (T '现在重启') -Cancel (T '稍后自己重启')) -eq (T '现在重启')) {
-        & "$env:SystemRoot\System32\shutdown.exe" /r /t 15 /c (T "C 盘清理工具：15 秒后重启，让刚才的设置生效") | Out-Null
+        & "$env:SystemRoot\System32\shutdown.exe" /r /t 15 /c (T "腾挪 ClearC：15 秒后重启，让刚才的设置生效") | Out-Null
     }
 }
 function Shorten-Mid([string]$p, [int]$n = 70) { if (-not $p -or $p.Length -le $n) { return $p }; return $p.Substring(0, 24) + '…' + $p.Substring($p.Length - ($n - 25)) }
@@ -9428,7 +9428,7 @@ footer { margin-top:40px; color:var(--mute); font-size:12px; border-top:1px soli
         & $add '</table>'
         if ($script:growNote) { & $add ('<p class="note">{0}</p>' -f (& $H $script:growNote)) }
     }
-    & $add ('<footer>{0}</footer></main></body></html>' -f (& $H ((T "由 C 盘清理工具 {0} 生成，{1:yyyy-MM-dd HH:mm}。报告里只有文件夹和文件的名字、大小，不含文件内容。") -f $script:AppVersion, (Get-Date))))
+    & $add ('<footer>{0}</footer></main></body></html>' -f (& $H ((T "由腾挪 ClearC {0} 生成，{1:yyyy-MM-dd HH:mm}。报告里只有文件夹和文件的名字、大小，不含文件内容。") -f $script:AppVersion, (Get-Date))))
     return $sb.ToString()
 }
 $ctl.BtnMapReport.Add_Click({
@@ -10403,7 +10403,7 @@ function Register-CleanTask([string]$name, [string]$desc, [string]$argsText, [st
     $xml = @"
 <?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
-  <RegistrationInfo><Author>C 盘清理工具</Author><Description>$($esc::Escape($desc))</Description></RegistrationInfo>
+  <RegistrationInfo><Author>腾挪 ClearC</Author><Description>$($esc::Escape($desc))</Description></RegistrationInfo>
   <Triggers>$($trigger.Replace('{USER}', $esc::Escape([Security.Principal.WindowsIdentity]::GetCurrent().Name)))</Triggers>
   <Principals><Principal id="Author"><UserId>$sid</UserId><LogonType>InteractiveToken</LogonType><RunLevel>HighestAvailable</RunLevel></Principal></Principals>
   <Settings>
@@ -10428,11 +10428,11 @@ function Register-CleanTask([string]$name, [string]$desc, [string]$argsText, [st
 # 两个任务的内容。提醒任务有两个触发时间：每次登录电脑 2 分钟后、每天中午 12 点（错过了就在下次开机后补一次）
 function Enable-AutoTask([bool]$isRemind) {
     if ($isRemind) {
-        return (Register-CleanTask $script:taskRemind (T 'C 盘清理工具：每次登录电脑后和每天中午各检查一次 C 盘剩余空间，低于设定值时提醒（每天最多一次）。在工具的「自动提醒」页关掉开关即可删除本任务。') '/check' `
+        return (Register-CleanTask $script:taskRemind (T '腾挪 ClearC：每次登录电脑后和每天中午各检查一次 C 盘剩余空间，低于设定值时提醒（每天最多一次）。在工具的「自动提醒」页关掉开关即可删除本任务。') '/check' `
             ('<LogonTrigger><UserId>{USER}</UserId><Delay>PT2M</Delay></LogonTrigger>' +
              '<CalendarTrigger><StartBoundary>2026-01-01T12:00:00</StartBoundary><ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay></CalendarTrigger>'))
     }
-    return (Register-CleanTask $script:taskClean (T 'C 盘清理工具：每周日自动清理一次临时文件、缓存和日志（不搬家、不清空回收站、不碰个人文件夹）。在工具的「自动提醒」页关掉开关即可删除本任务。') '/autoclean' '<CalendarTrigger><StartBoundary>2026-01-04T12:30:00</StartBoundary><ScheduleByWeek><DaysOfWeek><Sunday/></DaysOfWeek><WeeksInterval>1</WeeksInterval></ScheduleByWeek></CalendarTrigger>')
+    return (Register-CleanTask $script:taskClean (T '腾挪 ClearC：每周日自动清理一次临时文件、缓存和日志（不搬家、不清空回收站、不碰个人文件夹）。在工具的「自动提醒」页关掉开关即可删除本任务。') '/autoclean' '<CalendarTrigger><StartBoundary>2026-01-04T12:30:00</StartBoundary><ScheduleByWeek><DaysOfWeek><Sunday/></DaysOfWeek><WeeksInterval>1</WeeksInterval></ScheduleByWeek></CalendarTrigger>')
 }
 # 打开工具时检查一次：本工具挪了位置、或者任务是旧版本建的（提醒没有「登录后检查」），就按现在的位置和设置重建
 function Repair-AutoTasks {
@@ -11041,9 +11041,9 @@ $win.MinWidth  = [math]::Min([double]980,  [double]$wa.Width - 24)
 $win.MinHeight = [math]::Min([double]600,  [double]$wa.Height - 24)
 if ($wa.Height -lt 800) { $ctl.LogPanel.Height = 130 }
 $ctl.OvPlanScroll.MaxHeight = [math]::Max([double]80, [math]::Min([double]190, [double]$wa.Height - 560))
-$win.Title = ((T "C 盘清理工具 {0}") -f $script:AppVersion)
+$win.Title = ((T "腾挪 ClearC {0}") -f $script:AppVersion)
 $ctl.AppVer.Text = ((T "版本 {0}") -f $script:AppVersion)
-Write-LogFile ((T "==== C 盘清理工具 {0} 启动；Windows {1}；屏幕可用区域 {2:N0} x {3:N0}") -f $script:AppVersion, [Environment]::OSVersion.Version, $wa.Width, $wa.Height)
+Write-LogFile ((T "==== 腾挪 ClearC {0} 启动；Windows {1}；屏幕可用区域 {2:N0} x {3:N0}") -f $script:AppVersion, [Environment]::OSVersion.Version, $wa.Width, $wa.Height)
 
 $script:statusColor = @{ wait = '#86868B'; run = '#0071E3'; ok = '#248A3D'; warn = '#B25000'; fail = '#D70015'; skip = '#86868B' }
 $script:pendingDialog = $null

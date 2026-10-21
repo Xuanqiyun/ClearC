@@ -5,9 +5,9 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 
-[assembly: AssemblyTitle("C盘清理工具")]
-[assembly: AssemblyDescription("清理 C 盘、把微信/QQ 搬到其他盘、查找重复文件")]
-[assembly: AssemblyProduct("C盘清理工具")]
+[assembly: AssemblyTitle("腾挪 ClearC")]
+[assembly: AssemblyDescription("C 盘清理和搬家：清理 C 盘、把聊天记录和软件搬到其他盘、查找大文件和重复文件")]
+[assembly: AssemblyProduct("腾挪 ClearC")]
 [assembly: AssemblyVersion("2.5.0.0")]
 [assembly: AssemblyFileVersion("2.5.0.0")]
 [assembly: AssemblyInformationalVersion("2.5")]
@@ -27,7 +27,7 @@ static class CleanCLauncher {
         if (TestMode) { Console.Error.WriteLine("FAIL: " + shortMsg); return; }
         try {
             bool zh = System.Globalization.CultureInfo.CurrentUICulture.Name.StartsWith("zh", StringComparison.OrdinalIgnoreCase);
-            if (zh) MessageBoxW(IntPtr.Zero, "C盘清理工具没能启动：\r\n\r\n" + shortMsg + "\r\n\r\n详细信息已保存到：\r\n" + LogPath, "C盘清理工具", 0x10);
+            if (zh) MessageBoxW(IntPtr.Zero, "腾挪 ClearC 没能启动：\r\n\r\n" + shortMsg + "\r\n\r\n详细信息已保存到：\r\n" + LogPath, "腾挪 ClearC", 0x10);
             else MessageBoxW(IntPtr.Zero, "ClearC could not start:\r\n\r\n" + shortMsg + "\r\n\r\nDetails were saved to:\r\n" + LogPath, "ClearC", 0x10);
         } catch { }
     }
