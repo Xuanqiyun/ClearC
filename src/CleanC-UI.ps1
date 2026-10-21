@@ -57,7 +57,9 @@ using System.Collections.Generic;
 using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.IO;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 
@@ -299,20 +301,15 @@ public static class DupFinder {
             if (Fast) ScanFast(key, atRoot, local); else ScanSlow(d, atRoot, local);
         }
 
+        // 一次读一大批目录记录（见 DirReader）；每个线程留一个，不用每个文件夹都重新分配缓冲区
+        [ThreadStatic] static DirReader reader;
         void ScanFast(string dir, bool atRoot, Dictionary<string, List<DupFile>> local) {
-            string pattern = dir.StartsWith("\\\\") ? "\\\\?\\UNC\\" + dir.Substring(2) + "\\*" : "\\\\?\\" + dir + "\\*";
-            WIN32_FIND_DATAW fd;
-            IntPtr h = FindFirstFileExW(pattern, 1 /*FindExInfoBasic*/, out fd, 0, IntPtr.Zero, 2 /*FIND_FIRST_EX_LARGE_FETCH*/);
-            if (h == new IntPtr(-1)) return;
+            DirReader r = reader;
+            if (r == null) { r = new DirReader(); reader = r; }
+            if (!r.Open(dir)) return;
             try {
-                do {
-                    string name = fd.cFileName;
-                    if (name == "." || name == "..") continue;
-                    long size = ((long)fd.nFileSizeHigh << 32) | fd.nFileSizeLow;
-                    long ft = ((long)fd.ftWriteHigh << 32) | fd.ftWriteLow;
-                    Entry(dir, name, fd.dwFileAttributes, size, ft, atRoot, local);
-                } while (!Cancel && FindNextFileW(h, out fd));
-            } finally { FindClose(h); }
+                while (!Cancel && r.Next()) Entry(dir, r.Name, r.Attr, r.Size, r.Write, atRoot, local);
+            } finally { r.Close(); }
         }
 
         void ScanSlow(string d, bool atRoot, Dictionary<string, List<DupFile>> local) {
@@ -667,21 +664,21 @@ public static class DupFinder {
     }
 }
 
-// 快速统计文件夹大小：不进入链接目录（搬走后留下的链接不会把别的盘算进来），Files/Bytes 实时可读，用来显示进度
-public static class DirStat {
-    public static long Files, Bytes;
-    // 统计时跳过的特殊项目（链接、用 Windows 压缩功能压过的文件等）的个数和第一个的位置
-    public static long Reparse; public static string ReparseSample;
-    // 用户点了「取消」：数到一半就停。结果不完整，调用方看到取消标记后不会再用它做判断
-    public static volatile bool Cancel;
+// ==================== 读一个文件夹里的条目：一次读一大批，文件名用到时才转成字符串 ====================
+// Windows 上用 GetFileInformationByHandleEx 一次读 64 KB 的目录记录；第一次用时和 FindFirstFileEx 的结果核对，
+// 不一致就一直用 FindFirstFileEx。不是 Windows（测试用）时用 .NET 自带的列举。
+public sealed class DirReader {
+    public static volatile int Mode;      // 0 还没定  1 批量读  2 FindFirstFileEx  3 .NET
+    static int tests, mismatches;
+    static readonly object gate = new object();
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     struct FD {
-        public uint dwFileAttributes;
+        public uint attr;
         public uint c1, c2, a1, a2, w1, w2;
-        public uint nFileSizeHigh, nFileSizeLow, r0, r1;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string cFileName;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 14)] public string cAlternateFileName;
+        public uint sizeHigh, sizeLow, r0, r1;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string name;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 14)] public string alt;
     }
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     static extern IntPtr FindFirstFileExW(string lpFileName, int fInfoLevelId, out FD lpFindFileData, int fSearchOp, IntPtr lpSearchFilter, int dwAdditionalFlags);
@@ -689,54 +686,941 @@ public static class DirStat {
     static extern bool FindNextFileW(IntPtr hFindFile, out FD lpFindFileData);
     [DllImport("kernel32.dll")]
     static extern bool FindClose(IntPtr hFindFile);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    static extern IntPtr CreateFileW(string name, uint access, uint share, IntPtr sa, uint disposition, uint flags, IntPtr template);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool GetFileInformationByHandleEx(IntPtr h, int infoClass, IntPtr buffer, uint size);
+    [DllImport("kernel32.dll")]
+    static extern bool CloseHandle(IntPtr h);
+
+    static readonly IntPtr BAD = new IntPtr(-1);
+    const int BUF = 64 * 1024;
+
+    readonly int force;                    // 0 = 按 Mode；其他 = 固定用这种方式（自检时用）
+    int mode;
+    IntPtr h = BAD, hf = BAD, hbuf = IntPtr.Zero;
+    byte[] buf;
+    int pos, len; bool more, first;
+    FD fd;
+    List<FileSystemInfo> list; int li;
+    string dirPath; int count;
+
+    public uint Attr; public long Size, Write;
+    public uint Tag;                       // 重解析点的类型（有重解析点时才有）
+    int nameOff, nameLen; string name;
+
+    public DirReader() { force = 0; }
+    DirReader(int forceMode) { force = forceMode; }
+
+    public bool IsDir { get { return (Attr & 0x10) != 0; } }
+    public bool IsReparse { get { return (Attr & 0x400) != 0; } }
+    // 指向别处的链接（目录联接、符号链接这类「代替名字」的重解析点）。OneDrive 等云端文件夹也带重解析点，但不是链接，里面的东西要算
+    public bool IsLink { get { return IsReparse && (Tag == 0 || (Tag & 0x20000000) != 0); } }
+    public string Name { get { if (name == null && mode == 1) name = Encoding.Unicode.GetString(buf, nameOff, nameLen); return name; } }
+
+    static bool Win { get { return System.IO.Path.DirectorySeparatorChar == '\\'; } }
+    public static string LongPath(string dir) {
+        string d = dir.TrimEnd('\\', '/');
+        if (d.Length == 2 && d[1] == ':') return "\\\\?\\" + d + "\\";
+        if (d.StartsWith("\\\\?\\")) return d;
+        if (d.StartsWith("\\\\")) return "\\\\?\\UNC\\" + d.Substring(2);
+        return "\\\\?\\" + d;
+    }
+
+    public bool Open(string dir) {
+        Close();
+        mode = force != 0 ? force : ChooseMode(dir);
+        name = null; dirPath = dir; count = 0;
+        if (mode == 3) {
+            try { list = new List<FileSystemInfo>(new DirectoryInfo(dir).EnumerateFileSystemInfos()); li = 0; return true; }
+            catch { list = null; return false; }
+        }
+        if (mode == 2) return OpenFind(dir);
+        h = CreateFileW(LongPath(dir), 0x0001 /*FILE_LIST_DIRECTORY*/, 7, IntPtr.Zero, 3 /*OPEN_EXISTING*/, 0x02000000 /*BACKUP_SEMANTICS*/, IntPtr.Zero);
+        if (h == BAD) return false;
+        if (hbuf == IntPtr.Zero) { hbuf = Marshal.AllocHGlobal(BUF); buf = new byte[BUF]; }
+        pos = 0; len = 0; more = true;
+        return true;
+    }
+
+    bool OpenFind(string dir) {
+        string p = LongPath(dir); if (!p.EndsWith("\\")) p += "\\";
+        hf = FindFirstFileExW(p + "*", 1, out fd, 0, IntPtr.Zero, 2);
+        if (hf == BAD) return false;
+        first = true; return true;
+    }
+
+    public bool Next() {
+        name = null; Tag = 0;
+        if (mode == 3) {
+            while (list != null && li < list.Count) {
+                FileSystemInfo e = list[li++];
+                try {
+                    Attr = (uint)e.Attributes; count++;
+                    FileInfo fi = e as FileInfo;
+                    Size = fi != null ? fi.Length : 0;
+                    Write = e.LastWriteTimeUtc.ToFileTimeUtc();
+                    name = e.Name;
+                    return true;
+                } catch { }
+            }
+            return false;
+        }
+        if (mode == 2) {
+            while (true) {
+                if (first) first = false;
+                else if (!FindNextFileW(hf, out fd)) return false;
+                if (fd.name == "." || fd.name == "..") continue;
+                Attr = fd.attr; Size = ((long)fd.sizeHigh << 32) | fd.sizeLow; Write = ((long)fd.w2 << 32) | fd.w1;
+                if ((Attr & 0x400) != 0) Tag = fd.r0;      // dwReserved0：重解析点的类型
+                name = fd.name; count++;
+                return true;
+            }
+        }
+        while (true) {
+            if (pos >= len) {
+                if (!more) return false;
+                if (!GetFileInformationByHandleEx(h, 14 /*FileFullDirectoryInfo*/, hbuf, BUF)) {
+                    int err = Marshal.GetLastWin32Error();
+                    more = false;
+                    // 一条都还没读到就出错（不是「没有了」）：这个文件夹改用 FindFirstFileEx 再列一遍，免得当成空文件夹
+                    if (count == 0 && err != 18 /*NO_MORE_FILES*/ && err != 2 /*FILE_NOT_FOUND*/) {
+                        CloseHandle(h); h = BAD;
+                        if (!OpenFind(dirPath)) return false;
+                        mode = 2;
+                        return Next();
+                    }
+                    return false;
+                }
+                Marshal.Copy(hbuf, buf, 0, BUF);
+                pos = 0; len = BUF;
+            }
+            int e = pos;
+            int next = BitConverter.ToInt32(buf, e);
+            int nl = BitConverter.ToInt32(buf, e + 60);
+            if (next < 0 || nl < 0 || e + 68 + nl > BUF) { more = false; return false; }
+            pos = next == 0 ? len : e + next;
+            if (nl == 2 && buf[e + 68] == '.' && buf[e + 69] == 0) continue;
+            if (nl == 4 && buf[e + 68] == '.' && buf[e + 69] == 0 && buf[e + 70] == '.' && buf[e + 71] == 0) continue;
+            Attr = BitConverter.ToUInt32(buf, e + 56);
+            Size = BitConverter.ToInt64(buf, e + 40);
+            Write = BitConverter.ToInt64(buf, e + 24);
+            if ((Attr & 0x400) != 0) Tag = BitConverter.ToUInt32(buf, e + 64);   // 有重解析点时 EaSize 这一格放的是它的类型
+            nameOff = e + 68; nameLen = nl; count++;
+            return true;
+        }
+    }
+
+    public void Close() {
+        if (h != BAD) { CloseHandle(h); h = BAD; }
+        if (hf != BAD) { FindClose(hf); hf = BAD; }
+        list = null;
+    }
+    public void Free() { Close(); if (hbuf != IntPtr.Zero) { Marshal.FreeHGlobal(hbuf); hbuf = IntPtr.Zero; } }
+    ~DirReader() { Close(); if (hbuf != IntPtr.Zero) { Marshal.FreeHGlobal(hbuf); hbuf = IntPtr.Zero; } }
+
+    static int ChooseMode(string dir) {
+        if (!Win) return 3;
+        int m = Mode;
+        if (m != 0) return m;
+        lock (gate) {
+            if (Mode != 0) return Mode;
+            int r = SelfTest(dir);
+            if (r == 1) { Mode = 1; return 1; }
+            // 对不上可能只是那个文件夹正好在变：换几个文件夹再试，三个都对不上才一直用 FindFirstFileEx
+            if (r == 2 && ++mismatches >= 3) Mode = 2;
+            else if (++tests >= 20) Mode = 2;
+            return 2;
+        }
+    }
+    // 同一个文件夹用两种方式各列一遍：个数、名字、大小、时间、属性都一样，才用批量读
+    // 返回 1 一致  2 对不上  0 看不出来（文件太少、打不开）
+    static int SelfTest(string dir) {
+        DirReader a = new DirReader(1), b = new DirReader(2);
+        try {
+            if (!b.Open(dir)) return 0;
+            if (!a.Open(dir)) return 2;
+            Dictionary<string, string> sa = new Dictionary<string, string>(StringComparer.Ordinal), sb = new Dictionary<string, string>(StringComparer.Ordinal);
+            while (a.Next()) { sa[a.Name] = a.Attr + "|" + a.Size + "|" + a.Write + "|" + a.Tag; if (sa.Count > 5000) break; }
+            while (b.Next()) { sb[b.Name] = b.Attr + "|" + b.Size + "|" + b.Write + "|" + b.Tag; if (sb.Count > 5000) break; }
+            if (sb.Count < 3 || sb.Count > 5000) return 0;  // 太少看不出来；太多只比了一部分
+            if (sa.Count != sb.Count) return 2;
+            foreach (KeyValuePair<string, string> kv in sb) { string v; if (!sa.TryGetValue(kv.Key, out v) || v != kv.Value) return 2; }
+            return 1;
+        } catch { return 2; }
+        finally { a.Free(); b.Free(); }
+    }
+}
+
+// 快速统计文件夹大小：不进入链接目录（搬走后留下的链接不会把别的盘算进来），Files/Bytes 实时可读，用来显示进度。
+// SSD 上多线程一起数，机械硬盘上线程少一点（来回寻道反而慢）
+public static class DirStat {
+    public static long Files, Bytes;
+    // 统计时跳过的特殊项目（链接、用 Windows 压缩功能压过的文件等）的个数和第一个的位置
+    public static long Reparse; public static string ReparseSample;
+    // 用户点了「取消」：数到一半就停。结果不完整，调用方看到取消标记后不会再用它做判断
+    public static volatile bool Cancel;
+    public static volatile bool ThreadsReady;
+    static readonly Dictionary<char, int> threads = new Dictionary<char, int>();
+    public static void SetThreads(string drive, int n) { if (string.IsNullOrEmpty(drive)) return; lock (threads) threads[char.ToUpperInvariant(drive[0])] = Math.Max(1, Math.Min(16, n)); }
+    public static int ThreadsFor(string path) {
+        int n;
+        if (!string.IsNullOrEmpty(path) && path.Length >= 2 && path[1] == ':') { lock (threads) { if (threads.TryGetValue(char.ToUpperInvariant(path[0]), out n)) return n; } }
+        return Math.Max(2, Math.Min(4, Environment.ProcessorCount));
+    }
 
     public static long Measure(string root) {
         Files = 0; Bytes = 0; Reparse = 0; ReparseSample = "";
         if (string.IsNullOrEmpty(root)) return 0;
         try { if (!Directory.Exists(root)) return 0; } catch { return 0; }
-        bool win = System.IO.Path.DirectorySeparatorChar == '\\';
-        Stack<string> st = new Stack<string>();
         string r0 = root.TrimEnd('\\', '/');
-        st.Push(r0.Length == 0 ? root : r0);
-        while (st.Count > 0) {
-            if (Cancel) break;
-            string d = st.Pop();
-            if (win) {
-                string pat = d.StartsWith("\\\\") ? "\\\\?\\UNC\\" + d.Substring(2) + "\\*" : "\\\\?\\" + d + "\\*";
-                FD fd;
-                IntPtr h = FindFirstFileExW(pat, 1, out fd, 0, IntPtr.Zero, 2);
-                if (h == new IntPtr(-1)) continue;
-                try {
-                    do {
-                        string n = fd.cFileName;
-                        if (n == "." || n == "..") continue;
-                        if ((fd.dwFileAttributes & 0x400) != 0) { if (Reparse++ == 0) ReparseSample = d + "\\" + n; continue; }
-                        if ((fd.dwFileAttributes & 0x10) != 0) st.Push(d + "\\" + n);
-                        else { Files++; Bytes += ((long)fd.nFileSizeHigh << 32) | fd.nFileSizeLow; }
-                    } while (FindNextFileW(h, out fd));
-                } finally { FindClose(h); }
-            } else {
-                try {
-                    foreach (FileSystemInfo e in new DirectoryInfo(d).EnumerateFileSystemInfos()) {
-                        FileAttributes a = e.Attributes;
-                        if ((a & FileAttributes.ReparsePoint) != 0) { if (Reparse++ == 0) ReparseSample = e.FullName; continue; }
-                        if ((a & FileAttributes.Directory) != 0) st.Push(e.FullName);
-                        else { Files++; try { Bytes += ((FileInfo)e).Length; } catch { } }
+        if (r0.Length == 0 || (r0.Length == 2 && r0[1] == ':')) r0 = root;
+        ConcurrentStack<string> work = new ConcurrentStack<string>();
+        int pending = 1; work.Push(r0);
+        object sampleLock = new object();
+        int n = ThreadsFor(root);
+        // 先在调用的线程里数，待数的文件夹多起来才逐个加线程：统计很多个小文件夹时不用每次都开一堆线程
+        List<Thread> helpers = new List<Thread>();
+        int started = 1;
+        ThreadStart job = null;
+        job = delegate {
+            DirReader r = new DirReader();
+            try {
+                while (true) {
+                    string d;
+                    if (work.TryPop(out d)) {
+                        try {
+                            if (!Cancel && r.Open(d)) {
+                                long f = 0, b = 0;
+                                string sep = (d.EndsWith("\\") || d.EndsWith("/")) ? "" : System.IO.Path.DirectorySeparatorChar.ToString();
+                                while (r.Next()) {
+                                    if (r.IsReparse) {
+                                        if (Interlocked.Increment(ref Reparse) == 1) lock (sampleLock) ReparseSample = d + sep + r.Name;
+                                        continue;
+                                    }
+                                    if (r.IsDir) { Interlocked.Increment(ref pending); work.Push(d + sep + r.Name); }
+                                    else { f++; b += r.Size; if ((f & 1023) == 0) { Interlocked.Add(ref Files, f); Interlocked.Add(ref Bytes, b); f = 0; b = 0; } }
+                                }
+                                Interlocked.Add(ref Files, f); Interlocked.Add(ref Bytes, b);
+                                if (n > 1 && Thread.VolatileRead(ref started) < n && !work.IsEmpty) {   // IsEmpty 很快；Count 要数一遍
+                                    if (Interlocked.Increment(ref started) <= n) {
+                                        try { Thread t = new Thread(job); t.IsBackground = true; t.Start(); lock (helpers) helpers.Add(t); }
+                                        catch { Interlocked.Decrement(ref started); }
+                                    } else Interlocked.Decrement(ref started);
+                                }
+                            }
+                        } catch { }
+                        finally { r.Close(); }
+                        if (Interlocked.Decrement(ref pending) == 0) break;
+                    } else {
+                        if (Thread.VolatileRead(ref pending) == 0) break;
+                        Thread.Sleep(1);
                     }
-                } catch { }
-            }
+                }
+            } finally { r.Free(); }
+        };
+        job();
+        while (true) {
+            Thread[] ts; lock (helpers) ts = helpers.ToArray();
+            foreach (Thread t in ts) t.Join();
+            lock (helpers) { if (helpers.Count == ts.Length) break; }
         }
         return Bytes;
     }
 }
 
-// ==================== 空间地图：多线程扫描整块盘，建一棵按大小汇总的文件夹树 ====================
+// ==================== 直接读 NTFS 的文件表（MFT） ====================
+// NTFS 把每个文件的名字、所在文件夹、大小都记在 MFT 里。按顺序把它整块读出来，比一个文件夹一个文件夹地问系统快得多。
+// 只读：以只读方式打开整个分区，不写任何东西。读不了（不是 NTFS、结构不认识、和直接列目录核对不上）就退回逐个文件夹扫描。
+// 统计口径和逐个文件夹扫描一样：硬链接每个名字算一次，链接目录（搬家留下的、挂载点）不往里算，备用数据流不算。
+public interface IVolume {
+    int SectorSize { get; set; }
+    int Read(long offset, byte[] buffer, int count);   // offset、count 都要是扇区大小的整数倍
+    void Close();
+}
+public sealed class FileVolume : IVolume {           // 测试用：读一个磁盘镜像文件
+    readonly FileStream fs;
+    public int SectorSize { get; set; }
+    public FileVolume(string path) { fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite); SectorSize = 512; }
+    public int Read(long offset, byte[] buffer, int count) {
+        fs.Seek(offset, SeekOrigin.Begin);
+        int total = 0;
+        while (total < count) { int n = fs.Read(buffer, total, count - total); if (n <= 0) break; total += n; }
+        return total;
+    }
+    public void Close() { fs.Dispose(); }
+}
+public sealed class WinVolume : IVolume {             // Windows：\\.\C:
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    static extern IntPtr CreateFileW(string name, uint access, uint share, IntPtr sa, uint disposition, uint flags, IntPtr template);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool SetFilePointerEx(IntPtr h, long dist, out long newPos, uint method);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool ReadFile(IntPtr h, IntPtr buffer, int toRead, out int read, IntPtr overlapped);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool DeviceIoControl(IntPtr h, uint code, byte[] inBuf, int inSize, byte[] outBuf, int outSize, out int returned, IntPtr overlapped);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern IntPtr VirtualAlloc(IntPtr addr, UIntPtr size, uint type, uint protect);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool VirtualFree(IntPtr addr, UIntPtr size, uint type);
+    IntPtr nbuf = IntPtr.Zero; int nlen;          // 按页对齐的读盘缓冲区：有的磁盘要求缓冲区对齐
+    byte[] recOut;
+    [DllImport("kernel32.dll")]
+    static extern bool CloseHandle(IntPtr h);
+    public IntPtr Handle;
+    public int SectorSize { get; set; }
+    public WinVolume(string root) {
+        string v = "\\\\.\\" + root.Substring(0, 2);
+        Handle = CreateFileW(v, 0x80000000 /*GENERIC_READ*/, 3 /*SHARE_READ|WRITE*/, IntPtr.Zero, 3 /*OPEN_EXISTING*/, 0, IntPtr.Zero);
+        if (Handle == new IntPtr(-1)) throw new IOException("open volume: " + Marshal.GetLastWin32Error());
+        SectorSize = 512;
+    }
+    public int Read(long offset, byte[] buffer, int count) {
+        if (count > nlen) {
+            if (nbuf != IntPtr.Zero) { VirtualFree(nbuf, UIntPtr.Zero, 0x8000 /*MEM_RELEASE*/); nbuf = IntPtr.Zero; nlen = 0; }
+            int want = (count + 0xFFFF) & ~0xFFFF;
+            nbuf = VirtualAlloc(IntPtr.Zero, (UIntPtr)(uint)want, 0x3000 /*COMMIT|RESERVE*/, 0x04 /*READWRITE*/);
+            if (nbuf == IntPtr.Zero) throw new IOException("alloc: " + Marshal.GetLastWin32Error());
+            nlen = want;
+        }
+        long np;
+        if (!SetFilePointerEx(Handle, offset, out np, 0)) throw new IOException("seek: " + Marshal.GetLastWin32Error());
+        int got;
+        if (!ReadFile(Handle, nbuf, count, out got, IntPtr.Zero)) throw new IOException("read: " + Marshal.GetLastWin32Error());
+        if (got > 0) Marshal.Copy(nbuf, buffer, 0, got);
+        return got;
+    }
+    // 经文件系统读一条记录（走缓存，刚改过的也是新的）。1 读到了  0 这条记录现在没在用  -1 读不了
+    public int GetRecord(long frn, byte[] rec, int rs) {
+        if (recOut == null || recOut.Length < rs + 16) recOut = new byte[rs + 16];
+        int got, err;
+        if (!Ioctl(0x00090068 /*FSCTL_GET_NTFS_FILE_RECORD*/, BitConverter.GetBytes(frn), recOut, out got, out err)) return -1;
+        if (got < 12) return -1;
+        // 要的那条没在用时，返回的是它前面最近一条在用的
+        if ((BitConverter.ToInt64(recOut, 0) & 0xFFFFFFFFFFFF) != frn) return 0;
+        if (BitConverter.ToInt32(recOut, 8) != rs || got < 12 + rs) return -1;
+        Buffer.BlockCopy(recOut, 12, rec, 0, rs);
+        return 1;
+    }
+    public bool Ioctl(uint code, byte[] inBuf, byte[] outBuf, out int returned, out int err) {
+        bool ok = DeviceIoControl(Handle, code, inBuf, inBuf == null ? 0 : inBuf.Length, outBuf, outBuf.Length, out returned, IntPtr.Zero);
+        err = ok ? 0 : Marshal.GetLastWin32Error();
+        return ok;
+    }
+    public void Close() {
+        if (Handle != new IntPtr(-1)) { CloseHandle(Handle); Handle = new IntPtr(-1); }
+        if (nbuf != IntPtr.Zero) { VirtualFree(nbuf, UIntPtr.Zero, 0x8000); nbuf = IntPtr.Zero; nlen = 0; }
+    }
+}
+
+public struct MftLink { public int Parent; public ushort ParentSeq; public string Name; }
+
+// 读出来的文件表：每个记录号一格
+public sealed class MftIndex {
+    public string Root;
+    public int RecordSize, SectorSize; public long ClusterSize;
+    public List<long[]> Runs = new List<long[]>();   // MFT 在盘上的各段：{ 盘上的字节位置, 字节数 }
+    public long MftBytes;
+    public int Count;
+    public int[] Parent; public ushort[] ParentSeq, Seq;
+    public long[] Size, Write;
+    public byte[] Flag;                               // 1 在用  2 文件夹  4 链接（重解析点）  8 有属性列表
+    public string[] Name;                             // 只存文件夹、1 MB 以上的文件和有属性列表的文件的名字
+    public Dictionary<int, List<MftLink>> Extra = new Dictionary<int, List<MftLink>>();   // 第二个起的名字（硬链接）
+    public long Bad;                                  // 校验不过的记录
+    public List<int> BadList = new List<int>();       // 校验不过的在用记录：读完后再试一次
+    public HashSet<int> OpenFiles = new HashSet<int>();   // 变更日志里还没「关闭」的文件：开着的文件后面再改不会有新记录，每次都重读
+    public bool Partial;                              // 中途停下了
+    public ulong JournalId; public long NextUsn; public bool HasJournal;
+    public DateTime At;
+    public void Alloc(int n) {
+        Count = n;
+        Parent = new int[n]; ParentSeq = new ushort[n]; Seq = new ushort[n];
+        Size = new long[n]; Write = new long[n]; Flag = new byte[n]; Name = new string[n];
+        for (int i = 0; i < n; i++) Parent[i] = -1;
+    }
+    public void Grow(int n) {
+        if (n <= Count) return;
+        int old = Count;
+        Array.Resize(ref Parent, n); Array.Resize(ref ParentSeq, n); Array.Resize(ref Seq, n);
+        Array.Resize(ref Size, n); Array.Resize(ref Write, n); Array.Resize(ref Flag, n); Array.Resize(ref Name, n);
+        for (int i = old; i < n; i++) Parent[i] = -1;
+        Count = n;
+    }
+    public void Clear(int frn) {
+        Parent[frn] = -1; ParentSeq[frn] = 0; Seq[frn] = 0; Size[frn] = 0; Write[frn] = 0; Flag[frn] = 0; Name[frn] = null;
+        Extra.Remove(frn); ExtOf.Remove(frn);
+    }
+    public Dictionary<int, List<int>> ExtOf = new Dictionary<int, List<int>>();   // 主记录 → 读到过的续页
+    public Dictionary<int, ushort> ExtClaim = new Dictionary<int, ushort>();    // 续页 → 它记着的主记录序号
+    public HashSet<int> Failed = new HashSet<int>();                            // 上次没重读成的记录：下次接着读
+    public IVolume Vol;                                                         // 读放在盘上别处的重解析数据用
+    public Dictionary<int, long> Recent = new Dictionary<int, long>();          // 属性列表是从盘上读的（可能还没写进最新的）：两分钟内每次都重读
+}
+
+public static class Mft {
+    public static long BigMin = 1L * 1024 * 1024;
+    public static long RecordsDone, RecordsTotal;     // 进度
+
+    static ushort U16(byte[] b, int o) { return (ushort)(b[o] | (b[o + 1] << 8)); }
+    static uint U32(byte[] b, int o) { return BitConverter.ToUInt32(b, o); }
+    static long I64(byte[] b, int o) { return BitConverter.ToInt64(b, o); }
+    static ulong U64(byte[] b, int o) { return BitConverter.ToUInt64(b, o); }
+
+    // 读任意一段（自动按扇区对齐）
+    static void ReadAt(IVolume v, long off, byte[] dst, int dstOff, int count) {
+        int ss = v.SectorSize;
+        long a = off / ss * ss;
+        int pre = (int)(off - a);
+        int len = (pre + count + ss - 1) / ss * ss;
+        byte[] tmp = new byte[len];
+        int got = v.Read(a, tmp, len);
+        if (got < pre + count) throw new IOException("short read");
+        Buffer.BlockCopy(tmp, pre, dst, dstOff, count);
+    }
+
+    // 每个扇区末尾两个字节在写盘时换成了校验号，读出来要换回去；对不上说明这条记录坏了
+    public static bool Fixup(byte[] b, int off, int size) {
+        int usaOfs = U16(b, off + 4), usaCnt = U16(b, off + 6);
+        if (usaCnt != size / 512 + 1 || usaOfs < 0x28 || usaOfs + usaCnt * 2 > size) return false;
+        int usn0 = off + usaOfs;
+        for (int i = 1; i < usaCnt; i++) {
+            int p = off + i * 512 - 2;
+            if (b[p] != b[usn0] || b[p + 1] != b[usn0 + 1]) return false;
+            b[p] = b[usn0 + 2 * i]; b[p + 1] = b[usn0 + 2 * i + 1];
+        }
+        return true;
+    }
+
+    // 非常驻属性的数据在盘上的位置：{ 盘上字节位置, 字节数 }
+    static List<long[]> DecodeRuns(byte[] b, int off, int end, long cluster) {
+        List<long[]> runs = new List<long[]>();
+        long lcn = 0;
+        while (off < end) {
+            int h = b[off++];
+            if (h == 0) break;
+            int lb = h & 0xF, ob = h >> 4;
+            if (lb == 0 || lb > 8 || ob > 8 || off + lb + ob > end) throw new InvalidDataException("runlist");
+            long len = 0;
+            for (int i = 0; i < lb; i++) len |= (long)b[off + i] << (8 * i);
+            off += lb;
+            if (ob == 0) throw new InvalidDataException("sparse run");
+            long delta = 0;
+            for (int i = 0; i < ob; i++) delta |= (long)b[off + i] << (8 * i);
+            if (ob < 8 && (b[off + ob - 1] & 0x80) != 0) delta |= -1L << (8 * ob);
+            off += ob;
+            lcn += delta;
+            if (lcn < 0 || len <= 0) throw new InvalidDataException("runlist value");
+            runs.Add(new long[] { lcn * cluster, len * cluster });
+        }
+        return runs;
+    }
+
+    // 引导扇区 + 第 0 条记录（$MFT 自己）：算出记录大小、MFT 在盘上的各段、一共有多少条记录
+    public static MftIndex Open(IVolume v, string root) {
+        byte[] boot = new byte[4096];
+        if (v.Read(0, boot, 4096) < 512) throw new IOException("boot");
+        if (Encoding.ASCII.GetString(boot, 3, 8) != "NTFS    ") throw new InvalidDataException("not NTFS");
+        int bps = U16(boot, 0x0B);
+        int spc = boot[0x0D]; if (spc > 0x80) spc = 1 << (256 - spc);
+        if (bps != 512 && bps != 1024 && bps != 2048 && bps != 4096) throw new InvalidDataException("sector size");
+        long cluster = (long)bps * spc;
+        if (cluster <= 0 || cluster > 2 * 1024 * 1024 || (cluster & (cluster - 1)) != 0) throw new InvalidDataException("cluster size");
+        long mftLcn = I64(boot, 0x30);
+        int cpr = (sbyte)boot[0x40];
+        int rs = cpr > 0 ? (int)(cpr * cluster) : (1 << (-cpr));
+        if (rs != 1024 && rs != 2048 && rs != 4096) throw new InvalidDataException("record size");
+        v.SectorSize = bps;
+        MftIndex ix = new MftIndex();
+        ix.Root = root; ix.RecordSize = rs; ix.SectorSize = bps; ix.ClusterSize = cluster;
+        byte[] r0 = new byte[rs];
+        // Windows 上经文件系统读 $MFT 自己的记录（刚变长、还没写到盘上时也是新的）；读不了再直接读盘
+        WinVolume wv0 = v as WinVolume;
+        if (wv0 == null || FreshRecord(wv0, 0, r0, rs) != 1) {
+            ReadAt(v, mftLcn * cluster, r0, 0, rs);
+            if (U32(r0, 0) != 0x454C4946 || !Fixup(r0, 0, rs)) throw new InvalidDataException("$MFT record");
+        }
+        long dataSize = -1;
+        List<KeyValuePair<long, List<long[]>>> segs = new List<KeyValuePair<long, List<long[]>>>();
+        byte[] attrList = null;
+        ScanMftRecordForData(r0, rs, cluster, segs, ref dataSize, ref attrList, v);
+        if (dataSize < 0 || segs.Count == 0) throw new InvalidDataException("$MFT data");
+        ix.Runs = segs[0].Value;
+        // $MFT 本身很碎时，后面几段记在别的记录里（属性列表指过去）
+        if (attrList != null) {
+            ix.MftBytes = Sum(ix.Runs);
+            HashSet<int> seenSeg = new HashSet<int>();
+            for (int o = 0; o + 26 <= attrList.Length; ) {
+                uint type = U32(attrList, o); int el = U16(attrList, o + 4);
+                if (el < 26 || o + el > attrList.Length) break;
+                int nl = attrList[o + 6];
+                long vcn = I64(attrList, o + 8);
+                int seg = (int)(U64(attrList, o + 16) & 0xFFFFFFFFFFFF);
+                if (type == 0x80 && nl == 0 && seg != 0 && vcn > 0 && seenSeg.Add(seg)) {   // 一条续页里可能有好几段，只读一次
+                    byte[] rec = new byte[rs];
+                    if (wv0 == null || FreshRecord(wv0, seg, rec, rs) != 1) {
+                        ReadVirtual(v, ix, (long)seg * rs, rec, rs);
+                        if (U32(rec, 0) != 0x454C4946 || !Fixup(rec, 0, rs)) throw new InvalidDataException("$MFT extension");
+                    }
+                    long ds = -1; byte[] al2 = null;
+                    List<KeyValuePair<long, List<long[]>>> s2 = new List<KeyValuePair<long, List<long[]>>>();
+                    ScanMftRecordForData(rec, rs, cluster, s2, ref ds, ref al2, v);
+                    foreach (KeyValuePair<long, List<long[]>> kv in s2) segs.Add(kv);
+                }
+                o += el;
+            }
+            segs.Sort((a, b) => a.Key.CompareTo(b.Key));
+            ix.Runs = new List<long[]>();
+            long expect = 0;                                // 各段要首尾相接，否则后面的记录号全对不上
+            foreach (KeyValuePair<long, List<long[]>> kv in segs) {
+                if (kv.Key != expect) throw new InvalidDataException("$MFT extents");
+                foreach (long[] r in kv.Value) expect += r[1] / cluster;
+                ix.Runs.AddRange(kv.Value);
+            }
+        }
+        long runBytes = Sum(ix.Runs);
+        ix.MftBytes = Math.Min(dataSize, runBytes);
+        long n = ix.MftBytes / rs;
+        if (n <= 16 || n > int.MaxValue) throw new InvalidDataException("record count");
+        ix.Count = (int)n;
+        return ix;
+    }
+    static long Sum(List<long[]> runs) { long s = 0; foreach (long[] r in runs) s += r[1]; return s; }
+
+    static void ScanMftRecordForData(byte[] r, int rs, long cluster, List<KeyValuePair<long, List<long[]>>> segs, ref long dataSize, ref byte[] attrList, IVolume v) {
+        int a = U16(r, 0x14), end = Math.Min(rs, (int)U32(r, 0x18));
+        while (a + 16 <= end) {
+            uint type = U32(r, a);
+            if (type == 0xFFFFFFFF) break;
+            int len = (int)U32(r, a + 4);
+            if (len < 16 || a + len > end) break;
+            bool nonRes = r[a + 8] != 0; int nameLen = r[a + 9];
+            if (type == 0x80 && nameLen == 0 && nonRes) {
+                long vcn = I64(r, a + 0x10);
+                int ro = U16(r, a + 0x20);
+                if (vcn == 0) dataSize = Math.Min(I64(r, a + 0x30), I64(r, a + 0x38));
+                segs.Add(new KeyValuePair<long, List<long[]>>(vcn, DecodeRuns(r, a + ro, a + len, cluster)));
+            } else if (type == 0x20) {
+                if (!nonRes) { int c = a + U16(r, a + 0x14); int cl = (int)U32(r, a + 0x10); attrList = new byte[cl]; Buffer.BlockCopy(r, c, attrList, 0, cl); }
+                else {
+                    long sz = I64(r, a + 0x30);
+                    List<long[]> runs = DecodeRuns(r, a + U16(r, a + 0x20), a + len, cluster);
+                    byte[] buf = new byte[sz]; long got = 0;
+                    foreach (long[] run in runs) { if (got >= sz) break; int take = (int)Math.Min(run[1], sz - got); ReadAt(v, run[0], buf, (int)got, take); got += take; }
+                    attrList = buf;
+                }
+            }
+            a += len;
+        }
+    }
+
+    // 按 MFT 里的位置读（跨过它在盘上的各段）
+    static void ReadVirtual(IVolume v, MftIndex ix, long vpos, byte[] dst, int count) {
+        int done = 0; long cur = 0;
+        foreach (long[] run in ix.Runs) {
+            if (done >= count) break;
+            long runEnd = cur + run[1];
+            if (vpos + done < runEnd) {
+                long inRun = vpos + done - cur;
+                int take = (int)Math.Min(run[1] - inRun, count - done);
+                ReadAt(v, run[0] + inRun, dst, done, take);
+                done += take;
+            }
+            cur = runEnd;
+        }
+        if (done < count) throw new InvalidDataException("beyond MFT");
+    }
+
+    // 把整个 MFT 按顺序读一遍
+    public static void ReadAll(IVolume v, MftIndex ix, Func<bool> cancelled) {
+        ix.Alloc(ix.Count); ix.Vol = v;
+        int rs = ix.RecordSize;
+        int ss = v.SectorSize;
+        int chunk = (int)Math.Max(ix.ClusterSize, rs);
+        chunk = (4 * 1024 * 1024 / chunk) * chunk;
+        byte[] buf = new byte[chunk + (int)Math.Max(ix.ClusterSize, ss)];
+        RecordsTotal = ix.Count; RecordsDone = 0;
+        long vdone = 0; int frn = 0;
+        byte[] carry = new byte[rs]; int carryLen = 0;
+        foreach (long[] run in ix.Runs) {
+            long pos = 0;
+            while (pos < run[1] && vdone < ix.MftBytes) {
+                if (cancelled != null && cancelled()) { ix.Partial = true; return; }
+                long want = Math.Min(Math.Min((long)chunk, run[1] - pos), ix.MftBytes - vdone);
+                int rd = (int)((want + ss - 1) / ss * ss);
+                if (rd > run[1] - pos) rd = (int)(run[1] - pos);
+                int got = v.Read(run[0] + pos, buf, rd);
+                if (got < want) throw new IOException("short read");
+                int n = (int)want, k = 0;
+                if (carryLen > 0) {                         // 上一段末尾剩下半条记录
+                    int need = rs - carryLen;
+                    if (need > n) { Buffer.BlockCopy(buf, 0, carry, carryLen, n); carryLen += n; k = n; }
+                    else {
+                        Buffer.BlockCopy(buf, 0, carry, carryLen, need);
+                        Parse(ix, carry, 0, frn++); carryLen = 0; k = need;
+                    }
+                }
+                for (; k + rs <= n; k += rs) Parse(ix, buf, k, frn++);
+                if (k < n) { Buffer.BlockCopy(buf, k, carry, 0, n - k); carryLen = n - k; }
+                pos += want; vdone += want;
+                RecordsDone = frn;
+                if (frn >= ix.Count) return;
+            }
+        }
+    }
+
+    [ThreadStatic] static int[] nmOff, nmLen; [ThreadStatic] static ulong[] nmPar;
+    // 解析一条记录。扩展记录（文件太碎、硬链接太多时用的续页）里的名字和大小记到它的主记录上
+    public static void Parse(MftIndex ix, byte[] b, int off, int frn) {
+        int rs = ix.RecordSize;
+        if (frn >= ix.Count) return;
+        uint sig = U32(b, off);
+        if (sig == 0x44414142) { ix.Bad++; if (ix.BadList.Count < 100000) ix.BadList.Add(frn); return; }   // "BAAD"
+        if (sig != 0x454C4946) return;                      // "FILE"；不是的话是从没用过的空记录
+        if (!Fixup(b, off, rs)) {
+            // 读的时候正好在写的记录：在用的才算坏（标志在第一个扇区里，校验不过也读得到），读完再试一次
+            if ((U16(b, off + 0x16) & 1) != 0) { ix.Bad++; if (ix.BadList.Count < 100000) ix.BadList.Add(frn); }
+            return;
+        }
+        ParseFixed(ix, b, off, frn);
+    }
+    static void ParseFixed(MftIndex ix, byte[] b, int off, int frn) {
+        int rs = ix.RecordSize;
+        int flags = U16(b, off + 0x16);
+        if ((flags & 1) == 0) return;
+        ulong baseRef = U64(b, off + 0x20);
+        bool ext = (baseRef & 0xFFFFFFFFFFFF) != 0;
+        int owner = ext ? (int)(baseRef & 0xFFFFFFFFFFFF) : frn;
+        if (owner < 0 || owner >= ix.Count) return;
+        // 续页指向的主记录已经换了人（序号对不上）：是过时的续页，不算
+        if (ext && (ix.Flag[owner] & 1) != 0 && ix.Seq[owner] != (ushort)(baseRef >> 48)) return;
+        if (ext) {
+            List<int> el;
+            if (!ix.ExtOf.TryGetValue(owner, out el)) { el = new List<int>(2); ix.ExtOf[owner] = el; }
+            if (!el.Contains(frn)) el.Add(frn);
+            ix.ExtClaim[frn] = (ushort)(baseRef >> 48);
+        }
+        if (!ext) {
+            ix.Seq[frn] = U16(b, off + 0x10);
+            ix.Flag[frn] |= 1;
+            if ((flags & 2) != 0) ix.Flag[frn] |= 2;
+        }
+        int a = off + U16(b, off + 0x14);
+        int end = off + Math.Min(rs, (int)U32(b, off + 0x18));
+        int nNames = 0;
+        if (nmOff == null) { nmOff = new int[8]; nmLen = new int[8]; nmPar = new ulong[8]; }
+        long size = 0; bool hasData = false;
+        while (a + 16 <= end) {
+            uint type = U32(b, a);
+            if (type == 0xFFFFFFFF) break;
+            int len = (int)U32(b, a + 4);
+            if (len < 16 || a + len > end) { ix.Bad++; break; }
+            bool nonRes = b[a + 8] != 0;
+            int attrNameLen = b[a + 9];
+            if (type == 0x10 && !nonRes && !ext) {
+                int c = a + U16(b, a + 0x14);
+                if (c + 0x24 <= a + len) ix.Write[frn] = I64(b, c + 8);
+            } else if (type == 0x20) {
+                ix.Flag[owner] |= 8;
+            } else if (type == 0x30 && !nonRes) {
+                int c = a + U16(b, a + 0x14); int cl = (int)U32(b, a + 0x10);
+                if (cl >= 0x42 && c + cl <= a + len) {
+                    int nl = b[c + 0x40], ns = b[c + 0x41];
+                    if (ns != 2 && c + 0x42 + nl * 2 <= a + len) {
+                        if (nNames == nmOff.Length) { Array.Resize(ref nmOff, nNames * 2); Array.Resize(ref nmLen, nNames * 2); Array.Resize(ref nmPar, nNames * 2); }
+                        nmOff[nNames] = c + 0x42; nmLen[nNames] = nl * 2; nmPar[nNames] = U64(b, c); nNames++;
+                    }
+                }
+            } else if (type == 0x80 && attrNameLen == 0) {
+                if (nonRes) { if (len >= 0x40 && I64(b, a + 0x10) == 0) { size = I64(b, a + 0x30); hasData = true; } }
+                else { size = U32(b, a + 0x10); hasData = true; }
+            } else if (type == 0xC0) {
+                // 只有目录联接、符号链接这类「代替名字」的重解析点才是链接；OneDrive 等云端文件夹也带重解析点，但里面的东西在这块盘上，要算
+                uint tag = 0; bool known = false;
+                if (!nonRes) { int c = a + U16(b, a + 0x14); if (c + 4 <= a + len) { tag = U32(b, c); known = true; } }
+                else known = ReparseTag(ix, b, a, len, out tag);   // 数据太长放在盘上别处（很长的链接目标、云端文件夹的数据）
+                if (known && (tag & 0x20000000) != 0) ix.Flag[owner] |= 4; else ix.Flag[owner] |= 16;
+            }
+            a += len;
+        }
+        if (hasData) ix.Size[owner] = size;
+        bool keep = ext || (ix.Flag[owner] & (2 | 8)) != 0 || ix.Size[owner] >= BigMin;
+        for (int i = 0; i < nNames; i++) {
+            string nm = keep ? Encoding.Unicode.GetString(b, nmOff[i], nmLen[i]) : null;
+            int p = (int)(nmPar[i] & 0xFFFFFFFFFFFF); ushort ps = (ushort)(nmPar[i] >> 48);
+            if (ix.Parent[owner] < 0) { ix.Parent[owner] = p; ix.ParentSeq[owner] = ps; ix.Name[owner] = nm; }
+            else {
+                List<MftLink> l;
+                if (!ix.Extra.TryGetValue(owner, out l)) { l = new List<MftLink>(1); ix.Extra[owner] = l; }
+                MftLink k = new MftLink(); k.Parent = p; k.ParentSeq = ps; k.Name = nm; l.Add(k);
+            }
+        }
+    }
+
+    static bool ReparseTag(MftIndex ix, byte[] b, int a, int len, out uint tag) {
+        tag = 0;
+        if (ix.Vol == null || len < 0x40) return false;
+        try {
+            List<long[]> runs = DecodeRuns(b, a + U16(b, a + 0x20), a + len, ix.ClusterSize);
+            if (runs.Count == 0) return false;
+            byte[] t = new byte[4];
+            ReadAt(ix.Vol, runs[0][0], t, 0, 4);
+            tag = U32(t, 0); return true;
+        } catch { return false; }
+    }
+
+    // 重新读几条记录（变更日志里列出的），用来在上次读的基础上更新
+    // Windows 上经文件系统读（FSCTL_GET_NTFS_FILE_RECORD，走缓存）：直接读盘的话，刚改过的记录可能还没写到盘上。
+    // 文件太碎、硬链接太多时有续页：属性列表在主记录里的，续页一起重读。返回 false：有读不了、校验不过的，要整份重读
+    // 每条记录要么整条（主记录加全部续页）都读好再换上，要么不动、留到下次再读。返回 false：要整份重读
+    public static bool Reread(IVolume v, MftIndex ix, ICollection<int> frns) {
+        int rs = ix.RecordSize;
+        byte[] rec = new byte[rs];
+        WinVolume wv = v as WinVolume;
+        ix.Vol = v;
+        List<int> all = new List<int>(frns);
+        foreach (int f in ix.Failed) if (!frns.Contains(f)) all.Add(f);
+        foreach (int f in all) {
+            if (f < 16) continue;
+            if (f >= ix.Count) return false;
+            bool ok = false;
+            try { ok = RereadOne(v, wv, ix, f, rec); } catch { ok = false; }
+            if (ok) ix.Failed.Remove(f);
+            else { ix.Failed.Add(f); if (ix.Failed.Count > 200) return false; }
+        }
+        return true;
+    }
+    static bool RereadOne(IVolume v, WinVolume wv, MftIndex ix, int f, byte[] rec) {
+        int rs = ix.RecordSize;
+        int r = ReadOne(v, wv, ix, f, rec);
+        if (r < 0) return false;
+        if (r == 0 || (U64(rec, 0x20) & 0xFFFFFFFFFFFF) != 0) { ix.Clear(f); return true; }   // 删掉了，或者这个号现在是别的文件的续页
+        List<int> segs; bool fromDisk;
+        if (!ExtSegs(v, ix, rec, f, out segs, out fromDisk)) return false;
+        // 属性列表列出的续页，加上以前读到过的续页（属性列表是从盘上读的话可能没写进最新的）
+        List<int> known;
+        if (ix.ExtOf.TryGetValue(f, out known)) { if (segs == null) segs = new List<int>(); foreach (int s in known) if (!segs.Contains(s)) segs.Add(s); }
+        ushort seq = U16(rec, 0x10);
+        List<byte[]> exts = new List<byte[]>(); List<int> extNo = new List<int>();
+        if (segs != null) foreach (int s in segs) {
+            if (s < 16 || s >= ix.Count) return false;
+            byte[] x = new byte[rs];
+            int rr = ReadOne(v, wv, ix, s, x);
+            if (rr < 0) return false;
+            ulong br = U64(x, 0x20);
+            if (rr == 0 || (int)(br & 0xFFFFFFFFFFFF) != f || (ushort)(br >> 48) != seq) continue;   // 已经不是它的续页了
+            exts.Add(x); extNo.Add(s);
+        }
+        // 都读好了，才换上
+        ix.Clear(f);
+        ParseFixed(ix, rec, 0, f);
+        for (int i = 0; i < exts.Count; i++) ParseFixed(ix, exts[i], 0, extNo[i]);
+        if (fromDisk) ix.Recent[f] = DateTime.UtcNow.Ticks; else ix.Recent.Remove(f);
+        return true;
+    }
+    // 读一条记录并校验：1 在用且读好了  0 没在用  -1 读不了或校验不过
+    static int ReadOne(IVolume v, WinVolume wv, MftIndex ix, int f, byte[] rec) {
+        int rs = ix.RecordSize;
+        if (wv != null) return FreshRecord(wv, f, rec, rs);
+        ReadVirtual(v, ix, (long)f * rs, rec, rs);
+        uint sig = U32(rec, 0);
+        if (sig == 0x44414142) return -1;                   // "BAAD"
+        if (sig != 0x454C4946) return 0;                    // 从没用过的空记录
+        if (!Fixup(rec, 0, rs)) return -1;
+        return (U16(rec, 0x16) & 1) != 0 ? 1 : 0;
+    }
+    // 经文件系统读一条记录。文件系统给的一般是已经换回原值的样子；扇区末尾还都是校验号的（盘上的样子）才按校验号换回
+    static int FreshRecord(WinVolume wv, int f, byte[] rec, int rs) {
+        int r = wv.GetRecord(f, rec, rs);
+        if (r <= 0) return r;
+        uint sig = U32(rec, 0);
+        if (sig == 0x44414142) return -1;
+        if (sig != 0x454C4946) return 0;
+        int usaOfs = U16(rec, 4), usaCnt = U16(rec, 6);
+        if (usaCnt != rs / 512 + 1 || usaOfs < 0x28 || usaOfs + usaCnt * 2 > rs) return -1;
+        bool raw = true;
+        for (int i = 1; i < usaCnt; i++) { int p = i * 512 - 2; if (rec[p] != rec[usaOfs] || rec[p + 1] != rec[usaOfs + 1]) { raw = false; break; } }
+        if (raw && !Fixup(rec, 0, rs)) return -1;
+        return (U16(rec, 0x16) & 1) != 0 ? 1 : 0;
+    }
+    // 主记录的属性列表指到的续页。没有属性列表：segs = null。属性列表太长、放在盘上别处时从盘上读（fromDisk = true）
+    static bool ExtSegs(IVolume v, MftIndex ix, byte[] r, int frn, out List<int> segs, out bool fromDisk) {
+        segs = null; fromDisk = false;
+        int rs = ix.RecordSize;
+        int a = U16(r, 0x14), end = Math.Min(rs, (int)U32(r, 0x18));
+        while (a + 16 <= end) {
+            uint type = U32(r, a);
+            if (type == 0xFFFFFFFF || type > 0x20) break;
+            int len = (int)U32(r, a + 4);
+            if (len < 16 || a + len > end) return false;
+            if (type == 0x20) {
+                byte[] list; int c, cl;
+                if (r[a + 8] == 0) { list = r; c = a + U16(r, a + 0x14); cl = (int)U32(r, a + 0x10); if (c + cl > a + len) return false; }
+                else {
+                    if (len < 0x40) return false;
+                    long sz = I64(r, a + 0x30);
+                    if (sz <= 0 || sz > 4 * 1024 * 1024) return false;
+                    List<long[]> runs = DecodeRuns(r, a + U16(r, a + 0x20), a + len, ix.ClusterSize);
+                    list = new byte[sz]; long got = 0;
+                    foreach (long[] run in runs) { if (got >= sz) break; int take = (int)Math.Min(run[1], sz - got); ReadAt(v, run[0], list, (int)got, take); got += take; }
+                    if (got < sz) return false;
+                    c = 0; cl = (int)sz; fromDisk = true;
+                }
+                segs = new List<int>();
+                for (int o = c; o + 26 <= c + cl; ) {
+                    int el = U16(list, o + 4);
+                    if (el < 26 || o + el > c + cl) return false;
+                    int seg = (int)(U64(list, o + 16) & 0xFFFFFFFFFFFF);
+                    if (seg != frn && !segs.Contains(seg)) segs.Add(seg);
+                    o += el;
+                }
+                return true;
+            }
+            a += len;
+        }
+        return true;
+    }
+    // 整份读完后，校验不过的记录再读一次（多半是读的那一刻正在写）
+    public static void RetryBad(IVolume v, MftIndex ix) {
+        if (ix.BadList.Count == 0 || ix.BadList.Count > 20000) return;
+        List<int> list = ix.BadList; ix.BadList = new List<int>();
+        int rs = ix.RecordSize; byte[] rec = new byte[rs];
+        WinVolume wv = v as WinVolume;
+        ix.Vol = v;
+        foreach (int f in list) {
+            try {
+                int r = ReadOne(v, wv, ix, f, rec);
+                if (r < 0) { ix.BadList.Add(f); continue; }
+                ix.Bad--;
+                if (r == 1) ParseFixed(ix, rec, 0, f);      // 0：现在已经没在用了
+            } catch { ix.BadList.Add(f); }
+        }
+    }
+    // 续页记着的主记录序号对不上（过时的续页，主记录比它后读到时没拦住）：这些文件整条重读
+    public static void FixStaleExt(IVolume v, MftIndex ix) {
+        List<int> owners = new List<int>();
+        foreach (KeyValuePair<int, List<int>> kv in ix.ExtOf) {
+            foreach (int s in kv.Value) { ushort c; if (ix.ExtClaim.TryGetValue(s, out c) && (ix.Flag[kv.Key] & 1) != 0 && c != ix.Seq[kv.Key]) { owners.Add(kv.Key); break; } }
+        }
+        if (owners.Count == 0) return;
+        foreach (int o in owners) { List<int> l = ix.ExtOf[o]; l.RemoveAll(s => { ushort c; return ix.ExtClaim.TryGetValue(s, out c) && c != ix.Seq[o]; }); }
+        Reread(v, ix, owners);
+    }
+
+
+    // 用读出来的文件表搭出和逐个文件夹扫描一样的文件夹树
+    public static DmNode BuildTree(MftIndex ix, out List<DmFile> big, out long files, out long dirs) { long o; return BuildTree(ix, out big, out files, out dirs, out o); }
+    // orphans：所在文件夹的记录不在（或序号对不上）的文件个数。很多的话说明读出来的表有问题
+    public static DmNode BuildTree(MftIndex ix, out List<DmFile> big, out long files, out long dirs, out long orphans) {
+        int n = ix.Count;
+        DmNode[] nodes = new DmNode[n];
+        DmNode root = new DmNode(); root.Name = ix.Root;
+        nodes[5] = root;
+        for (int i = 16; i < n; i++) {
+            if ((ix.Flag[i] & 3) != 3) continue;
+            DmNode d = new DmNode(); d.Name = ix.Name[i] ?? ("#" + i); d.IsLink = (ix.Flag[i] & 4) != 0; d.Cloud = !d.IsLink && (ix.Flag[i] & 16) != 0; d.LastWrite = 0;
+            nodes[i] = d;
+        }
+        for (int i = 16; i < n; i++) {
+            DmNode d = nodes[i]; if (d == null) continue;
+            int p = ix.Parent[i];
+            if (p < 0 || p >= n || p == i || nodes[p] == null || ix.Seq[p] != ix.ParentSeq[i]) continue;
+            d.Parent = nodes[p]; nodes[p].Kids.Add(d);
+        }
+        // 只要从根能走到的；链接目录不往里走（和逐个扫描一样）
+        bool[] reach = new bool[n];
+        Stack<int> st = new Stack<int>();
+        reach[5] = true; st.Push(5);
+        Dictionary<DmNode, int> idOf = new Dictionary<DmNode, int>();
+        for (int i = 16; i < n; i++) if (nodes[i] != null) idOf[nodes[i]] = i;
+        dirs = 0;
+        while (st.Count > 0) {
+            DmNode d = nodes[st.Pop()];
+            if (d.IsLink) { d.Kids.Clear(); continue; }
+            foreach (DmNode k in d.Kids) { int id = idOf[k]; if (!reach[id]) { reach[id] = true; dirs++; st.Push(id); } }
+        }
+        big = new List<DmFile>();
+        files = 0; orphans = 0;
+        for (int i = 16; i < n; i++) {
+            byte f = ix.Flag[i];
+            if ((f & 1) == 0 || (f & 2) != 0) continue;
+            int pp = ix.Parent[i];
+            if (pp >= 16 && (pp >= n || nodes[pp] == null || ix.Seq[pp] != ix.ParentSeq[i])) orphans++;
+            long size = ix.Size[i], wt = ix.Write[i];
+            AddFile(ix, nodes, reach, ix.Parent[i], ix.ParentSeq[i], ix.Name[i], size, wt, big, ref files);
+            List<MftLink> l;
+            if (ix.Extra.TryGetValue(i, out l)) foreach (MftLink k in l) AddFile(ix, nodes, reach, k.Parent, k.ParentSeq, k.Name, size, wt, big, ref files);
+        }
+        return root;
+    }
+    static void AddFile(MftIndex ix, DmNode[] nodes, bool[] reach, int p, ushort ps, string name, long size, long wt, List<DmFile> big, ref long files) {
+        if (p < 0 || p >= nodes.Length || nodes[p] == null || !reach[p] || ix.Seq[p] != ps) return;
+        DmNode d = nodes[p];
+        if (d.IsLink) return;
+        d.Own += size; d.OwnFiles++; files++;
+        if (wt > d.LastWrite) d.LastWrite = wt;
+        if (size >= BigMin && name != null) {
+            DmFile x = new DmFile(); x.Dir = d; x.Name = name; x.Size = size;
+            try { x.Modified = DateTime.FromFileTime(wt); } catch { }
+            big.Add(x);
+        }
+    }
+
+    // ---------- 变更日志（USN）：同一次打开程序里再扫描时，只重读改动过的记录 ----------
+    const uint FSCTL_QUERY_USN_JOURNAL = 0x000900F4, FSCTL_READ_USN_JOURNAL = 0x000900BB;
+    public static bool QueryJournal(WinVolume v, out ulong id, out long first, out long next) {
+        id = 0; first = 0; next = 0;
+        byte[] o = new byte[80]; int got, err;
+        if (!v.Ioctl(FSCTL_QUERY_USN_JOURNAL, null, o, out got, out err) || got < 24) return false;
+        id = U64(o, 0); first = I64(o, 8); next = I64(o, 16);
+        return true;
+    }
+    // 从 start 读到 until：改动过的记录号；返回 false 表示日志断了（被清理、换了一个），要整份重读
+    // minTime：只要这个时间（UTC FILETIME）以后的改动；open：顺便记下还开着（没有「关闭」记录）的文件
+    public static bool ReadJournal(WinVolume v, ulong id, long start, long until, HashSet<int> frns, int max, long minTime, HashSet<int> open) {
+        byte[] inb = new byte[40], outb = new byte[256 * 1024];
+        long usn = start;
+        for (int loop = 0; loop < 100000 && usn < until; loop++) {
+            Array.Clear(inb, 0, inb.Length);
+            Buffer.BlockCopy(BitConverter.GetBytes(usn), 0, inb, 0, 8);
+            Buffer.BlockCopy(BitConverter.GetBytes(0xFFFFFFFFu), 0, inb, 8, 4);
+            Buffer.BlockCopy(BitConverter.GetBytes(id), 0, inb, 32, 8);
+            int got, err;
+            if (!v.Ioctl(FSCTL_READ_USN_JOURNAL, inb, outb, out got, out err)) return false;
+            if (got < 8) return false;
+            long nextUsn = I64(outb, 0);
+            bool done = false;
+            for (int o = 8; o + 60 <= got; ) {
+                int rl = (int)U32(outb, o);
+                if (rl < 60 || o + rl > got) return false;
+                if (U16(outb, o + 4) != 2) return false;          // 128 位记录号（ReFS 那种）不认
+                if (I64(outb, o + 24) >= until) { done = true; break; }
+                int frn = (int)(U64(outb, o + 8) & 0xFFFFFFFFFFFF);
+                if (open != null) {
+                    if ((U32(outb, o + 40) & 0x80000000u) != 0) open.Remove(frn);   // USN_REASON_CLOSE
+                    else if (open.Count < 50000) open.Add(frn);
+                }
+                if (I64(outb, o + 32) >= minTime) frns.Add(frn);   // 改名、移动都记在文件自己的记录上，不用重读父文件夹
+                if (frns.Count > max) return false;
+                o += rl;
+            }
+            if (done || got <= 8 || nextUsn <= usn) break;
+            usn = nextUsn;
+        }
+        return true;
+    }
+}
+
+// ==================== 空间地图：一棵按大小汇总的文件夹树 ====================
+// NTFS 上直接读文件表（快），读不了就多线程逐个文件夹扫描
 public class DmNode {
     public string Name;
     public DmNode Parent;
     public long Size, Own, Files, OwnFiles, LastWrite;
     public bool IsLink, Denied, Gone;
+    public bool Cloud;                                // 带重解析点但不是链接的文件夹（OneDrive 等云端文件夹）
     public List<DmNode> Kids = new List<DmNode>();
+    public List<DmFile> Big;                          // 只在根上：扫描时记下的 1 MB 以上的文件
     public string FullPath() {
         List<string> parts = new List<string>();
         for (DmNode n = this; n != null; n = n.Parent) parts.Add(n.Name);
@@ -758,27 +1642,233 @@ public static class DiskMap {
     public static volatile bool Cancel;
     public static long FilesSeen, DirsSeen, BytesSeen;
     public static volatile string Current = "";
-    public static List<DmFile> BigFiles = new List<DmFile>();
+    public static List<DmFile> BigFiles = new List<DmFile>();   // 空间地图现在显示的那棵树的大文件
+    public static string LastMethod = "", LastNote = "";        // mft / mft-usn / mft-partial / walk；没能读文件表的原因
+    public static long LastMs, LastChanged;
     static int pending;
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    struct FD {
-        public uint attr;
-        public uint c1, c2, a1, a2, w1, w2;
-        public uint sizeHigh, sizeLow, r0, r1;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string name;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 14)] public string alt;
-    }
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    static extern IntPtr FindFirstFileExW(string lpFileName, int fInfoLevelId, out FD lpFindFileData, int fSearchOp, IntPtr lpSearchFilter, int dwAdditionalFlags);
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    static extern bool FindNextFileW(IntPtr hFindFile, out FD lpFindFileData);
-    [DllImport("kernel32.dll")]
-    static extern bool FindClose(IntPtr hFindFile);
-
-    const long BigMin = 1L * 1024 * 1024;   // 「找文件」只在这些文件里找
+    public const long BigMin = 1L * 1024 * 1024;   // 「找文件」只在这些文件里找
     static bool Win { get { return System.IO.Path.DirectorySeparatorChar == '\\'; } }
 
+    static readonly object cacheLock = new object(), mftGate = new object();
+    static readonly Dictionary<string, MftIndex> mftIdx = new Dictionary<string, MftIndex>(StringComparer.OrdinalIgnoreCase);
+    static readonly Dictionary<string, string> mftBroken = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    static readonly Dictionary<string, DmNode> walkTree = new Dictionary<string, DmNode>(StringComparer.OrdinalIgnoreCase);
+    static readonly Dictionary<string, DateTime> walkAt = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+
+    public static void Use(DmNode root) { BigFiles = (root != null && root.Big != null) ? root.Big : new List<DmFile>(); }
+    // 本工具删过、搬过东西以后，逐个扫描得到的旧结果不再拿来用（读文件表的结果靠变更日志自己更新）
+    public static void Invalidate() { lock (cacheLock) { walkTree.Clear(); walkAt.Clear(); } }
+
+    // 拿到一块盘的文件夹树。
+    // allowWalk：读不了文件表时，要不要逐个文件夹扫一遍（慢）；fresh：逐个扫描的结果要不要重新扫（不用 10 分钟内的旧结果）
+    public static DmNode GetTree(string root, int threads, bool allowWalk, bool fresh) {
+        Stopwatch sw = Stopwatch.StartNew();
+        LastNote = ""; LastChanged = 0; Mft.RecordsDone = 0; Mft.RecordsTotal = 0;
+        string key = root.Substring(0, 1);
+        try { return GetTree2(root, key, threads, allowWalk, fresh, sw); } finally { Phase = ""; }
+    }
+    public static volatile string Phase = "";            // 正在做什么：mft 读文件表  walk 逐个文件夹扫描
+    static DmNode GetTree2(string root, string key, int threads, bool allowWalk, bool fresh, Stopwatch sw) {
+        if (MftAllowed(root)) {
+            Phase = "mft";
+            try {
+                DmNode t; lock (mftGate) t = TreeFromMft(root, key);   // 同一时间只有一处在读/更新文件表
+                if (t != null) { LastMs = sw.ElapsedMilliseconds; return t; }
+            } catch (Exception e) {
+                string why = e.GetType().Name + ": " + e.Message;
+                lock (cacheLock) { mftBroken[key] = why; mftIdx.Remove(key); }
+                LastNote = why;
+            }
+            if (Cancel) { LastMs = sw.ElapsedMilliseconds; return null; }
+        } else {
+            string b; lock (cacheLock) { if (mftBroken.TryGetValue(key, out b)) LastNote = b; }
+        }
+        if (!fresh) {
+            lock (cacheLock) {
+                DmNode w; DateTime at;
+                if (walkTree.TryGetValue(key, out w) && walkAt.TryGetValue(key, out at) && (DateTime.Now - at).TotalMinutes < 10) { LastMethod = "walk-cache"; LastMs = sw.ElapsedMilliseconds; return w; }
+            }
+        }
+        if (!allowWalk) { LastMs = sw.ElapsedMilliseconds; return null; }
+        Phase = "walk";
+        DmNode r = Scan(root, threads);
+        LastMethod = "walk";
+        if (!Cancel) lock (cacheLock) { walkTree[key] = r; walkAt[key] = DateTime.Now; }
+        LastMs = sw.ElapsedMilliseconds;
+        return r;
+    }
+
+    static bool MftAllowed(string root) {
+        if (!Win || root == null || root.Length < 2 || root[1] != ':' || root.TrimEnd('\\').Length != 2) return false;   // 只认整块盘
+        lock (cacheLock) { if (mftBroken.ContainsKey(root.Substring(0, 1))) return false; }
+        try { return new DriveInfo(root.Substring(0, 2) + "\\").DriveFormat == "NTFS"; } catch { return false; }
+    }
+
+    static DmNode TreeFromMft(string root, string key) {
+        string r0 = root.Substring(0, 2) + "\\";
+        WinVolume v = new WinVolume(r0);
+        try {
+            int fullReads = 0;
+            bool noCache = false;
+            for (int attempt = 0; attempt < 3; attempt++) {
+                MftIndex ix = null;
+                lock (cacheLock) { mftIdx.TryGetValue(key, out ix); }
+                bool inc = false;
+                // 同一次打开程序里扫过：按变更日志只重读改动过的记录（还开着的文件每次都重读）
+                if (ix != null && ix.HasJournal && attempt == 0) try {
+                    ulong id; long first, next;
+                    if (Mft.QueryJournal(v, out id, out first, out next) && id == ix.JournalId && ix.NextUsn >= first) {
+                        HashSet<int> frns = new HashSet<int>();
+                        if (Mft.ReadJournal(v, id, ix.NextUsn, next, frns, 300000, 0, ix.OpenFiles)) {
+                            foreach (int f in ix.OpenFiles) frns.Add(f);
+                            long now = DateTime.UtcNow.Ticks;
+                            foreach (KeyValuePair<int, long> kv in new List<KeyValuePair<int, long>>(ix.Recent)) {
+                                if (now - kv.Value < 120L * 10000000) frns.Add(kv.Key); else ix.Recent.Remove(kv.Key);
+                            }
+                            MftIndex head = Mft.Open(v, r0);
+                            if (head.RecordSize == ix.RecordSize) {
+                                ix.Runs = head.Runs; ix.MftBytes = head.MftBytes; ix.Grow(head.Count);
+                                if (Mft.Reread(v, ix, frns)) { ix.NextUsn = next; ix.At = DateTime.Now; inc = true; LastChanged = frns.Count; }
+                            }
+                        }
+                    }
+                } catch { inc = false; }                      // 按日志更新出了问题：整份重读
+                if (!inc) {
+                    if (fullReads >= 2) break;
+                    fullReads++;
+                    Current = r0;
+                    ulong id; long first, next;
+                    bool hj = Mft.QueryJournal(v, out id, out first, out next);   // 读之前先记下日志位置，读的过程中的改动下次会补上
+                    long t0 = DateTime.UtcNow.ToFileTimeUtc();
+                    try { ix = Mft.Open(v, r0); }
+                    catch (InvalidDataException) { Thread.Sleep(300); ix = Mft.Open(v, r0); }   // 可能正好赶上 MFT 变长，再试一次
+                    Mft.ReadAll(v, ix, delegate { return Cancel; });
+                    if (!ix.Partial) { Mft.RetryBad(v, ix); Mft.FixStaleExt(v, ix); }
+                    if (ix.Bad > ix.Count / 100 + 100) throw new InvalidDataException("bad records: " + ix.Bad);
+                    ix.HasJournal = hj; ix.JournalId = id; ix.NextUsn = next; ix.At = DateTime.Now;
+                    if (hj && !ix.Partial && !CatchUp(v, ix, t0)) noCache = true;
+                }
+                List<DmFile> big; long files, dirs, orphans;
+                DmNode t = Mft.BuildTree(ix, out big, out files, out dirs, out orphans);
+                Finish(t, big);
+                FilesSeen = files; DirsSeen = dirs; BytesSeen = t.Size;
+                if (ix.Partial) { lock (cacheLock) mftIdx.Remove(key); LastMethod = "mft-partial"; return t; }
+                string bad = orphans > Math.Max(500, files / 200) ? "files without a folder: " + orphans : Verify(t);
+                if (bad != null) {
+                    lock (cacheLock) mftIdx.Remove(key);
+                    if (inc || fullReads < 2) continue;        // 对不上：整份重读一次再核对（可能只是核对的那一刻正好在变）
+                    throw new InvalidDataException("check: " + bad);
+                }
+                if (noCache) { lock (cacheLock) mftIdx.Remove(key); LastMethod = "mft"; return t; }      // 补读最近改动时出了问题：这次的结果照用，下次整份重读
+                lock (cacheLock) {
+                    // 留着系统盘和最近一块别的盘的文件表（下次按变更日志更新），再多就太占内存
+                    string sys = (Environment.GetEnvironmentVariable("SystemDrive") ?? "C:").Substring(0, 1);
+                    if (!string.Equals(key, sys, StringComparison.OrdinalIgnoreCase))
+                        foreach (string k in new List<string>(mftIdx.Keys)) if (!string.Equals(k, sys, StringComparison.OrdinalIgnoreCase)) mftIdx.Remove(k);
+                    mftIdx[key] = ix;
+                }
+                LastMethod = inc ? "mft-usn" : "mft";
+                return t;
+            }
+            return null;
+        } finally { v.Close(); }
+    }
+
+    // 盘上的文件表可能还没写进刚才几十秒的改动（还在内存里）：读完后按变更日志，把这段时间改过的记录经文件系统重读一遍。
+    // 顺便从日志里找出还开着的文件
+    // 返回 false：出了问题，这份表不留着用
+    static bool CatchUp(WinVolume v, MftIndex ix, long t0) {
+        try {
+            ulong id; long first, now;
+            if (!Mft.QueryJournal(v, out id, out first, out now) || id != ix.JournalId) return true;
+            if (now - first > (64L << 20)) return true;   // 日志太长，整份读一遍不划算；最近的改动下次扫描时补上
+            HashSet<int> frns = new HashSet<int>();
+            HashSet<int> open = new HashSet<int>();
+            if (!Mft.ReadJournal(v, id, first, now, frns, 300000, t0 - 120L * 10000000, open)) return true;
+            ix.OpenFiles = open;
+            foreach (int f in open) frns.Add(f);
+            MftIndex head = Mft.Open(v, ix.Root);
+            if (head.RecordSize != ix.RecordSize) return false;
+            ix.Runs = head.Runs; ix.MftBytes = head.MftBytes; ix.Grow(head.Count);
+            if (!Mft.Reread(v, ix, frns)) return false;
+            if (now > ix.NextUsn) ix.NextUsn = now;
+            return true;
+        } catch { return false; }
+    }
+
+    // 和直接列目录比一比：根目录下的文件夹和根目录自己的文件个数，再抽查 20 个深一点的文件夹自己的文件个数和大小
+    static string Verify(DmNode root) {
+        if (!Win) return null;
+        string err = CompareDir(root, root.Name, true);
+        if (err != null && err.Length > 0) return err;
+        List<DmNode> pool = new List<DmNode>();
+        Queue<KeyValuePair<DmNode, int>> q = new Queue<KeyValuePair<DmNode, int>>();
+        q.Enqueue(new KeyValuePair<DmNode, int>(root, 0));
+        while (q.Count > 0 && pool.Count < 20000) {
+            KeyValuePair<DmNode, int> kv = q.Dequeue();
+            if (kv.Value > 0) pool.Add(kv.Key);
+            // 云端文件夹不抽查：列它的内容会去问 OneDrive，没开的话可能卡住
+            if (kv.Value < 6) foreach (DmNode k in kv.Key.Kids) if (!k.IsLink && !k.Cloud) q.Enqueue(new KeyValuePair<DmNode, int>(k, kv.Value + 1));
+        }
+        int step = Math.Max(1, pool.Count / 20), done = 0, bad = 0; string firstBad = null;
+        for (int i = 0; i < pool.Count && done < 20; i += step) {
+            err = CompareDir(pool[i], pool[i].FullPath(), false);
+            if (err == null) { done++; continue; }
+            if (err.Length == 0) continue;                // 打不开：没法核对，不算
+            done++; bad++; if (firstBad == null) firstBad = err;
+        }
+        return bad > 3 ? firstBad + " (" + bad + "/" + done + ")" : null;
+    }
+    // null 对得上  "" 打不开、没法核对  其他：哪里对不上
+    static string CompareDir(DmNode node, string path, bool isRoot) {
+        DirReader r = new DirReader();
+        try {
+            if (!r.Open(path)) return "";
+            long files = 0, bytes = 0;
+            HashSet<string> dirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            while (r.Next()) { if (r.IsDir) dirs.Add(r.Name); else { files++; bytes += r.Size; } }
+            if (Math.Abs(files - node.OwnFiles) > Math.Max(5, files / 50)) return "files in " + path + ": " + files + " / " + node.OwnFiles;
+            if (!isRoot && Math.Abs(bytes - node.Own) > Math.Max(256L << 20, bytes / 20)) return "bytes in " + path + ": " + bytes + " / " + node.Own;
+            HashSet<string> mine = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (DmNode k in node.Kids) mine.Add(k.Name);
+            int miss = 0;
+            foreach (string d in dirs) if (!mine.Contains(d)) miss++;
+            foreach (string d in mine) if (!dirs.Contains(d)) miss++;
+            if (miss > Math.Max(3, dirs.Count / 50)) return "folders in " + path + ": " + miss + " differ";
+            return null;
+        } finally { r.Free(); }
+    }
+
+    // 测试用：读一个 NTFS 镜像文件
+    public static MftIndex TestIndex;
+    public static DmNode ScanImage(string image, string rootName) {
+        FileVolume v = new FileVolume(image);
+        try {
+            MftIndex ix = Mft.Open(v, rootName);
+            Mft.ReadAll(v, ix, null);
+            Mft.RetryBad(v, ix); Mft.FixStaleExt(v, ix);
+            TestIndex = ix;
+            List<DmFile> big; long f, d;
+            DmNode t = Mft.BuildTree(ix, out big, out f, out d);
+            Finish(t, big);
+            return t;
+        } finally { v.Close(); }
+    }
+    public static DmNode RereadImage(string image, MftIndex ix, int[] frns) {
+        FileVolume v = new FileVolume(image);
+        try {
+            MftIndex head = Mft.Open(v, ix.Root);
+            ix.Runs = head.Runs; ix.MftBytes = head.MftBytes; ix.Grow(head.Count);
+            if (!Mft.Reread(v, ix, frns)) return null;
+            List<DmFile> big; long f, d;
+            DmNode t = Mft.BuildTree(ix, out big, out f, out d);
+            Finish(t, big);
+            return t;
+        } finally { v.Close(); }
+    }
+
+    // ---------- 逐个文件夹扫描（多线程） ----------
     public static DmNode Scan(string root, int threads) {
         FilesSeen = 0; DirsSeen = 0; BytesSeen = 0; Current = "";
         string r = root;
@@ -793,23 +1883,54 @@ public static class DiskMap {
         for (int t = 0; t < threads; t++) {
             ts[t] = new Thread(() => {
                 List<DmFile> mine = new List<DmFile>();
-                while (true) {
-                    DmNode n;
-                    if (work.TryPop(out n)) {
-                        try { if (!Cancel) Enumerate(n, work, mine); } catch { n.Denied = true; }
-                        if (Interlocked.Decrement(ref pending) == 0) break;
-                    } else {
-                        if (Thread.VolatileRead(ref pending) == 0) break;
-                        Thread.Sleep(1);
+                DirReader rd = new DirReader();
+                try {
+                    while (true) {
+                        DmNode n;
+                        if (work.TryPop(out n)) {
+                            try { if (!Cancel) Enumerate(n, work, mine, rd); } catch { n.Denied = true; }
+                            if (Interlocked.Decrement(ref pending) == 0) break;
+                        } else {
+                            if (Thread.VolatileRead(ref pending) == 0) break;
+                            Thread.Sleep(1);
+                        }
                     }
-                }
+                } finally { rd.Free(); }
                 lock (bigLock) { big.AddRange(mine); }
             });
             ts[t].IsBackground = true; ts[t].Start();
         }
         foreach (Thread th in ts) th.Join();
+        Finish(top, big);
+        return top;
+    }
 
-        // 自下而上汇总大小，并让每一层按大小从大到小排
+    static void Enumerate(DmNode n, ConcurrentStack<DmNode> work, List<DmFile> big, DirReader r) {
+        string dir = n.FullPath();
+        Current = dir;
+        if (!r.Open(dir)) { n.Denied = true; return; }
+        long files = 0, bytes = 0;
+        try {
+            while (!Cancel && r.Next()) {
+                if (r.IsDir) {
+                    DmNode c = new DmNode(); c.Name = r.Name; c.Parent = n;
+                    n.Kids.Add(c);
+                    if (r.IsLink) { c.IsLink = true; continue; }
+                    Interlocked.Increment(ref pending); Interlocked.Increment(ref DirsSeen);
+                    work.Push(c);
+                } else {
+                    long sz = r.Size, wt = r.Write;
+                    n.Own += sz; n.OwnFiles++;
+                    if (wt > n.LastWrite) n.LastWrite = wt;
+                    files++; bytes += sz;
+                    if (sz >= BigMin) { DmFile f = new DmFile(); f.Dir = n; f.Name = r.Name; f.Size = sz; try { f.Modified = DateTime.FromFileTime(wt); } catch { } big.Add(f); }
+                }
+            }
+        } finally { r.Close(); Interlocked.Add(ref FilesSeen, files); Interlocked.Add(ref BytesSeen, bytes); }
+    }
+
+    // 自下而上汇总大小，每一层按大小从大到小排；大文件按大小排好挂在根上
+    public static void Finish(DmNode top, List<DmFile> big) {
         List<DmNode> order = new List<DmNode>();
         Stack<DmNode> st = new Stack<DmNode>(); st.Push(top);
         while (st.Count > 0) { DmNode n = st.Pop(); order.Add(n); foreach (DmNode k in n.Kids) st.Push(k); }
@@ -821,57 +1942,7 @@ public static class DiskMap {
             n.Kids.Sort((a, b) => b.Size.CompareTo(a.Size));
         }
         big.Sort((a, b) => b.Size.CompareTo(a.Size));
-        BigFiles = big;
-        return top;
-    }
-
-    static void Enumerate(DmNode n, ConcurrentStack<DmNode> work, List<DmFile> big) {
-        string dir = n.FullPath();
-        Current = dir;
-        if (Win) {
-            string pat = dir.StartsWith("\\\\") ? "\\\\?\\UNC\\" + dir.Substring(2).TrimEnd('\\') + "\\*" : "\\\\?\\" + dir.TrimEnd('\\') + "\\*";
-            FD fd;
-            IntPtr h = FindFirstFileExW(pat, 1, out fd, 0, IntPtr.Zero, 2);
-            if (h == new IntPtr(-1)) { n.Denied = true; return; }
-            try {
-                do {
-                    string name = fd.name;
-                    if (name == "." || name == "..") continue;
-                    if ((fd.attr & 0x10) != 0) {
-                        DmNode c = new DmNode(); c.Name = name; c.Parent = n;
-                        n.Kids.Add(c);
-                        if ((fd.attr & 0x400) != 0) { c.IsLink = true; continue; }
-                        Interlocked.Increment(ref pending); Interlocked.Increment(ref DirsSeen);
-                        work.Push(c);
-                    } else {
-                        long sz = ((long)fd.sizeHigh << 32) | fd.sizeLow;
-                        long wt = ((long)fd.w2 << 32) | fd.w1;
-                        n.Own += sz; n.OwnFiles++;
-                        if (wt > n.LastWrite) n.LastWrite = wt;
-                        Interlocked.Increment(ref FilesSeen); Interlocked.Add(ref BytesSeen, sz);
-                        if (sz >= BigMin) { DmFile f = new DmFile(); f.Dir = n; f.Name = name; f.Size = sz; try { f.Modified = DateTime.FromFileTime(wt); } catch { } big.Add(f); }
-                    }
-                } while (!Cancel && FindNextFileW(h, out fd));
-            } finally { FindClose(h); }
-        } else {
-            foreach (FileSystemInfo e in new DirectoryInfo(dir).EnumerateFileSystemInfos()) {
-                if (Cancel) break;
-                if ((e.Attributes & FileAttributes.Directory) != 0) {
-                    DmNode c = new DmNode(); c.Name = e.Name; c.Parent = n;
-                    n.Kids.Add(c);
-                    if ((e.Attributes & FileAttributes.ReparsePoint) != 0) { c.IsLink = true; continue; }
-                    Interlocked.Increment(ref pending); Interlocked.Increment(ref DirsSeen);
-                    work.Push(c);
-                } else {
-                    long sz = 0; try { sz = ((FileInfo)e).Length; } catch { }
-                    long wt = e.LastWriteTimeUtc.ToFileTimeUtc();
-                    n.Own += sz; n.OwnFiles++;
-                    if (wt > n.LastWrite) n.LastWrite = wt;
-                    Interlocked.Increment(ref FilesSeen); Interlocked.Add(ref BytesSeen, sz);
-                    if (sz >= BigMin) { DmFile f = new DmFile(); f.Dir = n; f.Name = e.Name; f.Size = sz; f.Modified = e.LastWriteTime; big.Add(f); }
-                }
-            }
-        }
+        top.Big = big;
     }
 
     // 删掉一个文件夹后，从树上摘掉并把大小从上面每一层减掉
@@ -1259,7 +2330,8 @@ function Invoke-Tool([string]$exe, [string[]]$argv, [string]$cwd = '', [double]$
 }
 function IsLink($p) { $i = Get-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue; return [bool]($i -and ($i.Attributes -band [IO.FileAttributes]::ReparsePoint)) }
 
-function Get-Size([string[]]$paths, [string]$filter) {
+# $tree：Get-SysTree 读出的 C 盘文件夹树，有的话文件夹大小直接从树上查（只用于显示和估算）
+function Get-Size([string[]]$paths, [string]$filter, $tree = $null) {
     $sum = [double]0
     foreach ($p in $paths) {
         foreach ($it in (Get-Item -Path $p -Force -ErrorAction SilentlyContinue)) {
@@ -1268,11 +2340,56 @@ function Get-Size([string[]]$paths, [string]$filter) {
                 if ($filter) {
                     $s = (Get-ChildItem -LiteralPath $it.FullName -Filter $filter -File -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
                     if ($s) { $sum += $s }
-                } else { $sum += [DirStat]::Measure($it.FullName) }
+                } else { $sum += (Est-Bytes $it.FullName $tree) }
             } else { $sum += $it.Length }
         }
     }
     return $sum
+}
+
+# ---------- 统计得更快 ----------
+# 每块盘用几个线程一起统计：固态硬盘多一些，机械硬盘少一些（来回寻道反而更慢）。每次打开程序只查一次
+function Init-DriveThreads {
+    if ([DirStat]::ThreadsReady) { return }
+    $cores = [Environment]::ProcessorCount
+    try {
+        $media = @{}
+        foreach ($pd in @(Get-PhysicalDisk -ErrorAction Stop)) { $media[[string]$pd.DeviceId] = [string]$pd.MediaType }
+        foreach ($part in @(Get-Partition -ErrorAction Stop)) {
+            $c = [int][char]$part.DriveLetter
+            if ($c -lt 65) { continue }
+            $mt = $media[[string]$part.DiskNumber]
+            $n = if ($mt -eq 'SSD' -or $mt -eq 'SCM') { [math]::Min(8, [math]::Max(4, $cores)) } elseif ($mt -eq 'HDD') { 2 } else { 4 }
+            [DirStat]::SetThreads([string][char]$c, $n)
+        }
+    } catch {}
+    [DirStat]::ThreadsReady = $true
+}
+# C 盘的文件夹树，各页面共用：能直接读 NTFS 的文件表（MFT）就读，几秒钟读完；同一次打开程序里再用时，按变更日志只更新改过的部分。
+# 读不了（不是 NTFS、没有权限、和直接列目录核对对不上）就返回空，调用的地方照旧逐个文件夹统计。
+# 这棵树只用来显示和估算大小；真正删除、搬家时，各自重新统计、重新检查
+function Get-SysTree {
+    if (Stopping) { return $null }
+    SetP @{ SubKind = 'mft'; SubStart = (Get-Date); Detail = (T '读取 C 盘的文件表（MFT）') }
+    $t = $null
+    try { $t = [DiskMap]::GetTree("$env:SystemDrive", [DirStat]::ThreadsFor($env:SystemDrive), $false, $false) } catch { $t = $null }
+    if (-not $t) {
+        $why = [string][DiskMap]::LastNote
+        if ($why -and -not $sync.MftNoted) { $sync.MftNoted = $true; Log ((T "没能直接读取 C 盘的文件表，改为逐个文件夹统计（{0}）") -f $why) }
+        return $null
+    }
+    $m = [string][DiskMap]::LastMethod
+    if ($m -eq 'mft-partial' -or (Stopping)) { return $null }
+    if ($m -eq 'mft') { Log ((T "读取 C 盘的文件表：{0:N0} 个文件，用时 {1:N1} 秒") -f $t.Files, ([double][DiskMap]::LastMs / 1000)) }
+    elseif ($m -eq 'mft-usn') { Log ((T "按变更日志更新了 C 盘的文件表（{0:N0} 处改动），用时 {1:N1} 秒") -f [DiskMap]::LastChanged, ([double][DiskMap]::LastMs / 1000)) }
+    return $t
+}
+# 估计一个文件夹的大小：树上有就直接查，查不到（不在 C 盘、路径里有链接、短文件名等）再逐个统计
+function Est-Bytes([string]$p, $tree) {
+    if ($tree) {
+        try { $n = [DiskMap]::Find($tree, $p); if ($n -and -not $n.IsLink) { return [double]$n.Size } } catch {}
+    }
+    return DirBytes $p
 }
 # ---------- 个人文件夹保护 ----------
 # C 盘上的个人文件夹（桌面、文档、下载、图片、视频、音乐、收藏夹、OneDrive 等）以及用户目录本身，清理时一律不删
@@ -1462,7 +2579,7 @@ function Get-Catalog {
     return $list
 }
 
-function Measure-Item($it) {
+function Measure-Item($it, $tree = $null) {
     if ($it.Size) { return [double](& $it.Size) }
     $paths = @()
     foreach ($p in $it.Paths) {
@@ -1470,7 +2587,7 @@ function Measure-Item($it) {
         $paths += $p
     }
     if (-not $paths) { return 0 }
-    return Get-Size $paths $it.Filter
+    return Get-Size $paths $it.Filter $tree
 }
 
 function Invoke-Delete($it, $res, [switch]$Auto) {
@@ -3598,6 +4715,25 @@ Zoom 装在这里的程序和本地数据。会议录像默认存在「文档」
 关掉并继续	Close and continue
 这是一个链接（多半是搬家后留下的），删了软件会找不到数据。要处理请到「搬家管理」	This is a link (most likely left by a move); deleting it would leave apps unable to find their data. Manage it in "Moved folders"
 它所在的文件夹 {0} 已经搬到其他盘了，这份扫描结果过时了，请重新扫描	Its folder {0} has been moved to another drive, so this scan is out of date. Please scan again
+读取 C 盘的文件表：{0:N0} / {1:N0} 条记录	Reading the C: file table: {0:N0} / {1:N0} records
+逐个文件夹统计	Counting folder by folder
+读取 C 盘的文件表	Read the C: file table
+直接读取 NTFS 的文件表（MFT），比逐个文件夹查看快得多。只是查看，不会改动任何东西。	Reading the NTFS file table (MFT) directly, which is much faster than going through every folder. Only looks; nothing is changed.
+已读 {0:N0} / {1:N0} 条文件记录	Read {0:N0} / {1:N0} file records
+读取文件表	Reading the file table
+ · 扫描于 {0:HH:mm}（{1}）	 · scanned at {0:HH:mm} ({1})
+。这次是直接读文件表，原来进不去的文件夹（比如 System Volume Information）也算进来了，这些文件夹看起来变大不一定是真的变大	. This time the file table was read directly, so folders that could not be opened before (such as System Volume Information) are now counted; if those look bigger, they may not really have grown
+。这次是逐个文件夹扫描的，进不去的文件夹没算进来，这些文件夹看起来变小不一定是真的变小	. This time every folder was scanned one by one and folders that cannot be opened were not counted; if those look smaller, they may not really have shrunk
+按变更日志更新	updated from the change journal
+直接读文件表	read the file table
+逐个文件夹扫描	scanned folder by folder
+空间地图：没能直接读取文件表（{0}），改为逐个文件夹扫描	Space map: could not read the file table ({0}), scanning folder by folder instead
+空间地图：{0}，用时 {1:N1} 秒	Space map: {0}, took {1:N1} s
+读取 C 盘的文件表（MFT）	Reading the C: file table (MFT)
+没能直接读取 C 盘的文件表，改为逐个文件夹统计（{0}）	Could not read the C: file table, counting folder by folder instead ({0})
+读取 C 盘的文件表：{0:N0} 个文件，用时 {1:N1} 秒	Read the C: file table: {0:N0} files, took {1:N1} s
+按变更日志更新了 C 盘的文件表（{0:N0} 处改动），用时 {1:N1} 秒	Updated the C: file table from the change journal ({0:N0} changes), took {1:N1} s
+没有权限打开这个文件夹，看不到里面有什么，不删。	ClearC does not have permission to open this folder and cannot see what is inside, so it will not delete it.
 '@
 # 英文的帮助页（整页替换中文的那一页）
 $script:helpEnXaml = @'
@@ -3777,7 +4913,15 @@ $script:helpEnXaml = @'
               </StackPanel>
               <DockPanel Margin="0,8,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Scan</Run><Run>: choose a drive and click "Scan" to measure the size of every folder. It only looks and changes nothing. Drive C: usually takes a minute or two.</Run></TextBlock>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Scan</Run><Run>: choose a drive and click "Scan" to measure the size of every folder. It only looks and changes nothing.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Why scanning is fast</Run><Run>: on NTFS drives (C: almost always is), ClearC reads the file table on the disk (the MFT) directly, so hundreds of thousands of files usually take seconds rather than minutes. The result is checked against a direct folder listing; if it does not match or the table cannot be read (not NTFS, not enough permission and so on), ClearC goes back to scanning folder by folder, with several threads at once (more on SSDs, fewer on hard disks). Scanning again while ClearC is still open only updates what changed, using the Windows change journal. Reading the file table also sees folders that a folder-by-folder scan cannot open (such as System Volume Information), so the totals of the two methods can differ slightly.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Read once, shared by every page</Run><Run>: "Clean up C:", "Moved folders" and "Apps" also read the C: file table once to look up how big each folder is. These numbers are only for display and estimates; when something is actually deleted or moved, every item is measured and checked again, never decided from this result.</Run></TextBlock>
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
@@ -6025,7 +7169,15 @@ if ($script:mode -match '(?i)/autoclean') {
               </StackPanel>
               <DockPanel Margin="0,8,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">扫描</Run><Run>：选一块盘点「扫描」，把每个文件夹的大小都数一遍。只是查看，不改动任何东西。C 盘一般一两分钟就能扫完。</Run></TextBlock>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">扫描</Run><Run>：选一块盘点「扫描」，把每个文件夹的大小都数一遍。只是查看，不改动任何东西。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">扫描为什么快</Run><Run>：NTFS 格式的盘（C 盘基本都是），工具直接读盘上的文件表（MFT），几十万个文件一般几秒到十几秒就读完，不用一个个文件夹去看。读完会和直接列目录的结果核对一下，对不上或读不了（不是 NTFS、权限不够等）就自动改回逐个文件夹扫描，多个线程一起数（固态硬盘线程多一些，机械硬盘少一些）。同一次打开工具里再扫描，按系统的变更日志只更新改过的部分，更快。读文件表能看到逐个扫描进不去的文件夹（比如 System Volume Information），所以两种方式的总数可能略有出入。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">一次读取，各页共用</Run><Run>：「清理 C 盘」「搬家管理」「软件管理」统计大小时也先读一次 C 盘的文件表，直接查出每个文件夹多大。这些数字只用来显示和估算；真正删除、搬家的时候，每一项都会重新统计、重新检查，不会拿这份结果做判断。</Run></TextBlock>
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
@@ -6690,7 +7842,7 @@ function Request-Cancel {
 function Set-CancelFlags {
     $m = [string]$sync.Mode
     $sync.Cancel = $true
-    if ($script:cancelModes.ContainsKey($m)) { [DirStat]::Cancel = $true }
+    if ($script:cancelModes.ContainsKey($m)) { [DirStat]::Cancel = $true; [DiskMap]::Cancel = $true }   # 读文件表、统计大小都停下
     if ($m -eq 'dup' -or $m -eq 'dupdel' -or $m -eq 'merge') { [DupFinder]::Cancel = $true }
     if ($m -eq 'map') { [DiskMap]::Cancel = $true }
     if ($m -eq 'scan') { $script:oneClickPending = $false }
@@ -6785,6 +7937,15 @@ function Update-Op {
             $detail = [string]$p.Detail
             $subTime = (T "这一项已用 ") + (FmtSpan $subEl)
             $etaOk = $false
+        } elseif ($kind -eq 'mft') {
+            $subShow = $true
+            $rt = [double][Mft]::RecordsTotal
+            if ($rt -gt 0) {
+                $subFrac = [math]::Min(0.99, [double][Mft]::RecordsDone / $rt)
+                $detail = (T "读取 C 盘的文件表：{0:N0} / {1:N0} 条记录") -f [Mft]::RecordsDone, $rt
+            } elseif ([string][DiskMap]::Phase -eq 'walk') { $detail = (T '逐个文件夹统计') }
+            else { $detail = (T '读取 C 盘的文件表') }
+            $subTime = (T "这一项已用 ") + (FmtSpan $subEl)
         } elseif ($kind -eq 'measure') {
             $subShow = $true
             $detail = (T "{0}：已数 {1:N0} 个文件，{2}") -f [string]$p.Detail, [DirStat]::Files, (Fmt ([DirStat]::Bytes))
@@ -6800,9 +7961,18 @@ function Update-Op {
     elseif ($sync.Mode -eq 'hogs') { $stepLine = (T '统计 C 盘各目录的大小'); $what = (T '找出 C 盘上最占地方的文件夹和大文件，目录多时要几分钟。') }
     elseif ($sync.Mode -eq 'map') {
         $stepLine = (T "扫描 {0}") -f $sync.MapRoot
-        $what = (T '把每个文件夹里的文件大小数一遍。只是查看，不会改动任何东西。')
-        $detail = (T "已看过 {0:N0} 个文件夹、{1:N0} 个文件，{2}    {3}") -f [DiskMap]::DirsSeen, [DiskMap]::FilesSeen, (Fmt ([DiskMap]::BytesSeen)), (Shorten ([DiskMap]::Current))
-        if ([double]$sync.MapUsed -gt 0) { $frac = [math]::Min(0.99, [double][DiskMap]::BytesSeen / [double]$sync.MapUsed) }
+        if ([string][DiskMap]::Phase -eq 'mft') {
+            $what = (T '直接读取 NTFS 的文件表（MFT），比逐个文件夹查看快得多。只是查看，不会改动任何东西。')
+            $rt = [double][Mft]::RecordsTotal
+            if ($rt -gt 0) {
+                $detail = (T "已读 {0:N0} / {1:N0} 条文件记录") -f [Mft]::RecordsDone, $rt
+                $frac = [math]::Min(0.99, [double][Mft]::RecordsDone / $rt)
+            } else { $detail = (T '读取文件表') }
+        } else {
+            $what = (T '把每个文件夹里的文件大小数一遍。只是查看，不会改动任何东西。')
+            $detail = (T "已看过 {0:N0} 个文件夹、{1:N0} 个文件，{2}    {3}") -f [DiskMap]::DirsSeen, [DiskMap]::FilesSeen, (Fmt ([DiskMap]::BytesSeen)), (Shorten ([DiskMap]::Current))
+            if ([double]$sync.MapUsed -gt 0) { $frac = [math]::Min(0.99, [double][DiskMap]::BytesSeen / [double]$sync.MapUsed) }
+        }
     }
 
     $timeText = (T "已用 ") + (FmtSpan $el)
@@ -6846,7 +8016,7 @@ function Update-Op {
 
 function Shorten($p) { if (-not $p) { return '' }; if ($p.Length -le 80) { $p } else { '…' + $p.Substring($p.Length - 79) } }
 
-$script:AppVersion = '2.4'
+$script:AppVersion = '2.5'
 $script:logFile = Join-Path ([IO.Path]::GetTempPath()) 'CleanC-run.log'
 function Write-LogFile([string]$m) { try { [IO.File]::AppendAllText($script:logFile, ("{0:yyyy-MM-dd HH:mm:ss}  {1}`r`n" -f (Get-Date), $m), [Text.Encoding]::UTF8) } catch {} }
 function UI-Log($m) { $ctl.Log.AppendText("$m`r`n"); $ctl.Log.ScrollToEnd(); Write-LogFile ([string]$m) }
@@ -6889,7 +8059,7 @@ function Start-Worker([string]$code, $arg) {
     $rs = [runspacefactory]::CreateRunspace(); $rs.ApartmentState = 'STA'; $rs.ThreadOptions = 'ReuseThread'; $rs.Open()
     $rs.SessionStateProxy.SetVariable('sync', $sync)
     $ps = [powershell]::Create(); $ps.Runspace = $rs
-    $ps.AddScript("param(`$arg)`n" + $engine + "`n" + $code).AddArgument($arg) | Out-Null
+    $ps.AddScript("param(`$arg)`n" + $engine + "`nInit-DriveThreads`n" + $code).AddArgument($arg) | Out-Null
     $script:worker = @{ PS = $ps; Handle = $ps.BeginInvoke(); RS = $rs }
 }
 
@@ -6993,8 +8163,10 @@ function Do-Scan([switch]$Quiet) {
     UI-Busy $true
     Start-Worker @'
 $sizes = @{}
-$cat = Get-Catalog; $i = 0
-foreach ($it in $cat) { if (Stopping) { break }; $i++; SetP @{ Steps = $cat.Count; Step = $i; StepName = $it.N; SubKind = 'measure'; SubStart = (Get-Date); Detail = (T '统计大小') }; $sizes[$it.Idx] = Measure-Item $it }
+$cat = Get-Catalog; $i = 1; $steps = $cat.Count + 1
+SetP @{ Steps = $steps; Step = 1; StepName = (T '读取 C 盘的文件表') }
+$tree = Get-SysTree
+foreach ($it in $cat) { if (Stopping) { break }; $i++; SetP @{ Steps = $steps; Step = $i; StepName = $it.N; SubKind = 'measure'; SubStart = (Get-Date); Detail = (T '统计大小') }; $sizes[$it.Idx] = Measure-Item $it $tree }
 if (-not (Stopping)) { $sync.Sizes = $sizes }
 '@ $null
 }
@@ -7809,7 +8981,7 @@ function Start-MapScan([string]$root) {
     if ($script:worker -or -not $root) { return }
     $di = $null; try { $di = New-Object System.IO.DriveInfo $root } catch {}
     $sync.MapUsed = if ($di) { [double]($di.TotalSize - $di.AvailableFreeSpace) } else { [double]0 }
-    $sync.MapRoot = $root; $sync.MapResult = $null
+    $sync.MapRoot = $root; $sync.MapResult = $null; $sync.MapMethod = ''; $sync.MapNote = ''
     [DiskMap]::Cancel = $false
     $sync.Mode = 'map'
     Start-Op ((T "扫描 {0}") -f $root)
@@ -7819,14 +8991,9 @@ function Start-MapScan([string]$root) {
     $ctl.MapTree.Children.Clear()
     UI-Log ((T "空间地图：开始扫描 {0}") -f $root)
     Start-Worker @'
-$L = $arg.Root.Substring(0, 1).ToUpper(); $n = 4
-try {
-    $part = Get-Partition -DriveLetter $L -ErrorAction Stop
-    $pd = Get-PhysicalDisk -ErrorAction Stop | Where-Object { $_.DeviceId -eq [string]$part.DiskNumber } | Select-Object -First 1
-    if ($pd -and ($pd.MediaType -eq 'SSD' -or $pd.MediaType -eq 'SCM')) { $n = [math]::Max(4, [math]::Min(12, [Environment]::ProcessorCount)) }
-    elseif ($pd -and $pd.MediaType -eq 'HDD') { $n = 2 }
-} catch {}
-$sync.MapResult = [DiskMap]::Scan($arg.Root, $n)
+# 能读文件表（MFT）就读；读不了再逐个文件夹扫一遍
+$sync.MapResult = [DiskMap]::GetTree($arg.Root, [DirStat]::ThreadsFor($arg.Root), $true, $true)
+$sync.MapMethod = [string][DiskMap]::LastMethod; $sync.MapMs = [double][DiskMap]::LastMs; $sync.MapNote = [string][DiskMap]::LastNote
 '@ @{ Root = $root }
 }
 $ctl.BtnMapScan.Add_Click({ if ($ctl.MapDrive.SelectedItem) { Start-MapScan ([string]$ctl.MapDrive.SelectedItem.Tag) } })
@@ -7891,7 +9058,7 @@ function Show-MapLevel($node) {
     }
     $ctl.MapList.ItemsSource = $rows
     $ctl.MapPath.Text = $path
-    $ctl.MapInfo.Text = (T "这一层共 {0}，{1:N0} 个文件{2}") -f (Fmt $node.Size), $node.Files, $(if ($script:mapScanAt) { (T " · 扫描于 {0:HH:mm}") -f $script:mapScanAt } else { '' })
+    $ctl.MapInfo.Text = (T "这一层共 {0}，{1:N0} 个文件{2}") -f (Fmt $node.Size), $node.Files, $(if ($script:mapScanAt) { (T " · 扫描于 {0:HH:mm}（{1}）") -f $script:mapScanAt, $script:mapHow } else { '' })
     $ctl.BtnMapUp.IsEnabled = ($null -ne $node.Parent)
     $ctl.EmptyMap.Visibility = if ($rows.Count -gt 0) { 'Collapsed' } else { 'Visible' }
     if ($rows.Count -eq 0) { $ctl.EmptyMapText.Text = (T '这个文件夹是空的') }
@@ -8312,9 +9479,10 @@ function Update-Growth($root) {
     $letter = $root.FullPath().Substring(0, 1).ToUpper()
     New-Item -ItemType Directory -Path $script:snapDir -Force | Out-Null
     $latest = Join-Path $script:snapDir "$letter-latest.txt"
-    $old = @{}; $oldAt = ''
+    $old = @{}; $oldAt = ''; $oldHow = 'walk'
     if (Test-Path -LiteralPath $latest) {
         foreach ($l in [IO.File]::ReadAllLines($latest, [Text.Encoding]::UTF8)) {
+            if ($l.StartsWith('#method=')) { $oldHow = $l.Substring(8).Trim(); continue }
             if ($l.StartsWith('#')) { $oldAt = $l.TrimStart('#').Trim(); continue }
             $a = $l.Split("`t"); if ($a.Count -eq 2) { $old[$a[0].ToLowerInvariant()] = [double]$a[1] }
         }
@@ -8342,8 +9510,14 @@ function Update-Growth($root) {
             $script:growRows.Add($g)
         }
         $script:growNote = if ($script:growRows.Count -gt 0) { ((T "上次扫描在 {0}。红色是变大的，绿色是变小的（只列变化超过 100 MB 的文件夹）") -f $oldAt) } else { ((T "和上次（{0}）相比，没有文件夹变化超过 100 MB") -f $oldAt) }
+        # 读文件表能看到逐个扫描进不去的文件夹（比如 System Volume Information），两种方式的结果放在一起比会有出入
+        $newHow = if ([string]$script:mapMethod -like 'mft*') { 'mft' } else { 'walk' }
+        if ($oldHow -ne $newHow) {
+            $script:growNote += $(if ($newHow -eq 'mft') { (T '。这次是直接读文件表，原来进不去的文件夹（比如 System Volume Information）也算进来了，这些文件夹看起来变大不一定是真的变大') } else { (T '。这次是逐个文件夹扫描的，进不去的文件夹没算进来，这些文件夹看起来变小不一定是真的变小') })
+        }
     } else { $script:growNote = (T '这是第一次扫描这块盘。下次再扫描，就能看到哪些文件夹变大了') }
     $out = New-Object System.Collections.Generic.List[string]
+    $out.Add(('#method=' + $(if ([string]$script:mapMethod -like 'mft*') { 'mft' } else { 'walk' })))   # 放在日期前面：旧版本只认最后一个 # 行当日期
     $out.Add(("# {0:yyyy-MM-dd HH:mm}" -f (Get-Date)))
     foreach ($l in $snap) { $out.Add($l) }
     if (Test-Path -LiteralPath $latest) { Copy-Item -LiteralPath $latest -Destination (Join-Path $script:snapDir "$letter-previous.txt") -Force -ErrorAction SilentlyContinue }
@@ -8357,6 +9531,12 @@ $ctl.BtnMapDelete.Add_Click({
     $rows = @($sel | Where-Object { -not $_.Locked -and $_.Size -gt 0 })
     if ($rows.Count -eq 0) { return }
     foreach ($r in $rows) { $why = Get-DeleteBlock $r.Path; if ($why) { Show-Sheet -Kind warn -Title (T '这一项不能删') -Text ("{0}`n`n{1}" -f $r.Path, $why) | Out-Null; return } }
+    # 读文件表能看到没有权限打开的文件夹：打不开的不删（看不到里面有什么）
+    foreach ($r in @($rows | Where-Object { $_.IsDir })) {
+        $lp = [string]$r.Path; if ($lp.Length -ge 248 -and -not $lp.StartsWith('\\')) { $lp = '\\?\' + $lp }
+        $ok = $true; try { $en = [IO.Directory]::EnumerateFileSystemEntries($lp).GetEnumerator(); [void]$en.MoveNext(); $en.Dispose() } catch { $ok = $false }
+        if (-not $ok) { Show-Sheet -Kind warn -Title (T '这一项不能删') -Text ("{0}`n`n{1}" -f $r.Path, (T '没有权限打开这个文件夹，看不到里面有什么，不删。')) | Out-Null; return }
+    }
     $bytes = [double]0; foreach ($r in $rows) { $bytes += [double]$r.Size }
     $how = (T "「移到回收站」可以恢复，但要清空回收站后才真正腾出空间；「永久删除」马上腾出空间，删了就找不回来。")
     $items = $null
@@ -8523,7 +9703,9 @@ $cat = @(Get-Catalog | Where-Object { ($_.Kind -eq 'move' -or $_.Kind -eq 'flex'
 $partial = @{}
 foreach ($root in (All-MoveRoots)) { foreach ($pr in (Read-MoveMapPairs $root)) { $partial[([string]$pr[0]).TrimEnd('\').ToLowerInvariant()] = $true } }
 $catKeys = @()
-$steps = $cat.Count + 2; $step = 0
+$steps = $cat.Count + 3; $step = 1
+SetP @{ Steps = $steps; Step = 1; StepName = (T '读取 C 盘的文件表') }
+$tree = Get-SysTree
 foreach ($c in $cat) {
     if (Stopping) { break }
     $step++
@@ -8536,7 +9718,7 @@ foreach ($c in $cat) {
         if (-not (Test-Path -LiteralPath $p -PathType Container)) { continue }
         if ($c.NoOneDrive -and $p -like '*OneDrive*') { continue }
         if ((IsLink $p) -or (Get-LinkedAncestor $p)) { continue }
-        $b = DirBytes $p
+        $b = Est-Bytes $p $tree
         if (Stopping) { break }
         $paths += $p; $bytes += $b
         if ($partial.ContainsKey($p.TrimEnd('\').ToLowerInvariant())) { $isPartial = $true }
@@ -8568,7 +9750,7 @@ if (-not $sync.WasCancelled) {
         SetP @{ StepName = ((T "检查软件：{0}") -f $a.Name); SubKind = 'measure'; SubStart = (Get-Date); Detail = ((T "{0} / {1}") -f $n, $onC.Count) }
         $why = Get-AppMoveBlock $a $apps $svc
         $bytes = [double]$a.Est; $measured = $false
-        if (-not $why) { $bytes = DirBytes $loc; $measured = $true; if (Stopping) { break } }
+        if (-not $why) { $bytes = Est-Bytes $loc $tree; $measured = $true; if (Stopping) { break } }
         if ($bytes -lt 1MB) { continue }
         [void]$out.Add(@{ Type = 'app'; Idx = 0; Name = $a.Name; Location = $loc; Paths = @($loc); Bytes = $bytes; Publisher = $a.Publisher; Version = $a.Version
             Block = $why; Partial = $partial.ContainsKey($lk); Measured = $measured })
@@ -8950,16 +10132,18 @@ function Load-Apps {
     Start-Worker @'
 $out = Get-InstalledApps
 $i = 0
+SetP @{ Steps = $out.Count + 1; Step = 1; StepName = (T '读取 C 盘的文件表') }
+$tree = Get-SysTree
 $generic = @($env:SystemRoot, "$env:SystemDrive\Program Files", "$env:SystemDrive\Program Files (x86)", "$env:SystemDrive\ProgramData", $env:LOCALAPPDATA, $env:APPDATA, "$env:LOCALAPPDATA\Programs")
 $stopped = $false
 foreach ($a in $out) {
     $i++
     $a.Size = $a.Est; $a.Measured = $false
     if ($stopped -or (Stopping)) { $stopped = $true; continue }   # 取消后剩下的用安装时登记的大小
-    SetP @{ Steps = $out.Count; Step = $i; StepName = $a.Name; SubKind = 'none' }
+    SetP @{ Steps = $out.Count + 1; Step = $i + 1; StepName = $a.Name; SubKind = 'none' }
     $loc = $a.Location
     if ($loc -and $loc.Length -gt 3 -and ($generic -notcontains $loc) -and (Test-Path -LiteralPath $loc -PathType Container)) {
-        $b = DirBytes $loc
+        $b = Est-Bytes $loc $tree
         if (Stopping) { $stopped = $true; continue }
         if ($b -gt 0) { $a.Size = $b; $a.Measured = $true }
     }
@@ -9534,6 +10718,8 @@ $timer.Add_Tick({
         $w.PS.Dispose(); $w.RS.Dispose()
         [DirStat]::Cancel = $false
         if ($sync.WasCancelled) { UI-Log (T '已中途取消。') }
+        # 删过、搬过东西以后，逐个扫描得到的旧树不再拿来用（读文件表的结果靠变更日志更新）
+        if (@('scan', 'movescan', 'apps', 'map', 'movesize', 'dup') -notcontains [string]$sync.Mode) { [DiskMap]::Invalidate() }
 
         if ($sync.Mode -eq 'scan') {
             if ($sync.WasCancelled -or -not $sync.Sizes) {
@@ -9608,8 +10794,15 @@ $timer.Add_Tick({
         }
         elseif ($sync.Mode -eq 'map') {
             $root = $sync.MapResult
-            $stopped = [DiskMap]::Cancel
+            $mm = [string]$sync.MapMethod; $secs = [double]$sync.MapMs / 1000
+            # 读文件表时，读完以后（核对的时候）才点停止的，结果是完整的
+            $stopped = ($mm -eq 'mft-partial') -or ([DiskMap]::Cancel -and $mm -notlike 'mft*')
+            if ($sync.MapNote -and $mm -notlike 'mft*') { UI-Log ((T "空间地图：没能直接读取文件表（{0}），改为逐个文件夹扫描") -f $sync.MapNote) }
             if ($root) {
+                $script:mapHow = if ($mm -eq 'mft-usn') { (T '按变更日志更新') } elseif ($mm -like 'mft*') { (T '直接读文件表') } else { (T '逐个文件夹扫描') }
+                UI-Log ((T "空间地图：{0}，用时 {1:N1} 秒") -f $script:mapHow, $secs)
+                [DiskMap]::Use($root)
+                $script:mapMethod = $mm
                 $script:mapRoot = $root; $script:mapCur = $root; $script:mapScanAt = Get-Date
                 $script:movedTargets = $null
                 $script:prevSnap = $null
