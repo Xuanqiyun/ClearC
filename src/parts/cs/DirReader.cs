@@ -258,7 +258,7 @@ public static class DirStat {
                                     else { f++; b += r.Size; if ((f & 1023) == 0) { Interlocked.Add(ref Files, f); Interlocked.Add(ref Bytes, b); f = 0; b = 0; } }
                                 }
                                 Interlocked.Add(ref Files, f); Interlocked.Add(ref Bytes, b);
-                                if (n > 1 && Thread.VolatileRead(ref started) < n && !work.IsEmpty) {   // IsEmpty 很快；Count 要数一遍
+                                if (n > 1 && Volatile.Read(ref started) < n && !work.IsEmpty) {   // IsEmpty 很快；Count 要数一遍
                                     if (Interlocked.Increment(ref started) <= n) {
                                         try { Thread t = new Thread(job); t.IsBackground = true; t.Start(); lock (helpers) helpers.Add(t); }
                                         catch { Interlocked.Decrement(ref started); }
@@ -269,7 +269,7 @@ public static class DirStat {
                         finally { r.Close(); }
                         if (Interlocked.Decrement(ref pending) == 0) break;
                     } else {
-                        if (Thread.VolatileRead(ref pending) == 0) break;
+                        if (Volatile.Read(ref pending) == 0) break;
                         Thread.Sleep(1);
                     }
                 }

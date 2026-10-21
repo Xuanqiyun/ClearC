@@ -933,7 +933,7 @@ public static class DirStat {
                                     else { f++; b += r.Size; if ((f & 1023) == 0) { Interlocked.Add(ref Files, f); Interlocked.Add(ref Bytes, b); f = 0; b = 0; } }
                                 }
                                 Interlocked.Add(ref Files, f); Interlocked.Add(ref Bytes, b);
-                                if (n > 1 && Thread.VolatileRead(ref started) < n && !work.IsEmpty) {   // IsEmpty 很快；Count 要数一遍
+                                if (n > 1 && Volatile.Read(ref started) < n && !work.IsEmpty) {   // IsEmpty 很快；Count 要数一遍
                                     if (Interlocked.Increment(ref started) <= n) {
                                         try { Thread t = new Thread(job); t.IsBackground = true; t.Start(); lock (helpers) helpers.Add(t); }
                                         catch { Interlocked.Decrement(ref started); }
@@ -944,7 +944,7 @@ public static class DirStat {
                         finally { r.Close(); }
                         if (Interlocked.Decrement(ref pending) == 0) break;
                     } else {
-                        if (Thread.VolatileRead(ref pending) == 0) break;
+                        if (Volatile.Read(ref pending) == 0) break;
                         Thread.Sleep(1);
                     }
                 }
@@ -1925,7 +1925,7 @@ public static class DiskMap {
                             try { if (!Cancel) Enumerate(n, work, mine, rd); } catch { n.Denied = true; }
                             if (Interlocked.Decrement(ref pending) == 0) break;
                         } else {
-                            if (Thread.VolatileRead(ref pending) == 0) break;
+                            if (Volatile.Read(ref pending) == 0) break;
                             Thread.Sleep(1);
                         }
                     }
@@ -3859,7 +3859,6 @@ function Invoke-SelfTest([string]$Version) {
         $r = [DirReader]::Compare($d)
         & $add $(if ($r -match 'differ 0\b' -and $r -notmatch 'fell back') { 'pass' } elseif ($r -match '^batch \d') { 'fail' } else { 'warn' }) ("listing {0}: {1}" -f $d, $r)
     }
-    $L.Add(("listing mode in use: {0} (1 batch, 2 FindFirstFileEx)" -f [DirReader]::Mode))
     if (Stopping) { return @{ Lines = $L; Res = $res; Stopped = $true } }
     # 2. 读文件表
     $step++; SetP @{ Steps = $steps; Step = $step; StepName = (T '读取 C 盘的文件表'); SubKind = 'mft'; SubStart = (Get-Date); Detail = '' }
@@ -3889,6 +3888,7 @@ function Invoke-SelfTest([string]$Version) {
             if ($kind -ne 'pass') { foreach ($x in [DiskMap]::Diff($node, $w, 8)) { $L.Add('       ' + $x) } }
         }
     }
+    $L.Add(("listing mode in use: {0} (1 batch, 2 FindFirstFileEx, 0 not decided yet)" -f [DirReader]::Mode))
     if (Stopping) { return @{ Lines = $L; Res = $res; Stopped = $true } }
     # 4. 按变更日志更新：建、改、删几个文件，看看每次都对
     $step++; SetP @{ Steps = $steps; Step = $step; StepName = (T '试一下按变更日志更新'); SubKind = 'action'; SubStart = (Get-Date); Detail = '' }
