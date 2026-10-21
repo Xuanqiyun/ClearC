@@ -1,5 +1,5 @@
 # 每次推送都在 GitHub 的 Linux 和 Windows 机器上跑测试；Windows 上还会构建 exe，并在真的 NTFS 系统盘上跑一遍自检。
-# 只读仓库，不写回任何东西；结果在 Actions 页面里看，自检报告和 exe 作为附件下载（保留 14 天）。
+# 只读仓库，不写回任何东西。结果在 Actions 页面里看：失败的原因和自检报告也写成了注释；exe 和自检报告作为附件保留 14 天。
 name: test
 on:
   push:
@@ -11,34 +11,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: checks and engine tests
-        shell: pwsh
-        run: |
-          ./tests/Checks.ps1
-          ./tests/Engine.Tests.ps1
-      - name: NTFS image tests
-        run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq ntfs-3g
-          sudo env PWSH="$(command -v pwsh)" bash tests/ntfs/run.sh
+      - name: install ntfs-3g
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ntfs-3g
+      - name: tests
+        run: bash tests/ci.sh
   windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: checks and engine tests (Windows PowerShell 5.1)
+      - name: tests, build and self-test
         shell: powershell
-        run: |
-          .\tests\Checks.ps1; if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          .\tests\Engine.Tests.ps1; if ($LASTEXITCODE) { exit $LASTEXITCODE }
-      - name: build exe
-        shell: powershell
-        run: .\build\build.ps1
-      - name: self-test on the real system drive
-        shell: powershell
-        run: |
-          $env:CLEANC_QUIET = '1'; $env:CLEANC_REPORT = "$PWD\out\selftest.txt"
-          $p = Start-Process -FilePath .\out\ClearC.exe -ArgumentList '/selftest' -Wait -PassThru
-          Get-Content .\out\selftest.txt
-          exit $p.ExitCode
+        run: .\tests\ci.ps1
       - uses: actions/upload-artifact@v4
         if: always()
         with:
