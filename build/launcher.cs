@@ -8,9 +8,9 @@ using System.Text;
 [assembly: AssemblyTitle("腾挪 ClearC")]
 [assembly: AssemblyDescription("C 盘清理和搬家：清理 C 盘、把聊天记录和软件搬到其他盘、查找大文件和重复文件")]
 [assembly: AssemblyProduct("腾挪 ClearC")]
-[assembly: AssemblyVersion("2.5.0.0")]
-[assembly: AssemblyFileVersion("2.5.0.0")]
-[assembly: AssemblyInformationalVersion("2.5")]
+[assembly: AssemblyVersion("2.6.0.0")]
+[assembly: AssemblyFileVersion("2.6.0.0")]
+[assembly: AssemblyInformationalVersion("2.6")]
 [assembly: System.Runtime.Versioning.TargetFramework(".NETFramework,Version=v4.8", FrameworkDisplayName = ".NET Framework 4.8")]
 
 // 启动器：把内置的 PowerShell 程序放进本进程里的 PowerShell 引擎运行（用 Windows 自带的 PowerShell 5.1，不需要另装任何东西）。
@@ -59,7 +59,7 @@ static class CleanCLauncher {
 
         Assembly me = Assembly.GetExecutingAssembly();
         Environment.SetEnvironmentVariable("CLEANC_SELF", me.Location);
-        // 定时任务会带上 /check 或 /autoclean，程序据此只做后台检查、不打开主窗口
+        // 定时任务会带上 /check 或 /autoclean（自检是 /selftest），程序据此只做后台的事、不打开主窗口
         Environment.SetEnvironmentVariable("CLEANC_ARGS", string.Join(" ", args));
         // 本进程内的所有 PowerShell 运行空间都不受执行策略限制，等同于 powershell.exe -ExecutionPolicy Bypass
         Environment.SetEnvironmentVariable("PSExecutionPolicyPreference", "Bypass");
@@ -104,6 +104,9 @@ static class CleanCLauncher {
                 Fail(first, sb.ToString());
                 return 1;
             }
+            // 自检（/selftest）用退出码报告有几项不通过，测试机可以据此判断
+            object code = Method(proxy.GetType(), "GetVariable", typeof(string)).Invoke(proxy, new object[] { "CLEANC_EXIT" });
+            if (code is int) return (int)code;
             return 0;
         } catch (TargetInvocationException tie) {
             Exception inner = tie.InnerException ?? tie;

@@ -1,0 +1,1198 @@
+好	OK
+C 盘只剩 {0} 了	Only {0} left on C:
+低于你设定的 {0} GB。打开腾挪 ClearC，看看能清掉或搬走什么？\n（在工具的「自动提醒」页可以关掉这个提醒）	That's below the {0} GB you set. Open ClearC to see what can be cleaned up or moved?\n(You can turn off this reminder on the "Reminders" page.)
+稍后	Later
+打开腾挪 ClearC	Open ClearC
+每周自动清理完成	Weekly cleanup finished
+C 盘多出 {0}；{1}	Freed {0} on C:; {1}
+；	; 
+C 盘多出 {0}。只清了临时文件、缓存和日志，没有碰任何个人文件。每一项都记在「操作日志」里。	Freed {0} on C:. Only temporary files, caches and logs were cleaned; no personal files were touched. Every item is recorded in the "Activity log".
+已复制	Copied
+复制失败，请手动输入	Couldn't copy. Please type it in manually.
+腾挪 ClearC {0}	ClearC {0}
+Windows {0}，{1} 位	Windows {0}, {1}-bit
+C 盘剩余 {0} / 共 {1}	Free on C: {0} / {1} total
+屏幕可用区域 {0:N0} x {1:N0}	Screen work area {0:N0} x {1:N0}
+---- 最近的运行记录 ----	---- Recent run log ----
+已复制，可以直接粘贴到微信里发给开发者	Copied. You can paste it straight into WeChat and send it to the developer.
+复制失败，可以点「打开运行记录文件」再手动复制	Couldn't copy. Click "Open run log file" and copy it manually.
+还没有运行记录	No run log yet
+收起运行记录	Hide run log
+运行记录	Run log
+（点「是」表示你确认这一点）	 (Clicking "Yes" means you confirm this.)
+{0} 小时 {1} 分	{0} h {1} min
+{0} 分 {1} 秒	{0} min {1} s
+{0} 秒	{0} s
+关闭占用这些文件的聊天软件（开着的话没法搬）	Close the chat apps using these files (they can't be moved while open)
+统计要搬多少	Measure how much to move
+复制到目标盘	Copy to the target drive
+核对复制是否完整	Verify the copy is complete
+把原位置换成链接（软件照常找得到；被占用时会关掉占用的程序重试）	Replace the original location with a link (apps still find their files; if something is in use, the program using it is closed and the step is retried)
+删除 C 盘上的原目录，腾出空间	Delete the original folder on C: to free up space
+关闭占用这些文件的软件	Close the apps using these files
+统计要搬回多少	Measure how much to move back
+复制回 	Copy back to 
+拆掉链接，换回真正的文件夹	Remove the link and restore a real folder
+删除目标盘上的那份	Delete the copy on the target drive
+复制到 	Copy to 
+补复制有变化的文件到 	Copy changed files to 
+（上次的副本接着用）	 (reusing the previous copy)
+等待	Waiting
+{0}  {1}：{2}	{0}  {1}: {2}
+可以最小化窗口，任务栏图标上也有进度。做完前不要关闭本窗口。	You can minimize the window; the taskbar icon shows progress too. Don't close this window until it's done.
+准备中…	Preparing…
+已用 0 秒	Elapsed 0 s
+开始：{0}	Started: {0}
+{0}：{1}	{0}: {1}
+共用时 	Total time: 
+{0}：{1}，共用时 {2}	{0}: {1}, total time {2}
+：已完成	: Done
+每一项的结果也显示在列表里；详细过程可以在左下角「运行记录」里查看。	Each item's result is also shown in the list. For details, see "Run log" at the bottom left.
+第 1 步：列出所有文件	Step 1: List all files
+先把每个位置里的文件名和大小都看一遍，名字和大小都对得上的才可能是重复文件。	First the name and size of every file in each location are checked. Only files whose name and size both match can be duplicates.
+已看过 {0:N0} 个文件夹、{1:N0} 个文件    {2}	Checked {0:N0} folders, {1:N0} files    {2}
+第 2 步：快速筛选 {0:N0} 个同名同大小的文件	Step 2: Quick check of {0:N0} files with the same name and size
+每个文件只读开头和结尾各 64 KB，内容明显不同的在这一步就排除掉。	Only the first and last 64 KB of each file are read. Files whose content is clearly different are ruled out at this step.
+每个文件读完全部内容	reading every file in full
+小文件读全文，大文件抽 16 处	small files read in full, 16 samples from large files
+第 3 步：比对剩下的 {0:N0} 个文件	Step 3: Compare the remaining {0:N0} files
+确认内容是否真的相同（{0}）。	Confirming the content is really identical ({0}).
+{0:N0} / {1:N0} 个，已读 {2} / {3}	{0:N0} / {1:N0} files, read {2} / {3}
+整理结果	Organizing results
+第 {0} / {1} 项：{2}	Item {0} / {1}: {2}
+第 {0} / {1} 个文件夹：{2}	Folder {0} / {1}: {2}
+从 {0} 搬到 {1}	Moving from {0} to {1}
+统计这一项占了多少空间。扫描只是查看，不会删除任何东西。	Measuring how much space this item takes. Scanning only looks; nothing is deleted.
+删除前会再确认保留的那份还在、内容相同；抽样判定的文件会逐字节核对。	Before deleting, it checks again that the copy being kept still exists and has the same content. Files matched by sampling are verified byte by byte.
+已复制 {0} / {1}，{2}/秒	Copied {0} / {1}, {2}/s
+上次已复制 {0}，正在补有变化的文件：{1} / {2}	{0} already copied last time; copying changed files: {1} / {2}
+这一项还要约 	Time left for this item: about 
+这一项已用 	Time on this item: 
+已释放 {0} / 约 {1}	Freed {0} / about {1}
+逐字节核对 {0}：{1} / {2}	Verifying {0} byte by byte: {1} / {2}
+删除前核对	Check before deleting
+{0}：已数 {1:N0} 个文件，{2}	{0}: counted {1:N0} files, {2}
+统计 C 盘各目录的大小	Measuring folder sizes on C:
+找出 C 盘上最占地方的文件夹和大文件，目录多时要几分钟。	Finds the largest folders and files on C:. With many folders this can take a few minutes.
+扫描 {0}	Scanning {0}
+把每个文件夹里的文件大小数一遍。只是查看，不会改动任何东西。	Adds up the size of the files in each folder. It only looks; nothing is changed.
+已看过 {0:N0} 个文件夹、{1:N0} 个文件，{2}    {3}	Checked {0:N0} folders, {1:N0} files, {2}    {3}
+已用 	Elapsed 
+，预计还要 	, estimated time left 
+{0}，{1}	{0}, {1}
+共 {0}，已用 {1}	{0} total, {1} used
+可释放约 	Reclaimable: about 
+可释放（扫描后显示）	Reclaimable (shown after scan)
+{0} {1} 项	{0}: {1}
+扫描到 {0} 项，分成 {1} 类：{2}。每一项都可以单独选「删除」「搬走」或「跳过」，往下滚动查看全部。	Found {0} items in {1} categories: {2}. For each item you can choose "Delete", "Move" or "Skip". Scroll down to see them all.
+、	, 
+下面还有 {0} 项	{0} more below
+下面还有内容	More below
+运行后知道	Known after running
+跳过	Skip
+C 盘上没找到可以清理的东西	Nothing to clean up was found on C:
+共 {0} 项。按当前选择，可释放约 {1}。	{0} items in total. With the current selection, about {1} can be freed.
+已选 {0} 项，可释放约 {1}。	{0} selected. About {1} can be freed.
+没有选中任何项目。	Nothing selected.
+正在扫描，大目录可能要一两分钟…	Scanning. Large folders may take a minute or two…
+正在扫描…	Scanning…
+扫描可清理项	Scan for items to clean
+开始扫描...	Starting scan...
+{0}    空闲 {1}{2}	{0}    {1} free{2}
+，空间最大	, most space
+{0}    空闲 {1}，自选	{0}    {1} free, custom
+这台电脑只有 C 盘，没有可以搬去的磁盘	This PC only has drive C:, so there's no other drive to move to
+已自动选了空闲最多的 {0} 盘（剩 {1}）。也可以从下拉框换一块盘，或点「选择文件夹」。只列本机硬盘：网络盘、网盘、U 盘不能做链接目标。	The drive with the most free space, {0}:, was selected automatically ({1} free). You can pick another drive from the list, or click "Choose folder". Only local hard drives are listed: network drives, cloud drives and USB drives can't be link targets.
+这台电脑只有 C 盘，不能搬家；其他清理照常可以做。	This PC only has drive C:, so moving isn't possible. Other cleanups still work as usual.
+选择搬家目标文件夹（要在 C 盘以外的本机硬盘上）	Choose a destination folder for moving (on a local hard drive other than C:)
+请选 C 盘以外的位置	Choose a location other than C:
+搬到 C 盘自己身上腾不出空间。	Moving to C: itself doesn't free any space.
+只能选本机硬盘	Local hard drives only
+网络盘、网盘和 U 盘不能做链接目标，拔掉或断网后软件会找不到数据。	Network drives, cloud drives and USB drives can't be link targets. Once unplugged or offline, apps can't find their data.
+执行所选操作	Run selected
+没有选中任何操作	No actions selected
+在列表里把要处理的项目选成「删除」或「搬到其他盘」，再点「执行所选操作」。	In the list, set the items you want to handle to "Delete" or "Move to another drive", then click "Run selected".
+搬到其他盘	Move to another drive
+没有可用的搬家目标	No move destination available
+请在「搬家目标」里选一个 C 盘以外的本机硬盘。	Under "Move destination", choose a local hard drive other than C:.
+{0} 盘放不下	Not enough room on drive {0}:
+{0} 只剩 {1}，要搬的东西有 {2}。请换一个目标，或少选几项搬家。	{0} only has {1} free, but the items to move take {2}. Choose another destination, or move fewer items.
+{0}　{1}	{0}: {1}
+涉及约 {0}。大文件夹搬家可能要几十分钟，进度会显示在窗口中间，做完会告诉你结果。	About {0} in total. Moving large folders can take tens of minutes. Progress is shown in the middle of the window, and you'll see the result when it's done.
+\n\n要搬的东西会放到 {0}。	\n\nItems to move will go to {0}.
+删除	Delete
+\n\n其中 {0} 项会删除文件，删除后可能无法恢复。请确认这些资料不再需要。	\n\n{0} of these items will delete files, which may not be recoverable. Please make sure you no longer need this data.
+我已确认要删除的内容不再需要，删除不会给我带来损失；因删除造成的后果由我自己承担。	I have confirmed that the content to be deleted is no longer needed and that deleting it will not cause me any loss. I take responsibility for any consequences of the deletion.
+执行 {0} 项操作？	Run {0} actions?
+取消	Cancel
+开始	Start
+需要先退出{0}	Quit {0} first
+{0}正在使用要搬的文件夹。不退出的话里面的文件一直被占用，搬家不会成功。\n\n点「退出并继续」会替你关掉它们（包括右下角托盘里的）。退出前请确认没有正在发送或下载的文件。搬完后照常打开即可，聊天记录和文件都在。	{0} is using the folders to be moved. Unless it quits, the files inside stay in use and the move won't succeed.\n\nClick "Quit and continue" to close it for you (including from the system tray at the bottom right). Before quitting, make sure no files are being sent or downloaded. After the move, open it as usual. Your chat history and files will all be there.
+这次不搬这几项	Skip these this time
+退出并继续	Quit and continue
+{0} 没有退出，这次不搬：{1}	{0} didn't quit. Not moved this time: {1}
+已同意退出 {0}，开始执行后会先关掉它们	Agreed to quit {0}. It will be closed first when the run starts
+这次没搬：{0} 没有退出	Not moved this time: {0} didn't quit
+搬家目标：{0}	Move destination: {0}
+开始执行 {0} 项...	Starting {0} items...
+一键清理：先扫描...	One-click cleanup: scanning first...
+桌面	Desktop
+文档	Documents
+下载	Downloads
+图片	Pictures
+视频	Videos
+音乐	Music
+整个 {0} 盘	Entire drive {0}:
+{0}  已用 {1}	{0}  {1} used
+Word 文档	Word documents
+Excel 表格	Excel sheets
+PPT 演示	PowerPoint slides
+文本	Text
+电子书	E-books
+照片图片	Photos and images
+RAW 原片	RAW photos
+设计稿	Design files
+CAD 图纸	CAD drawings
+音频	Audio
+压缩包	Archives
+安装包	Installers
+磁盘镜像	Disk images
+全部类型	All types
+不限文件类型	Any file type
+不限	Any
+1 MB 以上	1 MB or larger
+1 GB 以上	1 GB or larger
+大小只能填数字，比如 1.5	Size must be a number, e.g. 1.5
+「到」要比「从」大	"To" must be larger than "From"
+自定义	Custom
+ 等 {0} 类	 and more ({0} types)
+大小填写有误	Invalid size
+不限大小	Any size
+ 以上	 or larger
+ 以下	 or smaller
+{0} 到 {1}	{0} to {1}
+留空表示不限	Leave blank for no limit
+文件名和内容都相同	Same name and content
+只要内容相同	Same content, any name
+，完整比对	, full comparison
+，快速比对	, quick comparison
+{0}，{1}，{2}，{3} 个位置	{0}, {1}, {2}, {3} locations
+选择要查找重复文件的文件夹	Choose a folder to search for duplicates
+{0} × {1} 份，可释放 {2}	{0} × {1} copies, can free {2}
+已完整比对	Fully compared
+每个文件都读完了全部内容，内容完全相同。	Every file was read in full. The contents are identical.
+抽样判定	Matched by sampling
+文件名、大小和 16 处抽样内容都相同。删除前会逐字节完整比对，有任何不同就不删。	Name, size and 16 sampled sections all match. Before deleting, the files are compared in full, byte by byte. If anything differs, nothing is deleted.
+没有找到重复文件	No duplicates found
+一共找到 {0} 组，只显示可释放空间最大的前 3000 组。删完这些后再查一次即可看到剩下的。	Found {0} groups in total. Only the 3,000 groups that free the most space are shown. After deleting these, search again to see the rest.
+没有找到重复文件。	No duplicates found.
+找到 {0} 组重复文件。已勾选 {1} 个，删除后释放 {2}。	Found {0} groups of duplicates. {1} selected; deleting them frees {2}.
+ C 盘个人文件夹里的 {0} 个副本受保护，不会删。	 {0} copies in personal folders on C: are protected and won't be deleted.
+已打开保护：C 盘个人文件夹里的文件不会删除	Protection on: files in personal folders on C: won't be deleted
+允许删除 C 盘个人文件夹里的文件？	Allow deleting files in personal folders on C:?
+桌面、文档、下载、图片、视频、音乐等文件夹里通常是你自己的资料。关掉保护后，这些位置的重复副本也可能被勾选删除。每组仍会至少保留一份。	Folders such as Desktop, Documents, Downloads, Pictures, Videos and Music usually hold your own files. With protection off, duplicate copies in these locations may also be selected for deletion. At least one copy in each group is always kept.
+我已确认删除这些位置的副本不会给我带来损失；因删除造成的后果由我自己承担。	I have confirmed that deleting the copies in these locations will not cause me any loss. I take responsibility for any consequences of the deletion.
+保持保护	Keep protection
+允许删除	Allow deleting
+已关闭保护：C 盘个人文件夹里的重复副本也可以勾选删除（勾选不会自动改变，需要时点「留最新的」等重新勾选）	Protection off: duplicate copies in personal folders on C: can also be selected for deletion (current selections don't change automatically; to reselect, click "Keep newest" or a similar option)
+还没选查找位置	No search location selected
+请在「查找位置」里至少勾选一个文件夹或磁盘。	Under "Search locations", select at least one folder or drive.
+文件大小填写有误	Invalid file size
+正在查找…	Searching…
+查找重复文件	Find duplicates
+开始查找重复文件：{0}。位置：{1}	Started finding duplicates: {0}. Locations: {1}
+正在停止...	Stopping...
+每组至少要留一份	Keep at least one copy in each group
+有 {0} 组把所有副本都勾上了，这些组不会删除。	In {0} groups, every copy is selected. These groups won't be deleted.
+每组至少保留一份没勾选的。	Leave at least one copy unselected in each group.
+文件会放进回收站，可以恢复；清空回收站后才真正释放空间。	Files go to the Recycle Bin and can be restored. Space is only freed after you empty the Recycle Bin.
+文件会被永久删除，不能恢复。	Files will be deleted permanently and can't be restored.
+\n\n另有 {0} 组所有副本都被勾选，这些组会跳过。	\n\nIn another {0} groups every copy is selected. These groups will be skipped.
+\n\n其中 {0} 个文件带有「注意」提示（程序目录或微信数据），请确认确实要删。	\n\n{0} of these files carry a "Caution" note (program folders or WeChat data). Please make sure you really want to delete them.
+移到回收站	Move to Recycle Bin
+永久删除	Delete permanently
+我已确认这些文件删除后不会给我带来损失；因删除造成的后果由我自己承担。	I have confirmed that deleting these files will not cause me any loss. I take responsibility for any consequences of the deletion.
+删除 {0} 个重复文件，释放 {1}？	Delete {0} duplicate files and free {1}?
+删除 {0} 个重复文件	Delete {0} duplicate files
+开始删除 {0} 个重复文件...	Starting to delete {0} duplicate files...
+这个位置不存在	This location doesn't exist
+需要重启电脑才生效	Restart your PC to apply
+稍后自己重启	Restart later
+现在重启	Restart now
+腾挪 ClearC：15 秒后重启，让刚才的设置生效	ClearC: restarting in 15 seconds to apply the settings you just changed
+{0}  已用 {1} / 共 {2}	{0}  {1} used / {2} total
+空间地图：开始扫描 {0}	Space map: started scanning {0}
+空间地图：正在停止…	Space map: stopping…
+链接，指向 	Link to 
+其他位置	another location
+（多半是搬家留下的，不占这块盘）	 (probably left by a move; takes no space on this drive)
+{0:N0} 个文件	{0:N0} files
+ · 最近修改 {0}	 · last modified {0}
+ · 部分内容没有权限读取	 · some items couldn't be read (no permission)
+文件 · 修改于 {0:yyyy-MM-dd}	File · modified {0:yyyy-MM-dd}
+这一层共 {0}，{1:N0} 个文件{2}	This level: {0}, {1:N0} files{2}
+ · 扫描于 {0:HH:mm}	 · scanned at {0:HH:mm}
+这个文件夹是空的	This folder is empty
+{0} · 修改于 {1:yyyy-MM-dd}	{0} · modified {1:yyyy-MM-dd}
+最大的 {0} 个文件	{0} largest files
+只列出 50 MB 以上的文件，最多 500 个	Only files over 50 MB are listed, up to 500
+没有超过 50 MB 的文件	No files over 50 MB
+和上次扫描相比	Compared with the last scan
+选中一行可以打开位置、压缩或删除。系统文件夹、软件安装文件夹、C 盘个人文件夹和搬家后的数据带小锁，不能在这里删。	Select a row to open its location, compress it, or delete it. System folders, app install folders, personal folders on C:, and moved data show a lock and can't be deleted here.
+{0}：不能在这里删（{1}）	{0}: can't be deleted here ({1})
+不到 100 MB	Under 100 MB
+上次扫描在 {0}。红色是变大的，绿色是变小的（只列变化超过 100 MB 的文件夹）	Last scan: {0}. Red means it grew, green means it shrank (only folders that changed by more than 100 MB are listed)
+和上次（{0}）相比，没有文件夹变化超过 100 MB	Since the last scan ({0}), no folder has changed by more than 100 MB
+这是第一次扫描这块盘。下次再扫描，就能看到哪些文件夹变大了	This is the first scan of this drive. Scan it again later to see which folders have grown
+这一项不能删	This item can't be deleted
+文件夹	Folder
+文件	File
+{0}\n\n「移到回收站」可以恢复，但要清空回收站后才真正腾出空间；「永久删除」马上腾出空间，删了就找不回来。	{0}\n\n"Move to Recycle Bin" can be undone, but the space is only freed once you empty the Recycle Bin. "Delete permanently" frees the space right away, and what you delete can't be recovered.
+删除这个{0}（{1}）？	Delete this item ({0}, {1})?
+我已确认这些资料不再需要，删除不会给我带来损失；因删除造成的后果由我自己承担。	I have confirmed I no longer need these files and that deleting them won't cause me any loss. I take responsibility for the consequences of deleting them.
+删除 {0}	Delete {0}
+这个文件夹不适合这样压缩	This folder isn't suitable for this kind of compression
+压缩这个文件夹？	Compress this folder?
+{0}\n\n用 Windows 自带的 NTFS 压缩：文件照常打开、照常修改，只是占的空间变小。文档、代码、日志通常能省一半；照片、视频、压缩包几乎省不了。文件多的话要几分钟。	{0}\n\nUses the NTFS compression built into Windows. Files open and edit as usual; they just take up less space. Documents, code, and logs usually shrink by about half; photos, videos, and archives barely shrink at all. With many files, this can take a few minutes.
+压缩	Compress
+压缩文件夹	Compress folder
+共 {0} 个文件夹，正在统计大小…	{0} folders, calculating sizes…
+请等当前操作做完	Please wait for the current operation to finish
+另一个操作还在进行中。	Another operation is still in progress.
+修复链接？	Repair link?
+让 C 盘上的 {0} 重新指向 {1}。修好后软件就能照常找到数据。	Point {0} on C: back to {1}. Once it's repaired, the app can find its data as usual.
+修复	Repair
+链接已修复	Link repaired
+没修好	Couldn't repair
+删除多余的副本（{0}）？	Delete the extra copy ({0})?
+C 盘上的原文件夹 {0} 还在，软件用的是它；目标盘上的 {1} 是上次没搬完留下的副本。删掉它可以腾出目标盘的空间，C 盘不受影响。	The original folder {0} is still on C: and is the one the app uses. {1} on the target drive is a copy left over from an unfinished move. Deleting it frees space on the target drive; C: is not affected.
+我已确认 C 盘上的原文件夹还在，删掉这份副本不会给我带来损失。	I have confirmed the original folder is still on C: and that deleting this copy won't cause me any loss.
+删除副本	Delete copy
+删除多余的副本	Delete extra copy
+把 {0} 复制回 C 盘的 {1}，核对一致后拆掉链接、换回真正的文件夹，最后删除目标盘上的那份。\n\nC 盘现在剩 {2}，这个文件夹约 {3}。	Copies {0} back to {1} on C:, verifies that they match, removes the link and puts the real folder back, then deletes the copy on the target drive.\n\nC: now has {2} free; this folder is about {3}.
+把「{0}」搬回 C 盘？	Move "{0}" back to C:?
+搬回	Move back
+{0} 正在从这个文件夹运行，不退出的话没法搬回。点「退出并继续」会替你关掉它们（没保存的内容请先保存）。	Apps running from this folder ({0}) must be closed before it can be moved back. Click "Quit and continue" to have them closed for you (save any unsaved work first).
+{0} 正在使用这个文件夹，不退出的话没法搬回。点「退出并继续」会替你关掉它们。	This folder is in use by {0}, so it can't be moved back until they're closed. Click "Quit and continue" to have them closed for you.
+搬回 C 盘：{0}	Move {0} back to C:
+当前：已开启，系统文件已压缩存放	Current: on, system files are stored compressed
+当前：未开启	Current: off
+{0}（约 {1}）	{0} (about {1})
+没有页面文件	No page file
+当前：{0}	Current: {0}
+，由系统自动管理	, managed by Windows
+{0}  空闲 {1}	{0}  {1} free
+当前：已关闭休眠，没有 hiberfil.sys	Current: hibernation off, no hiberfil.sys
+当前：精简（只留快速启动），占 {0}	Current: reduced (Fast Startup only), uses {0}
+当前：完整休眠，占 {0}	Current: full hibernation, uses {0}
+开启系统压缩？	Turn on system compression?
+关闭系统压缩？	Turn off system compression?
+Windows 会把系统文件压缩存放，通常省 2 到 4 GB。要 10 到 30 分钟，期间可以照常用电脑，不需要重启。	Windows will store system files compressed, usually saving 2 to 4 GB. It takes 10 to 30 minutes. You can keep using your PC in the meantime, and no restart is needed.
+系统文件会解压回原样，C 盘会多用 2 到 4 GB。要 10 到 30 分钟。	System files will be decompressed back to normal, using 2 to 4 GB more on C:. It takes 10 to 30 minutes.
+开启	Turn on
+关闭	Turn off
+开启系统压缩	Turn on system compression
+关闭系统压缩	Turn off system compression
+把页面文件改到 {0} 盘？	Move the page file to drive {0}:?
+C 盘不再放页面文件，改为放在 {0}\\pagefile.sys，大小由系统自动管理。重启后生效，C 盘会多出几个 GB。{0} 必须是一直插着的本机硬盘。	The page file will no longer be on C:. It will be at {0}\\pagefile.sys, with its size managed by Windows. This takes effect after a restart and frees a few GB on C:. {0} must be a local drive that is always connected.
+改到这块盘	Use this drive
+没改成	Couldn't change it
+页面文件的新位置要重启电脑后才生效。	The new page file location takes effect after you restart your PC.
+页面文件恢复系统默认？	Restore the default page file setting?
+恢复成 Windows 自动管理（通常放在 C 盘）。重启后生效。	Let Windows manage it automatically again (usually on C:). This takes effect after a restart.
+恢复	Restore
+页面文件的设置要重启电脑后才生效。	Page file settings take effect after you restart your PC.
+整个删掉休眠文件。睡眠不受影响，但没有「休眠」和「快速启动」了，开机可能慢几秒。	Removes the hibernation file completely. Sleep still works, but "Hibernate" and "Fast Startup" will no longer be available, and startup may take a few seconds longer.
+休眠文件缩小到一半左右，只保留「快速启动」，开机速度不变，只是不能手动休眠。	Shrinks the hibernation file to about half and keeps only "Fast Startup". Startup speed stays the same; you just can't hibernate manually.
+恢复完整的休眠功能，休眠文件会变回约等于内存四到七成的大小。	Restores full hibernation. The hibernation file grows back to about 40 to 70 percent of your memory size.
+修改休眠设置？	Change hibernation settings?
+选择要压缩的文件夹	Choose a folder to compress
+请先退出 Docker Desktop	Quit Docker Desktop first
+在任务栏右下角的 Docker 图标上右键，选「Quit Docker Desktop」，再回来压缩。	Right-click the Docker icon at the bottom right of the taskbar, choose "Quit Docker Desktop", then come back and compress.
+压缩前会先关闭所有 WSL（wsl --shutdown），正在 WSL 里运行的程序会被结束。	All of WSL will be shut down first (wsl --shutdown), and any programs running in WSL will be closed.
+用这个磁盘的虚拟机要先关掉。	Shut down any virtual machine that uses this disk first.
+压缩「{0}」？	Compress "{0}"?
+{0}\n\n现在 {1}。{2}压缩不会删除里面的任何数据，只把已经空出来的部分还给 Windows，可能要几分钟。	{0}\n\nCurrent size: {1}. {2} Compressing won't delete any data inside; it only gives space that is already free back to Windows. This may take a few minutes.
+压缩虚拟磁盘：{0}	Compress virtual disk: {0}
+请先在「清理 C 盘」页的「搬家目标」里选一块 C 盘以外的硬盘。	First choose a drive other than C: under "Move destination" on the "Clean up C:" page.
+安卓*	Android*
+{0}（{1}）整个搬到 {2}，原位置留一个链接，软件照常使用。	Moves all of {0} ({1}) to {2} and leaves a link in the original location, so the software keeps working as usual.
+\n\n{0} 正在运行，搬之前会替你关掉它们（正在运行的模拟器或虚拟机会被结束）。	\n\nThese will be closed for you before the move: {0}. Any running emulator or virtual machine will be stopped.
+把「{0}」搬到其他盘？	Move "{0}" to another drive?
+搬	Move
+搬到其他盘：{0}	Move to another drive: {0}
+正在读取已安装的软件，并统计每个占多少空间…	Reading installed apps and measuring how much space each one uses…
+统计已安装的软件	Scan installed apps
+{0} 个软件，合计约 {1}	{0} apps, about {1} in total
+没有符合条件的软件	No matching apps
+约 	About 
+版本 	Version 
+安装于 	Installed 
+应用商店	Microsoft Store
+已搬到 {0}	Moved to {0}
+没有记录安装位置	Install location not recorded
+检查「{0}」能不能搬	Checking whether "{0}" can be moved
+应用商店的软件由 Windows 管理	Microsoft Store apps are managed by Windows
+「{0}」是从应用商店装的，本工具不能搬它。\n\n有的应用可以在 Windows 设置里换盘：设置 → 应用 → 已安装的应用，点它右边的「…」，选「移动」（没有这个选项就是不支持）。	"{0}" was installed from the Microsoft Store, so ClearC can't move it.\n\nSome apps can be moved to another drive in Windows Settings: Settings → Apps → Installed apps, click "…" next to the app, then choose "Move" (if that option isn't there, the app doesn't support it).
+打开 Windows 设置	Open Windows Settings
+「{0}」不适合搬	"{0}" shouldn't be moved
+这台电脑没有 C 盘以外的硬盘，或者还没选搬家目标。请先在「清理 C 盘」页的「搬家目标」里选一块硬盘。	This PC has no drive other than C:, or no move destination has been chosen yet. Choose a drive under "Move destination" on the "Clean up C:" page first.
+它给资源管理器装了右键菜单之类的组件（{0}），桌面和文件夹窗口一直开着这些文件，文件夹被占着搬不了。这类软件通常不大，建议留在 C 盘。	It adds components such as right-click menu entries to File Explorer ({0}). The desktop and folder windows keep these files open, so the folder is locked and can't be moved. Apps like this are usually small, so it's best to leave them on C:.
+\n\n它只占 {0}，搬走腾出的空间不多。	\n\nIt only takes up {0}, so moving it won't free much space.
+把安装文件夹 {0}（{1}）整个搬到 {2}，C 盘原位置留一个链接。桌面快捷方式、开始菜单、卸载和自动更新都照常可用，不用重装。\n\n搬之前先核对两边的文件完全一致，再删掉 C 盘上的那份。{3}	Moves the whole install folder {0} ({1}) to {2} and leaves a link in its original location on C:. Desktop shortcuts, the Start menu, uninstalling, and automatic updates all keep working, with no need to reinstall.\n\nThe files on both sides are verified to be identical before the copy on C: is deleted.{3}
+\n\n{0} 正在运行，搬之前会替你关掉（没保存的内容请先保存）。	\n\nThese will be closed for you before the move: {0}. Save any unsaved work first.
+\n\n要注意：{0} 盘要一直接着；以后软件大版本升级时，个别安装程序会把它重新装回 C 盘，到时在这里再搬一次就好。要搬回来，到「搬家管理」点「搬回 C 盘」。	\n\nNote: drive {0}: must stay connected. When the app gets a major update later, some installers put it back on C:; if that happens, just move it again here. To move it back, go to "Moved folders" and click "Move back to C:".
+关掉并搬走	Close and move
+还有程序开着里面的文件。请退出这个软件（包括屏幕右下角托盘里的图标），关掉打开着这个文件夹的窗口，再搬一次；已经复制好的部分下次直接用，很快	Some programs still have files in it open. Quit this app (including its icon in the system tray at the bottom right of the screen), close any windows showing this folder, and try the move again. Whatever has already been copied will be reused next time, so it'll be quick
+这个软件的安装程序没有写明装在哪里。	This app's installer didn't record where it was installed.
+从应用商店卸载 {0}（{1}）。	Uninstalls {0} ({1}) through the Microsoft Store.
+会打开 {0} 自带的卸载程序，按它的提示一步步操作即可。卸载完回到这里点「检查残留」，看看还有没有剩下的文件夹。	Opens the uninstaller that came with {0}; just follow its steps. When it's done, come back and click "Check leftovers" to see whether any folders were left behind.
+卸载「{0}」？	Uninstall "{0}"?
+\n\n卸载会删除这个软件，它保存在软件里的数据可能一起被删掉。	\n\nUninstalling removes the app, and data it stores may be deleted along with it.
+卸载	Uninstall
+卸载 {0}	Uninstall {0}
+打开卸载程序	Open uninstaller
+已打开「{0}」的卸载程序。卸载完成后点「检查残留」，看看还剩下哪些文件夹。	The uninstaller for "{0}" is open. When it's done, click "Check leftovers" to see which folders are left.
+打不开卸载程序	Couldn't open the uninstaller
+看起来还没卸载完	The uninstall doesn't seem finished yet
+系统里还登记着「{0}」。等卸载程序走完，再点「检查残留」。	"{0}" is still registered in Windows. Wait for the uninstaller to finish, then click "Check leftovers".
+没发现残留	No leftovers found
+「{0}」已经卸载干净了。	"{0}" has been completely uninstalled.
+{0}（{1}）	{0} ({1})
+「{0}」留下了 {1} 个文件夹	"{0}" left {1} folders behind
+这些文件夹以软件名命名，多半是卸载后剩下的设置和缓存。会移到回收站，需要的话还能恢复。	These folders are named after the app and are most likely settings and caches left after uninstalling. They'll be moved to the Recycle Bin, so you can restore them if needed.
+我已确认这些是已卸载软件留下的，删除不会给我带来损失。	I have confirmed these were left by the uninstalled app and that deleting them won't cause me any loss.
+先不删	Not now
+清理「{0}」的残留	Clean up leftovers of "{0}"
+只有 exe 版本支持定时任务	Only the exe version supports scheduled tasks
+本工具现在是从临时文件夹运行的（{0}），比如直接在压缩包里双击打开的。这个位置过后会被清掉，任务就找不到本工具了。\n\n请先把本工具复制到一个固定的位置（比如 D:\\工具），从那里打开，再开启。	ClearC is running from a temporary folder ({0}), for example because it was opened directly from inside a zip file. That location will be cleared later, and the task would no longer find ClearC.\n\nCopy ClearC to a permanent location first (for example D:\\Tools), open it from there, and then turn this on.
+腾挪 ClearC：每次登录电脑后和每天中午各检查一次 C 盘剩余空间，低于设定值时提醒（每天最多一次）。在工具的「自动提醒」页关掉开关即可删除本任务。	ClearC: checks free space on C: after each sign-in and at noon every day, and reminds you when it falls below the set limit (at most once a day). To remove this task, turn off the switch on the "Reminders" page in ClearC.
+腾挪 ClearC：每周日自动清理一次临时文件、缓存和日志（不搬家、不清空回收站、不碰个人文件夹）。在工具的「自动提醒」页关掉开关即可删除本任务。	ClearC: cleans up temporary files, caches, and logs automatically every Sunday (doesn't move anything, empty the Recycle Bin, or touch personal folders). To remove this task, turn off the switch on the "Reminders" page in ClearC.
+更新任务计划	Update scheduled task
+改用 {0}（原来的 {1} 不在了或版本更旧）	Switched to {0} (the previous {1} is missing or older)
+加上「登录电脑后检查」	Added "Check after sign-in"
+不用开着本工具，也不用设置开机启动。开启后会在 Windows「任务计划程序」里建一个任务（{0}）：每次登录电脑 2 分钟后、以及每天中午 12 点，Windows 会在后台运行一下本工具（{1}）检查 C 盘，空间够就什么都不显示，查完马上退出。关掉开关就删除这个任务。\n请把本工具放在固定的位置，不要删掉；挪了位置后打开一次，任务会自动改用新位置。	ClearC doesn't need to stay open or start with Windows. Turning this on creates a task ({0}) in Windows "Task Scheduler": 2 minutes after each sign-in and at 12 noon every day, Windows briefly runs ClearC ({1}) in the background to check C:. If there's enough space, nothing is shown, and it exits as soon as the check is done. Turning the switch off deletes the task.\nKeep ClearC in a fixed location and don't delete it. If you move it, open it once and the task will switch to the new location automatically.
+只有 exe 版本支持自动提醒。	Only the exe version supports reminders.
+本工具的位置变了，请把开关关掉再打开一次，让任务改用现在的位置。	ClearC has been moved. Turn the switch off and on again so the task uses the current location.
+上次自动清理：{0}，{1}	Last automatic cleanup: {0}, {1}
+任务名：{0}。	Task name: {0}.
+只有 exe 版本支持每周自动清理。	Only the exe version supports weekly cleanup.
+{0}：已用 {1}，剩余 {2}	{0}: {1} used, {2} free
+最近 {0} 天有记录：C 盘剩余从 {1} 变成 {2}（{3}{4}）。蓝色正常，橙色表示用掉了八成五以上，红色表示快满了。	Records from the last {0} days: free space on C: went from {1} to {2} ({3}{4}). Blue is normal, orange means over 85% is used, red means it's nearly full.
+多了 	up 
+少了 	down 
+还没有记录。每次打开本工具都会记一笔。	No records yet. One is added each time you open ClearC.
+空间不足提醒的界限	Low-space reminder threshold
+开启空间不足提醒	Turn on low-space reminder
+开启每周自动清理	Turn on weekly cleanup
+没开成	Couldn't turn it on
+任务计划：{0}	Scheduled task: {0}
+关闭空间不足提醒	Turn off low-space reminder
+关闭每周自动清理	Turn off weekly cleanup
+已删除任务计划	Scheduled task deleted
+{0:N0} 条	{0:N0} entries
+还没有操作记录。删除、搬运等操作做完后会出现在这里	No activity yet. Deletions, moves, and other actions will appear here once they're done
+没有符合条件的记录	No matching entries
+永久保存	Keep forever
+1 个月	1 month
+3 个月	3 months
+半年	6 months
+1 年	1 year
+2 年	2 years
+{0} 个月	{0} months
+·  日志是普通的 txt 文件，放在 {0}，每个月一个，可以用记事本直接打开。	·  Logs are plain .txt files stored in {0}, one per month, and can be opened directly in Notepad.
+·  删除、搬运、合并、压缩、卸载和系统设置的每一次改动都会记下来：什么时间、做了什么、对哪个文件或文件夹、结果怎样。只记操作，不保存文件内容。	·  Every delete, move, merge, compression, uninstall, and system setting change is recorded: when, what was done, to which file or folder, and the result. Only actions are logged; file contents are never saved.
+·  当前保存 {0}：每次打开本工具时，会自动删除 {1:yyyy-MM-dd}（{0}前）之前的记录，删掉后找不回来。	·  Currently kept for {0}: each time ClearC opens, entries from before {1:yyyy-MM-dd} ({0} ago) are deleted automatically and can't be recovered.
+·  当前设置为永久保存：记录不会自动删除，日志文件会越来越多（通常每月几十 KB 到几 MB）。	·  Currently set to keep forever: entries are never deleted automatically, so log files keep piling up (usually tens of KB to a few MB per month).
+保存时间改成「{0}」？	Change log retention to "{0}"?
+{0:yyyy-MM-dd} 之前的操作记录会马上删除，删掉后找不回来。	Entries from before {0:yyyy-MM-dd} will be deleted right away and can't be recovered.
+改	Change
+修改日志保存时间	Change log retention
+删除超过保存时间的旧记录	Delete entries older than the retention period
+{0} 条	{0} entries
+没有可以合并的	Nothing to merge
+合并只适用于同一块盘上的副本：勾选的副本要和没勾选（保留）的那份在同一块盘上。	Merging only works for copies on the same drive: the checked copies must be on the same drive as the unchecked one you keep.
+合并后，每个位置的文件都还在，打开、复制都和原来一样，只是这几个位置共用一份空间。\n\n要注意：合并后它们其实是同一个文件，改了其中一个位置，其他位置也会跟着变。所以适合照片、视频、安装包、压缩包这类不会再改的文件。	After merging, the file is still in every location and opens and copies just as before; these locations simply share the space of one copy.\n\nNote: after merging they are really the same file, so changing it in one location changes it in all the others too. This suits files you won't edit again, such as photos, videos, installers, and archives.
+\n\n另有 {0} 个勾选的副本和保留的那份不在同一块盘上，不能合并，会跳过。	\n\n{0} other checked copies aren't on the same drive as the one being kept, so they can't be merged and will be skipped.
+合并 {0} 个重复文件，腾出 {1}？	Merge {0} duplicate files and free up {1}?
+我知道合并后改动一个位置，其他位置会跟着变。	I understand that after merging, changing the file in one location changes it in the others too.
+合并	Merge
+合并 {0} 个重复文件	Merge {0} duplicate files
+[内部] 	[Internal] 
+后台出错：{0}	Background error: {0}
+完成	Done
+C 盘剩余：{0} → {1}，释放了 {2}	Free on C: {0} → {1}, freed {2}
+有 {0} 个文件夹已经复制好，但原文件夹还被别的程序占着，没换成链接。彻底退出相关的聊天软件（包括右下角托盘图标）后再点一次「执行」，会接着用复制好的副本，很快完成。	{0} folders have been copied, but the original folders are still in use by other programs, so they weren't replaced with links. Fully quit the related chat apps (including their tray icons at the bottom right), then click "Run" again. The existing copies will be reused, so it'll finish quickly.
+完成，释放 {0}，C 盘现在剩余 {1}	Done. Freed {0}; C: now has {1} free
+已完成：C 盘从剩余 {0} 变成 {1}。每一项的结果写在列表里；想看还剩什么，再点「扫描」。	Done: free space on C: went from {0} to {1}. The result for each item is shown in the list; to see what's left, click "Scan" again.
+……另有 {0} 项，见左下角「运行记录」	… and {0} more, see "Run log" at the bottom left
+执行完成	Run complete
+共用时 {0}。C 盘剩余 {1} → {2}，释放 {3}。{4}	Took {0}. Free on C: {1} → {2}, freed {3}.{4}
+{0}看过 {1:N0} 个文件夹、{2:N0} 个文件，找到 {3:N0} 组重复。	{0} Checked {1:N0} folders and {2:N0} files, found {3:N0} groups of duplicates.
+已停止。	Stopped.
+查找完成。	Search complete.
+已停止，找到 {0} 组	Stopped, found {0} groups
+完成，找到 {0} 组	Done, found {0} groups
+已自动勾选：每组留最新的一份，其余删除。可以改勾选，或点上面的按钮换一种留法。	Selected automatically: the newest copy in each group is kept and the rest will be deleted. You can change the selection, or use the buttons above to keep a different copy.
+\n\n文件在回收站里，清空回收站后才真正释放磁盘空间。	\n\nThe files are in the Recycle Bin; disk space is only freed after you empty it.
+文件在回收站里，清空回收站后才真正释放空间。	The files are in the Recycle Bin; space is only freed after you empty it.
+完成，删除了 {0} 个文件	Done, deleted {0} files
+删除了 {0} 个重复文件。{1}	Deleted {0} duplicate files. {1}
+没删的（内容和保留的那份不完全相同，或文件被占用）记在左下角的「运行记录」里。	Files that weren't deleted (content not identical to the kept copy, or file in use) are listed in "Run log" at the bottom left.
+删除完成	Deletion complete
+删除了 {0} 个重复文件，共用时 {1}。{2}\n\n没删的（内容和保留的那份不完全相同，或文件被占用）记在「运行记录」里。	Deleted {0} duplicate files in {1}.{2}\n\nFiles that weren't deleted (content not identical to the kept copy, or file in use) are listed in "Run log".
+没能和上次比较	Couldn't compare with the last scan
+这次扫描中途停止了，不和上次比较	This scan was stopped partway, so it isn't compared with the last one
+完成，{0:N0} 个文件，共 {1}	Done, {0:N0} files, {1} in total
+扫描中途停止了，下面只是已经看过的部分	The scan was stopped partway; only the part already scanned is shown below
+没有完成	Not completed
+已删除 {0}	Deleted {0}
+没有删掉	Couldn't delete
+完成，省了 {0}	Done, saved {0}
+上次压缩：{0}，实际占用 {1} → {2}，省了 {3}	Last compressed: {0}, size on disk {1} → {2}, saved {3}
+压缩完成	Compression complete
+{0}\n\n实际占用 {1} → {2}，省了 {3}。文件照常使用。	{0}\n\nSize on disk {1} → {2}, saved {3}. Files work as usual.
+系统压缩完成	System compression complete
+C 盘可用空间变化：{0}{1}	Free space on C: {0}{1}
+{0} → {1}，省了 {2}。	{0} → {1}, saved {2}.
+大小没有变化（{0}）。可能里面本来就没有可回收的空间，或者虚拟磁盘还在使用中。\n\n{1}	Size didn't change ({0}). There may be no reclaimable space inside, or the virtual disk is still in use.\n\n{1}
+虚拟磁盘压缩完成	Virtual disk compressed
+已搬 {0}	Moved {0}
+没搬成	Couldn't move
+搬好了	Moved
+已搬到 {0}。原位置留了链接，软件照常使用。{1}	Moved to {0}. A link was left at the original location, so the app works as usual.{1}
+「{0}」搬好了	"{0}" moved
+已搬到 {0}，C 盘腾出约 {1}。原位置留了链接，快捷方式和开始菜单照常能打开。建议现在打开一次这个软件，确认一切正常。\n\n要搬回来，到「搬家管理」点「搬回 C 盘」。{2}	Moved to {0}, freeing about {1} on drive C:. A link was left at the original location, so shortcuts and the Start menu still open the app as usual. It's a good idea to open the app once now to make sure everything works.\n\nTo move it back, go to "Moved folders" and click "Move back to C:".{2}
+没有搬，原文件夹没动。	Not moved. The original folder was left untouched.
+没读到已安装的软件	Couldn't read the installed apps
+已卸载	Uninstalled
+没卸载成	Couldn't uninstall
+残留已清理	Leftovers cleaned up
+「{0}」留下的 {1} 个文件夹已移到回收站。清空回收站后才真正腾出空间。	{1} folders left by "{0}" were moved to the Recycle Bin. The space is freed only after you empty the Recycle Bin.
+共 {0} 个文件夹，其中 {1} 个正常，已经帮 C 盘腾出约 {2}。	{0} folders in total, {1} working normally. About {2} has been freed on C: so far.
+已搬回 C 盘	Moved back to C:
+多余的副本已删除	Extra copy deleted
+搬回了 {0}，软件照常使用。	Moved {0} back. The app works as usual.
+腾出了 {0}。	Freed {0}.
+完成，合并了 {0} 个文件	Done. Merged {0} files
+合并了 {0} 个重复文件。每个位置的文件都还在，只占一份空间。	Merged {0} duplicate files. The files are still in every location, but take up the space of only one copy.
+没合并的（内容不完全相同、文件正被打开、不在同一块盘）记在左下角的「运行记录」里。	Files that weren't merged (contents not identical, file open, or not on the same drive) are listed in the "Run log" at the bottom left.
+一键清理	One-click cleanup
+还有操作在进行中	An operation is still in progress
+现在关闭可能留下搬了一半的文件夹。确定要关闭吗？	Closing now may leave a folder half moved. Are you sure you want to close?
+继续等待	Keep waiting
+仍然关闭	Close anyway
+进度卡片已收起，进度见窗口底部和任务栏图标；做完会弹窗告诉你。	The progress card is hidden. You can follow progress at the bottom of the window and on the taskbar icon; a message will pop up when it's done.
+C 盘快满时提醒你？	Remind you when C: is almost full?
+开启后，每次登录电脑和每天中午，Windows 会在后台检查一次 C 盘。剩余空间低于 20 GB 时在屏幕右下角提醒你（每天最多一次），空间够就什么都不显示。\n\n不需要一直开着本工具，也不需要开机启动。以后可以在「自动提醒」页随时关掉。	Once this is on, Windows checks drive C: in the background each time you sign in and every day at noon. When free space drops below 20 GB, a reminder appears at the bottom right of the screen (at most once a day). If there's enough space, nothing is shown.\n\nClearC doesn't need to stay open or start with Windows. You can turn this off anytime on the "Reminders" page.
+以后再说	Not now
+开启提醒	Turn on reminder
+提醒已开启	Reminder turned on
+在「自动提醒」页可以改提醒的界限，或者关掉。	You can change the reminder threshold or turn it off on the "Reminders" page.
+版本 {0}	Version {0}
+==== 腾挪 ClearC {0} 启动；Windows {1}；屏幕可用区域 {2:N0} x {3:N0}	==== ClearC {0} started; Windows {1}; usable screen area {2:N0} x {3:N0}
+自动删除超过保存时间的旧记录	Automatically delete records older than the retention period
+{0} 条，保存时间 {1} 个月	{0} entries, kept for {1} months
+使用前请先阅读安全风险提示	Please read the safety notice before use
+本工具会按你的选择删除或搬移电脑上的文件。删除的文件可能无法恢复，存在资料丢失的风险。\n\n每次删除前，请确认这些资料确实不再需要、删除不会给你带来损失；重要资料请先备份。因使用本工具造成的资料丢失或其他损失，责任由使用者自行承担，开发者不承担责任。\n\n完整说明随时可以在左侧「帮助」里查看。	ClearC deletes or moves files on your PC based on your choices. Deleted files may not be recoverable, so there is a risk of data loss.\n\nBefore each deletion, make sure you really no longer need the data and that deleting it won't cause you any loss; back up important data first. You are solely responsible for any data loss or other damage caused by using ClearC; the developer accepts no liability.\n\nYou can read the full details anytime under "Help" on the left.
+我已阅读并了解上述风险，同意自行承担使用本工具的后果。	I have read and understood the risks above, and I agree to take responsibility for the consequences of using ClearC.
+退出	Exit
+同意并继续	Agree and continue
+{0:yyyy-MM-dd HH:mm:ss}  已同意（版本 {1}）	{0:yyyy-MM-dd HH:mm:ss}  Agreed (version {1})
+用户已同意安全风险提示	User agreed to the safety notice
+  跳过（在个人文件夹里，不删）：{0}	  Skipped (in personal folders, not deleted): {0}
+跳过：在个人文件夹里，不删	Skipped: in personal folders, not deleted
+用户临时文件	User temp files
+各软件运行时的临时文件，关掉软件就没用了	Temporary files created by apps while running; no longer needed once the apps are closed
+系统临时文件	System temp files
+系统和安装程序的临时文件	Temporary files from Windows and installers
+Windows 更新下载缓存	Windows Update download cache
+已装完的更新安装包，下次更新会重新下载需要的部分	Packages for updates that are already installed; the next update downloads whatever it needs again
+系统升级残留目录	Leftover upgrade folders
+大版本升级留下的临时目录	Temporary folders left by major Windows upgrades
+崩溃转储与错误报告	Crash dumps and error reports
+蓝屏和程序崩溃时留下的调试文件，只对微软工程师有用	Debug files left by blue screens and app crashes; only useful to Microsoft engineers
+系统组件日志	System component logs
+Windows 更新的安装日志	Windows Update installation logs
+缩略图缓存	Thumbnail cache
+文件夹里图片的小预览图，打开文件夹时会重新生成	Small previews of images in folders; rebuilt when you open the folder
+Chrome 浏览器缓存	Chrome cache
+网页缓存。请先关闭浏览器。不影响密码、书签、历史记录	Web page cache. Close the browser first. Passwords, bookmarks and history are not affected
+Edge 浏览器缓存	Edge cache
+pip 缓存	pip cache
+Python 装包时下载的安装包副本，再装时会重新下载	Copies of packages downloaded when installing Python packages; downloaded again when needed
+npm 缓存	npm cache
+Node.js 装包时的下载缓存	Download cache from installing Node.js packages
+Clash Verge 代理日志	Clash Verge proxy logs
+代理软件的运行日志，会无限增长。建议在它设置里把日志等级改成 warn	Run logs of the proxy app, which grow without limit. Consider setting the log level to warn in its settings
+Intel XTU 超频日志	Intel XTU overclocking logs
+Intel 超频组件的日志，会无限增长	Logs of the Intel overclocking component, which grow without limit
+Apple 设备系统更新包	Apple device update packages
+给 iPhone/iPad 升级时下载的固件，装完就没用了	Firmware downloaded to update an iPhone/iPad; no longer needed once installed
+Dell 更新程序缓存	Dell Update cache
+戴尔驱动更新工具下载的安装包	Installers downloaded by Dell's driver update tool
+罗技 Options+ 缓存	Logitech Options+ cache
+罗技驱动的更新包缓存	Cached update packages for Logitech drivers
+NVIDIA 安装包与着色器缓存	NVIDIA installers and shader cache
+显卡驱动安装包和游戏着色器缓存，游戏首次启动会重建	Graphics driver installers and game shader cache; rebuilt the first time a game starts
+Intel 显卡着色器缓存	Intel graphics shader cache
+核显着色器缓存	Shader cache for integrated graphics
+Cursor 状态库备份	Cursor state database backup
+Cursor 编辑器状态库的备份副本，主文件保留	Backup copy of the Cursor editor's state database; the main file is kept
+清空回收站	Empty Recycle Bin
+回收站里是你以前删掉、但还能找回的文件。清空后就永远找不回了，请先打开回收站确认里面没有要的东西	The Recycle Bin holds files you deleted earlier that can still be restored. Once it's emptied, they're gone for good. Open the Recycle Bin first to make sure there's nothing you need
+Windows 传递优化缓存	Windows Delivery Optimization cache
+Windows 更新的点对点分发缓存	Peer-to-peer distribution cache for Windows Update
+NI 安装包缓存	NI installer cache
+LabVIEW 等 NI 软件的安装媒体缓存。软件本身不受影响；以后修复或重装时需重新下载	Installation media cache for NI software such as LabVIEW. The software itself isn't affected; repairing or reinstalling it later will require downloading again
+上一版 Windows 的完整副本。删后不能回退到上一版系统（系统升级 10 天后会自动删）	A full copy of your previous version of Windows. After deleting it, you can't go back to the previous version (Windows deletes it automatically 10 days after an upgrade)
+执行	Run
+重建 Windows 搜索索引	Rebuild Windows Search index
+搜索索引膨胀时可重建，重建后通常只剩 1 到 2 GB。重建期间（约 1 小时）搜文件会变慢	Rebuild the search index if it has grown too large; afterward it's usually only 1 to 2 GB. File searches are slower while it rebuilds (about 1 hour)
+关闭休眠 (hiberfil.sys)	Turn off hibernation (hiberfil.sys)
+休眠文件约等于内存大小。关闭后睡眠不受影响，只是没有「休眠」和「快速启动」	The hibernation file is about the size of your RAM. Turning it off doesn't affect Sleep; you just lose "Hibernate" and "Fast Startup"
+禁用 XTU 超频日志服务	Disable XTU overclocking log service
+外星人 Command Center 的 CPU 超频组件，会持续写几 GB 日志。不超频可禁用，AWCC 的风扇和性能档位不受影响	The CPU overclocking component of Alienware Command Center, which keeps writing several GB of logs. If you don't overclock, you can disable it; AWCC's fan and performance modes aren't affected
+WinSxS 组件清理 (DISM)	WinSxS component cleanup (DISM)
+清掉系统更新替换下来的旧组件，通常能省 2 到 10 GB。耗时 10 到 20 分钟，完成后建议重启	Removes old components replaced by Windows updates, usually saving 2 to 10 GB. Takes 10 to 20 minutes; restarting afterward is recommended
+微信/QQ 缓存 (Roaming)	WeChat/QQ cache (Roaming)
+微信、QQ、企业微信、腾讯会议的聊天图片、视频和缓存。搬之前要先退出它们，开着的话会提醒你	Chat images, videos and cache from WeChat, QQ, WeCom and Tencent Meeting. Quit them before moving; you'll be reminded if any are still open
+微信/QQ 缓存 (Local)	WeChat/QQ cache (Local)
+微信、QQ 等腾讯软件的本地缓存	Local cache of WeChat, QQ and other Tencent apps
+微信文件 (旧版)	WeChat files (old version)
+微信 3.x 的聊天记录和接收的文件	Chat history and received files from WeChat 3.x
+微信文件 (新版)	WeChat files (new version)
+微信 4.x 的聊天记录、图片、视频和接收的文件，通常是 C 盘最大的一块	Chat history, images, videos and received files from WeChat 4.x; usually the biggest item on C:
+企业微信文件	WeCom files
+企业微信的聊天记录、图片、文件和缓存	WeCom chat history, images, files and cache
+QQ 文件	QQ files
+QQ 的聊天记录和接收的文件	QQ chat history and received files
+飞书聊天记录	Feishu chat history
+飞书的聊天记录、图片、文件和缓存。搬之前要先退出飞书	Feishu chat history, images, files and cache. Quit Feishu before moving
+钉钉聊天记录	DingTalk chat history
+钉钉的聊天记录、图片和缓存（每个账号一个以 _v2 结尾的文件夹）。搬之前要先退出钉钉	DingTalk chat history, images and cache (one folder ending in _v2 per account). Quit DingTalk before moving
+Telegram 聊天记录	Telegram chat history
+Telegram 电脑版的本地数据、缓存和程序本身。搬之前要先退出 Telegram	Local data, cache and the program itself for Telegram Desktop. Quit Telegram before moving
+桌面上的所有文件。搬后桌面照常显示，文件实际在 D 盘	All files on your Desktop. After moving, the Desktop shows them as usual, but the files are actually on drive D:
+下载文件夹。搬后浏览器照常下载到这里，文件实际在 D 盘	The Downloads folder. After moving, browsers still download here as usual, but the files are actually on drive D:
+用户目录 .cache	User folder .cache
+各类开发工具的缓存（HuggingFace 模型、uv、playwright 等）。删了会重新下载；也可搬走	Caches of various developer tools (HuggingFace models, uv, playwright, etc.). Deleted items are downloaded again; you can also move them
+conda 环境 (.conda)	conda environments (.conda)
+conda 创建的 Python 环境。搬走后照常使用；删了要重建环境	Python environments created by conda. They work as usual after moving; if deleted, the environments must be rebuilt
+pip --user 安装的包	Packages installed with pip --user
+用 pip install --user 装的 Python 包。有 conda 的话多半已不用，可删；不确定就搬走	Python packages installed with pip install --user. If you use conda, they're probably no longer used and can be deleted; if unsure, move them
+  完成  {0,-26} 释放 {1}	  Done  {0,-26} freed {1}
+系统设置	System settings
+每周自动清理：{0}	Weekly cleanup: {0}
+清理：{0}	Cleanup: {0}
+C 盘多出 	Freed on C: 
+  关闭 {0}	  Closing {0}
+原文件夹还被占用，关闭占用的程序后重试（第 {0} / {1} 次）：{2}	The original folder is still in use. Closing the programs using it and retrying (attempt {0} of {1}): {2}
+  已经搬过（是链接），跳过 {0}	  Already moved (it's a link), skipping {0}
+  {0} 由 OneDrive 管理，不搬	  {0} is managed by OneDrive, not moving
+  {0} 已在目标盘	  {0} is already on the target drive
+统计 {0} 的大小	Measuring the size of {0}
+{0} 里有 {1} 个特殊项目（链接，或用 Windows 压缩功能压过的文件，比如 {2}）。复制时可能漏掉它们，为了不丢东西，这个文件夹不搬，原目录未动	{0} contains {1} special items (links, or files compressed with Windows compression, such as {2}). They could be missed during copying, so to avoid losing anything this folder won't be moved. The original folder was left untouched
+搬家失败	Move failed
+统计上次留下的副本 {0}	Measuring the copy left from last time: {0}
+核对 {0} 是不是这个文件夹的旧副本	Verifying whether {0} is an old copy of this folder
+目标盘上的 {0} 里有 {1} 个文件在 C 盘上没有，可能是唯一的一份，保留不动；这次搬到新文件夹 {2}	{1} files in {0} on the target drive don't exist on C: and may be the only copy, so they're left untouched. Moving to a new folder this time: {2}
+保留旧副本，改用新文件夹	Old copy kept, using a new folder
+  {0} 里已有上次复制的 {1}，这次只补有变化的文件	  {0} already has {1} copied last time; only changed files will be copied this time
+{0} 只剩 {1}，还需要约 {2}，放不下，原目录未动	{0} has only {1} left, but about {2} is needed. Not enough space; the original folder was left untouched
+  搬 {0} ({1}) -> {2}	  Moving {0} ({1}) -> {2}
+复制失败（robocopy 代码 {0}，可能是空间不够或有文件被占用），原目录未动	Copy failed (robocopy code {0}; possibly not enough space or a file is in use). The original folder was left untouched
+复制完成，核对两边大小	Copy finished, verifying sizes on both sides
+核对不一致（源 {0:N0} 个文件 {1}，目标 {2:N0} 个文件 {3}），原目录未动	Verification mismatch (source {0:N0} files, {1}; target {2:N0} files, {3}). The original folder was left untouched
+  核对通过：{0:N0} 个文件，{1}	  Verified: {0:N0} files, {1}
+把 {0} 换成指向 {1} 的链接	Replacing {0} with a link to {1}
+  以前留下的备份已改名为 {0}，确认没用后可手动删除	  An earlier backup was renamed to {0}; you can delete it manually once you're sure it's not needed
+还有程序开着里面的文件。请彻底退出相关的聊天软件（微信、QQ、企业微信、飞书、钉钉等，包括屏幕右下角托盘里的图标），关掉打开着这个文件夹的窗口，再点一次「执行」	Some programs still have files in it open. Fully quit the related chat apps (WeChat, QQ, WeCom, Feishu, DingTalk, etc., including their icons in the system tray at the bottom right of the screen), close any windows that have this folder open, then click "Run" again
+本工具就放在这个文件夹里，请把工具挪到别处再运行	ClearC itself is in this folder. Move ClearC somewhere else and run it again
+已复制到 {0}，但原文件夹被占用，还没换成链接：{1}。再搬时直接用这份副本，只补差异，很快就好	Copied to {0}, but the original folder is in use and hasn't been replaced with a link yet: {1}. Next time you move it, this copy is reused and only the differences are copied, so it'll be quick
+  {0}（系统提示：{1}）	  {0} (system message: {1})
+搬家未完成：原文件夹被占用	Move not finished: the original folder is in use
+建链接失败，已改回原目录，副本在 {0}	Couldn't create the link. The original folder was restored; the copy is in {0}
+补复制最后写入的文件	Copying the last files written
+已搬好，但最后几个文件没补复制过去，C 盘上的旧文件夹先保留：{0}	Moved, but the last few files weren't copied over, so the old folder on C: is kept for now: {0}
+{0:N0} 个文件，{1}，两边已核对一致	{0:N0} files, {1}, verified identical on both sides
+搬家后保留 C 盘旧文件夹	Old folder on C: kept after moving
+链接已建好，删除 C 盘上的原目录	Link created, deleting the original folder on C:
+已搬好，但 C 盘上的备份没删干净（有文件被占用），过后可手动删除：{0}	Moved, but the backup on C: wasn't fully deleted (some files are in use). You can delete it manually later: {0}
+搬家后 C 盘旧文件夹没删干净	Old folder on C: not fully deleted after moving
+  完成  {0}  ->  {1}	  Done  {0}  ->  {1}
+搬家后删除 C 盘上的原文件夹	Deleted the original folder on C: after moving
+数据已在 {0}	Data is now in {0}
+路径为空	Path is empty
+整块磁盘不能删	A whole drive can't be deleted
+C 盘个人文件夹（桌面、文档、下载、图片、视频、音乐等）里的东西不删	Items in your personal folders on C: (Desktop, Documents, Downloads, Pictures, Videos, Music, etc.) aren't deleted
+系统文件夹，删了 Windows 可能出问题	System folder; deleting it may cause problems with Windows
+程序总文件夹不能删	The main programs folder can't be deleted
+系统自带的程序，不能删	Built-in Windows app; can't be deleted
+软件的安装文件夹，请到「软件管理」里卸载，不要直接删	App installation folder. Uninstall it in "Apps" instead of deleting it directly
+系统文件，请用「省空间」里的功能处理	System file. Use the options in "Save space" to handle it
+系统文件夹，不能整个删	System folder; can't be deleted as a whole
+用户目录本身不能整个删	The user folder itself can't be deleted as a whole
+这是软件数据的总文件夹，只能删里面具体的项目	This is the main folder for app data; only specific items inside it can be deleted
+系统保存密码、证书和密钥的地方，删了会丢失登录信息和证书	This is where Windows stores passwords, certificates and keys; deleting it would lose sign-in info and certificates
+软件的安装包缓存，删了以后这些软件可能没法修复、升级或卸载	Installer cache for apps; after deleting it, these apps may not be able to repair, update or uninstall
+本工具自己的设置和日志	ClearC's own settings and logs
+这是搬家后的数据（CDriveMoved 文件夹），C 盘上的链接指向这里。要处理请到「搬家管理」	This is moved data (the CDriveMoved folder) that a link on C: points to. To manage it, go to "Moved folders"
+这里是搬家后的数据，C 盘上的链接指向这里。要处理请到「搬家管理」	This is moved data that a link on C: points to. To manage it, go to "Moved folders"
+整块磁盘请用系统压缩，不要整盘压	For a whole drive, use System compression instead of compressing the entire drive
+系统文件夹请用上面的「系统压缩」	For system folders, use "System compression" above
+这个文件夹里有虚拟磁盘（{0}），压缩会让它变慢，甚至出错。可以压缩里面别的子文件夹，虚拟磁盘请用「省空间」页里的「压缩虚拟磁盘」	This folder contains a virtual disk ({0}). Compressing it would slow the disk down or even cause errors. You can compress other subfolders inside it; for the virtual disk, use "Compact virtual disk" on the "Save space" page
+正常：数据在 {0} 盘，C 盘这里只留了一个指向它的链接，不占 C 盘空间，软件照常使用	OK: the data is on drive {0}:, and only a link to it is left here on C:. It takes no space on C:, and the app works as usual
+链接断了：目标文件夹不在了（硬盘拔了、或者盘符变了？）	Link broken: the target folder is gone (was the drive unplugged, or did its drive letter change?)
+。在 {0} 找到一份同名的，可以改指向它	. Found a folder with the same name in {0}; you can point the link to it
+没搬完：C 盘原文件夹还在，目标盘上也有一份。可以在原来搬它的地方（「清理 C 盘」或「软件管理」）再搬一次，只补差异；也可以删掉这份副本，删之前会先核对，副本里有不少 C 盘上没有的文件就不删	Not fully moved: the original folder is still on C:, and there's also a copy on the target drive. You can move it again from where you moved it before ("Clean up C:" or "Apps"), which copies only the differences. You can also delete this copy; it's verified first and won't be deleted if it has many files that aren't on C:
+C 盘上的链接不见了（软件卸载了，或者链接被删了）。软件还在用的话，可以重建链接；软件已经卸载的话，打开看看，确认不要了再自己删掉这份数据	The link on C: is gone (the app was uninstalled, or the link was deleted). If the app is still in use, you can rebuild the link. If it was uninstalled, open the data to check it, and delete it yourself once you're sure you don't need it
+已经不在了	No longer exists
+这一项现在不是正常的搬家状态，没法搬回	This item isn't in a normal moved state, so it can't be moved back
+C 盘只剩 {0}，放不下 {1}（还要留 2 GB 余量）	C: has only {0} left, not enough for {1} (2 GB must also be kept free)
+搬回 C 盘失败	Couldn't move back to C:
+复制回 C 盘失败（robocopy 代码 {0}），什么都没改，复制了一半的临时文件夹在 {1}	Copying back to C: failed (robocopy code {0}). Nothing was changed; the partly copied temporary folder is in {1}
+核对两边是否一致	Verifying both sides match
+核对不一致（目标盘 {0:N0} 个文件，复制回来 {1:N0} 个），什么都没改	Verification mismatch (target drive {0:N0} files, copied back {1:N0}). Nothing was changed
+C 盘上的链接拆不掉（可能被占用），什么都没改；复制回来的数据在 {0}	Couldn't remove the link on C: (it may be in use). Nothing was changed; the copied-back data is in {0}
+换回文件夹失败，已恢复原来的链接；复制回来的数据在 {0}	Couldn't switch back to a folder, so the original link was restored; the copied-back data is in {0}
+搬回 C 盘	Move back to C:
+{0:N0} 个文件，{1}，已核对	{0:N0} files, {1}, verified
+已搬回 C 盘，但有几个最后写入的文件没补复制过来，目标盘上的那份先保留：{0}	Moved back to C:, but the last few files written weren't copied back, so the copy on the target drive is kept for now: {0}
+搬回后保留目标盘副本	Copy on target drive kept after moving back
+已搬回，但目标盘上的旧副本没删干净：{0}	Moved back, but the old copy on the target drive wasn't fully deleted: {0}
+搬回后删除目标盘上的旧副本	Deleted the old copy on the target drive after moving back
+目标 {0} 不存在	Target {0} doesn't exist
+C 盘上 {0} 是一个真文件夹，不能覆盖	{0} on C: is a real folder and can't be overwritten
+重建链接	Rebuild link
+建链接失败	Couldn't create link
+重建链接失败	Couldn't rebuild link
+C 盘原文件夹不在，这份副本可能是唯一的一份，不删	The original folder on C: is gone, so this copy may be the only one. Not deleting it
+这份副本正被 {0} 的链接使用，不能删	This copy is in use by the link at {0} and can't be deleted
+核对副本里有没有 C 盘上没有的文件	Verifying whether the copy has files that aren't on C:
+核对不了，不删	Couldn't verify, so not deleting
+副本里有 {0} 个文件在 C 盘原文件夹里没有（或比 C 盘上的新），这份副本可能是唯一的一份，所以不删。请打开两边对比后再决定	{0} files in the copy aren't in the original folder on C: (or are newer than those on C:). This copy may be the only one, so it won't be deleted. Open both folders and compare them before deciding
+没删多余副本（副本里有 C 盘没有的文件）	Extra copy not deleted (it has files that aren't on C:)
+没删干净，可能有文件被占用	Not fully deleted; some files may be in use
+删除没搬完留下的多余副本	Deleted the extra copy left by an unfinished move
+{0}，C 盘原文件夹 {1} 保留	{0}; the original folder {1} on C: is kept
+安装程序没有写明这个软件装在哪个文件夹，没法确定要搬什么	The installer doesn't say which folder this app is installed in, so it's not clear what to move
+这个软件本来就不在 C 盘	This app isn't on C: to begin with
+已经搬过了，C 盘上这里只剩一个链接。要搬回来请到「搬家管理」	Already moved; only a link is left here on C:. To move it back, go to "Moved folders"
+它所在的文件夹 {0} 已经搬到其他盘了，这个软件的文件其实已经不在 C 盘	Its folder {0} has already been moved to another drive, so this app's files are no longer on C:
+安装程序没有写明软件装在哪个文件夹（只知道它的图标在 {0} 里），为了不搬错，不搬	The installer doesn't say which folder the app is installed in (only that its icon is in {0}). To avoid moving the wrong thing, it won't be moved
+记录的安装位置是一个总文件夹，里面还有很多别的东西，不能整个搬	The recorded install location is a shared parent folder that contains many other things, so it can't be moved as a whole
+这是系统或硬件驱动的文件夹，不能搬	This is a system or hardware driver folder and can't be moved
+微软的软件或 Windows 自带的组件，由系统统一管理更新和修复，不能搬	Microsoft software or a built-in Windows component. Windows manages its updates and repairs, so it can't be moved
+装在个人文件夹（桌面、文档、下载等）里，不动	Installed in personal folders (Desktop, Documents, Downloads, etc.), so it's left alone
+微软的软件（Office、Visual Studio、.NET、Edge 等）由微软的安装程序统一管理更新和修复，搬走后容易出错，不搬	Microsoft software (Office, Visual Studio, .NET, Edge, etc.) is updated and repaired by Microsoft's own installers and often breaks after being moved, so it won't be moved
+本工具就放在这个文件夹里，请把工具挪到别处再搬	This tool is in this folder. Move the tool somewhere else first, then move the folder
+这个文件夹里还装着别的软件「{0}」，整个搬会连它一起搬走。可以单独搬「{1}」	This folder also contains another app, "{0}", which would be moved along with it. You can move "{1}" on its own
+它装在「{0}」的文件夹里面，是那个软件的一部分。要搬请搬「{1}」	It's installed inside the "{0}" folder and is part of that app. To move it, move "{1}" instead
+这个软件带有系统服务或驱动（{0}）。服务和驱动在开机时就要加载，搬走后可能启动失败，甚至影响开机，所以不搬	This app includes system services or drivers ({0}). Services and drivers load at startup, so after a move they may fail to start or even keep Windows from starting. It won't be moved
+资源管理器（桌面、文件夹窗口、右键菜单）	File Explorer (desktop, folder windows, right-click menu)
+  没能把 {0} 的权限设成和原来一样：{1}	  Couldn't restore the original permissions on {0}: {1}
+WSL：{0}	WSL: {0}
+Linux 子系统的虚拟磁盘。在 Linux 里删了文件，这个文件不会自动变小，压缩一下就能把空间还给 Windows。要换位置可以用命令 wsl --manage {0} --move D:\\WSL	Virtual disk of the Windows Subsystem for Linux. Deleting files inside Linux doesn't shrink this file; compacting it gives the space back to Windows. To change its location, run wsl --manage {0} --move D:\\WSL
+Docker Desktop 数据盘	Docker Desktop data disk
+Docker 的镜像和容器都在里面。先在 Docker 里删掉不用的镜像（docker system prune），再压缩。换位置在 Docker Desktop 设置 → Resources → Disk image location	Holds Docker's images and containers. First delete unused images in Docker (docker system prune), then compact it. To change its location, go to Docker Desktop Settings → Resources → Disk image location
+Hyper-V 虚拟磁盘：{0}	Hyper-V virtual disk: {0}
+压缩前要先关掉用它的虚拟机	Shut down the virtual machine that uses it before compacting
+安卓模拟器（Android Studio）	Android emulator (Android Studio)
+Android 模拟器的系统镜像和数据	Android emulator system images and data
+VirtualBox 虚拟机	VirtualBox virtual machines
+VirtualBox 的虚拟机和虚拟磁盘	VirtualBox virtual machines and virtual disks
+VMware 虚拟机	VMware virtual machines
+VMware 的虚拟机和虚拟磁盘	VMware virtual machines and virtual disks
+。可以整个搬到其他盘，原位置留链接，软件照常使用。搬之前要关掉模拟器或虚拟机	. You can move the whole folder to another drive and leave a link in the original location; the software keeps working as usual. Close the emulator or virtual machine before moving
+先关掉 WSL（wsl --shutdown），虚拟磁盘不在使用中才能压缩	Shut down WSL first (wsl --shutdown). The virtual disk can only be compacted when it isn't in use
+压缩 {0}（diskpart，可能要几分钟）	Compacting {0} (diskpart, may take a few minutes)
+压缩虚拟磁盘	Compact virtual disk
+正在压缩系统文件，通常要 10 到 30 分钟，期间可以照常用电脑	Compressing system files. This usually takes 10 to 30 minutes; you can keep using your PC in the meantime
+正在解压系统文件，通常要 10 到 30 分钟	Decompressing system files. This usually takes 10 to 30 minutes
+开启系统压缩（CompactOS）	Turn on system compression (CompactOS)
+关闭系统压缩（CompactOS）	Turn off system compression (CompactOS)
+C 盘可用空间变化 {0}	Free space on C: changed by {0}
+页面文件恢复系统默认	Page file restored to system default
+由系统自动管理，重启后生效	Managed automatically by Windows; takes effect after restart
+页面文件改到其他盘	Page file moved to another drive
+C 盘不再放页面文件，大小由系统自动管理，重启后生效	No page file on C: anymore; size managed automatically by Windows; takes effect after restart
+修改页面文件失败，已恢复系统默认	Couldn't change the page file; restored the system default
+关闭休眠	Turn off hibernation
+没有「休眠」和「快速启动」了，睡眠不受影响	"Hibernate" and "Fast Startup" are no longer available; Sleep is not affected
+休眠文件改为精简	Hibernation file set to reduced size
+只保留快速启动，不能手动休眠	Only Fast Startup is kept; manual hibernation is unavailable
+恢复完整休眠	Restore full hibernation
+统计大小	Measuring size
+进行中…	In progress…
+已搬 {0} 到 {1}	Moved {0} to {1}
+部分完成：搬了 {0}；{1}	Partly done: moved {0}; {1}
+差最后一步：	One last step: 
+没搬成：	Not moved: 
+不用搬（已经搬过或不在 C 盘）	No need to move (already moved or not on C:)
+已完成，释放 {0}	Done, freed {0}
+已清理，释放 {0}	Cleaned up, freed {0}
+出错：	Error: 
+{0} {1}：{2}	{0} {1}: {2}
+全部完成。C 盘现在剩余 {0}	All done. C: now has {0} free
+固态硬盘，{0} 线程并行	SSD, {0} threads in parallel
+机械硬盘，单线程按顺序读	HDD, single thread, sequential reads
+类型未知，2 线程	Unknown type, 2 threads
+磁盘：	Disk: 
+提示：快速列举不可用，已改用普通方式列举文件（结果相同，只是慢一些）。	Note: Fast enumeration isn't available, so files are being listed the regular way (same results, just slower).
+  跳过（C 盘个人文件夹，受保护）：{0}	  Skipped (personal folder on C:, protected): {0}
+  跳过（文件在扫描后被修改过）：{0}	  Skipped (file was modified after the scan): {0}
+  没有删除（和保留的那份内容不完全相同，或保留的那份已不在）：{0}	  Not deleted (not identical to the kept copy, or the kept copy is gone): {0}
+  [{0}/{1}] 已删除  {2}	  [{0}/{1}] Deleted  {2}
+  删除失败  {0}：{1}	  Couldn't delete  {0}: {1}
+删除完成：{0} 个文件，{1}。	Deletion complete: {0} files, {1}.
+没有删掉（代码 {0}，可能文件正被占用，或者在提示里选了取消）	Not deleted (code {0}; a file may be in use, or Cancel was chosen in the prompt)
+没删干净，可能有文件正被占用	Not everything was deleted; some files may be in use
+空间地图：移到回收站	Space map: Move to Recycle Bin
+空间地图：永久删除	Space map: Delete permanently
+，失败：	, failed: 
+统计压缩前的实际占用	Measuring actual size before compression
+正在压缩 {0}	Compressing {0}
+  文件夹不在了：{0}	  Folder no longer exists: {0}
+  进不去：{0}	  Can't access: {0}
+压缩文件夹（NTFS）	Compress folder (NTFS)
+实际占用 {0} → {1}	Size on disk {0} → {1}
+检查有没有别的程序在用它的文件	Checking whether other programs are using its files
+这些程序正在使用它的组件：{0}。文件夹被它们占着，搬不了。输入法、右键菜单、杀毒、驱动这一类软件一般都不适合搬。	These programs are using its components: {0}. They're holding the folder, so it can't be moved. Software such as input methods, right-click menu extensions, antivirus and drivers is generally not suitable for moving.
+软件没搬：组件正被别的程序使用	App not moved: its components are in use by other programs
+关闭正在运行的程序	Closing running programs
+软件搬到其他盘：{0}	App moved to another drive: {0}
+安装文件夹整个搬走，原位置留链接	Whole install folder moved; link left in the original location
+卸载应用商店软件	Uninstall Microsoft Store app
+约 {0}	About {0}
+失败：	Failed: 
+软件残留：移到回收站（{0}）	App leftovers: Move to Recycle Bin ({0})
+没删掉，可能被占用	Not deleted; it may be in use
+  跳过（文件在扫描后变了）：{0}	  Skipped (file changed since the scan): {0}
+  跳过（和保留的那份内容不完全相同）：{0}	  Skipped (not identical to the kept copy): {0}
+  没合并：{0}：{1}	  Not merged: {0}: {1}
+合并为一份失败	Merge into one copy failed
+合并为一份（硬链接）	Merge into one copy (hard link)
+和 {0} 共用一份，腾出 {1}	Shares one copy with {0}, freed {1}
+C 盘清理	ClearC
+使用反馈	Feedback
+清理	Clean up
+清理 C 盘	Clean up C:
+重复文件	Duplicates
+省空间	Save space
+分析	Analyze
+空间地图	Space map
+软件管理	Apps
+管理	Manage
+搬家管理	Moved folders
+自动提醒	Reminders
+操作日志	Activity log
+帮助	Help
+分析占用	Analyze usage
+列出 C 盘上最占地方的文件夹和超过 1 GB 的文件，结果写在运行记录里	Lists the largest folders on C: and files over 1 GB; results are written to the Run log
+扫描	Scan
+「一键清理」会自动扫描并处理默认选中的项目。也可以先扫描，再逐项选择删除、搬到其他盘或跳过。	"One-click cleanup" scans automatically and handles the items selected by default. You can also scan first, then choose for each item whether to delete it, move it to another drive or skip it.
+自动扫描，清掉所有安全项和默认选中的项目，并把微信、QQ、飞书、钉钉等聊天记录搬到空间最大的其他盘。不会关闭休眠、不清空回收站，个人文件夹（桌面、文档、下载等）里的东西一律不删。	Scans automatically, cleans up all safe items and items selected by default, and moves chat history from WeChat, QQ, Feishu, DingTalk and others to the other drive with the most free space. It doesn't turn off hibernation or empty the Recycle Bin, and never deletes anything in your personal folders (Desktop, Documents, Downloads, etc.).
+可用	Free
+已用	Used
+搬家目标	Move destination
+选择文件夹…	Choose folder…
+聊天记录等搬到这里，C 盘原位置留一个链接，软件照常使用。	Chat history and similar data are moved here. A link is left in the original location on C:, and apps keep working as usual.
+点「扫描」看看 C 盘里有什么可以清理	Click "Scan" to see what can be cleaned up on C:
+往下翻一屏	Scroll down one page
+停止	Stop
+开始查找	Start search
+找出内容完全相同的文件，每组只留一份，其余删除。	Finds files with identical content, keeps one per group and deletes the rest.
+查找条件	Search criteria
+查找位置	Locations
+不在这里找了，移除	Remove this location from the search
+添加文件夹…	Add folder…
+系统目录、Program Files、AppData 和开发环境（.git、node_modules、conda）会自动跳过。	System folders, Program Files, AppData and development environments (.git, node_modules, conda) are skipped automatically.
+文件类型	File types
+其他扩展名	Other extensions
+全部重置	Reset all
+上面没有的类型，用空格隔开，例如 .dwg .step .sldprt	Types not listed above, separated by spaces, e.g. .dwg .step .sldprt
+文件大小	File size
+从	From
+到	to
+怎样算重复	Match by
+名字和内容都相同	Same name and content
+只看内容，名字不同也算	Content only, even if names differ
+比对方式	Comparison method
+快速	Fast
+16 MB 以内的文件读全文；更大的读头尾和 16 处抽样（每个约 1 MB）。删除前再逐字节完整比对。	Files up to 16 MB are read in full; larger ones are read at the start, the end and 16 sample points (about 1 MB each). Before deleting, files are compared again in full, byte by byte.
+完整比对	Full comparison
+每个可疑文件都读完全部内容。大视频多的时候会慢很多。	Reads the full contents of every candidate file. Much slower when there are many large videos.
+快速模式下大文件只抽样读约 1 MB；删除前都会逐字节完整核对，有任何不同就不删。	In fast mode, only about 1 MB of each large file is sampled. Before deleting, every file is fully verified byte by byte, and nothing is deleted if there is any difference.
+每组只留一份：	Keep one per group:
+留最新的	Keep newest
+留最早的	Keep oldest
+优先留 C 盘以外的	Prefer copies not on C:
+全部取消	Deselect all
+只有内容逐字节完全相同才算重复。	Only files that are identical byte for byte count as duplicates.
+C 盘个人文件夹里的文件受保护，不会删除	Files in personal folders on C: are protected and won't be deleted
+位置	Location
+修改时间	Modified
+注意	Note
+打开位置	Open location
+设置好条件后，点右上角「开始查找」	Set your criteria, then click "Start search" at the top right
+不删 C 盘个人文件夹里的文件	Don't delete files in personal folders on C:
+桌面、文档、下载、图片、视频、音乐等 C 盘个人文件夹里的副本一律保留，只删其他位置的副本	Copies in personal folders on C: (Desktop, Documents, Downloads, Pictures, Videos, Music, etc.) are always kept; only copies in other locations are deleted
+放入回收站，可以恢复	Move to Recycle Bin (can be restored)
+合并为一份	Merge into one copy
+勾选的副本换成指向保留那份的硬链接：每个位置的文件都还在，只占一份空间。只适用于同一块盘上的副本	Replaces the checked copies with hard links to the kept copy: the file stays in every location but takes up space only once. Only works for copies on the same drive
+删除勾选的文件	Delete checked files
+扫描整块盘，看清每个文件夹占了多少。双击文件夹往里点，一层层找到真正的大户。	Scans the whole drive to show how much space each folder takes. Double-click a folder to open it and work your way down to what's really taking up space.
+最大的文件	Largest files
+和上次比	Since last scan
+回到上一级文件夹	Go up one folder
+上一级	Up
+还没有扫描	Not scanned yet
+选一块盘，点「扫描」。C 盘通常一两分钟就能扫完。	Choose a drive and click "Scan". Drive C: usually takes a minute or two.
+上次	Previous
+这次	Current
+变化	Change
+点右上角「扫描」，看看这块盘的空间都去哪了	Click "Scan" at the top right to see where the space on this drive has gone
+压缩（不删文件）	Compress (keeps files)
+用 NTFS 压缩这个文件夹：文件照常打开、照常修改，只是占的空间变小。适合不常用的资料、旧项目	Compresses this folder with NTFS compression: files open and edit as usual, they just take up less space. Good for rarely used material and old projects
+删除…	Delete…
+刷新	Refresh
+不删任何文件也能腾出空间：系统压缩、把大系统文件挪到其他盘、压缩不常用的文件夹和虚拟磁盘。	Free up space without deleting any files: system compression, moving large system files to another drive, and compressing rarely used folders and virtual disks.
+系统压缩（CompactOS）	System compression (CompactOS)
+Windows 自带的功能：把系统文件压缩存放，通常能省 2 到 4 GB，不影响使用。压缩要 10 到 30 分钟，期间可以照常用电脑。固态硬盘几乎感觉不到变慢；很老的机械硬盘电脑不建议开。	A built-in Windows feature that stores system files compressed. It usually saves 2 to 4 GB and doesn't affect everyday use. Compression takes 10 to 30 minutes, and you can keep using your PC in the meantime. On an SSD you'll barely notice any slowdown; it isn't recommended for very old PCs with hard disk drives.
+页面文件（pagefile.sys）	Page file (pagefile.sys)
+内存不够用时，Windows 把暂时用不到的数据放进这个文件，通常有几个 GB 到十几 GB。可以把它放到其他硬盘，C 盘就不再占这块空间。要重启电脑才生效。改了以后蓝屏时可能无法保存完整的内存转储，对普通用户没有影响；如果有问题，随时点「恢复系统默认」。	When memory runs low, Windows moves data it doesn't need right now into this file, which is usually anywhere from a few GB to more than ten GB. You can put it on another drive so it no longer takes up space on C:. Takes effect after you restart your PC. Afterwards, Windows may not be able to save a complete memory dump after a blue screen, which doesn't affect most users; if anything goes wrong, click "Restore system default" at any time.
+恢复系统默认	Restore system default
+休眠文件（hiberfil.sys）	Hibernation file (hiberfil.sys)
+休眠和「快速启动」用的文件，大小约等于内存的四成到七成。「只留快速启动」能缩小到原来的一半左右，开机速度不变，只是不能手动休眠；「关闭休眠」整个删掉它，睡眠不受影响，只是没有休眠和快速启动。	Used by hibernation and "Fast Startup"; its size is about 40% to 70% of your memory. "Keep Fast Startup only" shrinks it to about half, and startup is just as fast, but you can't hibernate manually. "Turn off hibernation" deletes it entirely; Sleep is not affected, but there is no hibernation or Fast Startup.
+只留快速启动（缩小）	Keep Fast Startup only (smaller)
+压缩文件夹（NTFS 压缩）	Compress folders (NTFS compression)
+文件照常打开、照常修改，只是占的空间变小。文档、代码、日志、旧项目通常能省一半；照片、视频、压缩包本身已经压缩过，几乎省不了。也可以在「空间地图」里选中文件夹直接压缩。	Files open and edit as usual, they just take up less space. Documents, code, logs and old projects often shrink by half; photos, videos and archives are already compressed and barely shrink. You can also select a folder in "Space map" and compress it directly.
+虚拟磁盘、模拟器和虚拟机	Virtual disks, emulators and virtual machines
+WSL、Docker、安卓模拟器、虚拟机的磁盘文件动辄几十 GB，而且在里面删了东西也不会自动变小。压缩能把空出来的部分还给 Windows；文件夹形式的可以整个搬到其他盘。	Disk files for WSL, Docker, Android emulators and virtual machines often run to tens of GB, and they don't shrink when you delete things inside them. Compacting returns the freed space to Windows; those stored as folders can be moved to another drive as a whole.
+这台电脑上没找到 WSL、Docker、安卓模拟器或虚拟机的磁盘。	No disks for WSL, Docker, Android emulators or virtual machines were found on this PC.
+去找重复文件	Find duplicates
+合并重复文件	Merge duplicates
+同一块盘上内容完全相同的文件，可以合并成一份：每个位置的文件都还在，只占一份空间。在「重复文件」页找完后，点「合并为一份」。	Files with identical content on the same drive can be merged into one copy: the file stays in every location but takes up space only once. After searching on the "Duplicates" page, click "Merge into one copy".
+装过的软件按占用空间从大到小排。装在 C 盘的可以「搬到其他盘」，软件照常使用、不用重装；不用的可以直接卸载，卸载后再检查有没有残留文件夹。	Installed apps are sorted by size, largest first. Apps installed on C: can be moved with "Move to another drive" and keep working without reinstalling; apps you no longer use can be uninstalled, and then checked for leftover folders.
+全部	All
+装在 C 盘的	On C:
+按名字或发行商搜索	Search by name or publisher
+不用了	No thanks
+检查残留	Check leftovers
+把整个安装文件夹搬到其他盘，C 盘原位置留一个链接，软件照常使用，不用重装	Moves the whole install folder to another drive and leaves a link in the original location on C:. The app keeps working without reinstalling
+正在读取已安装的软件…	Reading installed apps…
+搬到其他盘的文件夹都在这里：看链接是否正常，需要时搬回 C 盘，或修复断掉的链接。	All folders moved to other drives are listed here. Check that their links work, move them back to C: when needed, or repair broken links.
+打开	Open
+修复链接	Repair link
+删除多余副本	Delete extra copy
+还没有搬过文件夹。在「清理 C 盘」里把项目选成「搬到其他盘」并执行，就会出现在这里。	No folders have been moved yet. In "Clean up C:", set an item to "Move to another drive" and run it, and it will appear here.
+C 盘快满时提醒你，每周自动清一次缓存，并记下空间的变化。两项都默认关闭，打开开关才生效。开启后由 Windows 自己定时运行，不需要一直开着本工具，也不需要开机启动。	Reminds you when C: is almost full, cleans caches automatically once a week, and records how space changes. Both are off by default and only take effect when you turn them on. Once on, Windows runs them on a schedule, so this tool doesn't need to stay open or start with Windows.
+C 盘空间不足时提醒我	Remind me when C: is low on space
+剩余空间低于	When free space is below
+时，在屏幕右下角弹出提醒（每天最多一次）	show a reminder in the lower-right corner of the screen (at most once a day)
+每周自动清理一次	Clean up automatically once a week
+不用开着本工具。每周日中午 12:30（错过了就在下次开机后）由 Windows 任务计划在后台自动做一遍「可以放心删」里的项目：临时文件、各类缓存和日志。不搬家、不清空回收站、不碰任何个人文件夹，也不会关闭正在运行的软件（被占用的文件直接跳过）。做完在右下角告诉你释放了多少，每一项都记在「操作日志」里。	This tool doesn't need to be open. Every Sunday at 12:30 PM (or after the next startup if that time is missed), Windows Task Scheduler runs the items under "Safe to delete" in the background: temporary files, caches and logs. It doesn't move anything, doesn't empty the Recycle Bin, never touches personal folders, and doesn't close running apps (files in use are simply skipped). When it's done, a notification in the lower-right corner tells you how much was freed, and every item is recorded in the "Activity log".
+C 盘空间变化	Space on C: over time
+柱子越高表示 C 盘已经用掉的越多（每天取最后一次记录）。每次打开本工具、每次定时检查都会记一笔。想知道是哪些文件夹变大了，到「空间地图」扫一遍，再选「和上次比」。	The taller the bar, the more of C: is used (the last record of each day). A record is added every time you open this tool and at every scheduled check. To find out which folders grew, scan in "Space map", then choose "Since last scan".
+打开日志文件夹	Open log folder
+删除、搬运、合并、压缩、卸载和系统设置的每一次改动都记在这里，可以按类别、时间和关键字查找。	Every deletion, move, merge, compression, uninstall and system setting change is recorded here. You can search by category, time and keyword.
+日志保存时间	Keep logs for
+半年（默认）	6 months (default)
+搬运	Move
+7 天	7 days
+30 天	30 days
+按文件名、文件夹或操作搜索	Search by file name, folder or action
+时间	Time
+类别	Category
+操作	Action
+对象	Item
+详情	Details
+还没有操作记录	No activity yet
+收起	Hide
+全部项目	All items
+在后台继续	Continue in background
+腾挪 ClearC	ClearC
+微信	WeChat
+企业微信	WeCom
+腾讯会议	Tencent Meeting
+飞书	Feishu
+钉钉	DingTalk
+Android 模拟器	Android emulator
+日志	Log
+切换界面语言	Switch UI language
+{0} 项	{0} items
+：已中途取消	: Cancelled
+正在取消…	Cancelling…
+正在取消：做完手上这一小步就停下，已经做完的不会撤销。	Cancelling: it will stop after the current small step. What's already done won't be undone.
+这一步不能中断（正在换成链接、删除备份或运行系统命令），做完就可以取消。	This step can't be interrupted (creating a link, deleting a backup or running a system command). You can cancel once it's done.
+已经做完的项目不会撤销，还没开始的都不做了。\n\n正在做的这一项会停在安全的地方：清理会停下，已经删掉的不会回来；搬家如果还在复制，C 盘上的原文件夹不动，已复制的部分留在目标盘，下次再搬会接着复制；如果正在换成链接或运行系统命令，会等这一步做完再停。	Items already done won't be undone, and items not started yet will be skipped.\n\nThe current item stops at a safe point: a cleanup stops where it is (anything already deleted stays deleted); a move that is still copying leaves the original folder on C: untouched and keeps the copied part on the target drive, so the next move picks up where it left off; if it is creating a link or running a system command, it finishes that step first.
+已经删掉的文件不会回来，剩下的不删了。	Files already deleted won't come back; the rest won't be deleted.
+已经合并的保持合并，照常可用；剩下的不合并了。	Files already merged stay merged and work as usual; the rest won't be merged.
+已经移到回收站的还在回收站里，剩下的不删了。	What was already moved stays in the Recycle Bin; the rest won't be deleted.
+已经压缩的文件保持压缩，照常可用；剩下的不压缩了。	Files already compressed stay compressed and work as usual; the rest won't be compressed.
+数据仍在目标盘上，C 盘上的链接不动，软件照常使用；复制回 C 盘的那一半会删掉。如果已经在换回文件夹，会等这一步做完再停。	The data stays on the target drive and the link on C: is left as it is, so apps keep working; the partial copy on C: will be deleted. If it is already swapping the folder back, it finishes that step first.
+C 盘上的原文件夹不动，软件照常使用。已复制到目标盘的部分先留着，下次再搬会接着复制；不需要的话，可以在「搬家管理」里删掉这份副本。如果已经在换成链接，会等这一步做完再停。	The original folder on C: is left untouched and apps keep working. The part already copied to the target drive is kept, so the next move picks up where it left off; if you don't need it, delete that copy in "Moved folders". If it is already creating the link, it finishes that step first.
+取消「{0}」？	Cancel "{0}"?
+继续做	Keep going
+停下来	Stop
+正在取消：做完手上这一小步就停下。	Cancelling: stopping after the current small step.
+ · 比上次 {0}	 · {0} since last scan
+找到 {0:N0} 个文件，共 {1}	Found {0:N0} files, {1} in total
+，下面列出最大的 {0:N0} 个	; the {0:N0} largest are listed below
+在 {0} 里找，只能找到扫描时记下的 1 MB 以上的文件	Searching {0}. Only files of 1 MB or more recorded during the scan can be found
+没有符合条件的文件，可以把条件放宽一些	No files match. Try loosening the filters
+ 双击一行可以跳到这个文件夹。	 Double-click a row to open that folder.
+这次扫描里没有这个文件夹	This folder isn't in the current scan
+{0}\n\n它可能已经被删掉、改了名，或者变得很小。	{0}\n\nIt may have been deleted or renamed, or it has become very small.
+没有可以导出的内容	Nothing to export
+先扫描一块盘，再导出看到的列表。	Scan a drive first, then export the list you see.
+找文件	Find files
+CSV 文件（可以用 Excel 打开）	CSV file (opens in Excel)
+上次（字节）	Previous (bytes)
+这次（字节）	Current (bytes)
+变化（字节）	Change (bytes)
+名称	Name
+路径	Path
+类型	Type
+大小（字节）	Size (bytes)
+大小	Size
+文件数	Files
+最近修改	Last modified
+链接	Link
+没能保存	Couldn't save
+空间地图：已导出 {0} 行到 {1}	Space map: exported {0} rows to {1}
+已导出	Exported
+{0:N0} 行，已保存到：\n{1}	{0:N0} rows saved to:\n{1}
+打开所在位置	Show in folder
+已中途取消。	Cancelled.
+已中途取消，列表没有更新	Cancelled; the list wasn't updated
+扫描已取消，下面还是上一次扫描的结果。	Scan cancelled. The list below is still from the previous scan.
+扫描已取消。点「扫描」重新开始。	Scan cancelled. Click "Scan" to start again.
+已中途取消：还没开始的项目都没做，已经做完的不会撤销。	Cancelled: items not started were skipped, and items already done weren't undone.
+已中途取消，释放 {0}，C 盘现在剩余 {1}	Cancelled, freed {0}, C: now has {1} free
+已中途取消：C 盘从剩余 {0} 变成 {1}。每一项的结果写在列表里；想看还剩什么，再点「扫描」。	Cancelled: free space on C: went from {0} to {1}. Each item's result is shown in the list; click "Scan" again to see what's left.
+已中途取消	Cancelled
+已中途取消，删除了 {0} 个文件	Cancelled, deleted {0} files
+已中途取消：删除了 {0} 个重复文件，剩下的没删。{1}	Cancelled: deleted {0} duplicate files; the rest weren't deleted. {1}
+已中途取消，省了 {0}	Cancelled, saved {0}
+压缩已中途取消	Compression cancelled
+\n\n已经压缩的文件保持压缩，剩下的没压缩。想压缩剩下的，再压缩一次这个文件夹就好。	\n\nFiles already compressed stay compressed; the rest weren't compressed. To compress the rest, compress this folder again.
+已取消	Cancelled
+已中途取消，没统计到的软件显示安装时登记的大小	Cancelled; apps not measured show the size recorded at install
+剩下的没删。	The rest weren't deleted.
+已中途取消，合并了 {0} 个文件	Cancelled, merged {0} files
+已中途取消：合并了 {0} 个重复文件，剩下的没合并。每个位置的文件都还在。	Cancelled: merged {0} duplicate files; the rest weren't merged. The files are still in every location.
+已取消，剩下的文件夹没有搬	Cancelled; the remaining folders weren't moved
+已取消：{0} 还没开始复制，原文件夹没动	Cancelled: {0} hadn't started copying; the original folder is untouched
+已取消：{0} 原文件夹没动。已复制的部分留在 {1}，下次再搬这一项会接着复制；不需要的话，可以在「搬家管理」里删掉这份副本	Cancelled: the original folder {0} is untouched. The part already copied is kept in {1}, and moving this item again picks up where it left off; if you don't need it, delete that copy in "Moved folders"
+已取消：{0} 已经复制到 {1}，但还没换成链接，原文件夹没动。下次再搬只补有变化的文件	Cancelled: {0} was fully copied to {1} but not yet replaced with a link; the original folder is untouched. Moving it again only copies files that changed
+搬家已取消	Move cancelled
+已取消，什么都没改，数据仍在 {0}。复制回 C 盘的那一半在 {1}，确认没用后可以手动删除	Cancelled, nothing was changed; the data is still in {0}. The partial copy on C: is in {1}; you can delete it yourself once you're sure it isn't needed
+已取消，什么都没改，数据仍在 {0}。复制回 C 盘的那一半已删掉	Cancelled, nothing was changed; the data is still in {0}. The partial copy on C: was deleted
+搬回 C 盘已取消	Move back to C: cancelled
+已取消，什么都没改	Cancelled, nothing was changed
+中途取消：已搬 {0}；{1}	Cancelled partway: moved {0}; {1}
+中途取消：清理了一部分，释放 {0}	Cancelled partway: partly cleaned, freed {0}
+已取消，没有处理	Cancelled, not processed
+已中途取消。C 盘现在剩余 {0}	Cancelled. C: now has {0} free
+  已中途取消：{0}	  Cancelled: {0}
+压缩文件夹（NTFS），中途取消	Compress folder (NTFS), cancelled partway
+已取消，什么都没动。	Cancelled, nothing was touched.
+停在安全的地方，已经做完的不会撤销	Stops at a safe point; what's already done won't be undone
+导出 CSV	Export CSV
+把现在看到的列表存成 CSV 文件，可以用 Excel 打开	Save the list you see as a CSV file that opens in Excel
+大小至少	At least
+多久没改过	Not modified for
+30 天以上	30+ days
+半年以上	6+ months
+1 年以上	1+ year
+2 年以上	2+ years
+压缩包和安装包	Archives and installers
+光盘映像和虚拟磁盘	Disc images and virtual disks
+程序和游戏数据	Programs and game data
+日志、转储和临时文件	Logs, dumps and temp files
+文件名里包含这些字。可以用 * 和 ?，比如 *.mp4、备份*	Text in the file name. You can use * and ?, e.g. *.mp4, backup*
+只找当前文件夹里的	Only in the current folder
+打开「空间地图」扫描 C 盘，看清哪些文件夹和文件最占地方	Open the "Space map" and scan C: to see which folders and files take up the most space
+已中途停止，看过 {0:N0} 个文件，共 {1}	Stopped partway, looked at {0:N0} files, {1} in total
+已取消，副本没删	Cancelled; the copy wasn't deleted
+现在直接关掉，可能留下搬了一半的文件夹。选「停下并关闭」会先停在安全的地方（正在做的这一小步会做完），然后自动关闭窗口。	Closing right now could leave a folder half moved. "Stop and close" first stops at a safe point (the current small step is finished), then closes the window automatically.
+停下并关闭	Stop and close
+正在停下，停好后自动关闭窗口。	Stopping; the window will close automatically once it has stopped.
+已经搬好的不会撤销，还没开始的都不搬了。\n\n正在搬的这一项会停在安全的地方：如果还在复制，C 盘上的原文件夹不动，已复制的部分留在目标盘，下次再搬会接着复制；如果正在换成链接，会等这一步做完再停。	Items already moved won't be undone, and items not started yet won't be moved.\n\nThe current item stops at a safe point: if it is still copying, the original folder on C: is left untouched and the copied part stays on the target drive, so the next move picks up where it left off; if it is creating the link, it finishes that step first.
+统计每一项占了多少空间，看看哪些能搬。只是查看，不会改动任何东西。	Measuring how much space each item takes to see what can be moved. This only looks and changes nothing.
+其他 {0} 项，共 {1}	{0} other items, {1} in total
+其他 {0} 项	{0} other items
+选中一行可以打开位置、压缩或删除；按住 Ctrl 或 Shift 可以选多项一起删。系统文件夹、软件安装文件夹、C 盘个人文件夹和搬家后的数据带小锁，不能在这里删。	Select a row to open its location, compress or delete it; hold Ctrl or Shift to select several and delete them together. System folders, app installation folders, personal folders on C: and moved data have a lock and can't be deleted here.
+已选 {0} 项，共 {1}	{0} selected, {1} in total
+（其中 {0} 项带小锁或是链接，不会删）	 ({0} of them are locked or links and won't be deleted)
+空间报告：{0}	Space report: {0}
+扫描于 {0:yyyy-MM-dd HH:mm}，扫描到 {1:N0} 个文件	Scanned {0:yyyy-MM-dd HH:mm}, {1:N0} files
+磁盘容量	Drive capacity
+剩余	Free
+扫描到的文件一共	All scanned files
+方块图：第一层文件夹	Treemap: top-level folders
+其他	Other
+最占空间的文件夹	Largest folders
+占比	Share
+再往下一层：最大的文件夹	One level down: largest folders
+最大的 30 个文件	30 largest files
+其他类型	Other types
+各类文件占多少	Space by file type
+只统计扫描时记下的 1 MB 以上的文件。	Counts only the files of 1 MB or more recorded during the scan.
+由腾挪 ClearC {0} 生成，{1:yyyy-MM-dd HH:mm}。报告里只有文件夹和文件的名字、大小，不含文件内容。	Generated by ClearC {0} on {1:yyyy-MM-dd HH:mm}. The report contains only folder and file names and sizes, no file contents.
+先扫描一块盘，再导出报告。	Scan a drive first, then export the report.
+网页报告	Web page report
+空间报告	Space report
+空间地图：报告已保存到 {0}	Space map: report saved to {0}
+报告已保存	Report saved
+{0}\n\n用浏览器打开就能看；想要 PDF，在浏览器里按 Ctrl+P，打印机选「另存为 PDF」。	{0}\n\nOpen it in a browser to view it. For a PDF, press Ctrl+P in the browser and choose "Save as PDF" as the printer.
+打开报告	Open report
+「移到回收站」可以恢复，但要清空回收站后才真正腾出空间；「永久删除」马上腾出空间，删了就找不回来。	"Move to Recycle Bin" can be undone, but frees space only after you empty the Recycle Bin; "Delete permanently" frees space right away and can't be undone.
+删除选中的 {0} 项（{1}）？	Delete the {0} selected items ({1})?
+\n\n另有 {0} 项带小锁或是链接，不会删。	\n\n{0} more items are locked or links and won't be deleted.
+……另有 {0} 项	…and {0} more
+删除 {0} 项	Delete {0} items
+已经搬走的（{0}）	Moved ({0})
+已经搬走的	Moved
+还没有搬过文件夹。	No folders have been moved yet.
+正在看 C 盘上还有什么能搬…	Looking for what else can be moved off C:…
+正在看 C 盘上还有什么能搬，统计大小要一会儿…	Looking for what else can be moved off C:; measuring sizes takes a moment…
+可以搬的	Can be moved
+看看 C 盘上还有什么能搬	Find what can be moved off C:
+装在 C 盘的软件（整个安装文件夹搬走，快捷方式、卸载和自动更新照常可用，不用重装）	Apps installed on C: (the whole installation folder is moved; shortcuts, uninstall and updates keep working, no reinstall needed)
+不适合搬的软件（原因写在每一项下面；不用的可以到「软件管理」里卸载）	Apps that shouldn't be moved (the reason is under each one; uninstall the ones you don't use in "Apps")
+上次已经复制过一部分，这次只补有变化的文件	Partly copied last time; this time only changed files are copied
+聊天记录 {0} 项	{0} chat histories
+软件 {0} 个	{0} apps
+其他文件夹 {0} 项	{0} other folders
+C 盘上还能搬走约 {0}：{1}。勾选后点右下角「搬到其他盘」。	About {0} more can be moved off C:: {1}. Tick the items and click "Move to another drive" at the bottom right.
+可以搬的（{0}）	Can be moved ({0})
+C 盘上没找到还能搬的东西。	Nothing else on C: that can be moved.
+C 盘上没找到还能搬的东西：聊天记录和软件要么已经搬走，要么不在 C 盘。	Nothing else on C: that can be moved: chat histories and apps have either been moved already or aren't on C:.
+已选 {0} 项，约 {1}。	{0} selected, about {1}.
+勾选要搬的项目。	Tick the items to move.
+这台电脑没有 C 盘以外的硬盘，或者还没选搬家目标。	This PC has no drive other than C:, or no move destination has been chosen.
+目标盘放不下	Not enough space on the target drive
+选中的一共约 {0}，{1} 只剩 {2}。少选几项，或者换一块空间更大的盘。	The selected items total about {0}, but {1} has only {2} left. Select fewer items or choose a drive with more space.
+不适合搬：它给资源管理器装了右键菜单之类的组件，文件夹一直被占着	Shouldn't be moved: it adds components such as right-click menu entries to File Explorer, so its folder is always in use
+选中的软件不适合搬	The selected apps shouldn't be moved
+它们给资源管理器装了右键菜单之类的组件，桌面和文件夹窗口一直开着这些文件，文件夹被占着，搬不了。	They add components such as right-click menu entries to File Explorer. The desktop and folder windows keep these files open, so the folders are in use and can't be moved.
+把下面 {0} 项搬到 {1}，一共约 {2}。每一项都先复制、核对两边一致，再把 C 盘上的原位置换成链接，删掉 C 盘上的那份；软件照常使用，以后可以在「已经搬走的」里搬回 C 盘。	Move the {0} items below to {1}, about {2} in total. Each item is copied and both sides are verified, then the original location on C: is replaced with a link and the copy on C: is deleted. Apps keep working, and you can move items back to C: later under "Moved".
+\n\n{0} 正在运行，搬之前会替你关掉（包括屏幕右下角托盘里的）。没保存的内容请先保存。	\n\n{0} is running and will be closed for you before moving (including the icon in the notification area at the bottom right). Save any unsaved work first.
+\n\n要注意：目标盘要一直接着；不要删除、改名或移动目标盘上的 CDriveMoved 文件夹。	\n\nNote: the target drive must stay connected, and don't delete, rename or move the CDriveMoved folder on it.
+把 {0} 项搬到其他盘？	Move {0} items to another drive?
+搬 {0} 项到其他盘	Move {0} items to another drive
+已中途取消，删除了 {0} 项	Cancelled, deleted {0} items
+已删除 {0} 项	Deleted {0} items
+删除了 {0} 项，{1} 项没删掉	Deleted {0} items; {1} weren't deleted
+有的没有删掉	Some weren't deleted
+下面这些没有删掉。正被别的程序打开的文件，关掉那个程序后再删一次。	These weren't deleted. For files open in another program, close that program and delete again.
+已取消。点右上角「刷新」重新看。	Cancelled. Click "Refresh" at the top right to look again.
+已取消，没有看完。	Cancelled before finishing.
+{0} 是从应用商店装的，由 Windows 管理，本工具不搬。可以在 Windows 设置 → 应用 → 已安装的应用 里点它右边的「…」→「移动」，连同数据换到其他盘（要这个应用支持）。	{0} was installed from the Microsoft Store and is managed by Windows, so ClearC doesn't move it. In Windows Settings → Apps → Installed apps, click "…" next to it → "Move" to move it with its data to another drive (if the app supports it).
+C 盘剩余：{0} → {1}，腾出了 {2}	Free on C:: {0} → {1}, freed {2}
+有 {0} 个文件夹已经复制好，但原文件夹还被别的程序占着，没换成链接。彻底退出相关的软件（包括右下角托盘图标）后再搬一次，会接着用复制好的副本，很快完成。	{0} folders were copied, but the original folders are still in use by other programs and weren't replaced with links. Fully quit those apps (including the notification-area icon) and move them again; the existing copies are reused, so it finishes quickly.
+已中途取消，腾出 {0}	Cancelled, freed {0}
+完成，腾出 {0}	Done, freed {0}
+搬家完成	Move complete
+Discord 数据和缓存	Discord data and cache
+Discord 的登录状态、缓存，以及看过的图片和视频。搬之前要先退出 Discord（包括右下角托盘图标）	Discord's sign-in state, cache, and images and videos you've viewed. Quit Discord first (including the notification-area icon)
+Slack 数据和缓存	Slack data and cache
+Slack 的登录状态、缓存和下载过的文件预览	Slack's sign-in state, cache and downloaded file previews
+Signal 聊天记录	Signal chat history
+Signal 电脑版的聊天记录（加密存放）和收到的附件	Signal Desktop's chat history (stored encrypted) and received attachments
+LINE 聊天记录	LINE chat history
+LINE 电脑版的聊天记录、图片和收到的文件	LINE for PC's chat history, images and received files
+Viber 聊天记录	Viber chat history
+Viber 电脑版的聊天记录、图片和视频	Viber Desktop's chat history, images and videos
+KakaoTalk 聊天记录	KakaoTalk chat history
+KakaoTalk 电脑版的聊天记录和图片、视频缓存	KakaoTalk for PC's chat history and image and video cache
+Zoom 程序和数据	Zoom app and data
+Zoom 装在这里的程序和本地数据。会议录像默认存在「文档」里的 Zoom 文件夹，那里属于个人文件夹，不动	The Zoom app installed here and its local data. Meeting recordings are saved by default in the Zoom folder under "Documents", which is a personal folder and is left untouched
+没搬完：C 盘原文件夹还在，目标盘上也有一份。可以在「可以搬的」里再搬一次，只补有变化的文件；也可以删掉这份副本，删之前会先核对，副本里有不少 C 盘上没有的文件就不删	Not finished: the original folder is still on C: and there's also a copy on the target drive. Move it again under "Can be moved" (only changed files are copied), or delete the copy; it is checked first and won't be deleted if it has many files that aren't on C:
+读取装在 C 盘的软件	Reading apps installed on C:
+读取已安装的软件和系统服务	Reading installed apps and system services
+检查软件：{0}	Checking app: {0}
+{0} / {1}	{0} / {1}
+方块图	Treemap
+每个方块的大小就是它占的空间。单击选中，双击文件夹往里点	Each block's size is the space it takes. Click to select; double-click a folder to open it
+导出报告	Export report
+把这块盘的空间情况存成一个网页报告：方块图、最大的文件夹和文件、各类文件占多少、和上次比的变化。在浏览器里按 Ctrl+P 可以存成 PDF	Save a web page report of this drive: treemap, largest folders and files, space by file type, and changes since the last scan. Press Ctrl+P in the browser to save it as PDF
+重新看看 C 盘上还有什么能搬，并刷新已经搬走的状态	Look again for what can be moved off C: and refresh the status of moved folders
+把 C 盘上的聊天记录、软件和其他大文件夹搬到其他盘，原位置留一个链接，软件照常使用。搬走的也在这里：看链接是否正常、搬回 C 盘、修复断掉的链接。	Move chat histories, apps and other large folders off C: to another drive, leaving a link in the original location so apps keep working. Moved folders are managed here too: check the links, move back to C:, or repair broken links.
+还没有搬过文件夹。在「可以搬的」里勾选要搬的项目，或者在「清理 C 盘」里选「搬到其他盘」，搬好的就会出现在这里。	No folders have been moved yet. Tick items under "Can be moved", or choose "Move to another drive" in "Clean up C:"; moved folders appear here.
+搬到	Move to
+全选	Select all
+勾选所有聊天记录和软件。「其他文件夹」请看清说明再自己勾选	Ticks all chat histories and apps. Read the notes for "Other folders" and tick them yourself
+全不选	Select none
+搬家时还要关掉这些程序	These programs also need to be closed
+这些程序正在使用要搬的文件夹：{0}。不关掉的话文件被占用，这几项搬不成。\n\n点「关掉并继续」会替你关掉它们，没保存的内容请先保存；点「不关」就先不碰它们，这几项复制好后会停在最后一步，下次再搬很快。	These programs are using folders that will be moved: {0}. If they stay open, the files are in use and those items can't be moved.\n\n"Close and continue" closes them for you; save any unsaved work first. "Don't close" leaves them alone: those items are copied but stop at the last step, and the next move is quick.
+不关	Don't close
+关掉并继续	Close and continue
+这是一个链接（多半是搬家后留下的），删了软件会找不到数据。要处理请到「搬家管理」	This is a link (most likely left by a move); deleting it would leave apps unable to find their data. Manage it in "Moved folders"
+它所在的文件夹 {0} 已经搬到其他盘了，这份扫描结果过时了，请重新扫描	Its folder {0} has been moved to another drive, so this scan is out of date. Please scan again
+读取 C 盘的文件表：{0:N0} / {1:N0} 条记录	Reading the C: file table: {0:N0} / {1:N0} records
+逐个文件夹统计	Counting folder by folder
+读取 C 盘的文件表	Read the C: file table
+直接读取 NTFS 的文件表（MFT），比逐个文件夹查看快得多。只是查看，不会改动任何东西。	Reading the NTFS file table (MFT) directly, which is much faster than going through every folder. Only looks; nothing is changed.
+已读 {0:N0} / {1:N0} 条文件记录	Read {0:N0} / {1:N0} file records
+读取文件表	Reading the file table
+ · 扫描于 {0:HH:mm}（{1}）	 · scanned at {0:HH:mm} ({1})
+。这次是直接读文件表，原来进不去的文件夹（比如 System Volume Information）也算进来了，这些文件夹看起来变大不一定是真的变大	. This time the file table was read directly, so folders that could not be opened before (such as System Volume Information) are now counted; if those look bigger, they may not really have grown
+。这次是逐个文件夹扫描的，进不去的文件夹没算进来，这些文件夹看起来变小不一定是真的变小	. This time every folder was scanned one by one and folders that cannot be opened were not counted; if those look smaller, they may not really have shrunk
+按变更日志更新	updated from the change journal
+直接读文件表	read the file table
+逐个文件夹扫描	scanned folder by folder
+空间地图：没能直接读取文件表（{0}），改为逐个文件夹扫描	Space map: could not read the file table ({0}), scanning folder by folder instead
+空间地图：{0}，用时 {1:N1} 秒	Space map: {0}, took {1:N1} s
+读取 C 盘的文件表（MFT）	Reading the C: file table (MFT)
+没能直接读取 C 盘的文件表，改为逐个文件夹统计（{0}）	Could not read the C: file table, counting folder by folder instead ({0})
+读取 C 盘的文件表：{0:N0} 个文件，用时 {1:N1} 秒	Read the C: file table: {0:N0} files, took {1:N1} s
+按变更日志更新了 C 盘的文件表（{0:N0} 处改动），用时 {1:N1} 秒	Updated the C: file table from the change journal ({0:N0} changes), took {1:N1} s
+没有权限打开这个文件夹，看不到里面有什么，不删。	ClearC does not have permission to open this folder and cannot see what is inside, so it will not delete it.
+文件表里有 {0} 条记录这次没读到，下次扫描时再补	{0} records in the file table could not be read this time; they will be picked up on the next scan
+扫描功能检查完了	Scanning check finished
+{0} 项正常，{1} 项提醒，{2} 项有问题	{0} passed, {1} warnings, {2} problems
+打开结果	Open result
+检查扫描功能	Check scanning
+开始检查扫描功能	Checking scanning
+检查新版本	Check for updates
+其余 {0:N0} 项	{0:N0} more items
+这里只列出最大的 500 项；其余的可以点「打开位置」在资源管理器里看	Only the 500 largest items are listed here; click "Open location" to see the rest in File Explorer
+这一行是合在一起的其余项目	This row combines the remaining items
+聊天记录里的文件只能查看和打开位置；要腾地方，到「搬家管理」把整个聊天记录搬到其他盘	Files in chat data can only be viewed and located; to free up space, move the whole chat data to another drive on the "Moved folders" page
+在聊天记录里找（{0}）。这些文件只能查看和打开位置；要腾地方，可以到「搬家管理」把整个聊天记录搬到其他盘	Searching chat data ({0}). These files can only be viewed and located; to free up space, move the whole chat data to another drive on the "Moved folders" page
+这块盘上没找到聊天软件的聊天记录文件夹（可能已经搬到其他盘了）	No chat data folders were found on this drive (they may already have been moved to another drive)
+已打开快速扫描：直接读文件表	Fast scan on: reading the file table directly
+已关闭快速扫描：以后逐个文件夹扫描	Fast scan off: scanning folder by folder from now on
+已中途停止	Stopped partway
+检查扫描功能：{0}；结果存在 {1}	Scanning check: {0}; result saved to {1}
+。	. 
+结果已经复制，可以直接粘贴到微信里发给开发者。	The result has been copied; you can paste it straight into a message to the developer.
+完整结果存在 {0}	Full result saved to {0}
+有问题的项目，扫描时会自动改用逐个文件夹扫描，不影响使用；把结果发给开发者可以帮助修好它。	Where there are problems, scanning automatically falls back to the folder-by-folder method, so ClearC keeps working; sending the result to the developer helps get it fixed.
+没能检查新版本	Could not check for updates
+连不上 GitHub：{0}\n\n可以直接打开下载页面看看。	Could not reach GitHub: {0}\n\nYou can open the download page directly.
+打开下载页面	Open download page
+有新版本 {0}	New version {0} available
+现在用的是 {0}。下载页面会在浏览器里打开，下载新的 exe 替换现在这个就好，设置都会保留。	You are using {0}. The download page opens in your browser; download the new exe and replace this one. Your settings are kept.
+已经是最新版本	You're up to date
+现在用的是 {0}，GitHub 上最新的是 {1}。	You are using {0}; the latest on GitHub is {1}.
+浅色	Light
+深色	Dark
+跟随系统	Follow Windows
+外观：{0}	Appearance: {0}
+外观：浅色	Appearance: Light
+选择外观	Choose appearance
+深色适合在暗的环境里用；跟随系统会照 Windows 设置里「选择应用模式」来。换了以后本工具会关闭，再自动打开。\n\n现在：{0}	Dark is easier on the eyes in dim light; Follow Windows uses the "Choose your app mode" setting in Windows. ClearC will close and reopen after you change it.\n\nCurrent: {0}
+切换外观	Change appearance
+启动用时 {0:N1} 秒：准备 {1:N1} 秒，加载界面 {2:N1} 秒，显示 {3:N1} 秒	Startup took {0:N1} s: preparing {1:N1} s, loading the window {2:N1} s, showing it {3:N1} s
+核对批量读目录	Checking batch directory reads
+和逐个文件夹扫描对比	Comparing with a folder-by-folder scan
+试一下按变更日志更新	Trying updates from the change journal
+快速扫描	Fast scan
+直接读取 NTFS 的文件表（MFT），比逐个文件夹查看快得多。少数安全软件对直接读盘会提示，可以关掉，改为逐个文件夹扫描。清理、搬家、软件管理统计大小时也按这个设置。	Reads the NTFS file table (MFT) directly, which is much faster than going through every folder. A few security programs warn about direct disk reads; turn this off to scan folder by folder instead. Clean up, Moved folders and Apps follow this setting too.
+只找聊天软件里的	Only in chat apps
+微信、QQ、企业微信、飞书、钉钉、Telegram 等聊天记录文件夹里的大文件。这些文件只能查看、打开位置；要腾地方，可以到「搬家管理」把整个聊天记录搬到其他盘。	Large files in the chat data folders of WeChat, QQ, WeCom, Feishu, DingTalk, Telegram and others. These files can only be viewed and located; to free up space, move the whole chat data to another drive on the "Moved folders" page.

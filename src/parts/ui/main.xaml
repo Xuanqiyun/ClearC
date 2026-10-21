@@ -1,0 +1,2229 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="腾挪 ClearC" Width="1220" Height="860" MinWidth="980" MinHeight="620"
+        WindowStartupLocation="CenterScreen" FontFamily="Segoe UI, Microsoft YaHei UI" FontSize="13" Background="#F5F5F7"
+        Foreground="#1D1D1F" UseLayoutRounding="True" SnapsToDevicePixels="True" TextOptions.TextFormattingMode="Display">
+  <Window.Resources>
+    <!-- 配色：浅灰底 #F5F5F7、白色卡片、正文 #1D1D1F、次要文字 #6E6E73、分隔线 #E5E5EA、唯一的强调色是蓝 #0071E3，红色只给删除 -->
+    <FontFamily x:Key="Icons">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
+
+    <!-- ===== 文字 ===== -->
+    <Style x:Key="PageTitle" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="26"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Foreground" Value="#1D1D1F"/>
+      <Setter Property="TextOptions.TextFormattingMode" Value="Ideal"/>
+    </Style>
+    <Style x:Key="PageSub" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Foreground" Value="#6E6E73"/>
+      <Setter Property="Margin" Value="0,5,0,0"/>
+      <Setter Property="TextWrapping" Value="Wrap"/>
+    </Style>
+    <Style x:Key="SectionTitle" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Foreground" Value="#1D1D1F"/>
+    </Style>
+    <Style x:Key="RowLabel" TargetType="TextBlock">
+      <Setter Property="Foreground" Value="#1D1D1F"/>
+      <Setter Property="Margin" Value="0,6,0,0"/>
+      <Setter Property="VerticalAlignment" Value="Top"/>
+    </Style>
+    <Style x:Key="Caption" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="Foreground" Value="#86868B"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style x:Key="Note" TargetType="TextBlock" BasedOn="{StaticResource Caption}"/>
+    <Style x:Key="HelpHead" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="15"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Foreground" Value="#1D1D1F"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style x:Key="HelpPara" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Foreground" Value="#3A3A3C"/>
+      <Setter Property="TextWrapping" Value="Wrap"/>
+      <Setter Property="LineHeight" Value="22"/>
+    </Style>
+
+    <!-- ===== 卡片 ===== -->
+    <Style x:Key="Card" TargetType="Border">
+      <Setter Property="Background" Value="White"/>
+      <Setter Property="CornerRadius" Value="12"/>
+      <Setter Property="BorderBrush" Value="#E5E5EA"/>
+      <Setter Property="BorderThickness" Value="1"/>
+    </Style>
+    <Style x:Key="SegBox" TargetType="Border">
+      <Setter Property="Background" Value="#EBEBF0"/>
+      <Setter Property="CornerRadius" Value="8"/>
+      <Setter Property="Padding" Value="2"/>
+      <Setter Property="HorizontalAlignment" Value="Left"/>
+    </Style>
+
+    <!-- ===== 按钮：圆角 8，悬停/按下时整体轻微变暗 ===== -->
+    <Style x:Key="Secondary" TargetType="Button">
+      <Setter Property="Foreground" Value="#1D1D1F"/>
+      <Setter Property="Background" Value="#E8E8ED"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Padding" Value="14,6"/>
+      <Setter Property="MinHeight" Value="30"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Grid>
+              <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                      BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8"/>
+              <Border x:Name="Shade" Background="#000000" Opacity="0" CornerRadius="8"/>
+              <Border x:Name="Ring" BorderBrush="#7FB5F0" BorderThickness="0" CornerRadius="8" Margin="-2"/>
+              <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="False"/>
+            </Grid>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Shade" Property="Opacity" Value="0.06"/></Trigger>
+              <Trigger Property="IsPressed" Value="True"><Setter TargetName="Shade" Property="Opacity" Value="0.14"/></Trigger>
+              <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Ring" Property="BorderThickness" Value="2"/></Trigger>
+              <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.4"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style TargetType="Button" BasedOn="{StaticResource Secondary}"/>
+    <Style x:Key="Primary" TargetType="Button" BasedOn="{StaticResource Secondary}">
+      <Setter Property="Background" Value="#0071E3"/>
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style x:Key="Danger" TargetType="Button" BasedOn="{StaticResource Secondary}">
+      <Setter Property="Background" Value="#D70015"/>
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style x:Key="Small" TargetType="Button" BasedOn="{StaticResource Secondary}">
+      <Setter Property="Padding" Value="10,3"/>
+      <Setter Property="MinHeight" Value="26"/>
+      <Setter Property="FontSize" Value="12.5"/>
+    </Style>
+    <Style x:Key="LinkButton" TargetType="Button">
+      <Setter Property="Foreground" Value="#0066CC"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Padding" Value="2,2"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border Background="Transparent" Padding="{TemplateBinding Padding}">
+              <ContentPresenter VerticalAlignment="Center" RecognizesAccessKey="False"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter Property="Opacity" Value="0.7"/></Trigger>
+              <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.4"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- ===== 侧边栏导航 ===== -->
+    <Style x:Key="Nav" TargetType="RadioButton">
+      <Setter Property="Foreground" Value="#1D1D1F"/>
+      <Setter Property="FontSize" Value="13.5"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Margin" Value="0,0,0,3"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="RadioButton">
+            <Border x:Name="Bd" CornerRadius="8" Padding="11,8" Background="Transparent">
+              <StackPanel Orientation="Horizontal">
+                <TextBlock x:Name="Glyph" Text="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}" FontFamily="{StaticResource Icons}"
+                           FontSize="15" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,11,0"/>
+                <ContentPresenter VerticalAlignment="Center"/>
+              </StackPanel>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="#E1E1E6"/></Trigger>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="#0071E3"/>
+                <Setter TargetName="Glyph" Property="Foreground" Value="White"/>
+                <Setter Property="Foreground" Value="White"/>
+                <Setter Property="FontWeight" Value="SemiBold"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- ===== 分段控件（单选） ===== -->
+    <Style x:Key="Seg" TargetType="RadioButton">
+      <Setter Property="Foreground" Value="#1D1D1F"/>
+      <Setter Property="FontSize" Value="12.5"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="RadioButton">
+            <Border x:Name="Bd" CornerRadius="6" Padding="12,4,12,5" Background="Transparent">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="#DEDEE4"/></Trigger>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="White"/>
+                <Setter TargetName="Bd" Property="Effect"><Setter.Value><DropShadowEffect BlurRadius="4" ShadowDepth="1" Direction="270" Opacity="0.16"/></Setter.Value></Setter>
+                <Setter Property="FontWeight" Value="SemiBold"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.4"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="ChipRadio" TargetType="RadioButton" BasedOn="{StaticResource Seg}"/>
+    <!-- 每一行的「删除 / 搬到其他盘 / 跳过」：一个横排的列表当分段控件用，选中项绑定到这一行的操作 -->
+    <Style x:Key="SegList" TargetType="ListBox">
+      <Setter Property="Background" Value="#EBEBF0"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Focusable" Value="False"/>
+      <Setter Property="ItemsPanel">
+        <Setter.Value><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></Setter.Value>
+      </Setter>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ListBox">
+            <Border Background="{TemplateBinding Background}" CornerRadius="8" Padding="2"><ItemsPresenter/></Border>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+      <Setter Property="ItemContainerStyle">
+        <Setter.Value>
+          <Style TargetType="ListBoxItem">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="Foreground" Value="#3A3A3C"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+              <Setter.Value>
+                <ControlTemplate TargetType="ListBoxItem">
+                  <Border x:Name="Bd" CornerRadius="6" Padding="11,4,11,5" Background="Transparent">
+                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                  </Border>
+                  <ControlTemplate.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="#DEDEE4"/></Trigger>
+                    <Trigger Property="IsSelected" Value="True">
+                      <Setter TargetName="Bd" Property="Background" Value="White"/>
+                      <Setter TargetName="Bd" Property="Effect"><Setter.Value><DropShadowEffect BlurRadius="4" ShadowDepth="1" Direction="270" Opacity="0.16"/></Setter.Value></Setter>
+                      <Setter Property="FontWeight" Value="SemiBold"/>
+                      <Setter Property="Foreground" Value="#1D1D1F"/>
+                    </Trigger>
+                    <MultiTrigger>
+                      <MultiTrigger.Conditions><Condition Property="IsSelected" Value="True"/><Condition Property="Content" Value="删除"/></MultiTrigger.Conditions>
+                      <Setter Property="Foreground" Value="#D70015"/>
+                    </MultiTrigger>
+                    <MultiTrigger>
+                      <MultiTrigger.Conditions><Condition Property="IsSelected" Value="True"/><Condition Property="Content" Value="搬到其他盘"/></MultiTrigger.Conditions>
+                      <Setter Property="Foreground" Value="#0071E3"/>
+                    </MultiTrigger>
+                    <MultiTrigger>
+                      <MultiTrigger.Conditions><Condition Property="IsSelected" Value="True"/><Condition Property="Content" Value="执行"/></MultiTrigger.Conditions>
+                      <Setter Property="Foreground" Value="#0071E3"/>
+                    </MultiTrigger>
+                  </ControlTemplate.Triggers>
+                </ControlTemplate>
+              </Setter.Value>
+            </Setter>
+          </Style>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- ===== 文件类型胶囊（多选） ===== -->
+    <Style x:Key="Chip" TargetType="ToggleButton">
+      <Setter Property="Foreground" Value="#1D1D1F"/>
+      <Setter Property="FontSize" Value="12.5"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Margin" Value="0,0,6,6"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ToggleButton">
+            <Border x:Name="Bd" CornerRadius="13" Padding="12,4,12,5" Background="#F2F2F7">
+              <ContentPresenter VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="#E5E5EA"/></Trigger>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="#0071E3"/>
+                <Setter Property="Foreground" Value="White"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.4"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- ===== 勾选框：圆角小方块，勾上变蓝 ===== -->
+    <Style TargetType="CheckBox">
+      <Setter Property="Foreground" Value="#1D1D1F"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="CheckBox">
+            <Grid Background="Transparent">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+              <Border x:Name="Box" Width="17" Height="17" CornerRadius="4.5" BorderThickness="1" BorderBrush="#B8B8BE" Background="White" VerticalAlignment="Center">
+                <Path x:Name="Mark" Data="M 3.5 7.6 L 6.5 10.6 L 11.6 4.8" Stroke="White" StrokeThickness="2"
+                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Visibility="Collapsed"/>
+              </Border>
+              <ContentPresenter x:Name="CP" Grid.Column="1" Margin="9,0,0,0" VerticalAlignment="Center" RecognizesAccessKey="False"/>
+            </Grid>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Box" Property="BorderBrush" Value="#8E8E93"/></Trigger>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="Box" Property="Background" Value="#0071E3"/>
+                <Setter TargetName="Box" Property="BorderBrush" Value="#0071E3"/>
+                <Setter TargetName="Mark" Property="Visibility" Value="Visible"/>
+              </Trigger>
+              <Trigger Property="HasContent" Value="False"><Setter TargetName="CP" Property="Visibility" Value="Collapsed"/></Trigger>
+              <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- ===== 输入框 ===== -->
+    <Style TargetType="TextBox">
+      <Setter Property="Foreground" Value="#1D1D1F"/>
+      <Setter Property="Background" Value="White"/>
+      <Setter Property="BorderBrush" Value="#D2D2D7"/>
+      <Setter Property="Padding" Value="8,0"/>
+      <Setter Property="MinHeight" Value="30"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="TextBox">
+            <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="7">
+              <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" VerticalAlignment="Center" Focusable="False"
+                            HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="BorderBrush" Value="#AEAEB2"/></Trigger>
+              <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Bd" Property="BorderBrush" Value="#0071E3"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <!-- 运行记录用系统默认的多行文本框（有滚动条），只改颜色 -->
+    <Style x:Key="LogBox" TargetType="TextBox">
+      <Setter Property="Foreground" Value="#3A3A3C"/>
+      <Setter Property="Background" Value="White"/>
+      <Setter Property="BorderThickness" Value="0"/>
+    </Style>
+
+    <!-- ===== 下拉框 ===== -->
+    <Style TargetType="ComboBoxItem">
+      <Setter Property="Padding" Value="9,6"/>
+      <Setter Property="Foreground" Value="#1D1D1F"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ComboBoxItem">
+            <Border x:Name="Bd" CornerRadius="5" Padding="{TemplateBinding Padding}" Background="Transparent">
+              <ContentPresenter/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsHighlighted" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="#0071E3"/>
+                <Setter Property="Foreground" Value="White"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style TargetType="ComboBox">
+      <Setter Property="Foreground" Value="#1D1D1F"/>
+      <Setter Property="MinHeight" Value="30"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ComboBox">
+            <Grid>
+              <ToggleButton x:Name="Toggle" Focusable="False" ClickMode="Press"
+                            IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                <ToggleButton.Template>
+                  <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="Bd" Background="White" BorderBrush="#D2D2D7" BorderThickness="1" CornerRadius="7">
+                      <TextBlock Text="&#xE70D;" FontFamily="{StaticResource Icons}" FontSize="10" Foreground="#6E6E73"
+                                 HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,11,0"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                      <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="BorderBrush" Value="#AEAEB2"/></Trigger>
+                      <Trigger Property="IsChecked" Value="True"><Setter TargetName="Bd" Property="BorderBrush" Value="#0071E3"/></Trigger>
+                    </ControlTemplate.Triggers>
+                  </ControlTemplate>
+                </ToggleButton.Template>
+              </ToggleButton>
+              <ContentPresenter IsHitTestVisible="False" Content="{TemplateBinding SelectionBoxItem}" ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                Margin="11,4,30,4" VerticalAlignment="Center" HorizontalAlignment="Left"/>
+              <Popup x:Name="PART_Popup" Placement="Bottom" AllowsTransparency="True" Focusable="False" PopupAnimation="Fade"
+                     IsOpen="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                <Border Background="White" BorderBrush="#D2D2D7" BorderThickness="1" CornerRadius="9" Padding="4" Margin="0,4,12,14"
+                        MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}">
+                  <Border.Effect><DropShadowEffect BlurRadius="18" ShadowDepth="3" Direction="270" Opacity="0.16"/></Border.Effect>
+                  <ScrollViewer MaxHeight="{TemplateBinding MaxDropDownHeight}" VerticalScrollBarVisibility="Auto">
+                    <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained"/>
+                  </ScrollViewer>
+                </Border>
+              </Popup>
+            </Grid>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- ===== 细滚动条 ===== -->
+    <Style x:Key="SlimThumb" TargetType="Thumb">
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Thumb">
+            <Border x:Name="T" Background="#C7C7CC" CornerRadius="4" Margin="2"/>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="T" Property="Background" Value="#AEAEB2"/></Trigger>
+              <Trigger Property="IsDragging" Value="True"><Setter TargetName="T" Property="Background" Value="#8E8E93"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style TargetType="ScrollBar">
+      <Setter Property="Width" Value="11"/>
+      <Setter Property="MinWidth" Value="11"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ScrollBar">
+            <Grid Background="Transparent">
+              <Track x:Name="PART_Track" Orientation="Vertical" IsDirectionReversed="True">
+                <Track.Thumb><Thumb Style="{StaticResource SlimThumb}"/></Track.Thumb>
+              </Track>
+            </Grid>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+      <Style.Triggers>
+        <Trigger Property="Orientation" Value="Horizontal">
+          <Setter Property="Width" Value="Auto"/>
+          <Setter Property="MinWidth" Value="0"/>
+          <Setter Property="Height" Value="11"/>
+          <Setter Property="MinHeight" Value="11"/>
+          <Setter Property="Template">
+            <Setter.Value>
+              <ControlTemplate TargetType="ScrollBar">
+                <Grid Background="Transparent">
+                  <Track x:Name="PART_Track" Orientation="Horizontal" IsDirectionReversed="False">
+                    <Track.Thumb><Thumb Style="{StaticResource SlimThumb}"/></Track.Thumb>
+                  </Track>
+                </Grid>
+              </ControlTemplate>
+            </Setter.Value>
+          </Setter>
+        </Trigger>
+      </Style.Triggers>
+    </Style>
+
+    <!-- ===== 进度条：圆角细条；不确定进度时轻轻闪烁 ===== -->
+    <Style TargetType="ProgressBar">
+      <Setter Property="Foreground" Value="#0071E3"/>
+      <Setter Property="Background" Value="#E5E5EA"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ProgressBar">
+            <Grid>
+              <Border x:Name="PART_Track" Background="{TemplateBinding Background}" CornerRadius="3"/>
+              <Border x:Name="PART_Indicator" Background="{TemplateBinding Foreground}" CornerRadius="3" HorizontalAlignment="Left"/>
+            </Grid>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsIndeterminate" Value="True">
+                <Trigger.EnterActions>
+                  <BeginStoryboard x:Name="Pulse">
+                    <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                      <DoubleAnimation Storyboard.TargetName="PART_Indicator" Storyboard.TargetProperty="Opacity" From="0.25" To="0.85" Duration="0:0:0.8"/>
+                    </Storyboard>
+                  </BeginStoryboard>
+                </Trigger.EnterActions>
+                <Trigger.ExitActions><StopStoryboard BeginStoryboardName="Pulse"/></Trigger.ExitActions>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style TargetType="ToolTip">
+      <Setter Property="Background" Value="White"/>
+      <Setter Property="Foreground" Value="#1D1D1F"/>
+      <Setter Property="BorderBrush" Value="#D2D2D7"/>
+      <Setter Property="Padding" Value="9,6"/>
+      <Setter Property="MaxWidth" Value="420"/>
+    </Style>
+
+    <!-- ===== 查找条件的折叠面板：左边一个小箭头，展开时转向下 ===== -->
+    <Style TargetType="Expander">
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Expander">
+            <DockPanel>
+              <ToggleButton DockPanel.Dock="Top" Focusable="False" Cursor="Hand" Content="{TemplateBinding Header}"
+                            IsChecked="{Binding IsExpanded, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                <ToggleButton.Template>
+                  <ControlTemplate TargetType="ToggleButton">
+                    <Border Background="Transparent" Padding="2,6">
+                      <DockPanel>
+                        <TextBlock x:Name="Chev" DockPanel.Dock="Left" Text="&#xE76C;" FontFamily="{StaticResource Icons}" FontSize="11"
+                                   Foreground="#6E6E73" VerticalAlignment="Center" Margin="0,1,10,0" RenderTransformOrigin="0.5,0.5">
+                          <TextBlock.RenderTransform><RotateTransform Angle="0"/></TextBlock.RenderTransform>
+                        </TextBlock>
+                        <ContentPresenter VerticalAlignment="Center"/>
+                      </DockPanel>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                      <Trigger Property="IsChecked" Value="True">
+                        <Setter TargetName="Chev" Property="RenderTransform"><Setter.Value><RotateTransform Angle="90"/></Setter.Value></Setter>
+                      </Trigger>
+                    </ControlTemplate.Triggers>
+                  </ControlTemplate>
+                </ToggleButton.Template>
+              </ToggleButton>
+              <ContentPresenter x:Name="Body" Visibility="Collapsed"/>
+            </DockPanel>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsExpanded" Value="True"><Setter TargetName="Body" Property="Visibility" Value="Visible"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- ===== 清理列表：每组一张圆角白卡片，行之间一条细线 ===== -->
+    <Style x:Key="CardGroup" TargetType="GroupItem">
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="GroupItem">
+            <StackPanel Margin="0,0,0,22">
+              <StackPanel Orientation="Horizontal" Margin="4,0,0,8">
+                <TextBlock Text="{Binding Items[0].GroupTitle}" FontSize="13" FontWeight="SemiBold" Foreground="#1D1D1F"/>
+                <Border Background="#E5E5EA" CornerRadius="8" Padding="7,0" Margin="8,0,0,0" VerticalAlignment="Center">
+                  <TextBlock Text="{Binding ItemCount, StringFormat='{}{0} 项'}" FontSize="11.5" Foreground="#3A3A3C"/>
+                </Border>
+                <TextBlock Text="{Binding Items[0].GroupNote}" FontSize="12" Foreground="#86868B" Margin="10,0,0,0" VerticalAlignment="Bottom"/>
+              </StackPanel>
+              <Border Background="White" CornerRadius="12" BorderBrush="#E5E5EA" BorderThickness="1" Padding="0,2">
+                <ItemsPresenter/>
+              </Border>
+            </StackPanel>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="PlainRow" TargetType="ListViewItem">
+      <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ListViewItem">
+            <Grid Background="Transparent">
+              <Rectangle x:Name="Sep" Height="1" Fill="#E5E5EA" VerticalAlignment="Top" Margin="18,0,0,0"/>
+              <ContentPresenter/>
+            </Grid>
+            <ControlTemplate.Triggers>
+              <DataTrigger Binding="{Binding First}" Value="True"><Setter TargetName="Sep" Property="Visibility" Value="Collapsed"/></DataTrigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <DataTemplate x:Key="CleanRow">
+      <Grid Margin="18,12,14,12">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+        <StackPanel Grid.Column="0" Margin="0,0,18,0" VerticalAlignment="Center">
+          <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold" Foreground="#1D1D1F"/>
+          <TextBlock Text="{Binding Note}" FontSize="12" Foreground="#6E6E73" TextWrapping="Wrap" Margin="0,3,0,0"/>
+          <TextBlock Text="{Binding Status}" Foreground="{Binding StatusBrush}" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,5,0,0">
+            <TextBlock.Style>
+              <Style TargetType="TextBlock">
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding Status}" Value=""><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </TextBlock.Style>
+          </TextBlock>
+        </StackPanel>
+        <TextBlock Grid.Column="1" Text="{Binding SizeText}" FontSize="13.5" Foreground="#1D1D1F" VerticalAlignment="Center"
+                   MinWidth="90" TextAlignment="Right" Margin="0,0,18,0"/>
+        <ListBox Grid.Column="2" ItemsSource="{Binding Actions}" SelectedItem="{Binding Action, Mode=TwoWay}" Style="{StaticResource SegList}" VerticalAlignment="Center"/>
+      </Grid>
+    </DataTemplate>
+
+    <!-- ===== 重复文件结果表 ===== -->
+    <Style TargetType="GridViewColumnHeader">
+      <Setter Property="HorizontalContentAlignment" Value="Left"/>
+      <Setter Property="Foreground" Value="#86868B"/>
+      <Setter Property="FontSize" Value="11.5"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="GridViewColumnHeader">
+            <Grid>
+              <Border Background="White" BorderBrush="#E5E5EA" BorderThickness="0,0,0,1" Padding="6,8,6,7">
+                <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center"/>
+              </Border>
+              <Thumb x:Name="PART_HeaderGripper" HorizontalAlignment="Right" Width="9" Margin="0,0,-4,0" Cursor="SizeWE">
+                <Thumb.Template>
+                  <ControlTemplate TargetType="Thumb">
+                    <Border Background="Transparent"><Rectangle Width="1" Fill="#E5E5EA" HorizontalAlignment="Center" Margin="0,8"/></Border>
+                  </ControlTemplate>
+                </Thumb.Template>
+              </Thumb>
+            </Grid>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="GridRow" TargetType="ListViewItem">
+      <Setter Property="Padding" Value="0,5"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ListViewItem">
+            <Border x:Name="Bd" Background="Transparent" Padding="{TemplateBinding Padding}">
+              <GridViewRowPresenter VerticalAlignment="Center" Columns="{TemplateBinding GridView.ColumnCollection}"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="#F5F5F7"/></Trigger>
+              <Trigger Property="IsSelected" Value="True"><Setter TargetName="Bd" Property="Background" Value="#E8F1FC"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="RootRow" TargetType="ListBoxItem">
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Margin" Value="0,0,6,6"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ListBoxItem"><ContentPresenter/></ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <!-- 查找位置：和文件类型一样的胶囊，勾上变蓝；自己加的文件夹带一个小叉可以移除 -->
+    <Style x:Key="PillCheck" TargetType="CheckBox">
+      <Setter Property="Foreground" Value="#1D1D1F"/>
+      <Setter Property="FontSize" Value="12.5"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="CheckBox">
+            <Border x:Name="Bd" CornerRadius="13" Padding="12,4,12,5" Background="#F2F2F7">
+              <ContentPresenter VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="#E5E5EA"/></Trigger>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="#0071E3"/>
+                <Setter Property="Foreground" Value="White"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="PillX" TargetType="Button">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="Bd" Width="16" Height="16" CornerRadius="8" Background="Transparent">
+              <TextBlock Text="&#xE711;" FontFamily="{StaticResource Icons}" FontSize="8" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="#26000000"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <!-- ===== 侧边栏分组标题 ===== -->
+    <Style x:Key="NavHead" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="11.5"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Foreground" Value="#86868B"/>
+      <Setter Property="Margin" Value="11,12,0,5"/>
+    </Style>
+    <!-- ===== 开关（勾选框的另一种样子） ===== -->
+    <Style x:Key="Switch" TargetType="CheckBox">
+      <Setter Property="Foreground" Value="#1D1D1F"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="CheckBox">
+            <StackPanel Orientation="Horizontal" Background="Transparent">
+              <Grid Width="40" Height="24" VerticalAlignment="Center">
+                <Border x:Name="Track" CornerRadius="12" Background="#D1D1D6"/>
+                <Ellipse x:Name="Knob" Width="20" Height="20" Fill="White" HorizontalAlignment="Left" Margin="2,0,0,0">
+                  <Ellipse.Effect><DropShadowEffect BlurRadius="3" ShadowDepth="1" Direction="270" Opacity="0.25"/></Ellipse.Effect>
+                </Ellipse>
+              </Grid>
+              <ContentPresenter x:Name="CP" Margin="10,0,0,0" VerticalAlignment="Center"/>
+            </StackPanel>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="Track" Property="Background" Value="#34C759"/>
+                <Setter TargetName="Knob" Property="HorizontalAlignment" Value="Right"/>
+                <Setter TargetName="Knob" Property="Margin" Value="0,0,2,0"/>
+              </Trigger>
+              <Trigger Property="HasContent" Value="False"><Setter TargetName="CP" Property="Visibility" Value="Collapsed"/></Trigger>
+              <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <!-- ===== 可以选中的列表行（空间地图、软件、搬家记录） ===== -->
+    <Style x:Key="SelRow" TargetType="ListViewItem">
+      <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ListViewItem">
+            <Border x:Name="Bd" Background="Transparent" CornerRadius="8" Margin="6,1">
+              <ContentPresenter/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="#F5F5F7"/></Trigger>
+              <Trigger Property="IsSelected" Value="True"><Setter TargetName="Bd" Property="Background" Value="#E8F1FC"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="CardHead" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="15"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Foreground" Value="#1D1D1F"/>
+    </Style>
+    <Style x:Key="Body" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Foreground" Value="#3A3A3C"/>
+      <Setter Property="TextWrapping" Value="Wrap"/>
+      <Setter Property="LineHeight" Value="21"/>
+    </Style>
+    <!-- 空间地图的一行：图标、名字、占比条、大小、百分比 -->
+    <DataTemplate x:Key="CandRowTpl">
+      <Grid Margin="14,11,14,11">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="30"/>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="100"/>
+          <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+        <CheckBox x:Name="Ck" Grid.Column="0" IsChecked="{Binding Checked, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanMove}" VerticalAlignment="Top" Margin="0,2,0,0"/>
+        <StackPanel Grid.Column="1" Margin="0,0,14,0">
+          <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+          <TextBlock Text="{Binding PathText}" FontSize="11.5" Foreground="#86868B" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" ToolTip="{Binding PathText}"/>
+          <TextBlock x:Name="Nt" Text="{Binding Note}" FontSize="12" Foreground="#6E6E73" TextWrapping="Wrap" Margin="0,3,0,0"/>
+          <TextBlock x:Name="St" Text="{Binding Status}" Foreground="{Binding StatusBrush}" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,4,0,0"/>
+        </StackPanel>
+        <TextBlock Grid.Column="2" Text="{Binding SizeText}" FontWeight="SemiBold" TextAlignment="Right" VerticalAlignment="Center" Margin="0,0,14,0"/>
+        <Button x:Name="CandOpen" Grid.Column="3" Content="打开" Tag="{Binding}" Style="{StaticResource Small}" VerticalAlignment="Center"/>
+      </Grid>
+      <DataTemplate.Triggers>
+        <DataTrigger Binding="{Binding Status}" Value=""><Setter TargetName="St" Property="Visibility" Value="Collapsed"/></DataTrigger>
+        <DataTrigger Binding="{Binding Note}" Value=""><Setter TargetName="Nt" Property="Visibility" Value="Collapsed"/></DataTrigger>
+        <DataTrigger Binding="{Binding CanMove}" Value="False"><Setter TargetName="Ck" Property="Visibility" Value="Hidden"/></DataTrigger>
+      </DataTemplate.Triggers>
+    </DataTemplate>
+    <DataTemplate x:Key="MapRowTpl">
+      <Grid Margin="12,7,14,7">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="30"/>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="172"/>
+          <ColumnDefinition Width="92"/>
+          <ColumnDefinition Width="58"/>
+        </Grid.ColumnDefinitions>
+        <TextBlock Grid.Column="0" Text="{Binding Glyph}" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="{Binding GlyphBrush}" VerticalAlignment="Center"/>
+        <StackPanel Grid.Column="1" Margin="0,0,14,0" VerticalAlignment="Center">
+          <DockPanel>
+            <TextBlock x:Name="Lk" DockPanel.Dock="Right" Text="&#xE72E;" FontFamily="{StaticResource Icons}" FontSize="11" Foreground="#86868B"
+                       Margin="8,0,0,0" VerticalAlignment="Center" Visibility="Collapsed" ToolTip="{Binding LockTip}"/>
+            <TextBlock Text="{Binding Name}" FontSize="13.5" TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}"/>
+          </DockPanel>
+          <TextBlock Text="{Binding Meta}" FontSize="11.5" Foreground="#86868B" TextTrimming="CharacterEllipsis" Margin="0,1,0,0"/>
+        </StackPanel>
+        <Border Grid.Column="2" Height="8" Width="160" CornerRadius="4" Background="#EFEFF4" HorizontalAlignment="Left" VerticalAlignment="Center">
+          <Border Width="{Binding Bar}" HorizontalAlignment="Left" CornerRadius="4" Background="#0071E3"/>
+        </Border>
+        <TextBlock Grid.Column="3" Text="{Binding SizeText}" FontWeight="SemiBold" TextAlignment="Right" VerticalAlignment="Center"/>
+        <TextBlock Grid.Column="4" Text="{Binding Pct}" Foreground="#86868B" TextAlignment="Right" VerticalAlignment="Center"/>
+      </Grid>
+      <DataTemplate.Triggers>
+        <DataTrigger Binding="{Binding Locked}" Value="True"><Setter TargetName="Lk" Property="Visibility" Value="Visible"/></DataTrigger>
+      </DataTemplate.Triggers>
+    </DataTemplate>
+  </Window.Resources>
+
+  <Grid x:Name="Root">
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="220"/>
+      <ColumnDefinition Width="*"/>
+    </Grid.ColumnDefinitions>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="*"/>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/>
+    </Grid.RowDefinitions>
+
+    <!-- ==================== 侧边栏 ==================== -->
+    <Border Grid.Column="0" Grid.RowSpan="3" Background="#ECECF0" BorderBrush="#DCDCE1" BorderThickness="0,0,1,0">
+      <DockPanel Margin="14,20,14,16">
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="6,0,0,26">
+          <Border Width="36" Height="36" CornerRadius="9">
+            <Border.Background>
+              <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Color="#3A9BFF" Offset="0"/>
+                <GradientStop Color="#0062D6" Offset="1"/>
+              </LinearGradientBrush>
+            </Border.Background>
+            <TextBlock Text="&#xEDA2;" FontFamily="{StaticResource Icons}" FontSize="18" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          </Border>
+          <StackPanel Margin="11,0,0,0" VerticalAlignment="Center">
+            <TextBlock Text="腾挪 ClearC" FontSize="15" FontWeight="SemiBold" TextOptions.TextFormattingMode="Ideal"/>
+            <TextBlock x:Name="AppVer" Text="" FontSize="11.5" Foreground="#86868B" Margin="0,1,0,0"/>
+          </StackPanel>
+        </StackPanel>
+        <StackPanel DockPanel.Dock="Bottom">
+          <Button x:Name="BtnTheme" Style="{StaticResource LinkButton}" Foreground="#6E6E73" Padding="11,6" HorizontalAlignment="Left">
+            <StackPanel Orientation="Horizontal">
+              <TextBlock Text="&#xE706;" FontFamily="{StaticResource Icons}" FontSize="13" VerticalAlignment="Center" Margin="0,0,9,0"/>
+              <TextBlock x:Name="BtnThemeText" Text="外观：浅色" VerticalAlignment="Center"/>
+            </StackPanel>
+          </Button>
+          <Button x:Name="BtnLang" Style="{StaticResource LinkButton}" Foreground="#6E6E73" Padding="11,6" HorizontalAlignment="Left" ToolTip="中文 / English">
+            <StackPanel Orientation="Horizontal">
+              <TextBlock Text="&#xE774;" FontFamily="{StaticResource Icons}" FontSize="13" VerticalAlignment="Center" Margin="0,0,9,0"/>
+              <TextBlock x:Name="BtnLangText" Text="English" VerticalAlignment="Center"/>
+            </StackPanel>
+          </Button>
+          <Button x:Name="BtnFeedback" Style="{StaticResource LinkButton}" Foreground="#6E6E73" Padding="11,6" HorizontalAlignment="Left">
+            <StackPanel Orientation="Horizontal">
+              <TextBlock Text="&#xE8BD;" FontFamily="{StaticResource Icons}" FontSize="13" VerticalAlignment="Center" Margin="0,0,9,0"/>
+              <TextBlock Text="使用反馈" VerticalAlignment="Center"/>
+            </StackPanel>
+          </Button>
+          <Button x:Name="BtnLog" Style="{StaticResource LinkButton}" Foreground="#6E6E73" Padding="11,6" HorizontalAlignment="Left">
+            <StackPanel Orientation="Horizontal">
+              <TextBlock Text="&#xE8A5;" FontFamily="{StaticResource Icons}" FontSize="13" VerticalAlignment="Center" Margin="0,0,9,0"/>
+              <TextBlock x:Name="BtnLogText" Text="运行记录" VerticalAlignment="Center"/>
+            </StackPanel>
+          </Button>
+        </StackPanel>
+        <StackPanel>
+          <TextBlock Text="清理" Style="{StaticResource NavHead}" Margin="11,0,0,5"/>
+          <RadioButton x:Name="NavClean" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xEDA2;" Content="清理 C 盘" IsChecked="True"/>
+          <RadioButton x:Name="NavDup" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE8C8;" Content="重复文件"/>
+          <RadioButton x:Name="NavSave" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE7B8;" Content="省空间"/>
+          <TextBlock Text="分析" Style="{StaticResource NavHead}"/>
+          <RadioButton x:Name="NavMap" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE9D9;" Content="空间地图"/>
+          <RadioButton x:Name="NavApps" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE71D;" Content="软件管理"/>
+          <TextBlock Text="管理" Style="{StaticResource NavHead}"/>
+          <RadioButton x:Name="NavMoves" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE8AB;" Content="搬家管理"/>
+          <RadioButton x:Name="NavAuto" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE823;" Content="自动提醒"/>
+          <RadioButton x:Name="NavLog" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE81C;" Content="操作日志"/>
+          <RadioButton x:Name="NavHelp" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE897;" Content="帮助" Margin="0,12,0,3"/>
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <!-- ==================== 清理 C 盘 ==================== -->
+    <Grid x:Name="PageClean" Grid.Column="1" Grid.Row="0" Margin="30,24,30,14">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="Auto"/>
+      </Grid.RowDefinitions>
+
+      <DockPanel Grid.Row="0" Margin="0,0,0,18">
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top" Margin="16,4,0,0">
+          <Button x:Name="BtnHogs" Content="分析占用" Margin="0,0,8,0" ToolTip="打开「空间地图」扫描 C 盘，看清哪些文件夹和文件最占地方"/>
+          <Button x:Name="BtnScan" Content="扫描"/>
+        </StackPanel>
+        <StackPanel>
+          <TextBlock Text="清理 C 盘" Style="{StaticResource PageTitle}"/>
+          <TextBlock x:Name="Hint" Style="{StaticResource PageSub}"
+                     Text="「一键清理」会自动扫描并处理默认选中的项目。也可以先扫描，再逐项选择删除、搬到其他盘或跳过。"/>
+        </StackPanel>
+      </DockPanel>
+
+      <!-- 容量卡片、搬家目标和清理列表放在同一个滚动区里，整页一起滚，列表不再挤在一小块里 -->
+      <Grid Grid.Row="1">
+      <ScrollViewer x:Name="CleanScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False" Padding="0,0,6,0">
+      <StackPanel>
+      <!-- 存储空间：已用 / 可释放 / 可用 -->
+      <Border Style="{StaticResource Card}" Padding="22,18" Margin="0,0,0,14">
+        <DockPanel>
+          <Button x:Name="BtnOneClick" DockPanel.Dock="Right" Style="{StaticResource Primary}" Content="一键清理" FontSize="14" Padding="24,9"
+                  VerticalAlignment="Center" Margin="28,0,0,0"
+                  ToolTip="自动扫描，清掉所有安全项和默认选中的项目，并把微信、QQ、飞书、钉钉等聊天记录搬到空间最大的其他盘。不会关闭休眠、不清空回收站，个人文件夹（桌面、文档、下载等）里的东西一律不删。"/>
+          <StackPanel>
+            <DockPanel>
+              <TextBlock x:Name="CapTotal" DockPanel.Dock="Right" Foreground="#86868B" VerticalAlignment="Bottom" Margin="12,0,0,3"/>
+              <StackPanel Orientation="Horizontal">
+                <TextBlock x:Name="CapFree" Text="—" FontSize="24" FontWeight="SemiBold" TextOptions.TextFormattingMode="Ideal"/>
+                <TextBlock Text="可用" FontSize="14" Foreground="#6E6E73" VerticalAlignment="Bottom" Margin="8,0,0,4"/>
+              </StackPanel>
+            </DockPanel>
+            <Border Height="10" CornerRadius="5" Background="#E5E5EA" Margin="0,11,0,10">
+              <Grid x:Name="CapBar">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="1*"/>
+                  <ColumnDefinition Width="0*"/>
+                  <ColumnDefinition Width="1*"/>
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Background="#8E8E93" CornerRadius="5,0,0,5"/>
+                <Border Grid.Column="1" Background="#0071E3"/>
+              </Grid>
+            </Border>
+            <StackPanel Orientation="Horizontal">
+              <Ellipse Width="8" Height="8" Fill="#8E8E93" VerticalAlignment="Center"/>
+              <TextBlock Text="已用" Style="{StaticResource Caption}" Margin="6,0,18,0"/>
+              <Ellipse Width="8" Height="8" Fill="#0071E3" VerticalAlignment="Center"/>
+              <TextBlock x:Name="CapReclaim" Text="可释放（扫描后显示）" Style="{StaticResource Caption}" Margin="6,0,18,0"/>
+              <Ellipse Width="8" Height="8" Fill="#D1D1D6" VerticalAlignment="Center"/>
+              <TextBlock Text="可用" Style="{StaticResource Caption}" Margin="6,0,0,0"/>
+            </StackPanel>
+          </StackPanel>
+        </DockPanel>
+      </Border>
+
+      <!-- 搬家目标 -->
+      <Border Style="{StaticResource Card}" Padding="18,12" Margin="0,0,0,20">
+        <StackPanel>
+          <DockPanel LastChildFill="False">
+            <TextBlock Text="&#xE8B7;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
+            <TextBlock Text="搬家目标" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,14,0"/>
+            <ComboBox x:Name="DestPick" Width="380" VerticalAlignment="Center"/>
+            <Button x:Name="BtnDestBrowse" Style="{StaticResource LinkButton}" Content="选择文件夹…" Margin="14,0,0,0" VerticalAlignment="Center"/>
+          </DockPanel>
+          <TextBlock x:Name="DestHint" Style="{StaticResource Caption}" Margin="26,7,0,0" TextWrapping="Wrap"
+                     Text="聊天记录等搬到这里，C 盘原位置留一个链接，软件照常使用。"/>
+        </StackPanel>
+      </Border>
+
+      <!-- 扫描结果总览：一共几类、每类几项，一眼看出下面还有很多 -->
+      <Border x:Name="CleanOverview" Background="#EAF3FF" CornerRadius="10" Padding="14,10" Margin="0,0,0,16" Visibility="Collapsed">
+        <DockPanel>
+          <TextBlock Text="&#xE8FD;" FontFamily="{StaticResource Icons}" FontSize="15" Foreground="#0071E3" VerticalAlignment="Top" Margin="0,1,10,0"/>
+          <TextBlock x:Name="CleanOverviewText" TextWrapping="Wrap" Foreground="#1D1D1F" LineHeight="20"/>
+        </DockPanel>
+      </Border>
+      <!-- 列表自己不滚动（没有内部滚动条），所有项目都排开，跟着整页滚 -->
+      <ListView x:Name="List" Background="Transparent" BorderThickness="0" Padding="0"
+                ItemTemplate="{StaticResource CleanRow}" ItemContainerStyle="{StaticResource PlainRow}">
+        <ListView.Template>
+          <ControlTemplate TargetType="ListView"><ItemsPresenter/></ControlTemplate>
+        </ListView.Template>
+        <ListView.GroupStyle>
+          <GroupStyle ContainerStyle="{StaticResource CardGroup}"/>
+        </ListView.GroupStyle>
+      </ListView>
+      <StackPanel x:Name="EmptyClean" HorizontalAlignment="Center" Margin="0,40,0,40" IsHitTestVisible="False">
+        <TextBlock Text="&#xE721;" FontFamily="{StaticResource Icons}" FontSize="34" Foreground="#C7C7CC" HorizontalAlignment="Center"/>
+        <TextBlock x:Name="EmptyCleanText" Text="点「扫描」看看 C 盘里有什么可以清理" Foreground="#86868B" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center"/>
+      </StackPanel>
+      </StackPanel>
+      </ScrollViewer>
+      <!-- 下面还有内容时浮在底部的提示，点一下往下翻一屏 -->
+      <Button x:Name="CleanMore" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,10" Visibility="Collapsed" Cursor="Hand" ToolTip="往下翻一屏">
+        <Button.Template>
+          <ControlTemplate TargetType="Button">
+            <Border Background="#1D1D1F" CornerRadius="16" Padding="16,7">
+              <Border.Effect><DropShadowEffect BlurRadius="14" ShadowDepth="3" Direction="270" Opacity="0.25"/></Border.Effect>
+              <ContentPresenter/>
+            </Border>
+          </ControlTemplate>
+        </Button.Template>
+        <StackPanel Orientation="Horizontal">
+          <TextBlock x:Name="CleanMoreText" Foreground="White" FontSize="12.5" VerticalAlignment="Center"/>
+          <TextBlock Text="&#xE74B;" FontFamily="{StaticResource Icons}" Foreground="White" FontSize="12" VerticalAlignment="Center" Margin="8,1,0,0"/>
+        </StackPanel>
+      </Button>
+      </Grid>
+
+      <DockPanel Grid.Row="2" Margin="0,14,0,0">
+        <Button x:Name="BtnRun" DockPanel.Dock="Right" Style="{StaticResource Primary}" Content="执行所选操作" Padding="22,8" IsEnabled="False"/>
+        <TextBlock x:Name="Summary" Text="" VerticalAlignment="Center" FontWeight="SemiBold" TextWrapping="Wrap" Margin="2,0,16,0"/>
+      </DockPanel>
+    </Grid>
+
+    <!-- ==================== 重复文件 ==================== -->
+    <Grid x:Name="PageDup" Grid.Column="1" Grid.Row="0" Margin="30,24,30,14" Visibility="Collapsed">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="Auto"/>
+      </Grid.RowDefinitions>
+
+      <DockPanel Grid.Row="0" Margin="0,0,0,14">
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top" Margin="16,4,0,0">
+          <Button x:Name="BtnDupStop" Content="停止" Margin="0,0,8,0" IsEnabled="False"/>
+          <Button x:Name="BtnDupScan" Content="开始查找" Style="{StaticResource Primary}" Padding="20,6"/>
+        </StackPanel>
+        <StackPanel>
+          <TextBlock Text="重复文件" Style="{StaticResource PageTitle}"/>
+          <TextBlock Style="{StaticResource PageSub}" Text="找出内容完全相同的文件，每组只留一份，其余删除。"/>
+        </StackPanel>
+      </DockPanel>
+
+      <Expander Grid.Row="1" x:Name="FilterExpander" IsExpanded="True" Margin="0,0,0,12">
+        <Expander.Header>
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Text="查找条件" Style="{StaticResource SectionTitle}" FontSize="13.5"/>
+            <TextBlock x:Name="FilterSummary" Margin="12,0,0,0" Foreground="#86868B" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+          </StackPanel>
+        </Expander.Header>
+        <!-- 位置和条件放在同一张卡片里，一行一类；选项都用胶囊和分段控件 -->
+        <Border Style="{StaticResource Card}" Padding="20,4,20,4" Margin="0,8,0,0">
+          <StackPanel>
+            <Grid Margin="0,12,0,10">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+              <TextBlock Grid.Column="0" Text="查找位置" Style="{StaticResource RowLabel}"/>
+              <StackPanel Grid.Column="1">
+                <ListBox x:Name="Roots" BorderThickness="0" Background="Transparent" Padding="0" ItemContainerStyle="{StaticResource RootRow}"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                  <ListBox.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ListBox.ItemsPanel>
+                  <ListBox.ItemTemplate>
+                    <DataTemplate>
+                      <CheckBox IsChecked="{Binding Enabled, Mode=TwoWay}" Style="{StaticResource PillCheck}" ToolTip="{Binding Detail}">
+                        <StackPanel Orientation="Horizontal">
+                          <TextBlock Text="{Binding Label}" VerticalAlignment="Center"/>
+                          <Button x:Name="X" Tag="{Binding}" Style="{StaticResource PillX}" Visibility="Collapsed" Margin="6,0,-5,0" ToolTip="不在这里找了，移除"/>
+                        </StackPanel>
+                      </CheckBox>
+                      <DataTemplate.Triggers>
+                        <DataTrigger Binding="{Binding Removable}" Value="True"><Setter TargetName="X" Property="Visibility" Value="Visible"/></DataTrigger>
+                      </DataTemplate.Triggers>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,0">
+                  <Button x:Name="BtnAddRoot" Style="{StaticResource LinkButton}" Content="添加文件夹…" Margin="0,0,14,0"/>
+                  <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap"
+                             Text="系统目录、Program Files、AppData 和开发环境（.git、node_modules、conda）会自动跳过。"/>
+                </StackPanel>
+              </StackPanel>
+            </Grid>
+            <Rectangle Height="1" Fill="#E5E5EA"/>
+            <Grid Margin="0,12,0,10">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+              <TextBlock Grid.Column="0" Text="文件类型" Style="{StaticResource RowLabel}"/>
+              <StackPanel Grid.Column="1">
+                <WrapPanel x:Name="TypeChips"/>
+                <DockPanel Margin="0,2,0,0" MaxWidth="560" HorizontalAlignment="Left">
+                  <TextBlock DockPanel.Dock="Left" Text="其他扩展名" Style="{StaticResource Caption}" Margin="0,0,10,0"/>
+                  <Button x:Name="TypeReset" DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="全部重置" Margin="12,0,0,0"/>
+                  <TextBox x:Name="ExtraExt" MinWidth="240" ToolTip="上面没有的类型，用空格隔开，例如 .dwg .step .sldprt"/>
+                </DockPanel>
+              </StackPanel>
+            </Grid>
+            <Rectangle Height="1" Fill="#E5E5EA"/>
+            <Grid Margin="0,10,0,10">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+              <TextBlock Grid.Column="0" Text="文件大小" Style="{StaticResource RowLabel}"/>
+              <StackPanel Grid.Column="1">
+                <Border Style="{StaticResource SegBox}"><StackPanel x:Name="SizeChips" Orientation="Horizontal"/></Border>
+                <StackPanel x:Name="SizeCustomRow" Orientation="Horizontal" Margin="0,9,0,0" Visibility="Collapsed">
+                  <TextBlock Text="从" Style="{StaticResource Caption}" Margin="0,0,8,0"/>
+                  <TextBox x:Name="SizeMin" Width="76"/>
+                  <ComboBox x:Name="SizeMinUnit" Width="66" Margin="6,0,0,0" SelectedIndex="1">
+                    <ComboBoxItem Content="KB"/><ComboBoxItem Content="MB"/><ComboBoxItem Content="GB"/>
+                  </ComboBox>
+                  <TextBlock Text="到" Style="{StaticResource Caption}" Margin="16,0,8,0"/>
+                  <TextBox x:Name="SizeMax" Width="76"/>
+                  <ComboBox x:Name="SizeMaxUnit" Width="66" Margin="6,0,0,0" SelectedIndex="1">
+                    <ComboBoxItem Content="KB"/><ComboBoxItem Content="MB"/><ComboBoxItem Content="GB"/>
+                  </ComboBox>
+                  <TextBlock x:Name="SizeHint" Text="留空表示不限" Style="{StaticResource Caption}" Margin="14,0,0,0"/>
+                </StackPanel>
+              </StackPanel>
+            </Grid>
+            <Rectangle Height="1" Fill="#E5E5EA"/>
+            <Grid Margin="0,10,0,12">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+              <TextBlock Grid.Column="0" Text="怎样算重复" Style="{StaticResource RowLabel}"/>
+              <StackPanel Grid.Column="1">
+                <WrapPanel>
+                  <Border Style="{StaticResource SegBox}" Margin="0,0,28,0">
+                    <StackPanel Orientation="Horizontal">
+                      <RadioButton x:Name="ModeName" GroupName="dupmode" Content="名字和内容都相同" IsChecked="True" Style="{StaticResource Seg}"/>
+                      <RadioButton x:Name="ModeContent" GroupName="dupmode" Content="只看内容，名字不同也算" Style="{StaticResource Seg}"/>
+                    </StackPanel>
+                  </Border>
+                  <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="比对方式" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                    <Border Style="{StaticResource SegBox}">
+                      <StackPanel Orientation="Horizontal">
+                        <RadioButton x:Name="SpeedFast" GroupName="dupspeed" Content="快速" IsChecked="True" Style="{StaticResource Seg}"
+                                     ToolTip="16 MB 以内的文件读全文；更大的读头尾和 16 处抽样（每个约 1 MB）。删除前再逐字节完整比对。"/>
+                        <RadioButton x:Name="SpeedExact" GroupName="dupspeed" Content="完整比对" Style="{StaticResource Seg}"
+                                     ToolTip="每个可疑文件都读完全部内容。大视频多的时候会慢很多。"/>
+                      </StackPanel>
+                    </Border>
+                  </StackPanel>
+                </WrapPanel>
+                <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="2,8,0,0"
+                           Text="快速模式下大文件只抽样读约 1 MB；删除前都会逐字节完整核对，有任何不同就不删。"/>
+              </StackPanel>
+            </Grid>
+          </StackPanel>
+        </Border>
+      </Expander>
+
+      <!-- 结果 -->
+      <Border Grid.Row="2" Style="{StaticResource Card}" Padding="0,0,0,6">
+        <DockPanel>
+          <DockPanel DockPanel.Dock="Top" Margin="18,12,14,10">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+              <TextBlock Text="每组只留一份：" Style="{StaticResource Caption}" Margin="0,0,8,0"/>
+              <Button x:Name="BtnKeepNew"  Style="{StaticResource Small}" Content="留最新的" Margin="0,0,6,0" IsEnabled="False"/>
+              <Button x:Name="BtnKeepOld"  Style="{StaticResource Small}" Content="留最早的" Margin="0,0,6,0" IsEnabled="False"/>
+              <Button x:Name="BtnPickC"    Style="{StaticResource Small}" Content="优先留 C 盘以外的" Margin="0,0,6,0" IsEnabled="False"/>
+              <Button x:Name="BtnPickNone" Style="{StaticResource Small}" Content="全部取消" IsEnabled="False"/>
+            </StackPanel>
+            <TextBlock x:Name="DupProgressText" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="#6E6E73"
+                       Text="只有内容逐字节完全相同才算重复。"/>
+          </DockPanel>
+          <Grid>
+            <ListView x:Name="DupList" Background="White" BorderThickness="0" ItemContainerStyle="{StaticResource GridRow}"
+                      VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.IsVirtualizingWhenGrouping="True"
+                      VirtualizingPanel.VirtualizationMode="Recycling" ScrollViewer.CanContentScroll="True">
+              <ListView.GroupStyle>
+                <GroupStyle>
+                  <GroupStyle.HeaderTemplate>
+                    <DataTemplate>
+                      <Border BorderBrush="#EFEFF4" BorderThickness="0,1,0,0" Padding="16,14,12,6" Margin="0,4,0,0">
+                        <StackPanel Orientation="Horizontal">
+                          <Ellipse Width="8" Height="8" Margin="0,0,10,0" VerticalAlignment="Center" Fill="{Binding Items[0].TypeBrush}"/>
+                          <TextBlock Text="{Binding Items[0].GroupName}" FontWeight="SemiBold" Foreground="#1D1D1F" VerticalAlignment="Center"/>
+                          <TextBlock Text="{Binding Items[0].GroupMeta}" Foreground="#86868B" Margin="12,0,0,0" VerticalAlignment="Center"/>
+                          <Border CornerRadius="9" Padding="8,1,8,2" Margin="12,0,0,0" VerticalAlignment="Center"
+                                  Background="{Binding Items[0].GroupBadgeBg}" ToolTip="{Binding Items[0].GroupBadgeTip}">
+                            <TextBlock Text="{Binding Items[0].GroupBadge}" FontSize="11.5" Foreground="{Binding Items[0].GroupBadgeFg}"/>
+                          </Border>
+                        </StackPanel>
+                      </Border>
+                    </DataTemplate>
+                  </GroupStyle.HeaderTemplate>
+                </GroupStyle>
+              </ListView.GroupStyle>
+              <ListView.View>
+                <GridView>
+                  <GridViewColumn Header="删除" Width="52">
+                    <GridViewColumn.CellTemplate>
+                      <DataTemplate>
+                        <Grid>
+                          <CheckBox x:Name="Chk" IsChecked="{Binding ToDelete, Mode=TwoWay}" HorizontalAlignment="Center"/>
+                          <TextBlock x:Name="Lock" Text="&#xE72E;" FontFamily="{StaticResource Icons}" FontSize="13" Foreground="#86868B" HorizontalAlignment="Center"
+                                     VerticalAlignment="Center" Visibility="Collapsed" ToolTip="C 盘个人文件夹里的文件受保护，不会删除"/>
+                        </Grid>
+                        <DataTemplate.Triggers>
+                          <DataTrigger Binding="{Binding CanDelete}" Value="False">
+                            <Setter TargetName="Chk" Property="Visibility" Value="Collapsed"/>
+                            <Setter TargetName="Lock" Property="Visibility" Value="Visible"/>
+                          </DataTrigger>
+                        </DataTemplate.Triggers>
+                      </DataTemplate>
+                    </GridViewColumn.CellTemplate>
+                  </GridViewColumn>
+                  <GridViewColumn Header="位置" Width="520">
+                    <GridViewColumn.CellTemplate>
+                      <DataTemplate>
+                        <TextBlock ToolTip="{Binding Path}" TextTrimming="CharacterEllipsis">
+                          <Run Text="{Binding Dir, Mode=OneWay}" Foreground="#86868B"/><Run Text="{Binding FileName, Mode=OneWay}" Foreground="#1D1D1F"/>
+                        </TextBlock>
+                      </DataTemplate>
+                    </GridViewColumn.CellTemplate>
+                  </GridViewColumn>
+                  <GridViewColumn Header="修改时间" Width="136">
+                    <GridViewColumn.CellTemplate><DataTemplate><TextBlock Text="{Binding Modified}" Foreground="#6E6E73"/></DataTemplate></GridViewColumn.CellTemplate>
+                  </GridViewColumn>
+                  <GridViewColumn Header="注意" Width="230">
+                    <GridViewColumn.CellTemplate><DataTemplate><TextBlock Text="{Binding Risk}" ToolTip="{Binding Risk}" Foreground="#C93400" TextTrimming="CharacterEllipsis"/></DataTemplate></GridViewColumn.CellTemplate>
+                  </GridViewColumn>
+                  <GridViewColumn Header="" Width="80">
+                    <GridViewColumn.CellTemplate><DataTemplate><Button Content="打开位置" Tag="{Binding Path}" Style="{StaticResource LinkButton}"/></DataTemplate></GridViewColumn.CellTemplate>
+                  </GridViewColumn>
+                </GridView>
+              </ListView.View>
+            </ListView>
+            <StackPanel x:Name="EmptyDup" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,10,0,30" IsHitTestVisible="False">
+              <TextBlock Text="&#xE8C8;" FontFamily="{StaticResource Icons}" FontSize="32" Foreground="#C7C7CC" HorizontalAlignment="Center"/>
+              <TextBlock x:Name="EmptyDupText" Text="设置好条件后，点右上角「开始查找」" Foreground="#86868B" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center"/>
+            </StackPanel>
+          </Grid>
+        </DockPanel>
+      </Border>
+
+      <DockPanel Grid.Row="3" Margin="0,14,0,0">
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+          <CheckBox x:Name="DupProtect" Content="不删 C 盘个人文件夹里的文件" IsChecked="True" VerticalAlignment="Center" Margin="0,0,16,0"
+                    ToolTip="桌面、文档、下载、图片、视频、音乐等 C 盘个人文件夹里的副本一律保留，只删其他位置的副本"/>
+          <CheckBox x:Name="DupRecycle" Content="放入回收站，可以恢复" IsChecked="True" VerticalAlignment="Center" Margin="0,0,16,0"/>
+          <Button x:Name="BtnDupMerge" Content="合并为一份" Margin="0,0,8,0" Padding="16,8" IsEnabled="False"
+                  ToolTip="勾选的副本换成指向保留那份的硬链接：每个位置的文件都还在，只占一份空间。只适用于同一块盘上的副本"/>
+          <Button x:Name="BtnDupDelete" Content="删除勾选的文件" Style="{StaticResource Danger}" Padding="20,8" IsEnabled="False"/>
+        </StackPanel>
+        <TextBlock x:Name="DupSummary" Text="" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap" Margin="2,0,16,0"/>
+      </DockPanel>
+    </Grid>
+
+    <!-- ==================== 空间地图 ==================== -->
+    <Grid x:Name="PageMap" Grid.Column="1" Grid.Row="0" Margin="30,24,30,14" Visibility="Collapsed">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="Auto"/>
+      </Grid.RowDefinitions>
+      <DockPanel Grid.Row="0" Margin="0,0,0,16">
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top" Margin="16,4,0,0">
+          <CheckBox x:Name="MapFast" Content="快速扫描" IsChecked="True" VerticalAlignment="Center" Margin="0,0,14,0"
+                    ToolTip="直接读取 NTFS 的文件表（MFT），比逐个文件夹查看快得多。少数安全软件对直接读盘会提示，可以关掉，改为逐个文件夹扫描。清理、搬家、软件管理统计大小时也按这个设置。"/>
+          <ComboBox x:Name="MapDrive" Width="200" Margin="0,0,8,0"/>
+          <Button x:Name="BtnMapStop" Content="停止" Margin="0,0,8,0" IsEnabled="False"/>
+          <Button x:Name="BtnMapScan" Content="扫描" Style="{StaticResource Primary}" Padding="20,6"/>
+        </StackPanel>
+        <StackPanel>
+          <TextBlock Text="空间地图" Style="{StaticResource PageTitle}"/>
+          <TextBlock Style="{StaticResource PageSub}" Text="扫描整块盘，看清每个文件夹占了多少。双击文件夹往里点，一层层找到真正的大户。"/>
+        </StackPanel>
+      </DockPanel>
+      <DockPanel Grid.Row="1" Margin="0,0,0,10">
+        <Border DockPanel.Dock="Right" Style="{StaticResource SegBox}" VerticalAlignment="Center">
+          <StackPanel Orientation="Horizontal">
+            <RadioButton x:Name="MapViewDirs" GroupName="mapview" Content="文件夹" IsChecked="True" Style="{StaticResource Seg}"/>
+            <RadioButton x:Name="MapViewTree" GroupName="mapview" Content="方块图" Style="{StaticResource Seg}" ToolTip="每个方块的大小就是它占的空间。单击选中，双击文件夹往里点"/>
+            <RadioButton x:Name="MapViewFiles" GroupName="mapview" Content="找文件" Style="{StaticResource Seg}"/>
+            <RadioButton x:Name="MapViewGrow" GroupName="mapview" Content="和上次比" Style="{StaticResource Seg}"/>
+          </StackPanel>
+        </Border>
+        <Button x:Name="BtnMapExport" DockPanel.Dock="Right" Style="{StaticResource Small}" Content="导出 CSV" Margin="0,0,10,0" VerticalAlignment="Center" IsEnabled="False"
+                ToolTip="把现在看到的列表存成 CSV 文件，可以用 Excel 打开"/>
+        <Button x:Name="BtnMapReport" DockPanel.Dock="Right" Style="{StaticResource Small}" Content="导出报告" Margin="0,0,8,0" VerticalAlignment="Center" IsEnabled="False"
+                ToolTip="把这块盘的空间情况存成一个网页报告：方块图、最大的文件夹和文件、各类文件占多少、和上次比的变化。在浏览器里按 Ctrl+P 可以存成 PDF"/>
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+          <Button x:Name="BtnMapUp" Style="{StaticResource Small}" Margin="0,0,10,0" IsEnabled="False" ToolTip="回到上一级文件夹">
+            <StackPanel Orientation="Horizontal">
+              <TextBlock Text="&#xE72B;" FontFamily="{StaticResource Icons}" FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0"/>
+              <TextBlock Text="上一级" VerticalAlignment="Center"/>
+            </StackPanel>
+          </Button>
+          <StackPanel VerticalAlignment="Center">
+            <TextBlock x:Name="MapPath" Text="还没有扫描" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" MaxWidth="560"/>
+            <TextBlock x:Name="MapInfo" Style="{StaticResource Caption}" Text="选一块盘，点「扫描」。C 盘通常一两分钟就能扫完。"/>
+          </StackPanel>
+        </StackPanel>
+      </DockPanel>
+      <!-- 找文件的条件：只在「找文件」时显示 -->
+      <WrapPanel x:Name="MapFilter" Grid.Row="2" Margin="0,0,0,10" Visibility="Collapsed">
+        <StackPanel Orientation="Horizontal" Margin="0,2,18,2">
+          <TextBlock Text="大小至少" VerticalAlignment="Center" Foreground="#6E6E73" Margin="0,0,8,0"/>
+          <ComboBox x:Name="MapMinSize" Width="96" SelectedIndex="2">
+            <ComboBoxItem Content="1 MB" Tag="1"/><ComboBoxItem Content="10 MB" Tag="10"/><ComboBoxItem Content="50 MB" Tag="50"/>
+            <ComboBoxItem Content="100 MB" Tag="100"/><ComboBoxItem Content="500 MB" Tag="500"/><ComboBoxItem Content="1 GB" Tag="1024"/>
+          </ComboBox>
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Margin="0,2,18,2">
+          <TextBlock Text="多久没改过" VerticalAlignment="Center" Foreground="#6E6E73" Margin="0,0,8,0"/>
+          <ComboBox x:Name="MapAge" Width="120" SelectedIndex="0">
+            <ComboBoxItem Content="不限" Tag="0"/><ComboBoxItem Content="30 天以上" Tag="30"/><ComboBoxItem Content="半年以上" Tag="182"/>
+            <ComboBoxItem Content="1 年以上" Tag="365"/><ComboBoxItem Content="2 年以上" Tag="730"/>
+          </ComboBox>
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Margin="0,2,18,2">
+          <TextBlock Text="类型" VerticalAlignment="Center" Foreground="#6E6E73" Margin="0,0,8,0"/>
+          <ComboBox x:Name="MapType" Width="190" SelectedIndex="0">
+            <ComboBoxItem Content="全部" Tag=""/>
+            <ComboBoxItem Content="视频" Tag="video"/>
+            <ComboBoxItem Content="压缩包和安装包" Tag="archive"/>
+            <ComboBoxItem Content="光盘映像和虚拟磁盘" Tag="image"/>
+            <ComboBoxItem Content="图片" Tag="picture"/>
+            <ComboBoxItem Content="音乐" Tag="music"/>
+            <ComboBoxItem Content="文档" Tag="doc"/>
+            <ComboBoxItem Content="程序和游戏数据" Tag="program"/>
+            <ComboBoxItem Content="日志、转储和临时文件" Tag="log"/>
+          </ComboBox>
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Margin="0,2,18,2">
+          <TextBlock Text="名称" VerticalAlignment="Center" Foreground="#6E6E73" Margin="0,0,8,0"/>
+          <TextBox x:Name="MapName" Width="150" ToolTip="文件名里包含这些字。可以用 * 和 ?，比如 *.mp4、备份*"/>
+        </StackPanel>
+        <CheckBox x:Name="MapUnder" Content="只找当前文件夹里的" VerticalAlignment="Center" Margin="0,2,18,2"/>
+        <CheckBox x:Name="MapChat" Content="只找聊天软件里的" VerticalAlignment="Center" Margin="0,2,0,2"
+                  ToolTip="微信、QQ、企业微信、飞书、钉钉、Telegram 等聊天记录文件夹里的大文件。这些文件只能查看、打开位置；要腾地方，可以到「搬家管理」把整个聊天记录搬到其他盘。"/>
+      </WrapPanel>
+      <Border Grid.Row="3" Style="{StaticResource Card}" Padding="0,6,0,6">
+        <Grid>
+          <Canvas x:Name="MapTree" Margin="10,4,10,4" ClipToBounds="True" Background="White" Visibility="Collapsed"/>
+          <ListView x:Name="MapList" Background="Transparent" BorderThickness="0" ItemTemplate="{StaticResource MapRowTpl}" ItemContainerStyle="{StaticResource SelRow}" SelectionMode="Extended"
+                    ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"/>
+          <ListView x:Name="MapGrow" Background="White" BorderThickness="0" ItemContainerStyle="{StaticResource GridRow}" Visibility="Collapsed">
+            <ListView.View>
+              <GridView>
+                <GridViewColumn Header="文件夹" Width="480">
+                  <GridViewColumn.CellTemplate><DataTemplate><TextBlock Text="{Binding Path}" ToolTip="{Binding Path}" TextTrimming="CharacterEllipsis"/></DataTemplate></GridViewColumn.CellTemplate>
+                </GridViewColumn>
+                <GridViewColumn Header="上次" Width="110">
+                  <GridViewColumn.CellTemplate><DataTemplate><TextBlock Text="{Binding Before}" Foreground="#6E6E73"/></DataTemplate></GridViewColumn.CellTemplate>
+                </GridViewColumn>
+                <GridViewColumn Header="这次" Width="110">
+                  <GridViewColumn.CellTemplate><DataTemplate><TextBlock Text="{Binding Now}"/></DataTemplate></GridViewColumn.CellTemplate>
+                </GridViewColumn>
+                <GridViewColumn Header="变化" Width="120">
+                  <GridViewColumn.CellTemplate><DataTemplate><TextBlock Text="{Binding Change}" Foreground="{Binding ChangeBrush}" FontWeight="SemiBold"/></DataTemplate></GridViewColumn.CellTemplate>
+                </GridViewColumn>
+              </GridView>
+            </ListView.View>
+          </ListView>
+          <StackPanel x:Name="EmptyMap" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,24" IsHitTestVisible="False">
+            <TextBlock Text="&#xE9D9;" FontFamily="{StaticResource Icons}" FontSize="34" Foreground="#C7C7CC" HorizontalAlignment="Center"/>
+            <TextBlock x:Name="EmptyMapText" Text="点右上角「扫描」，看看这块盘的空间都去哪了" Foreground="#86868B" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center"/>
+          </StackPanel>
+        </Grid>
+      </Border>
+      <DockPanel Grid.Row="4" Margin="0,14,0,0">
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+          <Button x:Name="BtnMapOpen" Content="打开位置" Margin="0,0,8,0" IsEnabled="False"/>
+          <Button x:Name="BtnMapCompress" Content="压缩（不删文件）" Margin="0,0,8,0" IsEnabled="False"
+                  ToolTip="用 NTFS 压缩这个文件夹：文件照常打开、照常修改，只是占的空间变小。适合不常用的资料、旧项目"/>
+          <Button x:Name="BtnMapDelete" Content="删除…" Style="{StaticResource Danger}" Padding="18,6" IsEnabled="False"/>
+        </StackPanel>
+        <TextBlock x:Name="MapSel" VerticalAlignment="Center" TextWrapping="Wrap" Foreground="#6E6E73" Margin="2,0,16,0"
+                   Text="选中一行可以打开位置、压缩或删除；按住 Ctrl 或 Shift 可以选多项一起删。系统文件夹、软件安装文件夹、C 盘个人文件夹和搬家后的数据带小锁，不能在这里删。"/>
+      </DockPanel>
+    </Grid>
+
+    <!-- ==================== 省空间（不删文件） ==================== -->
+    <Grid x:Name="PageSave" Grid.Column="1" Grid.Row="0" Visibility="Collapsed">
+      <ScrollViewer x:Name="SaveScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+        <StackPanel Margin="30,24,30,28" MaxWidth="900" HorizontalAlignment="Left">
+          <DockPanel>
+            <Button x:Name="BtnSaveRefresh" DockPanel.Dock="Right" Content="刷新" VerticalAlignment="Top" Margin="16,4,0,0"/>
+            <StackPanel>
+              <TextBlock Text="省空间" Style="{StaticResource PageTitle}"/>
+              <TextBlock Style="{StaticResource PageSub}" Text="不删任何文件也能腾出空间：系统压缩、把大系统文件挪到其他盘、压缩不常用的文件夹和虚拟磁盘。"/>
+            </StackPanel>
+          </DockPanel>
+
+          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,20,0,0">
+            <DockPanel>
+              <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="20,0,0,0">
+                <Button x:Name="BtnCosOff" Content="关闭" Margin="0,0,8,0"/>
+                <Button x:Name="BtnCosOn" Content="开启" Style="{StaticResource Primary}"/>
+              </StackPanel>
+              <StackPanel>
+                <TextBlock Text="系统压缩（CompactOS）" Style="{StaticResource CardHead}"/>
+                <TextBlock x:Name="SaveCosState" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
+                <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
+                           Text="Windows 自带的功能：把系统文件压缩存放，通常能省 2 到 4 GB，不影响使用。压缩要 10 到 30 分钟，期间可以照常用电脑。固态硬盘几乎感觉不到变慢；很老的机械硬盘电脑不建议开。"/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+
+          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+            <StackPanel>
+              <TextBlock Text="页面文件（pagefile.sys）" Style="{StaticResource CardHead}"/>
+              <TextBlock x:Name="SavePfState" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
+              <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
+                         Text="内存不够用时，Windows 把暂时用不到的数据放进这个文件，通常有几个 GB 到十几 GB。可以把它放到其他硬盘，C 盘就不再占这块空间。要重启电脑才生效。改了以后蓝屏时可能无法保存完整的内存转储，对普通用户没有影响；如果有问题，随时点「恢复系统默认」。"/>
+              <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                <ComboBox x:Name="SavePfDrive" Width="220" Margin="0,0,8,0"/>
+                <Button x:Name="BtnPfMove" Content="改到这块盘" Style="{StaticResource Primary}" Margin="0,0,8,0"/>
+                <Button x:Name="BtnPfAuto" Content="恢复系统默认"/>
+              </StackPanel>
+            </StackPanel>
+          </Border>
+
+          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+            <StackPanel>
+              <TextBlock Text="休眠文件（hiberfil.sys）" Style="{StaticResource CardHead}"/>
+              <TextBlock x:Name="SaveHibState" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
+              <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
+                         Text="休眠和「快速启动」用的文件，大小约等于内存的四成到七成。「只留快速启动」能缩小到原来的一半左右，开机速度不变，只是不能手动休眠；「关闭休眠」整个删掉它，睡眠不受影响，只是没有休眠和快速启动。"/>
+              <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                <Button x:Name="BtnHibReduced" Content="只留快速启动（缩小）" Style="{StaticResource Primary}" Margin="0,0,8,0"/>
+                <Button x:Name="BtnHibOff" Content="关闭休眠" Margin="0,0,8,0"/>
+                <Button x:Name="BtnHibFull" Content="恢复完整休眠"/>
+              </StackPanel>
+            </StackPanel>
+          </Border>
+
+          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+            <DockPanel>
+              <Button x:Name="BtnFolderCompress" DockPanel.Dock="Right" Content="选择文件夹…" Style="{StaticResource Primary}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+              <StackPanel>
+                <TextBlock Text="压缩文件夹（NTFS 压缩）" Style="{StaticResource CardHead}"/>
+                <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
+                           Text="文件照常打开、照常修改，只是占的空间变小。文档、代码、日志、旧项目通常能省一半；照片、视频、压缩包本身已经压缩过，几乎省不了。也可以在「空间地图」里选中文件夹直接压缩。"/>
+                <TextBlock x:Name="SaveFcState" Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+
+          <Border Style="{StaticResource Card}" Padding="24,20,24,14" Margin="0,14,0,0">
+            <StackPanel>
+              <TextBlock Text="虚拟磁盘、模拟器和虚拟机" Style="{StaticResource CardHead}"/>
+              <TextBlock Style="{StaticResource Body}" Margin="0,8,0,4"
+                         Text="WSL、Docker、安卓模拟器、虚拟机的磁盘文件动辄几十 GB，而且在里面删了东西也不会自动变小。压缩能把空出来的部分还给 Windows；文件夹形式的可以整个搬到其他盘。"/>
+              <ItemsControl x:Name="VdList">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <Border BorderBrush="#E5E5EA" BorderThickness="0,1,0,0" Padding="0,12,0,10">
+                      <DockPanel>
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
+                          <Button x:Name="VdOpen" Content="打开位置" Tag="{Binding}" Style="{StaticResource Small}" Margin="0,0,6,0"/>
+                          <Button x:Name="VdMove" Content="搬到其他盘" Tag="{Binding}" Style="{StaticResource Small}" Margin="0,0,6,0" Visibility="Collapsed"/>
+                          <Button x:Name="VdCompact" Content="压缩" Tag="{Binding}" Style="{StaticResource Small}" Visibility="Collapsed"/>
+                        </StackPanel>
+                        <TextBlock DockPanel.Dock="Right" Text="{Binding SizeText}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                        <StackPanel>
+                          <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                          <TextBlock Text="{Binding Path}" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                          <TextBlock Text="{Binding Note}" FontSize="12" Foreground="#6E6E73" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                        </StackPanel>
+                      </DockPanel>
+                    </Border>
+                    <DataTemplate.Triggers>
+                      <DataTrigger Binding="{Binding CanCompact}" Value="True"><Setter TargetName="VdCompact" Property="Visibility" Value="Visible"/></DataTrigger>
+                      <DataTrigger Binding="{Binding CanMove}" Value="True"><Setter TargetName="VdMove" Property="Visibility" Value="Visible"/></DataTrigger>
+                    </DataTemplate.Triggers>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock x:Name="VdEmpty" Style="{StaticResource Caption}" Margin="0,8,0,0" Text="这台电脑上没找到 WSL、Docker、安卓模拟器或虚拟机的磁盘。"/>
+            </StackPanel>
+          </Border>
+
+          <Border Style="{StaticResource Card}" Padding="24,18" Margin="0,14,0,0">
+            <DockPanel>
+              <Button x:Name="BtnGoDup" DockPanel.Dock="Right" Content="去找重复文件" VerticalAlignment="Center" Margin="20,0,0,0"/>
+              <StackPanel>
+                <TextBlock Text="合并重复文件" Style="{StaticResource CardHead}"/>
+                <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
+                           Text="同一块盘上内容完全相同的文件，可以合并成一份：每个位置的文件都还在，只占一份空间。在「重复文件」页找完后，点「合并为一份」。"/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+    </Grid>
+
+    <!-- ==================== 软件管理 ==================== -->
+    <Grid x:Name="PageApps" Grid.Column="1" Grid.Row="0" Margin="30,24,30,14" Visibility="Collapsed">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
+      </Grid.RowDefinitions>
+      <DockPanel Grid.Row="0" Margin="0,0,0,16">
+        <Button x:Name="BtnAppsRefresh" DockPanel.Dock="Right" Content="刷新" VerticalAlignment="Top" Margin="16,4,0,0"/>
+        <StackPanel>
+          <TextBlock Text="软件管理" Style="{StaticResource PageTitle}"/>
+          <TextBlock Style="{StaticResource PageSub}" TextWrapping="Wrap" Text="装过的软件按占用空间从大到小排。装在 C 盘的可以「搬到其他盘」，软件照常使用、不用重装；不用的可以直接卸载，卸载后再检查有没有残留文件夹。"/>
+        </StackPanel>
+      </DockPanel>
+      <DockPanel Grid.Row="1" Margin="0,0,0,10">
+        <Border DockPanel.Dock="Left" Style="{StaticResource SegBox}" VerticalAlignment="Center" Margin="0,0,14,0">
+          <StackPanel Orientation="Horizontal">
+            <RadioButton x:Name="AppsAll" GroupName="appsf" Content="全部" IsChecked="True" Style="{StaticResource Seg}"/>
+            <RadioButton x:Name="AppsC" GroupName="appsf" Content="装在 C 盘的" Style="{StaticResource Seg}"/>
+            <RadioButton x:Name="AppsStore" GroupName="appsf" Content="应用商店" Style="{StaticResource Seg}"/>
+          </StackPanel>
+        </Border>
+        <TextBlock x:Name="AppsInfo" DockPanel.Dock="Right" Style="{StaticResource Caption}" Margin="14,0,0,0"/>
+        <DockPanel>
+          <TextBlock DockPanel.Dock="Left" Text="&#xE721;" FontFamily="{StaticResource Icons}" FontSize="12" Foreground="#86868B" VerticalAlignment="Center" Margin="0,0,8,0"/>
+          <TextBox x:Name="AppsSearch" MaxWidth="320" HorizontalAlignment="Left" MinWidth="200" ToolTip="按名字或发行商搜索"/>
+        </DockPanel>
+      </DockPanel>
+      <Border Grid.Row="2" x:Name="AppsLeftBox" Background="#FFF8EC" BorderBrush="#F3D9A8" BorderThickness="1" CornerRadius="10" Padding="16,10" Margin="0,0,0,10" Visibility="Collapsed">
+        <DockPanel>
+          <Button x:Name="BtnAppsLeftClose" DockPanel.Dock="Right" Content="不用了" Style="{StaticResource Small}" Margin="8,0,0,0"/>
+          <Button x:Name="BtnAppsLeft" DockPanel.Dock="Right" Content="检查残留" Style="{StaticResource Small}"/>
+          <TextBlock x:Name="AppsLeftText" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,12,0"/>
+        </DockPanel>
+      </Border>
+      <Border Grid.Row="3" Style="{StaticResource Card}" Padding="0,6,0,6">
+        <Grid>
+          <ListView x:Name="AppsList" Background="Transparent" BorderThickness="0" ItemContainerStyle="{StaticResource SelRow}"
+                    ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
+            <ListView.ItemTemplate>
+              <DataTemplate>
+                <Grid Margin="12,8,10,8">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="40"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="100"/>
+                    <ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <Border Width="30" Height="30" CornerRadius="8" Background="#EFEFF4" HorizontalAlignment="Left" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding Icon}" FontWeight="SemiBold" Foreground="#6E6E73" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                  </Border>
+                  <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
+                    <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Text="{Binding Meta}" FontSize="11.5" Foreground="#86868B" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                  </StackPanel>
+                  <TextBlock Grid.Column="2" Text="{Binding SizeText}" FontWeight="SemiBold" TextAlignment="Right" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                  <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="AppOpen" Content="打开位置" Tag="{Binding}" Style="{StaticResource Small}" Margin="0,0,6,0"/>
+                    <Button x:Name="AppMove" Content="搬到其他盘" Tag="{Binding}" Style="{StaticResource Small}" Margin="0,0,6,0"
+                            ToolTip="把整个安装文件夹搬到其他盘，C 盘原位置留一个链接，软件照常使用，不用重装"/>
+                    <Button x:Name="AppUninstall" Content="卸载" Tag="{Binding}" Style="{StaticResource Small}"/>
+                  </StackPanel>
+                </Grid>
+                <DataTemplate.Triggers>
+                  <DataTrigger Binding="{Binding CanMove}" Value="False"><Setter TargetName="AppMove" Property="Visibility" Value="Collapsed"/></DataTrigger>
+                </DataTemplate.Triggers>
+              </DataTemplate>
+            </ListView.ItemTemplate>
+          </ListView>
+          <StackPanel x:Name="EmptyApps" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
+            <TextBlock Text="&#xE71D;" FontFamily="{StaticResource Icons}" FontSize="32" Foreground="#C7C7CC" HorizontalAlignment="Center"/>
+            <TextBlock x:Name="EmptyAppsText" Text="正在读取已安装的软件…" Foreground="#86868B" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center"/>
+          </StackPanel>
+        </Grid>
+      </Border>
+    </Grid>
+
+    <!-- ==================== 搬家管理 ==================== -->
+    <Grid x:Name="PageMoves" Grid.Column="1" Grid.Row="0" Margin="30,24,30,14" Visibility="Collapsed">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+      </Grid.RowDefinitions>
+      <DockPanel Grid.Row="0" Margin="0,0,0,16">
+        <Button x:Name="BtnMovesRefresh" DockPanel.Dock="Right" Content="刷新" VerticalAlignment="Top" Margin="16,4,0,0" ToolTip="重新看看 C 盘上还有什么能搬，并刷新已经搬走的状态"/>
+        <StackPanel>
+          <TextBlock Text="搬家管理" Style="{StaticResource PageTitle}"/>
+          <TextBlock Style="{StaticResource PageSub}" Text="把 C 盘上的聊天记录、软件和其他大文件夹搬到其他盘，原位置留一个链接，软件照常使用。搬走的也在这里：看链接是否正常、搬回 C 盘、修复断掉的链接。"/>
+        </StackPanel>
+      </DockPanel>
+      <DockPanel Grid.Row="1" Margin="0,0,0,12">
+        <Border DockPanel.Dock="Right" Style="{StaticResource SegBox}" VerticalAlignment="Center" Margin="16,0,0,0">
+          <StackPanel Orientation="Horizontal">
+            <RadioButton x:Name="MovesTabCand" GroupName="movestab" Content="可以搬的" IsChecked="True" Style="{StaticResource Seg}"/>
+            <RadioButton x:Name="MovesTabDone" GroupName="movestab" Content="已经搬走的" Style="{StaticResource Seg}"/>
+          </StackPanel>
+        </Border>
+        <TextBlock x:Name="MovesInfo" FontWeight="SemiBold" Margin="2,0,0,0" TextWrapping="Wrap" VerticalAlignment="Center"/>
+      </DockPanel>
+      <Grid Grid.Row="2">
+        <!-- 可以搬的：按聊天记录、软件、其他文件夹分组，勾选后一起搬 -->
+        <ListView x:Name="CandList" Background="Transparent" BorderThickness="0" ItemContainerStyle="{StaticResource PlainRow}" ItemTemplate="{StaticResource CandRowTpl}"
+                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+          <ListView.GroupStyle>
+            <GroupStyle ContainerStyle="{StaticResource CardGroup}"/>
+          </ListView.GroupStyle>
+        </ListView>
+        <StackPanel x:Name="EmptyCand" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
+          <TextBlock Text="&#xE8AB;" FontFamily="{StaticResource Icons}" FontSize="32" Foreground="#C7C7CC" HorizontalAlignment="Center"/>
+          <TextBlock x:Name="EmptyCandText" Text="正在看 C 盘上还有什么能搬…" Foreground="#86868B" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center" TextWrapping="Wrap" MaxWidth="520" TextAlignment="Center"/>
+        </StackPanel>
+        <!-- 已经搬走的 -->
+        <Border x:Name="MovesCard" Style="{StaticResource Card}" Padding="0,6,0,6" Visibility="Collapsed">
+          <Grid>
+          <ListView x:Name="MovesList" Background="Transparent" BorderThickness="0" ItemContainerStyle="{StaticResource SelRow}" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+            <ListView.ItemTemplate>
+              <DataTemplate>
+                <Grid Margin="14,10,10,10">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="100"/>
+                    <ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                    <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold"/>
+                    <TextBlock FontSize="11.5" Foreground="#86868B" TextTrimming="CharacterEllipsis" Margin="0,2,0,0">
+                      <Run Text="{Binding Src, Mode=OneWay}"/><Run Text="  →  "/><Run Text="{Binding Dst, Mode=OneWay}"/>
+                    </TextBlock>
+                    <TextBlock Text="{Binding Status}" Foreground="{Binding StatusBrush}" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                  </StackPanel>
+                  <TextBlock Grid.Column="1" Text="{Binding SizeText}" FontWeight="SemiBold" TextAlignment="Right" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                  <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="MvOpen" Content="打开" Tag="{Binding}" Style="{StaticResource Small}" Margin="0,0,6,0"/>
+                    <Button x:Name="MvFix" Content="修复链接" Tag="{Binding}" Style="{StaticResource Small}" Margin="0,0,6,0" Visibility="Collapsed"/>
+                    <Button x:Name="MvDrop" Content="删除多余副本" Tag="{Binding}" Style="{StaticResource Small}" Margin="0,0,6,0" Visibility="Collapsed"/>
+                    <Button x:Name="MvBack" Content="搬回 C 盘" Tag="{Binding}" Style="{StaticResource Small}" Visibility="Collapsed"/>
+                  </StackPanel>
+                </Grid>
+                <DataTemplate.Triggers>
+                  <DataTrigger Binding="{Binding CanFix}" Value="True"><Setter TargetName="MvFix" Property="Visibility" Value="Visible"/></DataTrigger>
+                  <DataTrigger Binding="{Binding CanDrop}" Value="True"><Setter TargetName="MvDrop" Property="Visibility" Value="Visible"/></DataTrigger>
+                  <DataTrigger Binding="{Binding CanBack}" Value="True"><Setter TargetName="MvBack" Property="Visibility" Value="Visible"/></DataTrigger>
+                </DataTemplate.Triggers>
+              </DataTemplate>
+            </ListView.ItemTemplate>
+          </ListView>
+          <StackPanel x:Name="EmptyMoves" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
+            <TextBlock Text="&#xE8AB;" FontFamily="{StaticResource Icons}" FontSize="32" Foreground="#C7C7CC" HorizontalAlignment="Center"/>
+            <TextBlock x:Name="EmptyMovesText" Text="还没有搬过文件夹。在「可以搬的」里勾选要搬的项目，或者在「清理 C 盘」里选「搬到其他盘」，搬好的就会出现在这里。" Foreground="#86868B" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center" TextWrapping="Wrap" MaxWidth="520" TextAlignment="Center"/>
+          </StackPanel>
+        </Grid>
+        </Border>
+      </Grid>
+      <DockPanel x:Name="CandStore" Grid.Row="3" Margin="2,10,0,0" Visibility="Collapsed">
+        <Button x:Name="BtnCandStore" DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="打开 Windows 设置" VerticalAlignment="Center" Margin="12,0,0,0"/>
+        <TextBlock x:Name="CandStoreText" Style="{StaticResource Caption}" TextWrapping="Wrap"/>
+      </DockPanel>
+      <DockPanel x:Name="CandBar" Grid.Row="4" Margin="0,14,0,0">
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+          <TextBlock Text="搬到" VerticalAlignment="Center" Foreground="#6E6E73" Margin="0,0,8,0"/>
+          <ComboBox x:Name="MovesDest" Width="320" Margin="0,0,8,0" VerticalAlignment="Center"/>
+          <Button x:Name="BtnCandMove" Content="搬到其他盘" Style="{StaticResource Primary}" Padding="20,6" IsEnabled="False"/>
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+          <Button x:Name="BtnCandAll" Style="{StaticResource LinkButton}" Content="全选" Margin="0,0,12,0" ToolTip="勾选所有聊天记录和软件。「其他文件夹」请看清说明再自己勾选"/>
+          <Button x:Name="BtnCandNone" Style="{StaticResource LinkButton}" Content="全不选" Margin="0,0,16,0"/>
+          <TextBlock x:Name="CandSel" VerticalAlignment="Center" TextWrapping="Wrap" Foreground="#6E6E73" Text="勾选要搬的项目。"/>
+        </StackPanel>
+      </DockPanel>
+    </Grid>
+
+    <!-- ==================== 自动提醒 ==================== -->
+    <Grid x:Name="PageAuto" Grid.Column="1" Grid.Row="0" Visibility="Collapsed">
+      <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+        <StackPanel Margin="30,24,30,28" MaxWidth="900" HorizontalAlignment="Left">
+          <TextBlock Text="自动提醒" Style="{StaticResource PageTitle}"/>
+          <TextBlock Style="{StaticResource PageSub}" TextWrapping="Wrap" Text="C 盘快满时提醒你，每周自动清一次缓存，并记下空间的变化。两项都默认关闭，打开开关才生效。开启后由 Windows 自己定时运行，不需要一直开着本工具，也不需要开机启动。"/>
+
+          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,20,0,0">
+            <StackPanel>
+              <DockPanel>
+                <CheckBox x:Name="AutoRemindOn" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center"/>
+                <TextBlock Text="C 盘空间不足时提醒我" Style="{StaticResource CardHead}" VerticalAlignment="Center"/>
+              </DockPanel>
+              <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                <TextBlock Text="剩余空间低于" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <ComboBox x:Name="AutoRemindGB" Width="100">
+                  <ComboBoxItem Content="10 GB"/><ComboBoxItem Content="20 GB"/><ComboBoxItem Content="30 GB"/><ComboBoxItem Content="50 GB"/>
+                </ComboBox>
+                <TextBlock Text="时，在屏幕右下角弹出提醒（每天最多一次）" VerticalAlignment="Center" Margin="10,0,0,0"/>
+              </StackPanel>
+              <TextBlock x:Name="AutoRemindNote" Style="{StaticResource Body}" Margin="0,12,0,0" Foreground="#6E6E73"/>
+            </StackPanel>
+          </Border>
+
+          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+            <StackPanel>
+              <DockPanel>
+                <CheckBox x:Name="AutoCleanOn" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center"/>
+                <TextBlock Text="每周自动清理一次" Style="{StaticResource CardHead}" VerticalAlignment="Center"/>
+              </DockPanel>
+              <TextBlock Style="{StaticResource Body}" Margin="0,10,0,0"
+                         Text="不用开着本工具。每周日中午 12:30（错过了就在下次开机后）由 Windows 任务计划在后台自动做一遍「可以放心删」里的项目：临时文件、各类缓存和日志。不搬家、不清空回收站、不碰任何个人文件夹，也不会关闭正在运行的软件（被占用的文件直接跳过）。做完在右下角告诉你释放了多少，每一项都记在「操作日志」里。"/>
+              <TextBlock x:Name="AutoCleanNote" Style="{StaticResource Body}" Margin="0,10,0,0" Foreground="#6E6E73"/>
+            </StackPanel>
+          </Border>
+
+          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+            <StackPanel>
+              <TextBlock Text="C 盘空间变化" Style="{StaticResource CardHead}"/>
+              <TextBlock x:Name="HistInfo" Style="{StaticResource Caption}" Margin="0,4,0,12" TextWrapping="Wrap"/>
+              <Border Height="150" BorderBrush="#E5E5EA" BorderThickness="0,0,0,1">
+                <ItemsControl x:Name="HistChart" VerticalAlignment="Bottom">
+                  <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <Border Width="16" Height="{Binding H}" Background="{Binding Fill}" CornerRadius="4,4,0,0" Margin="2,0" VerticalAlignment="Bottom" ToolTip="{Binding Tip}"/>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </Border>
+              <DockPanel Margin="0,6,0,0">
+                <TextBlock x:Name="HistLast" DockPanel.Dock="Right" Style="{StaticResource Caption}"/>
+                <TextBlock x:Name="HistFirst" Style="{StaticResource Caption}"/>
+              </DockPanel>
+              <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap"
+                         Text="柱子越高表示 C 盘已经用掉的越多（每天取最后一次记录）。每次打开本工具、每次定时检查都会记一笔。想知道是哪些文件夹变大了，到「空间地图」扫一遍，再选「和上次比」。"/>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+    </Grid>
+
+    <!-- ==================== 操作日志 ==================== -->
+    <Grid x:Name="PageLog" Grid.Column="1" Grid.Row="0" Margin="30,24,30,14" Visibility="Collapsed">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
+      </Grid.RowDefinitions>
+      <DockPanel Grid.Row="0" Margin="0,0,0,14">
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top" Margin="16,4,0,0">
+          <Button x:Name="BtnLogOpenDir" Content="打开日志文件夹" Margin="0,0,8,0"/>
+          <Button x:Name="BtnLogRefresh" Content="刷新"/>
+        </StackPanel>
+        <StackPanel>
+          <TextBlock Text="操作日志" Style="{StaticResource PageTitle}"/>
+          <TextBlock Style="{StaticResource PageSub}" Text="删除、搬运、合并、压缩、卸载和系统设置的每一次改动都记在这里，可以按类别、时间和关键字查找。"/>
+        </StackPanel>
+      </DockPanel>
+      <Border Grid.Row="1" Style="{StaticResource Card}" Padding="20,14" Margin="0,0,0,12">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Left" Margin="0,2,24,0">
+            <TextBlock Text="日志保存时间" FontWeight="SemiBold"/>
+            <ComboBox x:Name="LogKeep" Width="150" Margin="0,8,0,0">
+              <ComboBoxItem Content="1 个月" Tag="1"/><ComboBoxItem Content="3 个月" Tag="3"/><ComboBoxItem Content="半年（默认）" Tag="6"/>
+              <ComboBoxItem Content="1 年" Tag="12"/><ComboBoxItem Content="2 年" Tag="24"/><ComboBoxItem Content="永久保存" Tag="0"/>
+            </ComboBox>
+          </StackPanel>
+          <TextBlock x:Name="LogKeepNote" Style="{StaticResource Body}" Foreground="#3A3A3C"/>
+        </DockPanel>
+      </Border>
+      <WrapPanel Grid.Row="2" Margin="0,0,0,10">
+        <Border Style="{StaticResource SegBox}" Margin="0,0,12,6" VerticalAlignment="Center">
+          <StackPanel x:Name="LogCats" Orientation="Horizontal">
+            <RadioButton GroupName="logcat" Content="全部" Tag="" IsChecked="True" Style="{StaticResource Seg}"/>
+            <RadioButton GroupName="logcat" Content="删除" Tag="删除" Style="{StaticResource Seg}"/>
+            <RadioButton GroupName="logcat" Content="搬运" Tag="搬运" Style="{StaticResource Seg}"/>
+            <RadioButton GroupName="logcat" Content="合并" Tag="合并" Style="{StaticResource Seg}"/>
+            <RadioButton GroupName="logcat" Content="压缩" Tag="压缩" Style="{StaticResource Seg}"/>
+            <RadioButton GroupName="logcat" Content="卸载" Tag="卸载" Style="{StaticResource Seg}"/>
+            <RadioButton GroupName="logcat" Content="系统设置" Tag="系统设置" Style="{StaticResource Seg}"/>
+          </StackPanel>
+        </Border>
+        <Border Style="{StaticResource SegBox}" Margin="0,0,12,6" VerticalAlignment="Center">
+          <StackPanel x:Name="LogRange" Orientation="Horizontal">
+            <RadioButton GroupName="logrange" Content="7 天" Tag="7" Style="{StaticResource Seg}"/>
+            <RadioButton GroupName="logrange" Content="30 天" Tag="30" Style="{StaticResource Seg}"/>
+            <RadioButton GroupName="logrange" Content="全部" Tag="0" IsChecked="True" Style="{StaticResource Seg}"/>
+          </StackPanel>
+        </Border>
+        <TextBox x:Name="LogSearch" Width="220" Margin="0,0,12,6" ToolTip="按文件名、文件夹或操作搜索"/>
+        <TextBlock x:Name="LogCount" Style="{StaticResource Caption}" Margin="0,0,0,6"/>
+      </WrapPanel>
+      <Border Grid.Row="3" Style="{StaticResource Card}" Padding="0,0,0,6">
+        <Grid>
+          <ListView x:Name="LogList" Background="White" BorderThickness="0" ItemContainerStyle="{StaticResource GridRow}"
+                    VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
+            <ListView.View>
+              <GridView>
+                <GridViewColumn Header="时间" Width="150">
+                  <GridViewColumn.CellTemplate><DataTemplate><TextBlock Text="{Binding Time}" Foreground="#6E6E73"/></DataTemplate></GridViewColumn.CellTemplate>
+                </GridViewColumn>
+                <GridViewColumn Header="类别" Width="84">
+                  <GridViewColumn.CellTemplate>
+                    <DataTemplate>
+                      <Border CornerRadius="9" Padding="8,1,8,2" Background="{Binding CatBg}" HorizontalAlignment="Left">
+                        <TextBlock Text="{Binding CatText}" FontSize="11.5" Foreground="{Binding CatFg}"/>
+                      </Border>
+                    </DataTemplate>
+                  </GridViewColumn.CellTemplate>
+                </GridViewColumn>
+                <GridViewColumn Header="操作" Width="210">
+                  <GridViewColumn.CellTemplate><DataTemplate><TextBlock Text="{Binding What}" ToolTip="{Binding What}" TextTrimming="CharacterEllipsis"/></DataTemplate></GridViewColumn.CellTemplate>
+                </GridViewColumn>
+                <GridViewColumn Header="对象" Width="360">
+                  <GridViewColumn.CellTemplate><DataTemplate><TextBlock Text="{Binding Target}" ToolTip="{Binding Target}" TextTrimming="CharacterEllipsis"/></DataTemplate></GridViewColumn.CellTemplate>
+                </GridViewColumn>
+                <GridViewColumn Header="详情" Width="250">
+                  <GridViewColumn.CellTemplate><DataTemplate><TextBlock Text="{Binding Detail}" ToolTip="{Binding Detail}" Foreground="#6E6E73" TextTrimming="CharacterEllipsis"/></DataTemplate></GridViewColumn.CellTemplate>
+                </GridViewColumn>
+              </GridView>
+            </ListView.View>
+          </ListView>
+          <StackPanel x:Name="EmptyLog" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False" Margin="0,30,0,0">
+            <TextBlock Text="&#xE81C;" FontFamily="{StaticResource Icons}" FontSize="32" Foreground="#C7C7CC" HorizontalAlignment="Center"/>
+            <TextBlock x:Name="EmptyLogText" Text="还没有操作记录" Foreground="#86868B" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center"/>
+          </StackPanel>
+        </Grid>
+      </Border>
+    </Grid>
+
+    <!-- ==================== 帮助：使用说明、安全风险提示、使用反馈 ==================== -->
+    <Grid x:Name="PageHelp" Grid.Column="1" Grid.Row="0" Visibility="Collapsed">
+      <ScrollViewer x:Name="HelpScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+        <StackPanel Margin="30,24,30,28" MaxWidth="880" HorizontalAlignment="Left">
+          <TextBlock Text="帮助" Style="{StaticResource PageTitle}"/>
+          <TextBlock Style="{StaticResource PageSub}" Text="使用说明、安全风险提示，以及怎么联系开发者。"/>
+          <Border x:Name="RiskCard" Background="#FFF6F6" BorderBrush="#F3C4C8" BorderThickness="1" CornerRadius="12" Padding="24,20,24,20" Margin="0,20,0,0">
+            <DockPanel>
+              <TextBlock DockPanel.Dock="Left" Text="&#xE7BA;" FontFamily="{StaticResource Icons}" FontSize="20" Foreground="#D70015" VerticalAlignment="Top" Margin="0,1,14,0"/>
+              <StackPanel>
+                <TextBlock Text="安全风险提示" Style="{StaticResource HelpHead}" Foreground="#A1000F"/>
+                <DockPanel Margin="0,8,0,0">
+                  <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                  <TextBlock Style="{StaticResource HelpPara}"><Run>删除操作会把文件从电脑上移除。没有放进回收站的文件，删除后通常无法恢复，可能造成资料丢失。</Run></TextBlock>
+                </DockPanel>
+                <DockPanel Margin="0,8,0,0">
+                  <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                  <TextBlock Style="{StaticResource HelpPara}"><Run>每次删除前，请确认这些资料确实不再需要、删除不会给你带来损失。重要资料请先备份。</Run></TextBlock>
+                </DockPanel>
+                <DockPanel Margin="0,8,0,0">
+                  <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                  <TextBlock Style="{StaticResource HelpPara}"><Run>本工具只按你的选择执行操作。因使用本工具删除、搬移文件造成的资料丢失或其他损失，</Run><Run FontWeight="SemiBold" Foreground="#A1000F">责任由使用者自行承担，开发者不承担责任</Run><Run>。</Run></TextBlock>
+                </DockPanel>
+                <DockPanel Margin="0,8,0,0">
+                  <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                  <TextBlock Style="{StaticResource HelpPara}"><Run>继续使用本工具，即表示你已了解并接受上述风险。</Run></TextBlock>
+                </DockPanel>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
+            <StackPanel>
+              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                <TextBlock Text="&#xE768;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <TextBlock Text="快速上手" Style="{StaticResource HelpHead}"/>
+              </StackPanel>
+              <DockPanel Margin="0,10,0,0">
+                <Border DockPanel.Dock="Left" Width="22" Height="22" CornerRadius="11" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0">
+                  <TextBlock Text="1" Foreground="White" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">一键清理</Run><Run>：在「清理 C 盘」页点「一键清理」。工具会先扫描，再处理默认选中的项目：删除缓存、临时文件和日志，把微信、QQ、企业微信、飞书、钉钉等聊天记录搬到空间最大的其他盘。开始前会列出全部项目让你确认。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,10,0,0">
+                <Border DockPanel.Dock="Left" Width="22" Height="22" CornerRadius="11" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0">
+                  <TextBlock Text="2" Foreground="White" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">自己挑选</Run><Run>：先点「扫描」，在每一行选「删除」「搬到其他盘」或「跳过」，再点右下角「执行所选操作」。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,10,0,0">
+                <Border DockPanel.Dock="Left" Width="22" Height="22" CornerRadius="11" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0">
+                  <TextBlock Text="3" Foreground="White" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">找重复文件</Run><Run>：在左边切到「重复文件」，选好位置和条件，点「开始查找」。核对勾选后，点「删除勾选的文件」。</Run></TextBlock>
+              </DockPanel>
+            </StackPanel>
+          </Border>
+          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
+            <StackPanel>
+              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                <TextBlock Text="&#xEDA2;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <TextBlock Text="清理 C 盘" Style="{StaticResource HelpHead}"/>
+              </StackPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>列表分几组。</Run><Run FontWeight="SemiBold">可以放心删</Run><Run>：缓存、临时文件和日志，删了软件会自动重建。</Run><Run FontWeight="SemiBold">需要确认</Run><Run>：有代价的项目（例如删掉 Windows.old 后不能退回旧系统、清空回收站后找不回以前删的文件），默认跳过，看清说明再选。</Run><Run FontWeight="SemiBold">聊天软件的聊天记录</Run><Run>和</Run><Run FontWeight="SemiBold">其他可搬的文件夹</Run><Run>：数据不能删，只能整体搬到其他盘。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">个人文件夹里的东西一律不删</Run><Run>：桌面、文档、下载、图片、视频、音乐、收藏夹、OneDrive 等 C 盘个人文件夹，清理时不会删除里面的任何文件，即使误选也会自动跳过。桌面和下载只能「搬到其他盘」（文件原样保留），而且默认跳过。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>扫描完，列表上方会写明一共扫到几项、分成几类；每组标题旁边也标着这一组有几项。项目多时整页往下滚动，底部会提示「下面还有几项」。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">支持搬家的聊天软件</Run><Run>：微信（新版和旧版）、QQ、企业微信、腾讯会议、飞书、钉钉，以及 Telegram、Discord、Slack、Signal、LINE、Viber、KakaoTalk、Zoom。电脑上装了哪个，扫描后就会列出哪个；没装的不显示。从应用商店装的（比如 WhatsApp、Microsoft Teams）由 Windows 管理，请在 Windows 设置 → 应用里用「移动」换盘。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">搬家目标</Run><Run>默认选空闲最多的本机硬盘，也可以从下拉框换盘，或点「选择文件夹…」。只能选本机硬盘，网络盘、网盘和 U 盘不行。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">搬家的过程</Run><Run>：关闭占用的软件，复制到目标盘，核对两边大小，把原位置换成一个链接，最后删除 C 盘上的原文件夹。之后 C 盘原位置只剩一个链接（几乎不占空间），软件打开原来的路径时，Windows 自动转到目标盘上读写，软件察觉不到变化，不用改任何设置。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>请</Run><Run FontWeight="SemiBold">不要删除、改名或移动</Run><Run>目标盘上的 CDriveMoved 文件夹，否则微信、QQ 等会找不到聊天记录和文件。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>搬聊天记录时，如果对应的软件还开着，会先提示你退出。复制完会把两边的文件个数和大小重新核对一遍，一个文件都不少才会删除 C 盘上的原文件夹。万一原文件夹仍被别的程序占用，已复制好的副本会保留；退出相关软件后再执行一次，只补复制有变化的文件，很快就好。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">分析占用</Run><Run>会打开「空间地图」并扫描 C 盘，看清哪些文件夹和文件最占地方。</Run></TextBlock>
+              </DockPanel>
+            </StackPanel>
+          </Border>
+          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
+            <StackPanel>
+              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                <TextBlock Text="&#xE8C8;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <TextBlock Text="重复文件" Style="{StaticResource HelpHead}"/>
+              </StackPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">查找位置</Run><Run>：点胶囊勾选或取消；「添加文件夹…」可以加自己的位置，带小叉的可以移除。系统目录、程序目录和开发环境会自动跳过。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">文件类型、文件大小</Run><Run>：只找选中的类型和大小范围，范围越小找得越快。选「自定义」可以手填大小。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">怎样算重复</Run><Run>：默认要求文件名和内容都相同；选「只看内容」时，名字不同但内容相同也算。无论哪种，只有内容逐字节完全相同才算重复。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">比对方式</Run><Run>：「快速」对大文件只抽样读取；「完整比对」读完每个文件，更慢但更彻底。快速模式下，删除前也会逐字节完整核对，有任何不同就不删。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">结果</Run><Run>：每组列出所有副本。默认每组留最新的一份、勾选其余的；也可以改成留最早的、优先留 C 盘以外的，或者自己勾选。「打开位置」可以在资源管理器里看到这个文件。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">C 盘个人文件夹受保护</Run><Run>：默认勾选「不删 C 盘个人文件夹里的文件」，桌面、文档、下载、图片、视频、音乐等位置的副本显示一把小锁，不会被勾选或删除，只删其他位置的副本。确实要删这些位置的副本，取消勾选并再次确认才行。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>默认</Run><Run FontWeight="SemiBold">放入回收站</Run><Run>，误删可以从回收站恢复；取消勾选「放入回收站」就是永久删除，不能恢复。带「注意」提示的是程序目录或微信数据，删除前请看清楚。</Run></TextBlock>
+              </DockPanel>
+            </StackPanel>
+          </Border>
+          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
+            <StackPanel>
+              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                <TextBlock Text="&#xE7B8;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <TextBlock Text="省空间（不删文件）" Style="{StaticResource HelpHead}"/>
+              </StackPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">系统压缩（CompactOS）</Run><Run>：Windows 自带，把系统文件压缩存放，通常省 2 到 4 GB，不影响使用。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">页面文件</Run><Run>：把 pagefile.sys 改到其他硬盘，C 盘多出几个 GB，重启后生效，随时可以恢复系统默认。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">休眠文件</Run><Run>：「只留快速启动」能把 hiberfil.sys 缩小一半左右；「关闭休眠」整个删掉它。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">压缩文件夹</Run><Run>：NTFS 压缩，文件照常打开和修改，只是占的空间变小。适合文档、代码、旧项目。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">虚拟磁盘</Run><Run>：WSL、Docker 的虚拟磁盘在里面删了文件也不会自动变小，压缩一下就能把空间还给 Windows；安卓模拟器和虚拟机的文件夹可以整个搬到其他盘。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">合并重复文件</Run><Run>：在「重复文件」页点「合并为一份」，同一块盘上的重复文件只占一份空间，每个位置的文件都还在。合并后改动其中一个位置，其他位置会跟着变，所以适合不会再改的照片、视频、安装包。</Run></TextBlock>
+              </DockPanel>
+            </StackPanel>
+          </Border>
+          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
+            <StackPanel>
+              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                <TextBlock Text="&#xE9D9;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <TextBlock Text="空间地图" Style="{StaticResource HelpHead}"/>
+              </StackPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">扫描</Run><Run>：选一块盘点「扫描」，把每个文件夹的大小都数一遍。只是查看，不改动任何东西。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">扫描为什么快</Run><Run>：NTFS 格式的盘（C 盘基本都是），工具直接读盘上的文件表（MFT），几十万个文件一般几秒到十几秒就读完，不用一个个文件夹去看。读完会和直接列目录的结果核对一下，对不上或读不了（不是 NTFS、权限不够等）就自动改回逐个文件夹扫描，多个线程一起数（固态硬盘线程多一些，机械硬盘少一些）。同一次打开工具里再扫描，按系统的变更日志只更新改过的部分，更快。读文件表能看到逐个扫描进不去的文件夹（比如 System Volume Information），所以两种方式的总数可能略有出入。少数安全软件对直接读盘会提示，可以取消右上角的「快速扫描」，以后都逐个文件夹扫描（清理、搬家、软件管理统计大小时也一样）。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">一次读取，各页共用</Run><Run>：「清理 C 盘」「搬家管理」「软件管理」统计大小时也先读一次 C 盘的文件表，直接查出每个文件夹多大。这些数字只用来显示和估算；真正删除、搬家的时候，每一项都会重新统计、重新检查，不会拿这份结果做判断。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">往里点</Run><Run>：双击文件夹进入下一层，点「上一级」返回。每一行的蓝色条表示它在这一层里有多大。一层里东西很多时（比如 WinSxS 有上万个），只列最大的 500 项，其余合成最后一行，点「打开位置」可以在资源管理器里看全部。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">方块图</Run><Run>：把这一层的文件夹和文件画成方块，方块越大占的空间越多，一眼就能看出谁最大。单击选中，双击文件夹往里点。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">找文件</Run><Run>：在扫描时记下的 1 MB 以上的文件里找，从大到小排。可以按大小、多久没改过（比如半年以上）、类型（视频、压缩包和安装包、光盘映像和虚拟磁盘……）和名称筛选，名称里可以用 * 和 ?（比如 *.mp4）；勾选「只找当前文件夹里的」，就只找刚才点进去的那个文件夹；勾选「只找聊天软件里的」，就只在微信、QQ、企业微信、飞书、钉钉、Telegram 等的聊天记录里找，看清是哪些视频和文件占了地方。聊天记录里的文件在这里只能查看、打开位置，不能删；要腾地方，到「搬家管理」把整个聊天记录搬到其他盘。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">和上次比</Run><Run>：和上一次扫描对比，列出变大或变小超过 100 MB 的文件夹，找出空间是被谁慢慢吃掉的；双击一行跳到那个文件夹。文件夹列表里也会标出「比上次 +2.1 GB」这样的变化。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">导出 CSV</Run><Run>：把现在看到的列表（文件夹、找到的文件或和上次比的结果）存成 CSV 文件，可以用 Excel 打开、排序、发给别人。</Run><Run FontWeight="SemiBold">导出报告</Run><Run>：把整块盘的情况存成一个网页：方块图、最大的文件夹和文件、各类文件占多少、和上次比的变化；在浏览器里按 Ctrl+P 可以存成 PDF。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>选中一行可以</Run><Run FontWeight="SemiBold">打开位置</Run><Run>、</Run><Run FontWeight="SemiBold">压缩（不删文件）</Run><Run>或</Run><Run FontWeight="SemiBold">删除</Run><Run>；按住 Ctrl 或 Shift 可以选多项一起删。删除时可以选「移到回收站」（能恢复）或「永久删除」（立刻腾出空间），都要先勾选确认。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>带</Run><Run FontWeight="SemiBold">小锁</Run><Run>的不能在这里删：系统文件夹、软件的安装文件夹（请到「软件管理」卸载）、C 盘个人文件夹，以及搬家后的数据（CDriveMoved 文件夹）。</Run></TextBlock>
+              </DockPanel>
+            </StackPanel>
+          </Border>
+          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
+            <StackPanel>
+              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                <TextBlock Text="&#xE71D;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <TextBlock Text="软件管理" Style="{StaticResource HelpHead}"/>
+              </StackPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>列出装过的所有软件（包括应用商店里的），按占用空间从大到小排。可以只看装在 C 盘的，或者按名字搜索。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">卸载</Run><Run>会打开软件自带的卸载程序，按提示操作即可。卸载完回到这里点「</Run><Run FontWeight="SemiBold">检查残留</Run><Run>」，工具会找以软件名命名、卸载后剩下的文件夹，确认后移到回收站。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>发行商的总文件夹（比如 Tencent、Microsoft）不会被当成残留，系统自带的程序也不会。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">搬到其他盘</Run><Run>：装在 C 盘的软件可以把整个安装文件夹搬到其他硬盘，C 盘原位置留一个链接。快捷方式、开始菜单、卸载和自动更新都照常可用，不用重装。搬之前会核对两边文件完全一致，才删掉 C 盘上的那份；正在运行的会先问你再关掉。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>不适合搬的会直接告诉你原因，不会硬搬：带系统服务或驱动的（杀毒、VPN、驱动、远程控制等）、给资源管理器装了右键菜单的、输入法、微软自己的软件（Office、Visual Studio 等）、Windows 自带组件、文件夹里有链接或用 Windows 压缩功能压过的文件（复制时可能漏掉），以及没写明装在哪个文件夹的。应用商店的软件请在 Windows 设置 → 应用里用「移动」。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>搬走的软件在「</Run><Run FontWeight="SemiBold">搬家管理</Run><Run>」里能看到，随时可以「搬回 C 盘」。以后软件大版本升级时，个别安装程序会把它重新装回 C 盘，到时再搬一次即可。</Run></TextBlock>
+              </DockPanel>
+            </StackPanel>
+          </Border>
+          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
+            <StackPanel>
+              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                <TextBlock Text="&#xE8AB;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <TextBlock Text="搬家管理" Style="{StaticResource HelpHead}"/>
+              </StackPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">可以搬的</Run><Run>：自动列出 C 盘上还能搬走的东西，分成聊天记录、装在 C 盘的软件和其他文件夹三组，每一项都标着大小。勾选后在右下角选好目标盘，点「搬到其他盘」，可以一次搬好几项。开始前会列出全部项目，要先关掉的软件也会告诉你。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>带系统服务或驱动的、给资源管理器装了右键菜单的、微软自己的软件等，单独列在「不适合搬的软件」里，写明原因，不能勾选。从应用商店装的聊天软件（比如 WhatsApp、Microsoft Teams）由 Windows 管理，页面下方会提示在 Windows 设置里用「移动」换盘。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">已经搬走的</Run><Run>：所有搬到其他盘的文件夹都列在这里，每一项都显示现在的状态。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">正常</Run><Run>：数据在目标盘上，C 盘原位置只留了一个指向它的链接，不占 C 盘空间，软件照常使用。需要时可以「</Run><Run FontWeight="SemiBold">搬回 C 盘</Run><Run>」：复制回来、核对一致后才拆掉链接，最后删除目标盘上的那份。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">链接断了</Run><Run>：目标盘拔了或者盘符变了。把硬盘插回去（或改回原来的盘符）就好；如果在其他盘找到了同名的副本，可以「修复链接」改指向它。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">没搬完</Run><Run>：C 盘原文件夹还在，目标盘上有一份副本。可以在「可以搬的」里再搬一次（只补差异），或者删掉这份多余的副本。</Run></TextBlock>
+              </DockPanel>
+            </StackPanel>
+          </Border>
+          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
+            <StackPanel>
+              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                <TextBlock Text="&#xE823;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <TextBlock Text="自动提醒" Style="{StaticResource HelpHead}"/>
+              </StackPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">空间不足提醒</Run><Run>：打开开关后，每次登录电脑 2 分钟后、以及每天中午，各检查一次 C 盘，低于你设定的值（默认 20 GB）就在屏幕右下角提醒，每天最多一次；空间够就什么都不显示。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">每周自动清理</Run><Run>：打开开关后，每周日自动清理一次临时文件、缓存和日志。不搬家、不清空回收站、不碰个人文件夹，被占用的文件直接跳过。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>这两项都由 Windows「任务计划程序」按时运行本工具，</Run><Run FontWeight="SemiBold">不需要一直开着本工具，也不需要设置开机启动</Run><Run>。任务名字以 CleanC 开头，</Run><Run FontWeight="SemiBold">默认关闭</Run><Run>，关掉开关就删除任务。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>请把本工具放在一个固定的位置（比如 D:\工具），不要删掉。挪了位置后打开一次，任务会自动改用新位置。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">C 盘空间变化</Run><Run>：每次打开本工具、每次定时检查都记一笔，画成最近 30 天的柱状图。</Run></TextBlock>
+              </DockPanel>
+            </StackPanel>
+          </Border>
+          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
+            <StackPanel>
+              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                <TextBlock Text="&#xE81C;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <TextBlock Text="操作日志" Style="{StaticResource HelpHead}"/>
+              </StackPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">删除、搬运、合并、压缩、卸载和系统设置</Run><Run>的每一次改动都会记下来：什么时间、做了什么、对哪个文件或文件夹、结果怎样。只记操作，不保存文件内容。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>可以按类别（删除、搬运、合并……）、时间（7 天、30 天、全部）和关键字查找。日志是普通的 txt 文件，每月一个，点「打开日志文件夹」可以用记事本直接看。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">保存时间默认半年</Run><Run>，可以改成 1 个月到 2 年，或者永久保存。每次打开本工具时，超过保存时间的记录会自动删除，删掉后找不回来；把保存时间改短时，会先提示哪天之前的记录会被删掉。</Run></TextBlock>
+              </DockPanel>
+            </StackPanel>
+          </Border>
+          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
+            <StackPanel>
+              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                <TextBlock Text="&#xE897;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <TextBlock Text="常见问题" Style="{StaticResource HelpHead}"/>
+              </StackPanel>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">为什么要管理员权限？</Run><LineBreak/><Run>清理系统临时文件、Windows 更新缓存等位置，需要管理员权限。</Run></TextBlock>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">做到一半能取消吗？</Run><LineBreak/><Run>可以。进度卡片和窗口底部都有「取消」按钮，会停在安全的地方，已经做完的不会撤销：清理会停下；搬家如果还在复制，C 盘上的原文件夹不动，已复制的部分留在目标盘，下次再搬会接着复制；搬回 C 盘时复制回来的那一半会删掉，什么都不改。正在换成链接、删除备份或运行系统命令（比如清理 Windows 更新）时按钮是灰的，等这一步做完就能取消。</Run></TextBlock>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">执行时能关窗口吗？</Run><LineBreak/><Run>做完前请不要关闭窗口，想停下请点「取消」。可以点「在后台继续」收起进度卡片，窗口底部和任务栏图标上都能看到进度。</Run></TextBlock>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">在哪看详细过程？</Run><LineBreak/><Run>做过哪些删除和搬运，看左侧的「操作日志」；程序运行的技术细节，看左下角「运行记录」，完整文件在 %TEMP%\CleanC-run.log。</Run></TextBlock>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">释放的空间比预计少？</Run><LineBreak/><Run>放进回收站的文件，要清空回收站后才真正释放空间；正被其他程序占用的文件会被跳过。</Run></TextBlock>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">能用深色界面吗？</Run><LineBreak/><Run>可以。点左下角的「外观」，选浅色、深色或跟随系统（照 Windows 设置里「选择应用模式」来）。换了以后本工具会关闭，再自动打开。</Run></TextBlock>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">怎么知道有没有新版本？</Run><LineBreak/><Run>在下面「使用反馈」里点「检查新版本」，有新版本会打开下载页面；下载新的 exe 换掉旧的就行，设置、日志和自动提醒都会保留。本工具平时不联网，只在你点这个按钮时连一次 GitHub。</Run></TextBlock>
+            </StackPanel>
+          </Border>
+          <Border x:Name="FeedbackCard" Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
+            <StackPanel>
+              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                <TextBlock Text="&#xE8BD;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <TextBlock Text="使用反馈" Style="{StaticResource HelpHead}"/>
+              </StackPanel>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,8,0,0" Text="遇到问题、发现错误或有改进建议，欢迎直接联系开发者。"/>
+              <Border Background="#F5F5F7" CornerRadius="10" Padding="18,14" Margin="0,14,0,0">
+                <DockPanel>
+                  <Button x:Name="BtnCopyWx" DockPanel.Dock="Right" Style="{StaticResource Primary}" Content="复制微信号" Padding="18,7" VerticalAlignment="Center"/>
+                  <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Width="40" Height="40" CornerRadius="20" Background="#E6F4EA">
+                      <TextBlock Text="&#xE8BD;" FontFamily="{StaticResource Icons}" FontSize="18" Foreground="#248A3D" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
+                      <TextBlock Text="开发者微信" Style="{StaticResource Caption}"/>
+                      <TextBlock x:Name="DevWx" Text="45915504" FontSize="20" FontWeight="SemiBold" Margin="0,1,0,0" TextOptions.TextFormattingMode="Ideal"/>
+                    </StackPanel>
+                  </StackPanel>
+                </DockPanel>
+              </Border>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,14,0,0" Text="反馈时附上问题截图和诊断信息，能更快找到原因。诊断信息包括软件版本、Windows 版本、C 盘空间和最近的运行记录（里面有文件夹路径），发送前可以先看一下。"/>
+              <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                <Button x:Name="BtnCopyDiag" Content="复制诊断信息" Margin="0,0,8,0"/>
+                <Button x:Name="BtnOpenLog" Content="打开运行记录文件"/>
+                <TextBlock x:Name="CopyHint" Style="{StaticResource Caption}" Foreground="#248A3D" Margin="14,0,0,0"/>
+              </StackPanel>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,18,0,0" Text="「检查扫描功能」在这台电脑上核对快速扫描：比较直接读文件表和逐个文件夹扫描的结果，再在本工具自己的文件夹里建几个文件、改一改、删掉，看按变更日志更新对不对。只读 C 盘，不动你的文件，大约要一两分钟；结果会复制下来，可以直接发给开发者。「检查新版本」只在你点的时候连一次 GitHub。"/>
+              <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                <Button x:Name="BtnSelfTest" Content="检查扫描功能" Margin="0,0,8,0"/>
+                <Button x:Name="BtnCheckUpdate" Content="检查新版本"/>
+              </StackPanel>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+    </Grid>
+
+    <!-- ==================== 底部：进度条（有操作时出现） ==================== -->
+    <Border Grid.Column="1" Grid.Row="1" x:Name="OpPanel" Style="{StaticResource Card}" Padding="16,11,16,12" Margin="30,0,30,14" Visibility="Collapsed">
+      <StackPanel>
+        <DockPanel>
+          <Button x:Name="OpCancel" DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="取消" Margin="14,0,0,0" Visibility="Collapsed"
+                  ToolTip="停在安全的地方，已经做完的不会撤销"/>
+          <TextBlock x:Name="OpTime" DockPanel.Dock="Right" Foreground="#6E6E73" Margin="12,0,0,0"/>
+          <TextBlock x:Name="OpTitle" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+        </DockPanel>
+        <ProgressBar x:Name="OpBar" Height="6" Margin="0,8,0,7" Minimum="0" Maximum="100"/>
+        <DockPanel>
+          <TextBlock x:Name="OpSubTime" DockPanel.Dock="Right" Foreground="#86868B" FontSize="12" Margin="12,0,0,0"/>
+          <TextBlock x:Name="OpDetail" Foreground="#86868B" FontSize="12" TextTrimming="CharacterEllipsis"/>
+        </DockPanel>
+        <ProgressBar x:Name="OpSubBar" Height="4" Margin="0,6,0,0" Minimum="0" Maximum="100" Visibility="Collapsed"/>
+      </StackPanel>
+    </Border>
+
+    <!-- ==================== 运行记录（默认收起） ==================== -->
+    <Border Grid.Column="1" Grid.Row="2" x:Name="LogPanel" Style="{StaticResource Card}" Height="170" Margin="30,0,30,16" Padding="14,10,6,8" Visibility="Collapsed">
+      <DockPanel>
+        <DockPanel DockPanel.Dock="Top" Margin="2,0,8,4">
+          <Button x:Name="BtnLogHide" DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="收起"/>
+          <TextBlock Text="运行记录" Style="{StaticResource SectionTitle}"/>
+        </DockPanel>
+        <TextBox x:Name="Log" Style="{StaticResource LogBox}" IsReadOnly="True" VerticalScrollBarVisibility="Auto" TextWrapping="NoWrap"
+                 HorizontalScrollBarVisibility="Auto" FontFamily="Cascadia Mono, Consolas, Microsoft YaHei UI" FontSize="12"/>
+      </DockPanel>
+    </Border>
+
+    <!-- ==================== 进度卡片：执行时盖在窗口中间；做完后留下结果，点「完成」才消失 ==================== -->
+    <Border x:Name="Overlay" Grid.ColumnSpan="2" Grid.RowSpan="3" Background="#38000000" Visibility="Collapsed">
+      <Border Background="White" CornerRadius="14" Width="640" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="28,24,28,22">
+        <Border.Effect><DropShadowEffect BlurRadius="40" ShadowDepth="8" Direction="270" Opacity="0.22"/></Border.Effect>
+        <StackPanel>
+          <DockPanel>
+            <TextBlock x:Name="OvTime" DockPanel.Dock="Right" Foreground="#6E6E73" VerticalAlignment="Center" Margin="16,0,0,0"/>
+            <TextBlock x:Name="OvTitle" FontSize="17" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" TextOptions.TextFormattingMode="Ideal"/>
+          </DockPanel>
+          <ProgressBar x:Name="OvBar" Height="6" Margin="0,14,0,18" Minimum="0" Maximum="100"/>
+          <TextBlock x:Name="OvStep" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap"/>
+          <TextBlock x:Name="OvWhat" Foreground="#6E6E73" TextWrapping="Wrap" Margin="0,5,0,12"/>
+          <TextBlock x:Name="OvChecklist" Margin="2,0,0,8" LineHeight="24" FontSize="13.5"/>
+          <TextBlock x:Name="OvDetail" Foreground="#6E6E73" FontSize="12.5" TextWrapping="Wrap"/>
+          <ProgressBar x:Name="OvSubBar" Height="4" Margin="0,8,0,0" Minimum="0" Maximum="100" Visibility="Collapsed"/>
+          <StackPanel x:Name="OvPlanBox" Margin="0,18,0,0" Visibility="Collapsed">
+            <TextBlock Text="全部项目" Style="{StaticResource Caption}" Margin="2,0,0,6"/>
+            <Border CornerRadius="9" Padding="14,8" Background="#F5F5F7">
+              <ScrollViewer x:Name="OvPlanScroll" MaxHeight="190" VerticalScrollBarVisibility="Auto">
+                <TextBlock x:Name="OvPlan" LineHeight="23"/>
+              </ScrollViewer>
+            </Border>
+          </StackPanel>
+          <DockPanel Margin="0,20,0,0">
+            <Button x:Name="OvClose" DockPanel.Dock="Right" Content="完成" Style="{StaticResource Primary}" Padding="26,7" Visibility="Collapsed"/>
+            <Button x:Name="OvHide" DockPanel.Dock="Right" Content="在后台继续" Padding="14,7" Margin="0,0,8,0"/>
+            <Button x:Name="OvCancel" DockPanel.Dock="Right" Content="取消" Padding="14,7" Margin="0,0,8,0" Visibility="Collapsed"/>
+            <TextBlock x:Name="OvNote" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,14,0"/>
+          </DockPanel>
+        </StackPanel>
+      </Border>
+    </Border>
+
+    <!-- 弹出对话框时把主窗口压暗 -->
+    <Border x:Name="Dim" Grid.ColumnSpan="2" Grid.RowSpan="3" Background="#33000000" Visibility="Collapsed"/>
+  </Grid>
+</Window>

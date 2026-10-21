@@ -1,5 +1,16 @@
 # 更新记录
 
+## 2.6
+- **深色模式**：左下角「外观」可以选浅色、深色或跟随系统（照 Windows 的「选择应用模式」）。
+- **检查扫描功能**：「帮助」页里的新按钮，在你的电脑上核对快速扫描：比较直接读文件表和逐个文件夹扫描的结果，再在本工具自己的文件夹里建几个文件、改一改、删掉，看按变更日志更新对不对。只读 C 盘，结果自动复制，可以直接发给开发者。也可以用 `ClearC.exe /selftest` 运行。
+- **检查新版本**：「帮助」页里点一下，查 GitHub 上有没有新版本；本工具平时不联网，只在点的时候连一次。
+- **可以关掉快速扫描**：空间地图右上角的「快速扫描」，关掉后不再直接读盘，改为逐个文件夹扫描（少数安全软件对直接读盘会提示）。清理、搬家、软件管理统计大小时也按这个设置。
+- **只看聊天记录里的大文件**：空间地图「找文件」里勾选「只找聊天软件里的」，看清微信、QQ 等是哪些视频和文件占了地方。这些文件只能查看、打开位置，要腾地方请整体搬家。
+- **打开大文件夹更快**：一层里有上万项时（比如 WinSxS），只列最大的 500 项，其余合成一行。
+- 启动时把各阶段用时记进运行记录，方便找出慢在哪。
+- 开发：源码按功能分成 `src/parts/` 下的多个文件，由 `build/merge.ps1` 拼成原来的单文件；加了 `tests/`（语法和翻译检查、核心逻辑测试、Linux 上用真的 NTFS 镜像测试读文件表、深色模式对比度）；`build/build.ps1` 配置了证书时自动签名。
+- Dark mode (Light / Dark / Follow Windows); "Check scanning" self-test on your PC (`ClearC.exe /selftest`); "Check for updates" (only when clicked); a switch to turn off the fast scan; view large files inside chat data; huge folders open faster. Source split by function under `src/parts/`, tests under `tests/`, optional code signing in `build/build.ps1`.
+
 ## 2.5
 - 改名为「**腾挪 ClearC**」（原名「C盘清理工具」）：把占地方的东西清掉、挪走，给 C 盘腾出空间。设置、操作日志和自动提醒都照旧，不用重新设置。
 - **扫描快得多**：NTFS 格式的盘（C 盘基本都是）直接读取盘上的文件表（MFT），不用一个个文件夹去看，几十万到上百万个文件一般几秒到十几秒就读完。读完会和直接列目录的结果核对；对不上或读不了（不是 NTFS、权限不够等）自动改回逐个文件夹扫描。
