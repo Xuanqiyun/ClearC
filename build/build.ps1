@@ -3,7 +3,7 @@
 # 只用 Windows 自带的 .NET Framework 4.x 编译器 csc.exe，不需要安装 Visual Studio 或任何 SDK。
 # 用法（在仓库根目录）：
 #   powershell -NoProfile -ExecutionPolicy Bypass -File build\build.ps1
-# 生成的 exe 在 out\ 文件夹里。
+# 生成的 exe 在 out\ 文件夹里。设置了签名证书时顺便签名（见第 4 步）。
 #
 # exe 的结构：一个很小的 C# 启动器（launcher.cs），把 src\CleanC-UI.ps1 作为内嵌资源，
 # 启动时放进本进程里的 Windows PowerShell 5.1 引擎运行；脚本里的 C# 类型（$rowCode、$dupCode）
@@ -17,6 +17,9 @@ if (-not $Out) { $Out = Join-Path $root 'out\ClearC.exe' }
 $script = Join-Path $root 'src\CleanC-UI.ps1'
 $obj = Join-Path $here 'obj'
 New-Item -ItemType Directory -Force -Path $obj, (Split-Path $Out -Parent) | Out-Null
+
+# 0. 源码分成了 src/parts/ 下的多个文件：先拼成 src/CleanC-UI.ps1，保证用的是最新的
+if (Test-Path -LiteralPath (Join-Path $root 'src\parts\order.txt')) { & (Join-Path $here 'merge.ps1') }
 
 # 1. 从脚本里取出 C# 代码，和启动器一起编译
 $src = [IO.File]::ReadAllText($script)
@@ -40,3 +43,24 @@ if (-not (Test-Path -LiteralPath $csc)) { throw '找不到 .NET Framework 的 cs
     "$here\launcher.cs" "$obj\types_row.cs" "$obj\types_dup.cs"
 if ($LASTEXITCODE -ne 0) { throw "编译失败（csc 返回 $LASTEXITCODE）" }
 "已生成：$Out"
+
+# 4. 代码签名（可选）：设置了证书才签，没设置就跳过。证书从哪来见 README 的「代码签名」
+#    CLEARC_SIGN_PFX（.pfx 文件路径）+ CLEARC_SIGN_PASSWORD，或者 CLEARC_SIGN_THUMBPRINT（装在「当前用户 → 个人」里的证书）
+$pfx = $env:CLEARC_SIGN_PFX; $thumb = $env:CLEARC_SIGN_THUMBPRINT
+if ($pfx -or $thumb) {
+    $signtool = $null
+    $cmd = Get-Command signtool.exe -ErrorAction SilentlyContinue
+    if ($cmd) { $signtool = $cmd.Source }
+    if (-not $signtool) {
+        $kit = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
+        $signtool = Get-ChildItem -Path $kit -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue | Where-Object { $_.FullName -match '\\x64\\' } |
+            Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName
+    }
+    if (-not $signtool) { throw '要签名，但找不到 signtool.exe（安装 Windows SDK 时勾选「Windows SDK Signing Tools」）' }
+    $ts = if ($env:CLEARC_SIGN_TIMESTAMP) { $env:CLEARC_SIGN_TIMESTAMP } else { 'http://timestamp.digicert.com' }
+    $sa = @('sign', '/fd', 'SHA256', '/tr', $ts, '/td', 'SHA256', '/d', 'ClearC', '/du', 'https://github.com/Xuanqiyun/ClearC')
+    if ($pfx) { $sa += @('/f', $pfx); if ($env:CLEARC_SIGN_PASSWORD) { $sa += @('/p', $env:CLEARC_SIGN_PASSWORD) } } else { $sa += @('/sha1', $thumb) }
+    & $signtool @sa $Out
+    if ($LASTEXITCODE -ne 0) { throw "签名失败（signtool 返回 $LASTEXITCODE）" }
+    "已签名：$Out"
+}

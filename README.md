@@ -17,13 +17,13 @@
 | **聊天记录搬家** | 微信（新版和旧版）、QQ、企业微信、腾讯会议、飞书、钉钉，以及 Telegram、Discord、Slack、Signal、LINE、Viber、KakaoTalk、Zoom 的聊天记录和数据，整个搬到其他硬盘，C 盘原位置留一个链接，软件照常使用。软件开着时会先问你要不要替你关掉。 |
 | **重复文件** | 找出内容完全相同的文件。可以删掉多余的，也可以「合并为一份」（硬链接，每个位置的文件都还在，只占一份空间）。 |
 | **省空间** | 不删文件也能省：系统压缩（CompactOS）、NTFS 压缩文件夹、页面文件改到其他盘、休眠文件精简、压缩 WSL / Docker 的虚拟磁盘、把模拟器和虚拟机整个搬走。 |
-| **空间地图** | 扫描整块盘，一层层点进去看是哪些文件夹占了空间，也可以看成「方块图」。NTFS 格式的盘直接读盘上的文件表（MFT），几十万个文件一般几秒到十几秒就扫完；读不了时自动改回逐个文件夹扫描。「找文件」按大小、多久没改过、类型、名称筛选大文件，可以多选一起删；「和上次比」看哪些文件夹在变大。列表可以导出成 CSV，整块盘的情况可以导出成网页报告（在浏览器里能存成 PDF）。 |
+| **空间地图** | 扫描整块盘，一层层点进去看是哪些文件夹占了空间，也可以看成「方块图」。NTFS 格式的盘直接读盘上的文件表（MFT），几十万个文件一般几秒到十几秒就扫完；读不了时自动改回逐个文件夹扫描（也可以关掉「快速扫描」）。「找文件」按大小、多久没改过、类型、名称筛选大文件，可以多选一起删，也可以只看聊天记录里的大文件（只看不删）；「和上次比」看哪些文件夹在变大。列表可以导出成 CSV，整块盘的情况可以导出成网页报告（在浏览器里能存成 PDF）。 |
 | **软件管理** | 已装软件按占用大小排列。可以卸载，卸载后检查残留文件夹；装在 C 盘的还可以整个搬到其他盘，不用重装。 |
 | **搬家管理** | 「可以搬的」自动列出 C 盘上还能搬走的聊天记录、软件和其他大文件夹，勾选后一次搬好几项；不适合搬的软件单独列出并写明原因。「已经搬走的」显示每个搬走的文件夹现在的状态，可以搬回 C 盘、修复断掉的链接、删掉没搬完留下的多余副本。 |
 | **自动提醒** | C 盘剩余空间低于设定值时在右下角提醒（每次登录电脑后和每天中午各检查一次）；每周自动清一次缓存。两项默认关闭，由 Windows 任务计划运行，不用一直开着本工具。 |
 | **操作日志** | 每一次删除、搬运、合并、压缩、卸载和系统设置改动都记成 txt，可以按类别和时间查看。默认保存半年，可以改。 |
 
-界面支持**中文和英文**，在左侧栏底部点「English / 中文」切换。
+界面支持**中文和英文**、**浅色和深色**，在左侧栏底部点「English / 中文」「外观」切换。「帮助」页里可以**检查新版本**（只在点的时候联网），以及**检查扫描功能**：在你的电脑上核对快速扫描是否准确，结果可以发给开发者。
 
 ## 安全原则
 
@@ -50,11 +50,11 @@
 
 系统要求：Windows 10 或 11。用的是系统自带的 Windows PowerShell 5.1 和 .NET Framework 4.8，不需要另装任何东西。
 
-exe 没有代码签名，Windows SmartScreen 可能提示「Windows 已保护你的电脑」，点「更多信息」→「仍要运行」即可。不放心的话可以按下面的方法自己从源码构建。
+exe 暂时没有代码签名，Windows SmartScreen 可能提示「Windows 已保护你的电脑」，点「更多信息」→「仍要运行」即可。不放心的话可以按下面的方法自己从源码构建。
 
 ## 从源码运行或构建
 
-整个程序就是一个 PowerShell 脚本 `src/CleanC-UI.ps1`，exe 只是把它包起来。
+整个程序就是一个 PowerShell 脚本 `src/CleanC-UI.ps1`，exe 只是把它包起来。这个脚本由 `src/parts/` 下按功能分开的文件拼成（见 [src/parts/README.md](src/parts/README.md)）：改代码时改 `src/parts/` 里的文件，再运行 `build\merge.ps1`。
 
 **直接运行源码**：双击 `src/run-from-source.bat`（会请求管理员权限）。功能和 exe 一样，只是自动提醒、每周清理这类定时任务只有 exe 版本支持。
 
@@ -69,17 +69,43 @@ powershell -NoProfile -ExecutionPolicy Bypass -File build\build.ps1
 ### 代码结构
 
 ```
-src/CleanC-UI.ps1        整个程序（单文件）
-  ├─ $rowCode / $dupCode   C# 部分：列表行的数据类型、重复文件查找、文件夹统计（批量读目录、多线程）、读取 NTFS 文件表（MFT）和变更日志、空间地图、硬链接、回收站等
-  ├─ $engine               清理、搬家、删除保护、日志等核心逻辑；界面线程和每个后台任务共用
-  ├─ [xml]$xaml            WPF 界面
-  └─ 界面逻辑               各页面、后台任务、完成后的处理、定时任务模式（/check、/autoclean）
+src/parts/               源码，按功能分开（拼起来就是 src/CleanC-UI.ps1）
+  ├─ cs/                   C# 部分：重复文件查找、批量读目录和多线程统计、读取 NTFS 文件表（MFT）和变更日志、空间地图、深色配色、列表的行
+  ├─ engine/Engine.ps1     清理、搬家、删除保护、日志、自检等核心逻辑；界面线程和每个后台任务共用
+  ├─ i18n/en.tsv           英文界面的翻译表
+  ├─ ui/                   WPF 界面（main.xaml、英文帮助页）和各页面的界面逻辑
+  └─ glue/                 把各部分接起来：管理员权限、加载 C# 类型、定时任务模式（/check、/autoclean、/selftest）
+src/CleanC-UI.ps1        拼好的整个程序（直接运行源码、构建 exe 都用它）
 src/run-from-source.bat  不构建、直接运行源码
+build/merge.ps1          把 src/parts/ 拼成 src/CleanC-UI.ps1（-Check 只检查是不是最新的）
 build/launcher.cs        exe 启动器：把脚本作为内嵌资源，放进本进程里的 PowerShell 5.1 运行
 build/app.manifest       要求管理员权限、长路径支持
-build/build.ps1          Windows 上构建 exe
+build/build.ps1          Windows 上构建 exe（先自动拼一次；设置了证书就顺便签名）
 build/build-roslyn.ps1   其他系统上构建 exe
+tests/                   测试，见下面
 ```
+
+### 测试
+
+| 测试 | 在哪跑 | 怎么跑 |
+|---|---|---|
+| 语法、C# 编译、XAML、控件名、翻译 | 任何装了 PowerShell 的系统 | `pwsh tests/Checks.ps1` |
+| 核心逻辑（统计大小、查找、树上查大小、深色配色等） | Windows PowerShell 5.1 或 PowerShell 7 | `pwsh tests/Engine.Tests.ps1` |
+| 直接读文件表、按改动增量更新 | Linux，root，装 ntfs-3g 和 PowerShell 7 | `sudo bash tests/ntfs/run.sh`：用 mkntfs 和 ntfs-3g 做出真的 NTFS 镜像（硬链接、稀疏文件、碎片、备用数据流、很深的路径、各种簇大小），和挂载后逐个文件夹数出来的结果对比。ntfs-3g 建的符号链接是普通文件，和 Windows 不同，所以允许差几处 |
+| 深色模式的对比度 | 任何装了 PowerShell 和 Python 的系统 | `bash tests/theme/run.sh`：算每段文字和底色的对比度（近似） |
+| 在真的 Windows 上核对快速扫描 | Windows | 程序里「帮助」→「检查扫描功能」；或者 `ClearC.exe /selftest`，结果在 `%LOCALAPPDATA%\CleanC\selftest.txt`（设置环境变量 `CLEANC_REPORT` 可以改位置，`CLEANC_QUIET=1` 不弹提示），退出码是不通过的项数 |
+
+### 代码签名
+
+exe 签了名，SmartScreen 的提示会少很多（签名的发布者信誉要随着下载量慢慢积累，刚签的版本一开始可能还会提示）。`build\build.ps1` 已经支持签名：设置环境变量 `CLEARC_SIGN_PFX`（.pfx 证书）和 `CLEARC_SIGN_PASSWORD`，或者 `CLEARC_SIGN_THUMBPRINT`（装在「当前用户 → 个人」里的证书），构建完会用 Windows SDK 的 signtool 签名并加时间戳。证书可以这样拿：
+
+- **SignPath Foundation**（免费，给开源项目）：在 [signpath.org](https://signpath.org/) 申请。要求包括 OSI 认可的开源许可证（本项目是 MIT）、exe 由公开的自动构建（比如 GitHub Actions）从源码生成、每次签名都由维护者手动批准、项目主页写明代码签名政策。
+- **Azure Artifact Signing**（原 Trusted Signing，每月约 10 美元）：目前个人开发者只限美国和加拿大，机构限美国、加拿大、欧盟和英国。
+- 也可以向证书机构买 OV 代码签名证书。
+
+### 国内下载镜像
+
+GitHub 在国内下载慢的话，可以在 [Gitee](https://gitee.com/) 建一个同名仓库做镜像：Gitee 的「从 GitHub 导入仓库」可以定时同步代码；发版时把 exe 也上传到 Gitee 仓库的「发行版」里，再把下载地址补到这里。
 
 ### 程序在电脑上留下的东西
 
@@ -107,7 +133,7 @@ build/build-roslyn.ps1   其他系统上构建 exe
 
 ## 反馈
 
-- 在本仓库提 [Issue](../../issues)，最好附上截图，以及程序里「帮助」→「复制诊断信息」的内容。
+- 在本仓库提 [Issue](../../issues)，最好附上截图，以及程序里「帮助」→「复制诊断信息」的内容；扫描结果不对的话，附上「检查扫描功能」的结果。
 - 开发者微信：45915504
 
 ## 许可证
@@ -124,10 +150,12 @@ ClearC (Chinese name 腾挪, "make room") frees up space on drive C: on Windows 
 
 - **Clean up C:** lists what can be removed (caches, temp files, update leftovers) and what has a cost (Windows.old, Recycle Bin), each with Delete / Move / Skip.
 - **Move chat history and apps to another drive.** WeChat, QQ, WeCom, Tencent Meeting, Feishu, DingTalk, Telegram, Discord, Slack, Signal, LINE, Viber, KakaoTalk and Zoom data, as well as installed apps, are copied to another drive, verified, and replaced by a directory link, so the software keeps working unchanged.
-- **Duplicates, Save space, Space map, Apps, Moved folders, Reminders, Activity log.** Find duplicate files or merge them into hard links. Use CompactOS, NTFS folder compression, page-file and hibernation settings, and WSL / Docker disk compaction. The "Moved folders" page lists everything on C: that can still be moved and moves several items at once. Browse folder sizes as a list or treemap (NTFS drives are read straight from the file table, the MFT, so even large drives take seconds), find large files by size, age, type and name and delete several at once, export an HTML report, see which folders grew since the last scan, export lists to CSV, uninstall apps and clean leftovers, move folders back, and get low-space reminders. Every change is logged.
+- **Duplicates, Save space, Space map, Apps, Moved folders, Reminders, Activity log.** Find duplicate files or merge them into hard links. Use CompactOS, NTFS folder compression, page-file and hibernation settings, and WSL / Docker disk compaction. The "Moved folders" page lists everything on C: that can still be moved and moves several items at once. Browse folder sizes as a list or treemap (NTFS drives are read straight from the file table, the MFT, so even large drives take seconds; "Fast scan" can be turned off), look at the large files inside chat data (view only), find large files by size, age, type and name and delete several at once, export an HTML report, see which folders grew since the last scan, export lists to CSV, uninstall apps and clean leftovers, move folders back, and get low-space reminders. Every change is logged.
 - **Safety rules.** Personal folders (Desktop, Documents, Downloads…) are never deleted, every deletion needs an explicit confirmation, and system locations are blocked. Long operations can be cancelled at any time and stop at a safe point.
 
-The interface is available in English and Chinese. Switch with "English / 中文" at the bottom of the sidebar; the first launch follows the Windows display language.
+The interface is available in English and Chinese, light and dark. Switch with "English / 中文" and "Appearance" at the bottom of the sidebar; the first launch follows the Windows display language. The Help page can check for updates (only when you click it) and run "Check scanning", which verifies the fast scan on your PC and produces a report you can send to the developer (also `ClearC.exe /selftest`).
+
+Developers: the source is split by function under `src/parts/` and merged into `src/CleanC-UI.ps1` by `build/merge.ps1`; tests are in `tests/` (checks, engine tests, real NTFS image tests on Linux, dark-mode contrast). `build/build.ps1` signs the exe when a certificate is configured.
 
 Download the latest `ClearC-vX.X.exe` from [Releases](../../releases). The exe is not code-signed, so SmartScreen may warn; choose "More info → Run anyway", or build it yourself with `build\build.ps1`.
 

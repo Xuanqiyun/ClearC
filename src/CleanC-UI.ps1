@@ -6,6 +6,8 @@
 param()
 
 $ErrorActionPreference = 'SilentlyContinue'
+$script:AppVersion = '2.6'
+$script:startClock = [Diagnostics.Stopwatch]::StartNew()   # 记下启动各阶段用了多久，写进运行记录
 
 # ---------------- 管理员权限 ----------------
 $script:selfScript = $PSCommandPath
@@ -24,7 +26,13 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 
 # 表格行的数据类型（带属性变更通知，下拉框改动能回写）
 $rowCode = @"
+using System;
 using System.ComponentModel;
+// 深色模式换颜色：真正的换法在另一段 C#（Theme），启动时把它接到这里
+public static class RowTheme {
+    public static Func<string, char, string> Map;
+    public static string M(string c, char role) { Func<string, char, string> f = Map; return f == null ? c : f(c, role); }
+}
 public class RowItem : INotifyPropertyChanged {
     public int Idx { get; set; }
     public string Group { get; set; }
@@ -40,7 +48,7 @@ public class RowItem : INotifyPropertyChanged {
     private string _status = "";
     public string Status { get { return _status; } set { _status = value; Raise("Status"); } }
     private string _statusBrush = "#667085";
-    public string StatusBrush { get { return _statusBrush; } set { _statusBrush = value; Raise("StatusBrush"); } }
+    public string StatusBrush { get { return RowTheme.M(_statusBrush, 'f'); } set { _statusBrush = value; Raise("StatusBrush"); } }
     void Raise(string n) { PropertyChangedEventHandler h = PropertyChanged; if (h != null) h(this, new PropertyChangedEventArgs(n)); }
     public event PropertyChangedEventHandler PropertyChanged;
 }
@@ -80,8 +88,9 @@ public class DupRow : INotifyPropertyChanged {
     public string GroupMeta { get; set; }
     public string GroupBadge { get; set; }
     public string GroupBadgeTip { get; set; }
-    public string GroupBadgeBg { get; set; }
-    public string GroupBadgeFg { get; set; }
+    string _badgeBg, _badgeFg;
+    public string GroupBadgeBg { get { return Theme.B(_badgeBg); } set { _badgeBg = value; } }
+    public string GroupBadgeFg { get { return Theme.F(_badgeFg); } set { _badgeFg = value; } }
     public bool Verified { get; set; }
     public string Path { get; set; }
     public string Dir { get; set; }
@@ -91,7 +100,7 @@ public class DupRow : INotifyPropertyChanged {
     public long Size { get; set; }
     public string Risk { get; set; }
     public bool HasRisk { get; set; }
-    public string TypeBrush { get; set; }
+    string _type; public string TypeBrush { get { return Theme.F(_type); } set { _type = value; } }
     public bool Protected { get; set; }          // 在 C 盘个人文件夹里
     private bool _can = true;
     public bool CanDelete {
@@ -704,6 +713,7 @@ public sealed class DirReader {
     FD fd;
     List<FileSystemInfo> list; int li;
     string dirPath; int count;
+    public bool FellBack;                  // 批量读出错，这个文件夹改用了 FindFirstFileEx
 
     public uint Attr; public long Size, Write;
     public uint Tag;                       // 重解析点的类型（有重解析点时才有）
@@ -786,6 +796,7 @@ public sealed class DirReader {
                     // 一条都还没读到就出错（不是「没有了」）：这个文件夹改用 FindFirstFileEx 再列一遍，免得当成空文件夹
                     if (count == 0 && err != 18 /*NO_MORE_FILES*/ && err != 2 /*FILE_NOT_FOUND*/) {
                         CloseHandle(h); h = BAD;
+                        FellBack = true;
                         if (!OpenFind(dirPath)) return false;
                         mode = 2;
                         return Next();
@@ -834,6 +845,26 @@ public sealed class DirReader {
         }
     }
     // 同一个文件夹用两种方式各列一遍：个数、名字、大小、时间、属性都一样，才用批量读
+    // 自检用：同一个文件夹两种方式各列一遍，说明有没有差别
+    public static string Compare(string dir) {
+        if (!Win) return "not Windows";
+        DirReader a = new DirReader(1), b = new DirReader(2);
+        try {
+            if (!b.Open(dir)) return "cannot list";
+            if (!a.Open(dir)) return "batch read: cannot open";
+            Dictionary<string, string> sa = new Dictionary<string, string>(StringComparer.Ordinal), sb = new Dictionary<string, string>(StringComparer.Ordinal);
+            while (a.Next()) { sa[a.Name] = a.Attr + "|" + a.Size + "|" + a.Write + "|" + a.Tag; if (sa.Count > 200000) break; }
+            while (b.Next()) { sb[b.Name] = b.Attr + "|" + b.Size + "|" + b.Write + "|" + b.Tag; if (sb.Count > 200000) break; }
+            int diff = 0; string first = "";
+            foreach (KeyValuePair<string, string> kv in sb) {
+                string v;
+                if (!sa.TryGetValue(kv.Key, out v) || v != kv.Value) { diff++; if (first.Length == 0) first = kv.Key + " find=" + kv.Value + " batch=" + (v ?? "missing"); }
+            }
+            foreach (string k in sa.Keys) if (!sb.ContainsKey(k)) { diff++; if (first.Length == 0) first = k + " only in batch"; }
+            return "batch " + sa.Count + ", find " + sb.Count + ", differ " + diff + (a.FellBack ? ", batch fell back" : "") + (first.Length > 0 ? " (first: " + first + ")" : "");
+        } catch (Exception ex) { return "error " + ex.GetType().Name + ": " + ex.Message; }
+        finally { a.Free(); b.Free(); }
+    }
     // 返回 1 一致  2 对不上  0 看不出来（文件太少、打不开）
     static int SelfTest(string dir) {
         DirReader a = new DirReader(1), b = new DirReader(2);
@@ -1638,6 +1669,7 @@ public class DmFile {
     public string Path { get { string d = Dir.FullPath(); return (d.EndsWith("\\") || d.EndsWith("/")) ? d + Name : d + System.IO.Path.DirectorySeparatorChar + Name; } }
 }
 public class DmFind { public List<DmFile> Files = new List<DmFile>(); public long Count, Bytes; }
+public class DmEntry { public string Name, Path; public long Size; public DateTime Modified; }
 
 public static class DiskMap {
     public static volatile bool Cancel;
@@ -1700,8 +1732,9 @@ public static class DiskMap {
         return r;
     }
 
+    public static volatile bool MftOff;              // 用户在设置里关掉了「直接读文件表」
     static bool MftAllowed(string root) {
-        if (!Win || root == null || root.Length < 2 || root[1] != ':' || root.TrimEnd('\\').Length != 2) return false;   // 只认整块盘
+        if (MftOff || !Win || root == null || root.Length < 2 || root[1] != ':' || root.TrimEnd('\\').Length != 2) return false;   // 只认整块盘
         lock (cacheLock) { if (mftBroken.ContainsKey(root.Substring(0, 1))) return false; }
         try { return new DriveInfo(root.Substring(0, 2) + "\\").DriveFormat == "NTFS"; } catch { return false; }
     }
@@ -1978,6 +2011,11 @@ public static class DiskMap {
     // 找文件：在扫描时记下的文件里按条件筛选。BigFiles 已按大小从大到小排好：
     // 取前 max 个（确认文件还在），并算出符合条件的一共有几个、多大
     public static DmFind FindFiles(long minSize, DateTime olderThan, string exts, string name, DmNode under, int max) {
+        return FindFilesIn(minSize, olderThan, exts, name, under == null ? null : new DmNode[] { under }, max);
+    }
+    // unders：只在这几个文件夹里找（null 表示整块盘）
+    public static DmFind FindFilesIn(long minSize, DateTime olderThan, string exts, string name, DmNode[] unders, int max) {
+        HashSet<DmNode> within = unders == null ? null : new HashSet<DmNode>(unders);
         DmFind r = new DmFind();
         Dictionary<string, bool> ex = null;
         if (!string.IsNullOrEmpty(exts)) {
@@ -1997,8 +2035,8 @@ public static class DiskMap {
             if (ex != null) { int dot = f.Name.LastIndexOf('.'); if (dot < 0 || !ex.ContainsKey(f.Name.Substring(dot))) continue; }
             if (sub != null && f.Name.IndexOf(sub, StringComparison.OrdinalIgnoreCase) < 0) continue;
             if (rx != null && !rx.IsMatch(f.Name)) continue;
-            bool gone = false, inside = (under == null);
-            for (DmNode a = f.Dir; a != null; a = a.Parent) { if (a.Gone) { gone = true; break; } if (a == under) inside = true; }
+            bool gone = false, inside = (within == null);
+            for (DmNode a = f.Dir; a != null; a = a.Parent) { if (a.Gone) { gone = true; break; } if (!inside && within.Contains(a)) inside = true; }
             if (gone || !inside) continue;
             if (r.Files.Count < max) {
                 if (!FileThere(f.Path)) continue;
@@ -2036,6 +2074,62 @@ public static class DiskMap {
         string nm = System.IO.Path.GetFileName(path);
         BigFiles.RemoveAll(f => string.Equals(f.Name, nm, StringComparison.OrdinalIgnoreCase) && string.Equals(f.Path, path, StringComparison.OrdinalIgnoreCase));
     }
+    // 空间地图：一个文件夹里最大的几个文件（现场列，批量读目录）
+    public static List<DmEntry> TopFiles(string dir, int max) {
+        List<DmEntry> all = new List<DmEntry>();
+        DirReader r = new DirReader();
+        try {
+            if (!r.Open(dir)) return all;
+            string sep = (dir.EndsWith("\\") || dir.EndsWith("/")) ? "" : System.IO.Path.DirectorySeparatorChar.ToString();
+            while (r.Next()) {
+                if (r.IsDir) continue;
+                DmEntry x = new DmEntry(); x.Name = r.Name; x.Path = dir + sep + r.Name; x.Size = r.Size;
+                try { x.Modified = DateTime.FromFileTime(r.Write); } catch { }
+                all.Add(x);
+            }
+        } catch { } finally { r.Free(); }
+        all.Sort((a, b) => b.Size.CompareTo(a.Size));
+        if (all.Count > max) all.RemoveRange(max, all.Count - max);
+        return all;
+    }
+    // 一个文件夹里最大的几个子文件夹（不改动原来的顺序）
+    public static List<DmNode> TopKids(DmNode n, int max) {
+        List<DmNode> k = new List<DmNode>(n.Kids);
+        k.Sort((a, b) => b.Size.CompareTo(a.Size));
+        if (k.Count > max) k.RemoveRange(max, k.Count - max);
+        return k;
+    }
+    // 自检用：逐个扫描时打不开的文件夹个数
+    public static long CountDenied(DmNode n) {
+        long c = 0; Stack<DmNode> st = new Stack<DmNode>(); st.Push(n);
+        while (st.Count > 0) { DmNode d = st.Pop(); if (d.Denied) c++; foreach (DmNode k in d.Kids) st.Push(k); }
+        return c;
+    }
+    // 自检用：两棵树对不上的地方（按名字对应），差得最多的几处
+    public static List<string> Diff(DmNode a, DmNode b, int max) {
+        List<KeyValuePair<long, string>> found = new List<KeyValuePair<long, string>>();
+        Stack<KeyValuePair<DmNode, DmNode>> st = new Stack<KeyValuePair<DmNode, DmNode>>();
+        st.Push(new KeyValuePair<DmNode, DmNode>(a, b));
+        int seen = 0;
+        while (st.Count > 0 && seen < 2000000) {
+            KeyValuePair<DmNode, DmNode> kv = st.Pop(); DmNode x = kv.Key, y = kv.Value; seen++;
+            if (x.OwnFiles != y.OwnFiles || x.Own != y.Own)
+                found.Add(new KeyValuePair<long, string>(Math.Abs(x.Own - y.Own) + Math.Abs(x.OwnFiles - y.OwnFiles), y.FullPath() + "  own files " + x.OwnFiles + " / " + y.OwnFiles + ", bytes " + x.Own + " / " + y.Own + (y.Denied ? " (walk: denied)" : "")));
+            Dictionary<string, DmNode> yk = new Dictionary<string, DmNode>(StringComparer.OrdinalIgnoreCase);
+            foreach (DmNode k in y.Kids) yk[k.Name] = k;
+            foreach (DmNode k in x.Kids) {
+                DmNode m;
+                if (yk.TryGetValue(k.Name, out m)) { yk.Remove(k.Name); if (!k.IsLink && !m.IsLink) st.Push(new KeyValuePair<DmNode, DmNode>(k, m)); else if (k.IsLink != m.IsLink) found.Add(new KeyValuePair<long, string>(k.Size + m.Size + 1, m.FullPath() + "  link " + k.IsLink + " / " + m.IsLink)); }
+                else found.Add(new KeyValuePair<long, string>(k.Size + 1, k.FullPath() + "  only in file table, " + k.Files + " files, " + k.Size + " bytes"));
+            }
+            foreach (DmNode m in yk.Values) found.Add(new KeyValuePair<long, string>(m.Size + 1, m.FullPath() + "  only in walk, " + m.Files + " files, " + m.Size + " bytes"));
+        }
+        found.Sort((p, q) => q.Key.CompareTo(p.Key));
+        List<string> r = new List<string>();
+        for (int i = 0; i < found.Count && i < max; i++) r.Add(found[i].Value);
+        if (found.Count > max) r.Add("... " + (found.Count - max) + " more");
+        return r;
+    }
     // 快照：前几层里够大的文件夹，用来和下次扫描比较谁变大了
     public static List<string> Snapshot(DmNode root, int maxDepth, long minSize) {
         List<string> outp = new List<string>();
@@ -2048,6 +2142,156 @@ public static class DiskMap {
             if (kv.Value < maxDepth) foreach (DmNode k in kv.Key.Kids) if (!k.IsLink) st.Push(new KeyValuePair<DmNode, int>(k, kv.Value + 1));
         }
         return outp;
+    }
+}
+
+// ==================== 深色模式：把为浅色界面写的颜色换成深色界面用的 ====================
+// 按用途换：f 文字和图标  b 底色  d 边框和分隔线。灰色系按明暗翻过来（浅底变深底、深字变浅字），
+// 彩色保留色相：文字和图标提亮一点，浅的彩色底变成同色调的深底。透明色和阴影不动。
+public static class Theme {
+    public static bool Dark;
+
+    public static string Map(string c, char role) {
+        if (!Dark || string.IsNullOrEmpty(c)) return c;
+        uint argb;
+        if (!TryParse(c.Trim(), out argb)) return c;
+        int a = (int)(argb >> 24), r = (int)((argb >> 16) & 255), g = (int)((argb >> 8) & 255), b = (int)(argb & 255);
+        if (a == 0) return c;                                        // 透明
+        if (a < 255 && r < 48 && g < 48 && b < 48) return c;         // 阴影、半透明遮罩
+        double h, s, l; ToHsl(r, g, b, out h, out s, out l);
+        double chroma = (Math.Max(r, Math.Max(g, b)) - Math.Min(r, Math.Min(g, b))) / 255.0;
+        bool gray = l >= 0.9 ? chroma < 0.025 : chroma < 0.08;
+        double L, S = s;
+        if (gray) {
+            S = Math.Min(s, 0.06);
+            if (role == 'f') {
+                if (r == 255 && g == 255 && b == 255) return c;      // 彩色按钮、色块上的白字
+                L = Clamp(1.06 - l, 0.30, 0.95);
+            } else if (role == 'd') L = Clamp(0.19 + (0.96 - l) * 0.9, 0.17, 0.62);
+            else {
+                if (l >= 0.985) L = 0.17;                            // 白：卡片
+                else if (l >= 0.94) L = 0.105 + (0.985 - l) * 0.5;   // 页面底色、卡片里的浅灰块
+                else if (l >= 0.80) L = 0.13 + (0.94 - l) * 0.15;    // 侧边栏、分段按钮的底槽、按下的浅灰：比卡片暗一点（和浅色时一样，白色的选中块浮在上面）
+                else L = Clamp(0.30 + l * 0.25, 0.30, 0.45);         // 本来就深的底（提示条等）
+            }
+        } else if (l >= 0.85) {                                      // 浅的彩色底（提示框、标签）
+            if (role == 'f') { L = 0.80; S = Math.Min(s, 0.7); }
+            else if (role == 'd') { L = 0.34; S = Math.Min(s, 0.45); }
+            else { L = 0.19; S = Math.Min(s, 0.40); }
+        } else if (l >= 0.65) {                                      // 偏浅的彩色（浅边框、焦点环）
+            if (role == 'b') { L = 0.28; S = Math.Min(s, 0.5); }
+            else if (role == 'd') { L = 0.42; S = Math.Min(s, 0.55); }
+            else L = l;
+        } else {                                                     // 鲜艳的颜色
+            if (role == 'f') L = Math.Max(l, 0.62);
+            else if (role == 'd') L = Math.Max(l, 0.50);
+            else L = Math.Min(Math.Max(l, 0.42), 0.55);
+        }
+        int R, G, B; FromHsl(h, S, L, out R, out G, out B);
+        return a == 255 ? string.Format("#{0:X2}{1:X2}{2:X2}", R, G, B) : string.Format("#{0:X2}{1:X2}{2:X2}{3:X2}", a, R, G, B);
+    }
+    public static string F(string c) { return Map(c, 'f'); }
+    public static string B(string c) { return Map(c, 'b'); }
+    public static string D(string c) { return Map(c, 'd'); }
+
+    static bool TryParse(string s, out uint argb) {
+        argb = 0;
+        if (string.Equals(s, "White", StringComparison.OrdinalIgnoreCase)) { argb = 0xFFFFFFFF; return true; }
+        if (string.Equals(s, "Black", StringComparison.OrdinalIgnoreCase)) { argb = 0xFF000000; return true; }
+        if (s.Length < 7 || s[0] != '#') return false;
+        uint v;
+        if (!uint.TryParse(s.Substring(1), System.Globalization.NumberStyles.HexNumber, null, out v)) return false;
+        if (s.Length == 7) { argb = 0xFF000000 | v; return true; }
+        if (s.Length == 9) { argb = v; return true; }
+        return false;
+    }
+    static double Clamp(double x, double lo, double hi) { return x < lo ? lo : (x > hi ? hi : x); }
+    static void ToHsl(int r, int g, int b, out double h, out double s, out double l) {
+        double R = r / 255.0, G = g / 255.0, B = b / 255.0;
+        double mx = Math.Max(R, Math.Max(G, B)), mn = Math.Min(R, Math.Min(G, B));
+        l = (mx + mn) / 2; h = 0; s = 0;
+        if (mx == mn) return;
+        double d = mx - mn;
+        s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+        if (mx == R) h = (G - B) / d + (G < B ? 6 : 0); else if (mx == G) h = (B - R) / d + 2; else h = (R - G) / d + 4;
+        h /= 6;
+    }
+    static void FromHsl(double h, double s, double l, out int r, out int g, out int b) {
+        double R, G, B;
+        if (s <= 0) R = G = B = l;
+        else {
+            double q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
+            R = Hue(p, q, h + 1.0 / 3); G = Hue(p, q, h); B = Hue(p, q, h - 1.0 / 3);
+        }
+        r = (int)Math.Round(Clamp(R, 0, 1) * 255); g = (int)Math.Round(Clamp(G, 0, 1) * 255); b = (int)Math.Round(Clamp(B, 0, 1) * 255);
+    }
+    static double Hue(double p, double q, double t) {
+        if (t < 0) t += 1; if (t > 1) t -= 1;
+        if (t < 1.0 / 6) return p + (q - p) * 6 * t;
+        if (t < 0.5) return q;
+        if (t < 2.0 / 3) return p + (q - p) * (2.0 / 3 - t) * 6;
+        return p;
+    }
+    // 浅色时把颜色和白色按比例混合；深色时和卡片底色混合（选中状态用的淡底色）
+    public static string Tint(string c, double k) {
+        uint argb; if (!TryParse(c, out argb)) return c;
+        int r = (int)((argb >> 16) & 255), g = (int)((argb >> 8) & 255), b = (int)(argb & 255);
+        if (Dark) { string m = Map(c, 'f'); TryParse(m, out argb); r = (int)((argb >> 16) & 255); g = (int)((argb >> 8) & 255); b = (int)(argb & 255); }
+        int br = Dark ? 0x2C : 255, bg = Dark ? 0x2C : 255, bb = Dark ? 0x2E : 255;
+        return string.Format("#{0:X2}{1:X2}{2:X2}", (int)(br + (r - br) * k), (int)(bg + (g - bg) * k), (int)(bb + (b - bb) * k));
+    }
+
+    // 整段 XAML 里的颜色按所在的属性换掉
+    static readonly System.Text.RegularExpressions.Regex TagRx = new System.Text.RegularExpressions.Regex(
+        "<(/?)([A-Za-z_][\\w.:]*)((?:[^>\"']|\"[^\"]*\"|'[^']*')*?)(/?)>", System.Text.RegularExpressions.RegexOptions.Compiled);
+    static readonly System.Text.RegularExpressions.Regex AttrRx = new System.Text.RegularExpressions.Regex(
+        "([\\w.:]+)(\\s*=\\s*)\"([^\"]*)\"", System.Text.RegularExpressions.RegexOptions.Compiled);
+    public static string Xaml(string x) {
+        if (!Dark || string.IsNullOrEmpty(x)) return x;
+        List<string> stack = new List<string>();
+        return TagRx.Replace(x, delegate (System.Text.RegularExpressions.Match m) {
+            string close = m.Groups[1].Value, name = m.Groups[2].Value, attrs = m.Groups[3].Value, self = m.Groups[4].Value;
+            if (close.Length > 0) { int i = stack.LastIndexOf(name); if (i >= 0) stack.RemoveRange(i, stack.Count - i); return m.Value; }
+            string prop = null, key = null;
+            foreach (System.Text.RegularExpressions.Match a in AttrRx.Matches(attrs)) {
+                if (a.Groups[1].Value == "Property") prop = a.Groups[3].Value;
+                else if (a.Groups[1].Value == "x:Key") key = a.Groups[3].Value;
+            }
+            string local = name.Contains(":") ? name.Substring(name.IndexOf(':') + 1) : name;
+            string newAttrs = AttrRx.Replace(attrs, delegate (System.Text.RegularExpressions.Match a) {
+                string an = a.Groups[1].Value, v = a.Groups[3].Value;
+                char role = '\0';
+                if (an == "Foreground" || an == "CaretBrush") role = 'f';
+                else if (an == "Background") role = 'b';
+                else if (an == "BorderBrush" || an == "Stroke") role = 'd';
+                else if (an == "Fill") role = Lightish(v) ? 'b' : 'f';
+                else if (an == "Value" && prop != null) role = RoleOf(prop, v);
+                else if (an == "Color" && local != "DropShadowEffect") {
+                    for (int i = stack.Count - 1; i >= 0 && role == '\0'; i--) { int dot = stack[i].LastIndexOf('.'); if (dot > 0) role = RoleOf(stack[i].Substring(dot + 1), v); }
+                    if (role == '\0') {
+                        string k = key ?? "";
+                        role = (k.IndexOf("Fg", StringComparison.OrdinalIgnoreCase) >= 0 || k.IndexOf("Text", StringComparison.OrdinalIgnoreCase) >= 0) ? 'f'
+                             : (k.IndexOf("Line", StringComparison.OrdinalIgnoreCase) >= 0 || k.IndexOf("Border", StringComparison.OrdinalIgnoreCase) >= 0) ? 'd' : 'b';
+                    }
+                }
+                if (role == '\0' || (v.Length == 0) || (v[0] != '#' && v != "White" && v != "Black")) return a.Value;
+                return an + a.Groups[2].Value + "\"" + Map(v, role) + "\"";
+            });
+            if (self.Length == 0) stack.Add(name);
+            return "<" + name + newAttrs + self + ">";
+        });
+    }
+    static char RoleOf(string prop, string v) {
+        if (prop == "Foreground" || prop == "CaretBrush") return 'f';
+        if (prop == "Background") return 'b';
+        if (prop == "BorderBrush" || prop == "Stroke") return 'd';
+        if (prop == "Fill") return Lightish(v) ? 'b' : 'f';
+        return '\0';
+    }
+    static bool Lightish(string v) {
+        uint argb; if (!TryParse(v, out argb)) return false;
+        int r = (int)((argb >> 16) & 255), g = (int)((argb >> 8) & 255), b = (int)(argb & 255);
+        return (r + g + b) / 3 > 200;
     }
 }
 
@@ -2145,7 +2389,7 @@ public class MapRow {
     public double Bar { get; set; }
     public string Pct { get; set; }
     public string Glyph { get; set; }
-    public string GlyphBrush { get; set; }
+    string _glyph; public string GlyphBrush { get { return Theme.F(_glyph); } set { _glyph = value; } }
     public string Meta { get; set; }
     public bool IsDir { get; set; }
     public bool Locked { get; set; }
@@ -2179,7 +2423,7 @@ public class MoveRow : INotifyPropertyChanged {
     public string Dst { get; set; }
     public string State { get; set; }
     private string _status = ""; public string Status { get { return _status; } set { _status = value; Raise("Status"); } }
-    private string _brush = "#86868B"; public string StatusBrush { get { return _brush; } set { _brush = value; Raise("StatusBrush"); } }
+    private string _brush = "#86868B"; public string StatusBrush { get { return Theme.F(_brush); } set { _brush = value; Raise("StatusBrush"); } }
     private string _size = L10n.T("计算中…"); public string SizeText { get { return _size; } set { _size = value; Raise("SizeText"); } }
     public long Size { get; set; }
     public bool CanBack { get; set; }
@@ -2210,7 +2454,7 @@ public class CandRow : INotifyPropertyChanged {
     public bool Partial { get; set; }    // 目标盘上已经有上次复制的一部分
     private bool _chk; public bool Checked { get { return _chk; } set { if (_chk != value) { _chk = value; Dirty = true; Raise("Checked"); } } }
     private string _status = ""; public string Status { get { return _status; } set { _status = value; Raise("Status"); } }
-    private string _brush = "#86868B"; public string StatusBrush { get { return _brush; } set { _brush = value; Raise("StatusBrush"); } }
+    private string _brush = "#86868B"; public string StatusBrush { get { return Theme.F(_brush); } set { _brush = value; Raise("StatusBrush"); } }
     void Raise(string n) { PropertyChangedEventHandler h = PropertyChanged; if (h != null) h(this, new PropertyChangedEventArgs(n)); }
     public event PropertyChangedEventHandler PropertyChanged;
 }
@@ -2219,8 +2463,9 @@ public class LogRow {
     public DateTime When { get; set; }
     public string Cat { get; set; }
     public string CatText { get; set; }
-    public string CatBg { get; set; }
-    public string CatFg { get; set; }
+    string _catBg, _catFg;
+    public string CatBg { get { return Theme.B(_catBg); } set { _catBg = value; } }
+    public string CatFg { get { return Theme.F(_catFg); } set { _catFg = value; } }
     public string What { get; set; }
     public string Target { get; set; }
     public string Detail { get; set; }
@@ -2241,19 +2486,20 @@ public class HistBar {
     public double H { get; set; }
     public string Label { get; set; }
     public string Tip { get; set; }
-    public string Fill { get; set; }
+    string _fill; public string Fill { get { return Theme.B(_fill); } set { _fill = value; } }
 }
 public class GrowRow {
     public string Path { get; set; }
     public string Before { get; set; }
     public string Now { get; set; }
     public string Change { get; set; }
-    public string ChangeBrush { get; set; }
+    string _change; public string ChangeBrush { get { return Theme.F(_change); } set { _change = value; } }
     public double BeforeBytes { get; set; }
     public double NowBytes { get; set; }
 }
 '@
 if (-not ('DupFinder' -as [type])) { Add-Type -TypeDefinition $dupCode }
+$script:tPrep = $script:startClock.Elapsed.TotalSeconds
 
 # ============================================================
 # 引擎：清理项目录、测量、删除、搬家。主线程和后台线程都会加载这一段。
@@ -3566,6 +3812,100 @@ function Invoke-AutoClean {
     return @{ Freed = [math]::Max([double]0, [double]((FreeC) - $f0)); Items = $done }
 }
 
+# ---------- 自检：在这台电脑上核对快速扫描 ----------
+# 只读 C 盘；按变更日志更新的那一项，在本工具自己的文件夹里建几个文件、改一改、再删掉。结果写成英文文本给开发者看
+function Invoke-SelfTest([string]$Version) {
+    $L = New-Object System.Collections.Generic.List[string]
+    $res = @{ Pass = 0; Fail = 0; Warn = 0 }
+    $add = { param([string]$kind, [string]$msg) $L.Add(("[{0}] {1}" -f $kind, $msg)); if ($res.ContainsKey($kind.Substring(0,1).ToUpper() + $kind.Substring(1).ToLower())) { $res[$kind.Substring(0,1).ToUpper() + $kind.Substring(1).ToLower()]++ } }
+    $all = [Diagnostics.Stopwatch]::StartNew()
+    $sd = "$env:SystemDrive\"
+    $n = [DirStat]::ThreadsFor($env:SystemDrive)
+    $di = $null; try { $di = New-Object System.IO.DriveInfo $sd } catch {}
+    $L.Add(("ClearC self-test {0}  {1:yyyy-MM-dd HH:mm:ss}" -f $Version, (Get-Date)))
+    $L.Add(("Windows {0}, {1}-bit, PowerShell {2}, CLR {3}, culture {4}" -f [Environment]::OSVersion.Version, $(if ([Environment]::Is64BitOperatingSystem) { 64 } else { 32 }), $PSVersionTable.PSVersion, [Environment]::Version, [Globalization.CultureInfo]::CurrentUICulture.Name))
+    if ($di) { $L.Add(("{0} {1}, {2:N1} GB total, {3:N1} GB free, threads {4}" -f $sd, $di.DriveFormat, ($di.TotalSize / 1GB), ($di.AvailableFreeSpace / 1GB), $n)) }
+    $L.Add('')
+    # 1. 批量读目录和 FindFirstFileEx 一样吗
+    $step = 0; $steps = 4
+    $step++; SetP @{ Steps = $steps; Step = $step; StepName = (T '核对批量读目录'); SubKind = 'action'; SubStart = (Get-Date); Detail = '' }
+    foreach ($d in @($env:SystemRoot, "$env:SystemRoot\System32", $env:ProgramFiles, $env:LOCALAPPDATA, $env:USERPROFILE)) {
+        if (-not $d -or -not (Test-Path -LiteralPath $d)) { continue }
+        $r = [DirReader]::Compare($d)
+        & $add $(if ($r -match 'differ 0\b' -and $r -notmatch 'fell back') { 'pass' } elseif ($r -match '^batch \d') { 'fail' } else { 'warn' }) ("listing {0}: {1}" -f $d, $r)
+    }
+    $L.Add(("listing mode in use: {0} (1 batch, 2 FindFirstFileEx)" -f [DirReader]::Mode))
+    if (Stopping) { return @{ Lines = $L; Res = $res; Stopped = $true } }
+    # 2. 读文件表
+    $step++; SetP @{ Steps = $steps; Step = $step; StepName = (T '读取 C 盘的文件表'); SubKind = 'mft'; SubStart = (Get-Date); Detail = '' }
+    $tree = $null
+    if ([DiskMap]::MftOff) { & $add 'warn' 'direct file table reading is turned off in settings; file table checks skipped' }
+    else {
+        try { $tree = [DiskMap]::GetTree($sd, $n, $false, $true) } catch { & $add 'fail' ("file table: exception {0}" -f $_.Exception.Message) }
+        if ($tree) { & $add 'pass' ("file table: method {0}, {1:N0} ms, {2:N0} files, {3:N0} folders, {4:N1} GB, unread records {5}" -f [DiskMap]::LastMethod, [DiskMap]::LastMs, $tree.Files, [DiskMap]::DirsSeen, ($tree.Size / 1GB), [DiskMap]::LastFailed) }
+        elseif (-not (Stopping)) { & $add 'fail' ("file table not used: {0}" -f [DiskMap]::LastNote) }
+    }
+    if (Stopping) { return @{ Lines = $L; Res = $res; Stopped = $true } }
+    # 3. 和逐个文件夹扫描比
+    $step++; SetP @{ Steps = $steps; Step = $step; StepName = (T '和逐个文件夹扫描对比'); SubKind = 'action'; SubStart = (Get-Date); Detail = '' }
+    if ($tree) {
+        foreach ($p in @("$env:SystemRoot\System32", $env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:ProgramData, $env:LOCALAPPDATA, "$env:USERPROFILE\Documents")) {
+            if (Stopping) { break }
+            if (-not $p -or -not (Test-Path -LiteralPath $p -PathType Container) -or (IsLink $p)) { continue }
+            SetP @{ Detail = $p }
+            $node = [DiskMap]::Find($tree, $p)
+            $ws = [Diagnostics.Stopwatch]::StartNew(); $w = [DiskMap]::Scan($p, $n); $wms = $ws.ElapsedMilliseconds
+            if (-not $node) { & $add 'fail' ("{0}: not found in the file table" -f $p); continue }
+            $den = [DiskMap]::CountDenied($w)
+            $df = [long]$node.Files - [long]$w.Files; $db = [long]$node.Size - [long]$w.Size
+            $okF = [math]::Abs($df) -le [math]::Max(10, [long]$w.Files / 200); $okB = [math]::Abs($db) -le [math]::Max(64MB, [long]$w.Size / 100)
+            $kind = if ($okF -and $okB) { 'pass' } elseif ($den -gt 0 -and $df -ge 0 -and $db -ge 0) { 'warn' } else { 'fail' }
+            & $add $kind ("{0}: file table {1:N0} files {2:N0} bytes; walk {3:N0} files {4:N0} bytes in {5:N0} ms; walk could not open {6} folders" -f $p, $node.Files, $node.Size, $w.Files, $w.Size, $wms, $den)
+            if ($kind -ne 'pass') { foreach ($x in [DiskMap]::Diff($node, $w, 8)) { $L.Add('       ' + $x) } }
+        }
+    }
+    if (Stopping) { return @{ Lines = $L; Res = $res; Stopped = $true } }
+    # 4. 按变更日志更新：建、改、删几个文件，看看每次都对
+    $step++; SetP @{ Steps = $steps; Step = $step; StepName = (T '试一下按变更日志更新'); SubKind = 'action'; SubStart = (Get-Date); Detail = '' }
+    if ($tree) {
+        $base = Join-Path $env:LOCALAPPDATA ('CleanC\selftest-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+        $fs = $null
+        $check = {
+            param([string]$label, [scriptblock]$expect, [bool]$soft)
+            $s2 = [Diagnostics.Stopwatch]::StartNew()
+            $t = $null; try { $t = [DiskMap]::GetTree($sd, $n, $false, $true) } catch {}
+            $m = [string][DiskMap]::LastMethod; $ms = $s2.ElapsedMilliseconds
+            $why = if ($t) { & $expect $t } else { 'no tree: ' + [DiskMap]::LastNote }
+            $kind = if ($why) { $(if ($soft) { 'warn' } else { 'fail' }) } elseif ($m -ne 'mft-usn') { 'warn' } else { 'pass' }
+            & $add $kind ("journal {0}: method {1}, {2:N0} ms, changed {3}, unread {4}{5}" -f $label, $m, $ms, [DiskMap]::LastChanged, [DiskMap]::LastFailed, $(if ($why) { '; ' + $why } elseif ($m -ne 'mft-usn') { '; expected an incremental update' } else { '' }))
+        }
+        try {
+            New-Item -ItemType Directory -Path (Join-Path $base 'sub') -Force | Out-Null
+            $b1 = New-Object byte[] 25000; $b2 = New-Object byte[] 10000
+            foreach ($i in 1..40) { [IO.File]::WriteAllBytes((Join-Path $base "f$i.bin"), $b1) }
+            foreach ($i in 1..10) { [IO.File]::WriteAllBytes((Join-Path $base "sub\g$i.bin"), $b2) }
+            & $check 'create' { param($t) $x = [DiskMap]::Find($t, $base); if (-not $x) { 'test folder missing' } elseif ($x.Files -ne 50 -or $x.Size -ne 1100000) { "test folder {0} files {1} bytes, expected 50 / 1100000" -f $x.Files, $x.Size } } $false
+            Rename-Item -LiteralPath (Join-Path $base 'sub') -NewName 'sub2'
+            foreach ($i in 1..20) { Remove-Item -LiteralPath (Join-Path $base "f$i.bin") -Force }
+            $fa = [IO.File]::Open((Join-Path $base 'f21.bin'), [IO.FileMode]::Append, [IO.FileAccess]::Write); $fa.Write($b2, 0, 5000); $fa.Close()
+            & $check 'rename, delete, grow' { param($t) $x = [DiskMap]::Find($t, $base); if (-not $x) { 'test folder missing' } elseif ([DiskMap]::Find($t, (Join-Path $base 'sub'))) { 'old folder name still there' } elseif (-not [DiskMap]::Find($t, (Join-Path $base 'sub2'))) { 'renamed folder missing' } elseif ($x.OwnFiles -ne 20 -or $x.Own -ne 505000) { "test folder own {0} files {1} bytes, expected 20 / 505000" -f $x.OwnFiles, $x.Own } } $false
+            $fs = [IO.File]::Open((Join-Path $base 'f22.bin'), [IO.FileMode]::Append, [IO.FileAccess]::Write, [IO.FileShare]::ReadWrite); $fs.Write($b1, 0, 25000); $fs.Flush()
+            & $check 'file still open' { param($t) $x = [DiskMap]::Find($t, $base); if ($x -and $x.Own -ne 530000) { "own bytes {0} while the file is open, 530000 after writing (sizes of open files may lag)" -f $x.Own } } $true
+            $fs.Write($b1, 0, 25000); $fs.Close(); $fs = $null
+            & $check 'file closed' { param($t) $x = [DiskMap]::Find($t, $base); if (-not $x) { 'test folder missing' } elseif ($x.Own -ne 555000) { "own bytes {0}, expected 555000" -f $x.Own } } $false
+            Remove-Item -LiteralPath $base -Recurse -Force
+            & $check 'remove' { param($t) if ([DiskMap]::Find($t, $base)) { 'test folder still there after removing it' } } $false
+        } catch { & $add 'fail' ("journal test error: {0}" -f $_.Exception.Message) }
+        finally {
+            if ($fs) { try { $fs.Close() } catch {} }
+            if (Test-Path -LiteralPath $base) { Remove-Item -LiteralPath $base -Recurse -Force -ErrorAction SilentlyContinue }
+        }
+    }
+    $L.Add('')
+    $L.Add(("summary: {0} pass, {1} warn, {2} fail, {3:N1} s" -f $res.Pass, $res.Warn, $res.Fail, ($all.ElapsedMilliseconds / 1000)))
+    return @{ Lines = $L; Res = $res; Stopped = $false }
+}
+
 function Get-Hogs {
     $roots = @('C:\ProgramData','C:\Program Files','C:\Program Files (x86)',"$env:USERPROFILE","$env:LOCALAPPDATA","$env:APPDATA")
     $rows = foreach ($r in $roots) {
@@ -4737,6 +5077,49 @@ Zoom 装在这里的程序和本地数据。会议录像默认存在「文档」
 按变更日志更新了 C 盘的文件表（{0:N0} 处改动），用时 {1:N1} 秒	Updated the C: file table from the change journal ({0:N0} changes), took {1:N1} s
 没有权限打开这个文件夹，看不到里面有什么，不删。	ClearC does not have permission to open this folder and cannot see what is inside, so it will not delete it.
 文件表里有 {0} 条记录这次没读到，下次扫描时再补	{0} records in the file table could not be read this time; they will be picked up on the next scan
+扫描功能检查完了	Scanning check finished
+{0} 项正常，{1} 项提醒，{2} 项有问题	{0} passed, {1} warnings, {2} problems
+打开结果	Open result
+检查扫描功能	Check scanning
+开始检查扫描功能	Checking scanning
+检查新版本	Check for updates
+其余 {0:N0} 项	{0:N0} more items
+这里只列出最大的 500 项；其余的可以点「打开位置」在资源管理器里看	Only the 500 largest items are listed here; click "Open location" to see the rest in File Explorer
+这一行是合在一起的其余项目	This row combines the remaining items
+聊天记录里的文件只能查看和打开位置；要腾地方，到「搬家管理」把整个聊天记录搬到其他盘	Files in chat data can only be viewed and located; to free up space, move the whole chat data to another drive on the "Moved folders" page
+在聊天记录里找（{0}）。这些文件只能查看和打开位置；要腾地方，可以到「搬家管理」把整个聊天记录搬到其他盘	Searching chat data ({0}). These files can only be viewed and located; to free up space, move the whole chat data to another drive on the "Moved folders" page
+这块盘上没找到聊天软件的聊天记录文件夹（可能已经搬到其他盘了）	No chat data folders were found on this drive (they may already have been moved to another drive)
+已打开快速扫描：直接读文件表	Fast scan on: reading the file table directly
+已关闭快速扫描：以后逐个文件夹扫描	Fast scan off: scanning folder by folder from now on
+已中途停止	Stopped partway
+检查扫描功能：{0}；结果存在 {1}	Scanning check: {0}; result saved to {1}
+。	. 
+结果已经复制，可以直接粘贴到微信里发给开发者。	The result has been copied; you can paste it straight into a message to the developer.
+完整结果存在 {0}	Full result saved to {0}
+有问题的项目，扫描时会自动改用逐个文件夹扫描，不影响使用；把结果发给开发者可以帮助修好它。	Where there are problems, scanning automatically falls back to the folder-by-folder method, so ClearC keeps working; sending the result to the developer helps get it fixed.
+没能检查新版本	Could not check for updates
+连不上 GitHub：{0}\n\n可以直接打开下载页面看看。	Could not reach GitHub: {0}\n\nYou can open the download page directly.
+打开下载页面	Open download page
+有新版本 {0}	New version {0} available
+现在用的是 {0}。下载页面会在浏览器里打开，下载新的 exe 替换现在这个就好，设置都会保留。	You are using {0}. The download page opens in your browser; download the new exe and replace this one. Your settings are kept.
+已经是最新版本	You're up to date
+现在用的是 {0}，GitHub 上最新的是 {1}。	You are using {0}; the latest on GitHub is {1}.
+浅色	Light
+深色	Dark
+跟随系统	Follow Windows
+外观：{0}	Appearance: {0}
+外观：浅色	Appearance: Light
+选择外观	Choose appearance
+深色适合在暗的环境里用；跟随系统会照 Windows 设置里「选择应用模式」来。换了以后本工具会关闭，再自动打开。\n\n现在：{0}	Dark is easier on the eyes in dim light; Follow Windows uses the "Choose your app mode" setting in Windows. ClearC will close and reopen after you change it.\n\nCurrent: {0}
+切换外观	Change appearance
+启动用时 {0:N1} 秒：准备 {1:N1} 秒，加载界面 {2:N1} 秒，显示 {3:N1} 秒	Startup took {0:N1} s: preparing {1:N1} s, loading the window {2:N1} s, showing it {3:N1} s
+核对批量读目录	Checking batch directory reads
+和逐个文件夹扫描对比	Comparing with a folder-by-folder scan
+试一下按变更日志更新	Trying updates from the change journal
+快速扫描	Fast scan
+直接读取 NTFS 的文件表（MFT），比逐个文件夹查看快得多。少数安全软件对直接读盘会提示，可以关掉，改为逐个文件夹扫描。清理、搬家、软件管理统计大小时也按这个设置。	Reads the NTFS file table (MFT) directly, which is much faster than going through every folder. A few security programs warn about direct disk reads; turn this off to scan folder by folder instead. Clean up, Moved folders and Apps follow this setting too.
+只找聊天软件里的	Only in chat apps
+微信、QQ、企业微信、飞书、钉钉、Telegram 等聊天记录文件夹里的大文件。这些文件只能查看、打开位置；要腾地方，可以到「搬家管理」把整个聊天记录搬到其他盘。	Large files in the chat data folders of WeChat, QQ, WeCom, Feishu, DingTalk, Telegram and others. These files can only be viewed and located; to free up space, move the whole chat data to another drive on the "Moved folders" page.
 '@
 # 英文的帮助页（整页替换中文的那一页）
 $script:helpEnXaml = @'
@@ -4920,7 +5303,7 @@ $script:helpEnXaml = @'
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Why scanning is fast</Run><Run>: on NTFS drives (C: almost always is), ClearC reads the file table on the disk (the MFT) directly, so hundreds of thousands of files usually take seconds rather than minutes. The result is checked against a direct folder listing; if it does not match or the table cannot be read (not NTFS, not enough permission and so on), ClearC goes back to scanning folder by folder, with several threads at once (more on SSDs, fewer on hard disks). Scanning again while ClearC is still open only updates what changed, using the Windows change journal. Reading the file table also sees folders that a folder-by-folder scan cannot open (such as System Volume Information), so the totals of the two methods can differ slightly.</Run></TextBlock>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Why scanning is fast</Run><Run>: on NTFS drives (C: almost always is), ClearC reads the file table on the disk (the MFT) directly, so hundreds of thousands of files usually take seconds rather than minutes. The result is checked against a direct folder listing; if it does not match or the table cannot be read (not NTFS, not enough permission and so on), ClearC goes back to scanning folder by folder, with several threads at once (more on SSDs, fewer on hard disks). Scanning again while ClearC is still open only updates what changed, using the Windows change journal. Reading the file table also sees folders that a folder-by-folder scan cannot open (such as System Volume Information), so the totals of the two methods can differ slightly. A few security programs warn about direct disk reads; untick "Fast scan" at the top right to scan folder by folder from then on (Clean up, Moved folders and Apps follow the same setting).</Run></TextBlock>
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
@@ -4928,7 +5311,7 @@ $script:helpEnXaml = @'
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Drill down</Run><Run>: double-click a folder to open the next level, and click "Up one level" to go back. The blue bar on each row shows how large it is within the current level.</Run></TextBlock>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Drill down</Run><Run>: double-click a folder to open the next level, and click "Up one level" to go back. The blue bar on each row shows how large it is within the current level. When a level holds a lot (WinSxS has tens of thousands of items), only the 500 largest are listed and the rest are combined into the last row; "Open location" shows everything in File Explorer.</Run></TextBlock>
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
@@ -4936,7 +5319,7 @@ $script:helpEnXaml = @'
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Find files</Run><Run>: searches the files of 1 MB or more recorded during the scan, largest first. Filter by size, how long since they were modified (for example 6+ months), type (videos, archives and installers, disc images and virtual disks…) and name; names can use * and ? (for example *.mp4). Tick "Only in the current folder" to search just the folder you opened.</Run></TextBlock>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Find files</Run><Run>: searches the files of 1 MB or more recorded during the scan, largest first. Filter by size, how long since they were modified (for example 6+ months), type (videos, archives and installers, disc images and virtual disks…) and name; names can use * and ? (for example *.mp4). Tick "Only in the current folder" to search just the folder you opened, or "Only in chat apps" to search only the chat data of WeChat, QQ, WeCom, Feishu, DingTalk, Telegram and others and see which videos and files take up the space. Files in chat data can only be viewed and located here, not deleted; to free up space, move the whole chat data to another drive on the "Moved folders" page.</Run></TextBlock>
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
@@ -5079,6 +5462,8 @@ $script:helpEnXaml = @'
               <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Can I close the window while it's running?</Run><LineBreak/><Run>Please don't close the window until the work is done; to stop, click "Cancel". You can click "Continue in background" to collapse the progress card; progress is still shown at the bottom of the window and on the taskbar icon.</Run></TextBlock>
               <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Where can I see the details?</Run><LineBreak/><Run>For the deletions and moves that were made, see "Activity log" on the left. For technical details of what the program did, see "Run log" at the bottom left; the full file is at %TEMP%\CleanC-run.log.</Run></TextBlock>
               <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Less space freed than expected?</Run><LineBreak/><Run>Files moved to the Recycle Bin only free up space after you empty the Recycle Bin, and files in use by other programs are skipped.</Run></TextBlock>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Is there a dark mode?</Run><LineBreak/><Run>Yes. Click "Appearance" at the bottom left and choose Light, Dark or Follow Windows (the "Choose your app mode" setting). ClearC closes and reopens after you change it.</Run></TextBlock>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">How do I know about new versions?</Run><LineBreak/><Run>Click "Check for updates" under "Feedback" below. If there is a new version, the download page opens; replace the old exe with the new one and your settings, logs and reminders are kept. ClearC does not go online otherwise; it contacts GitHub only when you click that button.</Run></TextBlock>
             </StackPanel>
           </Border>
           <Border x:Name="FeedbackCard" Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
@@ -5107,6 +5492,11 @@ $script:helpEnXaml = @'
                 <Button x:Name="BtnCopyDiag" Content="Copy diagnostic info" Margin="0,0,8,0"/>
                 <Button x:Name="BtnOpenLog" Content="Open run log file"/>
                 <TextBlock x:Name="CopyHint" Style="{StaticResource Caption}" Foreground="#248A3D" Margin="14,0,0,0"/>
+              </StackPanel>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,18,0,0" Text="&quot;Check scanning&quot; verifies the fast scan on this PC: it compares reading the file table with a folder-by-folder scan, then creates a few files in ClearC's own folder, changes and deletes them to check updates from the change journal. It only reads drive C:, leaves your files alone and takes a minute or two; the result is copied so you can send it to the developer. &quot;Check for updates&quot; contacts GitHub only when you click it."/>
+              <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                <Button x:Name="BtnSelfTest" Content="Check scanning" Margin="0,0,8,0"/>
+                <Button x:Name="BtnCheckUpdate" Content="Check for updates"/>
               </StackPanel>
             </StackPanel>
           </Border>
@@ -5139,6 +5529,13 @@ try { [L10n]::Map = $script:L10n } catch {}
 Invoke-Expression $engine
 $catalog = Get-Catalog
 
+# ---------- 外观：浅色 / 深色 / 跟随系统。存在设置里，换了以后重新打开本工具生效 ----------
+$script:themePref = Get-Setting 'Theme' 'light'
+$script:sysDark = $false
+try { $script:sysDark = ((Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize' -Name AppsUseLightTheme -ErrorAction Stop).AppsUseLightTheme -eq 0) } catch {}
+[Theme]::Dark = ($script:themePref -eq 'dark') -or ($script:themePref -eq 'system' -and $script:sysDark)
+try { [RowTheme]::Map = [Delegate]::CreateDelegate([Func[string, char, string]], [Theme].GetMethod('Map')) } catch {}
+
 # ============================================================
 # 定时任务调用的两种模式（不打开主窗口）：
 #   /check      检查 C 盘剩余空间，低于设定值时在右下角提醒（每天最多一次）
@@ -5166,7 +5563,7 @@ function Show-Toast([string]$Title, [string]$Text, [string[]]$Buttons = @((T '�
 </Window>
 '@
     $x = $x.Replace('腾挪 ClearC', (T '腾挪 ClearC'))
-    $w = [Windows.Markup.XamlReader]::Parse($x)
+    $w = [Windows.Markup.XamlReader]::Parse([Theme]::Xaml($x))
     $w.FindName('TTitle').Text = $Title
     $w.FindName('TText').Text = $Text
     $script:toastResult = ''
@@ -5208,6 +5605,20 @@ if ($script:mode -match '(?i)/check') {
         $ans = Show-Toast -Title ((T "C 盘只剩 {0} 了") -f (GB $free)) -Text ((T "低于你设定的 {0} GB。打开腾挪 ClearC，看看能清掉或搬走什么？`n（在工具的「自动提醒」页可以关掉这个提醒）") -f $gb) -Buttons @((T '稍后'), (T '打开腾挪 ClearC'))
         if ($ans -eq (T '打开腾挪 ClearC') -and $env:CLEANC_SELF) { Start-Process -FilePath $env:CLEANC_SELF }
     }
+    $global:CLEANC_UI_SHOWN = $true
+    return
+}
+if ($script:mode -match '(?i)/selftest') {
+    Init-DriveThreads
+    [DiskMap]::MftOff = ((Get-Setting 'FastScan' '1') -eq '0')
+    $r = Invoke-SelfTest $script:AppVersion
+    $file = if ($env:CLEANC_REPORT) { $env:CLEANC_REPORT } else { Join-Path $script:appDir 'selftest.txt' }
+    try { New-Item -ItemType Directory -Force -Path (Split-Path $file) | Out-Null; [IO.File]::WriteAllText($file, (@($r.Lines) -join "`r`n"), (New-Object Text.UTF8Encoding $true)) } catch {}
+    if (-not $env:CLEANC_QUIET) {
+        $ans = Show-Toast -Title (T '扫描功能检查完了') -Text ((T "{0} 项正常，{1} 项提醒，{2} 项有问题") -f $r.Res.Pass, $r.Res.Warn, $r.Res.Fail) -Buttons @((T '好'), (T '打开结果'))
+        if ($ans -eq (T '打开结果')) { Start-Process -FilePath "$env:SystemRoot\System32\notepad.exe" -ArgumentList ('"{0}"' -f $file) }
+    }
+    $global:CLEANC_EXIT = [int]$r.Res.Fail
     $global:CLEANC_UI_SHOWN = $true
     return
 }
@@ -6052,6 +6463,12 @@ if ($script:mode -match '(?i)/autoclean') {
           </StackPanel>
         </StackPanel>
         <StackPanel DockPanel.Dock="Bottom">
+          <Button x:Name="BtnTheme" Style="{StaticResource LinkButton}" Foreground="#6E6E73" Padding="11,6" HorizontalAlignment="Left">
+            <StackPanel Orientation="Horizontal">
+              <TextBlock Text="&#xE706;" FontFamily="{StaticResource Icons}" FontSize="13" VerticalAlignment="Center" Margin="0,0,9,0"/>
+              <TextBlock x:Name="BtnThemeText" Text="外观：浅色" VerticalAlignment="Center"/>
+            </StackPanel>
+          </Button>
           <Button x:Name="BtnLang" Style="{StaticResource LinkButton}" Foreground="#6E6E73" Padding="11,6" HorizontalAlignment="Left" ToolTip="中文 / English">
             <StackPanel Orientation="Horizontal">
               <TextBlock Text="&#xE774;" FontFamily="{StaticResource Icons}" FontSize="13" VerticalAlignment="Center" Margin="0,0,9,0"/>
@@ -6442,6 +6859,8 @@ if ($script:mode -match '(?i)/autoclean') {
       </Grid.RowDefinitions>
       <DockPanel Grid.Row="0" Margin="0,0,0,16">
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top" Margin="16,4,0,0">
+          <CheckBox x:Name="MapFast" Content="快速扫描" IsChecked="True" VerticalAlignment="Center" Margin="0,0,14,0"
+                    ToolTip="直接读取 NTFS 的文件表（MFT），比逐个文件夹查看快得多。少数安全软件对直接读盘会提示，可以关掉，改为逐个文件夹扫描。清理、搬家、软件管理统计大小时也按这个设置。"/>
           <ComboBox x:Name="MapDrive" Width="200" Margin="0,0,8,0"/>
           <Button x:Name="BtnMapStop" Content="停止" Margin="0,0,8,0" IsEnabled="False"/>
           <Button x:Name="BtnMapScan" Content="扫描" Style="{StaticResource Primary}" Padding="20,6"/>
@@ -6511,7 +6930,9 @@ if ($script:mode -match '(?i)/autoclean') {
           <TextBlock Text="名称" VerticalAlignment="Center" Foreground="#6E6E73" Margin="0,0,8,0"/>
           <TextBox x:Name="MapName" Width="150" ToolTip="文件名里包含这些字。可以用 * 和 ?，比如 *.mp4、备份*"/>
         </StackPanel>
-        <CheckBox x:Name="MapUnder" Content="只找当前文件夹里的" VerticalAlignment="Center" Margin="0,2,0,2"/>
+        <CheckBox x:Name="MapUnder" Content="只找当前文件夹里的" VerticalAlignment="Center" Margin="0,2,18,2"/>
+        <CheckBox x:Name="MapChat" Content="只找聊天软件里的" VerticalAlignment="Center" Margin="0,2,0,2"
+                  ToolTip="微信、QQ、企业微信、飞书、钉钉、Telegram 等聊天记录文件夹里的大文件。这些文件只能查看、打开位置；要腾地方，可以到「搬家管理」把整个聊天记录搬到其他盘。"/>
       </WrapPanel>
       <Border Grid.Row="3" Style="{StaticResource Card}" Padding="0,6,0,6">
         <Grid>
@@ -7176,7 +7597,7 @@ if ($script:mode -match '(?i)/autoclean') {
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">扫描为什么快</Run><Run>：NTFS 格式的盘（C 盘基本都是），工具直接读盘上的文件表（MFT），几十万个文件一般几秒到十几秒就读完，不用一个个文件夹去看。读完会和直接列目录的结果核对一下，对不上或读不了（不是 NTFS、权限不够等）就自动改回逐个文件夹扫描，多个线程一起数（固态硬盘线程多一些，机械硬盘少一些）。同一次打开工具里再扫描，按系统的变更日志只更新改过的部分，更快。读文件表能看到逐个扫描进不去的文件夹（比如 System Volume Information），所以两种方式的总数可能略有出入。</Run></TextBlock>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">扫描为什么快</Run><Run>：NTFS 格式的盘（C 盘基本都是），工具直接读盘上的文件表（MFT），几十万个文件一般几秒到十几秒就读完，不用一个个文件夹去看。读完会和直接列目录的结果核对一下，对不上或读不了（不是 NTFS、权限不够等）就自动改回逐个文件夹扫描，多个线程一起数（固态硬盘线程多一些，机械硬盘少一些）。同一次打开工具里再扫描，按系统的变更日志只更新改过的部分，更快。读文件表能看到逐个扫描进不去的文件夹（比如 System Volume Information），所以两种方式的总数可能略有出入。少数安全软件对直接读盘会提示，可以取消右上角的「快速扫描」，以后都逐个文件夹扫描（清理、搬家、软件管理统计大小时也一样）。</Run></TextBlock>
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
@@ -7184,7 +7605,7 @@ if ($script:mode -match '(?i)/autoclean') {
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">往里点</Run><Run>：双击文件夹进入下一层，点「上一级」返回。每一行的蓝色条表示它在这一层里有多大。</Run></TextBlock>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">往里点</Run><Run>：双击文件夹进入下一层，点「上一级」返回。每一行的蓝色条表示它在这一层里有多大。一层里东西很多时（比如 WinSxS 有上万个），只列最大的 500 项，其余合成最后一行，点「打开位置」可以在资源管理器里看全部。</Run></TextBlock>
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
@@ -7192,7 +7613,7 @@ if ($script:mode -match '(?i)/autoclean') {
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">找文件</Run><Run>：在扫描时记下的 1 MB 以上的文件里找，从大到小排。可以按大小、多久没改过（比如半年以上）、类型（视频、压缩包和安装包、光盘映像和虚拟磁盘……）和名称筛选，名称里可以用 * 和 ?（比如 *.mp4）；勾选「只找当前文件夹里的」，就只找刚才点进去的那个文件夹。</Run></TextBlock>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">找文件</Run><Run>：在扫描时记下的 1 MB 以上的文件里找，从大到小排。可以按大小、多久没改过（比如半年以上）、类型（视频、压缩包和安装包、光盘映像和虚拟磁盘……）和名称筛选，名称里可以用 * 和 ?（比如 *.mp4）；勾选「只找当前文件夹里的」，就只找刚才点进去的那个文件夹；勾选「只找聊天软件里的」，就只在微信、QQ、企业微信、飞书、钉钉、Telegram 等的聊天记录里找，看清是哪些视频和文件占了地方。聊天记录里的文件在这里只能查看、打开位置，不能删；要腾地方，到「搬家管理」把整个聊天记录搬到其他盘。</Run></TextBlock>
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
@@ -7335,6 +7756,8 @@ if ($script:mode -match '(?i)/autoclean') {
               <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">执行时能关窗口吗？</Run><LineBreak/><Run>做完前请不要关闭窗口，想停下请点「取消」。可以点「在后台继续」收起进度卡片，窗口底部和任务栏图标上都能看到进度。</Run></TextBlock>
               <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">在哪看详细过程？</Run><LineBreak/><Run>做过哪些删除和搬运，看左侧的「操作日志」；程序运行的技术细节，看左下角「运行记录」，完整文件在 %TEMP%\CleanC-run.log。</Run></TextBlock>
               <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">释放的空间比预计少？</Run><LineBreak/><Run>放进回收站的文件，要清空回收站后才真正释放空间；正被其他程序占用的文件会被跳过。</Run></TextBlock>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">能用深色界面吗？</Run><LineBreak/><Run>可以。点左下角的「外观」，选浅色、深色或跟随系统（照 Windows 设置里「选择应用模式」来）。换了以后本工具会关闭，再自动打开。</Run></TextBlock>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">怎么知道有没有新版本？</Run><LineBreak/><Run>在下面「使用反馈」里点「检查新版本」，有新版本会打开下载页面；下载新的 exe 换掉旧的就行，设置、日志和自动提醒都会保留。本工具平时不联网，只在你点这个按钮时连一次 GitHub。</Run></TextBlock>
             </StackPanel>
           </Border>
           <Border x:Name="FeedbackCard" Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
@@ -7363,6 +7786,11 @@ if ($script:mode -match '(?i)/autoclean') {
                 <Button x:Name="BtnCopyDiag" Content="复制诊断信息" Margin="0,0,8,0"/>
                 <Button x:Name="BtnOpenLog" Content="打开运行记录文件"/>
                 <TextBlock x:Name="CopyHint" Style="{StaticResource Caption}" Foreground="#248A3D" Margin="14,0,0,0"/>
+              </StackPanel>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,18,0,0" Text="「检查扫描功能」在这台电脑上核对快速扫描：比较直接读文件表和逐个文件夹扫描的结果，再在本工具自己的文件夹里建几个文件、改一改、删掉，看按变更日志更新对不对。只读 C 盘，不动你的文件，大约要一两分钟；结果会复制下来，可以直接发给开发者。「检查新版本」只在你点的时候连一次 GitHub。"/>
+              <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                <Button x:Name="BtnSelfTest" Content="检查扫描功能" Margin="0,0,8,0"/>
+                <Button x:Name="BtnCheckUpdate" Content="检查新版本"/>
               </StackPanel>
             </StackPanel>
           </Border>
@@ -7496,7 +7924,8 @@ if ($script:Lang -eq 'en') {
         foreach ($c in @($el.ChildNodes)) { if ($c.NodeType -eq 'Text' -and $c.Value) { $c.Value = T $c.Value } }
     }
 }
-$win = [Windows.Markup.XamlReader]::Load((New-Object System.Xml.XmlNodeReader $xaml))
+$win = if ([Theme]::Dark) { [Windows.Markup.XamlReader]::Parse([Theme]::Xaml($xaml.OuterXml)) } else { [Windows.Markup.XamlReader]::Load((New-Object System.Xml.XmlNodeReader $xaml)) }
+$script:tUi = $script:startClock.Elapsed.TotalSeconds
 $ctl = @{}
 foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageMap','PageSave','PageApps','PageMoves','PageAuto','PageLog','BtnDupMerge',
                'MapDrive','BtnMapStop','BtnMapScan','MapViewDirs','MapViewFiles','MapViewGrow','BtnMapUp','MapPath','MapInfo','MapList','MapGrow','EmptyMap','EmptyMapText','BtnMapOpen','BtnMapCompress','BtnMapDelete','MapSel',
@@ -7505,7 +7934,7 @@ foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageM
                'BtnMovesRefresh','MovesInfo','MovesList','EmptyMoves','EmptyMovesText',
                'AutoRemindOn','AutoRemindGB','AutoRemindNote','AutoCleanOn','AutoCleanNote','HistInfo','HistChart','HistLast','HistFirst',
                'BtnLogOpenDir','BtnLogRefresh','LogKeep','LogKeepNote','LogCats','LogRange','LogSearch','LogCount','LogList','EmptyLog','EmptyLogText',
-               'BtnLang','BtnLangText','NavHelp','PageHelp','HelpScroll','FeedbackCard','RiskCard','BtnFeedback','BtnCopyWx','BtnCopyDiag','BtnOpenLog','CopyHint','DevWx',
+               'BtnLang','BtnLangText','BtnTheme','BtnThemeText','NavHelp','PageHelp','HelpScroll','FeedbackCard','RiskCard','BtnFeedback','BtnCopyWx','BtnCopyDiag','BtnOpenLog','CopyHint','DevWx','BtnSelfTest','BtnCheckUpdate','MapFast','MapChat',
                'NavClean','NavDup','PageClean','PageDup','AppVer','BtnLog','BtnLogText','BtnLogHide','LogPanel','Dim',
                'CapFree','CapTotal','CapBar','CapReclaim','EmptyClean','EmptyCleanText','EmptyDup','EmptyDupText','SizeCustomRow',
                'DestPick','BtnDestBrowse','DestHint','BtnOneClick','BtnScan','BtnRun','BtnHogs','Hint','List','Summary','Log',
@@ -7574,6 +8003,32 @@ $ctl.BtnCopyDiag.Add_Click({
     try { [System.Windows.Clipboard]::SetText((($info + $tail) -join "`r`n")); Show-CopyHint (T '已复制，可以直接粘贴到微信里发给开发者') }
     catch { Show-CopyHint (T '复制失败，可以点「打开运行记录文件」再手动复制') }
 })
+# ---------- 检查扫描功能（自检）、检查新版本 ----------
+$ctl.BtnSelfTest.Add_Click({
+    if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return }
+    $sync.Mode = 'selftest'; $sync.SelfTest = $null
+    Start-Op (T '检查扫描功能')
+    UI-Busy $true
+    UI-Log (T '开始检查扫描功能')
+    Start-Worker @'
+$sync.SelfTest = Invoke-SelfTest $arg.Version
+'@ @{ Version = $script:AppVersion }
+})
+$script:releasePage = 'https://github.com/Xuanqiyun/ClearC/releases'
+$ctl.BtnCheckUpdate.Add_Click({
+    if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return }
+    $sync.Mode = 'update'; $sync.Update = $null
+    Start-Op (T '检查新版本') -NoCard
+    UI-Busy $true
+    Start-Worker @'
+try {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+    $r = Invoke-RestMethod -Uri 'https://api.github.com/repos/Xuanqiyun/ClearC/releases/latest' -Headers @{ 'User-Agent' = 'ClearC'; 'Accept' = 'application/vnd.github+json' } -TimeoutSec 20 -UseBasicParsing -ErrorAction Stop
+    $sync.Update = @{ Ok = $true; Tag = [string]$r.tag_name; Url = [string]$r.html_url; Body = [string]$r.body }
+} catch { $sync.Update = @{ Ok = $false; Err = $_.Exception.Message } }
+'@ $null
+})
+
 $ctl.BtnOpenLog.Add_Click({
     if (Test-Path -LiteralPath $script:logFile) { Start-Process -FilePath "$env:SystemRoot\System32\notepad.exe" -ArgumentList ('"{0}"' -f $script:logFile) }
     else { Show-CopyHint (T '还没有运行记录') }
@@ -7596,7 +8051,7 @@ function Show-Sheet {
     if (-not $Primary) { $Primary = $Buttons[-1] }
     if (-not $Cancel)  { $Cancel = $Buttons[0] }
     $sw = $null
-    try { $sw = [Windows.Markup.XamlReader]::Parse($script:sheetXaml) } catch { $sw = $null }
+    try { $sw = [Windows.Markup.XamlReader]::Parse([Theme]::Xaml($script:sheetXaml)) } catch { $sw = $null }
     if (-not $sw) {
         # 万一自绘对话框出问题，退回系统消息框，保证流程能走下去
         $body = $Text; if ($Items) { $body += "`n`n" + (($Items | ForEach-Object { "  · $_" }) -join "`n") }
@@ -7615,7 +8070,7 @@ function Show-Sheet {
     $lk = if ($look.ContainsKey($Kind)) { $look[$Kind] } else { $look.info }
     $sw.FindName('SIconGlyph').Text = [string][char][int]$lk[0]
     $sw.FindName('SIconGlyph').Foreground = New-Brush $lk[1]
-    $sw.FindName('SIconBg').Fill = New-Brush $lk[2]
+    $sw.FindName('SIconBg').Fill = New-Brush $lk[2] 'b'
     $sw.FindName('STitle').Text = $Title
     $st = $sw.FindName('SText'); $st.Text = $Text; if (-not $Text) { $st.Visibility = 'Collapsed' }
     if ($Items) {
@@ -7677,7 +8132,8 @@ function DriveFree([string]$d) { try { [double](New-Object System.IO.DriveInfo $
 function Clamp01($x) { [math]::Max(0.0, [math]::Min(1.0, [double]$x)) }
 
 # ---------- 运行中的提示：底部进度条 + 窗口中间的进度卡片 ----------
-function New-Brush([string]$hex) { New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color][System.Windows.Media.ColorConverter]::ConvertFromString($hex)) }
+# role：f 文字和图标  b 底色  d 边框（深色模式按用途换颜色）
+function New-Brush([string]$hex, [string]$role = 'f') { New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color][System.Windows.Media.ColorConverter]::ConvertFromString([Theme]::Map($hex, [char]$role))) }
 # 把多行带颜色的文字写进一个 TextBlock：$lines = @( @('文字', '#颜色', $粗体), ... )
 function Set-Lines($tb, $lines) {
     $tb.Inlines.Clear()
@@ -7793,7 +8249,7 @@ function End-Op([string]$result, [switch]$KeepCard, [string]$headline = '', $rep
 # 不在这里的（删除单个文件夹、系统压缩、压缩虚拟磁盘、卸载、删除多余副本）要么很快做完，要么停在一半不安全
 $script:cancelModes = @{ scan = 'look'; apps = 'look'; dup = 'look'; map = 'look'
     run = 'run'; dupdel = 'dupdel'; merge = 'merge'; leftdel = 'leftdel'; fcompress = 'fcompress'; moveback = 'moveback'; vmove = 'move'; appmove = 'move'
-    movescan = 'look'; movemany = 'movemany'; mapdel = 'dupdel' }
+    movescan = 'look'; movemany = 'movemany'; mapdel = 'dupdel'; selftest = 'look' }
 $script:cancelUi = ''
 function Update-CancelUi {
     $m = [string]$sync.Mode
@@ -8019,7 +8475,6 @@ function Update-Op {
 
 function Shorten($p) { if (-not $p) { return '' }; if ($p.Length -le 80) { $p } else { '…' + $p.Substring($p.Length - 79) } }
 
-$script:AppVersion = '2.5'
 $script:logFile = Join-Path ([IO.Path]::GetTempPath()) 'CleanC-run.log'
 function Write-LogFile([string]$m) { try { [IO.File]::AppendAllText($script:logFile, ("{0:yyyy-MM-dd HH:mm:ss}  {1}`r`n" -f (Get-Date), $m), [Text.Encoding]::UTF8) } catch {} }
 function UI-Log($m) { $ctl.Log.AppendText("$m`r`n"); $ctl.Log.ScrollToEnd(); Write-LogFile ([string]$m) }
@@ -8483,11 +8938,10 @@ foreach ($d in [System.IO.DriveInfo]::GetDrives()) {
 }
 
 # ---------- 颜色工具 ----------
-function Brush([string]$hex) { New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color][System.Windows.Media.ColorConverter]::ConvertFromString($hex)) }
+function Brush([string]$hex, [string]$role = 'f') { New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color][System.Windows.Media.ColorConverter]::ConvertFromString([Theme]::Map($hex, [char]$role))) }
 function Tint([string]$hex, [double]$a) {
-    # 把颜色和白色按比例混合，得到选中状态用的浅底色
-    $c = [System.Windows.Media.Color][System.Windows.Media.ColorConverter]::ConvertFromString($hex)
-    '#{0:X2}{1:X2}{2:X2}' -f [int](255 - (255 - $c.R) * $a), [int](255 - (255 - $c.G) * $a), [int](255 - (255 - $c.B) * $a)
+    # 把颜色和底色按比例混合，得到选中状态用的淡底色（深色模式和深色卡片混合）
+    [Theme]::Tint($hex, $a)
 }
 
 # ---------- 文件类型：每类一个颜色，结果列表里用同一个颜色标出文件类型 ----------
@@ -9011,6 +9465,7 @@ function New-MapRow($name, $path, [double]$size, [double]$max, [double]$parent, 
     switch ($kind) {
         'dir'  { $r.Glyph = [string][char]0xE8B7; $r.GlyphBrush = '#0A84FF' }
         'link' { $r.Glyph = [string][char]0xE71B; $r.GlyphBrush = '#8E8E93' }
+        'more' { $r.Glyph = [string][char]0xE712; $r.GlyphBrush = '#8E8E93' }
         default { $r.Glyph = [string][char]0xE8A5; $r.GlyphBrush = '#8E8E93' }
     }
     $why = Get-DeleteBlock $path
@@ -9022,13 +9477,18 @@ function Show-MapLevel($node) {
     $script:mapCur = $node
     $path = $node.FullPath()
     $rows = New-Object System.Collections.Generic.List[MapRow]
-    $items = New-Object System.Collections.ArrayList
-    foreach ($k in $node.Kids) { [void]$items.Add(@{ K = $k; S = [double]$k.Size }) }
-    # 这一层自己的文件：现场列一下，只显示最大的 300 个
-    $files = @()
-    try { $files = @(Get-ChildItem -LiteralPath $path -File -Force -ErrorAction SilentlyContinue | Sort-Object Length -Descending | Select-Object -First 300) } catch {}
-    foreach ($f in $files) { [void]$items.Add(@{ F = $f; S = [double]$f.Length }) }
-    $sorted = @($items | Sort-Object { $_.S } -Descending)
+    # 只列最大的 500 项（子文件夹和这一层自己的文件放在一起比），其余合成一行：上万项的文件夹（比如 WinSxS）也能马上打开
+    $cap = 500
+    $kids = [DiskMap]::TopKids($node, $cap)
+    $files = [DiskMap]::TopFiles($path, 300)   # 这一层自己的文件：现场列一下
+    $sorted = New-Object System.Collections.ArrayList
+    $i = 0; $j = 0
+    while ($sorted.Count -lt $cap -and ($i -lt $kids.Count -or $j -lt $files.Count)) {
+        if ($j -ge $files.Count -or ($i -lt $kids.Count -and $kids[$i].Size -ge $files[$j].Size)) { [void]$sorted.Add(@{ K = $kids[$i]; S = [double]$kids[$i].Size }); $i++ }
+        else { [void]$sorted.Add(@{ F = $files[$j]; S = [double]$files[$j].Size }); $j++ }
+    }
+    $restN = [long]($node.Kids.Count - $i) + [math]::Max([long]0, [long]$node.OwnFiles - $j)
+    $restB = [double]$node.Size; foreach ($x in $sorted) { $restB -= $x.S }
     $max = if ($sorted.Count -gt 0) { [double]$sorted[0].S } else { 0 }
     foreach ($x in $sorted) {
         if ($x.K) {
@@ -9054,10 +9514,15 @@ function Show-MapLevel($node) {
             [void]$rows.Add($row)
         } else {
             $f = $x.F
-            $row = New-MapRow $f.Name $f.FullName $f.Length $max $node.Size $false $null ((T "文件 · 修改于 {0:yyyy-MM-dd}") -f $f.LastWriteTime) 'file'
-            $row.When = '{0:yyyy-MM-dd HH:mm}' -f $f.LastWriteTime
+            $row = New-MapRow $f.Name $f.Path $f.Size $max $node.Size $false $null ((T "文件 · 修改于 {0:yyyy-MM-dd}") -f $f.Modified) 'file'
+            $row.When = '{0:yyyy-MM-dd HH:mm}' -f $f.Modified
             [void]$rows.Add($row)
         }
+    }
+    if ($restN -gt 0) {
+        $more = New-MapRow ((T "其余 {0:N0} 项") -f $restN) $path ([math]::Max([double]0, $restB)) $max $node.Size $false $null (T '这里只列出最大的 500 项；其余的可以点「打开位置」在资源管理器里看') 'more'
+        $more.Locked = $true; $more.LockTip = (T '这一行是合在一起的其余项目')
+        [void]$rows.Add($more)
     }
     $ctl.MapList.ItemsSource = $rows
     $ctl.MapPath.Text = $path
@@ -9136,7 +9601,7 @@ function Draw-MapTree {
         $b.BorderThickness = New-Object System.Windows.Thickness 2
         $b.BorderBrush = $clear
         $bg = if (-not $row) { '#C7CCD6' } elseif ($row.IsDir) { $script:treeColors[$i % $script:treeColors.Count] } else { '#8E99AD' }
-        $b.Background = Brush $bg
+        $b.Background = Brush $bg 'b'
         $b.Tag = $row
         $b.ToolTip = if ($row) { "{0}`n{1}  ·  {2}`n{3}" -f $row.Name, $row.SizeText, $row.Pct, $row.Path } else { (T "其他 {0} 项，共 {1}") -f $ti.RestN, (Fmt $ti.Rest) }
         if ($b.Width -ge 46 -and $b.Height -ge 20) {
@@ -9159,7 +9624,7 @@ function Draw-MapTree {
                 $r = $s.Tag
                 if ($e.ClickCount -ge 2) { if ($r.IsDir -and $r.Node) { Show-MapLevel $r.Node }; $e.Handled = $true; return }
                 if ($script:treeSel) { $script:treeSel.BorderBrush = Brush '#00000000' }
-                $script:treeSel = $s; $s.BorderBrush = Brush '#1D1D1F'
+                $script:treeSel = $s; $s.BorderBrush = Brush '#1D1D1F' 'd'
                 $ctl.MapList.SelectedItems.Clear(); $ctl.MapList.SelectedItem = $r
             })
         }
@@ -9185,7 +9650,10 @@ function Get-MapFilter {
     $type = ''; $t = $ctl.MapType.SelectedItem; if ($t) { $type = [string]$t.Tag }
     $under = $null
     if ($ctl.MapUnder.IsChecked -and $script:mapCur -and -not [object]::ReferenceEquals($script:mapCur, $script:mapRoot)) { $under = $script:mapCur }
+    $chat = $null
+    if ($ctl.MapChat.IsChecked) { $chat = Get-MapChatNodes }
     return @{
+        Chat = $chat
         Min = [long]$min
         Before = $(if ($days -gt 0) { (Get-Date).AddDays(-$days) } else { [DateTime]::MaxValue })
         Exts = $(if ($type -and $script:mapTypes.ContainsKey($type)) { $script:mapTypes[$type] } else { '' })
@@ -9193,16 +9661,38 @@ function Get-MapFilter {
         Under = $under
     }
 }
+# 聊天软件的聊天记录文件夹在这棵树上的位置（搬走了的是链接，里面没有东西）
+function Get-MapChatNodes {
+    $out = @{ Nodes = New-Object System.Collections.Generic.List[DmNode]; Names = New-Object System.Collections.Generic.List[string] }
+    if (-not $script:mapRoot) { return $out }
+    foreach ($c in $catalog) {
+        if (-not ([string]$c.G).StartsWith('聊天软件') -or -not $c.Paths) { continue }
+        $hit = $false
+        foreach ($p in $c.Paths) {
+            if (-not $p) { continue }
+            foreach ($it in @(Get-Item -Path $p -Force -ErrorAction SilentlyContinue)) {
+                if (-not $it.PSIsContainer) { continue }
+                $n = [DiskMap]::Find($script:mapRoot, $it.FullName)
+                if ($n -and -not $n.IsLink -and -not $out.Nodes.Contains($n)) { $out.Nodes.Add($n); $hit = $true }
+            }
+        }
+        if ($hit) { $out.Names.Add([string]$c.N) }
+    }
+    return $out
+}
 function Show-MapFiles {
     $rows = New-Object System.Collections.Generic.List[MapRow]
     $f = Get-MapFilter
-    $res = [DiskMap]::FindFiles($f.Min, $f.Before, $f.Exts, $f.Name, $f.Under, $script:mapFindMax)
+    if ($f.Chat) { $res = [DiskMap]::FindFilesIn($f.Min, $f.Before, $f.Exts, $f.Name, $f.Chat.Nodes.ToArray(), $script:mapFindMax) }
+    else { $res = [DiskMap]::FindFiles($f.Min, $f.Before, $f.Exts, $f.Name, $f.Under, $script:mapFindMax) }
     $max = if ($res.Files.Count -gt 0) { [double]$res.Files[0].Size } else { 0 }
     $tot = if ($script:mapRoot) { [double]$script:mapRoot.Size } else { 0 }
     foreach ($x in $res.Files) {
         $p = $x.Path
         $row = New-MapRow $x.Name $p $x.Size $max $tot $false $null ((T "{0} · 修改于 {1:yyyy-MM-dd}") -f (Split-Path $p -Parent), $x.Modified) 'file'
         $row.When = '{0:yyyy-MM-dd HH:mm}' -f $x.Modified
+        # 聊天记录里的文件只看不删：要腾地方就整体搬家
+        if ($f.Chat) { $row.Locked = $true; $row.LockTip = (T '聊天记录里的文件只能查看和打开位置；要腾地方，到「搬家管理」把整个聊天记录搬到其他盘') }
         [void]$rows.Add($row)
     }
     $ctl.MapList.ItemsSource = $rows
@@ -9211,6 +9701,10 @@ function Show-MapFiles {
     $ctl.MapPath.Text = $head
     $where = if ($f.Under) { $f.Under.FullPath() } elseif ($script:mapRoot) { $script:mapRoot.FullPath() } else { '' }
     $ctl.MapInfo.Text = (T "在 {0} 里找，只能找到扫描时记下的 1 MB 以上的文件") -f $where
+    if ($f.Chat) {
+        $ctl.MapInfo.Text = if ($f.Chat.Names.Count -gt 0) { (T "在聊天记录里找（{0}）。这些文件只能查看和打开位置；要腾地方，可以到「搬家管理」把整个聊天记录搬到其他盘") -f ($f.Chat.Names -join (T '、')) }
+                            else { (T '这块盘上没找到聊天软件的聊天记录文件夹（可能已经搬到其他盘了）') }
+    }
     $ctl.MapUnder.ToolTip = if ($script:mapCur) { $script:mapCur.FullPath() } else { $null }
     $ctl.BtnMapUp.IsEnabled = $false
     $ctl.EmptyMap.Visibility = if ($rows.Count -gt 0) { 'Collapsed' } else { 'Visible' }
@@ -9223,8 +9717,19 @@ function Refresh-MapFiles { if ($script:mapView -eq 'files' -and $script:mapRoot
 $ctl.MapMinSize.Add_SelectionChanged({ Refresh-MapFiles })
 $ctl.MapAge.Add_SelectionChanged({ Refresh-MapFiles })
 $ctl.MapType.Add_SelectionChanged({ Refresh-MapFiles })
-$ctl.MapUnder.Add_Checked({ Refresh-MapFiles })
+$ctl.MapUnder.Add_Checked({ $ctl.MapChat.IsChecked = $false; Refresh-MapFiles })
 $ctl.MapUnder.Add_Unchecked({ Refresh-MapFiles })
+$ctl.MapChat.Add_Checked({ $ctl.MapUnder.IsChecked = $false; if ($script:mapView -ne 'files' -and $script:mapRoot) { $ctl.MapViewFiles.IsChecked = $true }; Refresh-MapFiles })
+$ctl.MapChat.Add_Unchecked({ Refresh-MapFiles })
+# 快速扫描（直接读文件表）开关：存在设置里，所有页面统计大小时都按它来
+$ctl.MapFast.IsChecked = ((Get-Setting 'FastScan' '1') -ne '0')
+[DiskMap]::MftOff = -not $ctl.MapFast.IsChecked
+$ctl.MapFast.Add_Click({
+    $on = [bool]$ctl.MapFast.IsChecked
+    [DiskMap]::MftOff = -not $on
+    Set-Setting 'FastScan' $(if ($on) { '1' } else { '0' })
+    UI-Log $(if ($on) { (T '已打开快速扫描：直接读文件表') } else { (T '已关闭快速扫描：以后逐个文件夹扫描') })
+})
 # 名称：停下打字 0.4 秒后再找，免得每打一个字就刷新一次
 $script:mapNameTimer = New-Object System.Windows.Threading.DispatcherTimer
 $script:mapNameTimer.Interval = [TimeSpan]::FromMilliseconds(400)
@@ -10722,7 +11227,7 @@ $timer.Add_Tick({
         [DirStat]::Cancel = $false
         if ($sync.WasCancelled) { UI-Log (T '已中途取消。') }
         # 删过、搬过东西以后，逐个扫描得到的旧树不再拿来用（读文件表的结果靠变更日志更新）
-        if (@('scan', 'movescan', 'apps', 'map', 'movesize', 'dup') -notcontains [string]$sync.Mode) { [DiskMap]::Invalidate() }
+        if (@('scan', 'movescan', 'apps', 'map', 'movesize', 'dup', 'update') -notcontains [string]$sync.Mode) { [DiskMap]::Invalidate() }
 
         if ($sync.Mode -eq 'scan') {
             if ($sync.WasCancelled -or -not $sync.Sizes) {
@@ -10837,6 +11342,42 @@ $timer.Add_Tick({
             if ($fails.Count -gt 0) {
                 $script:pendingDialog = @{ Title = $(if ($nOk -eq 0) { (T '没有删掉') } else { (T '有的没有删掉') }); Kind = 'warn'; Items = @($fails | Select-Object -First 20)
                     Text = (T '下面这些没有删掉。正被别的程序打开的文件，关掉那个程序后再删一次。') }
+            }
+        }
+        elseif ($sync.Mode -eq 'selftest') {
+            $r = $sync.SelfTest
+            if (-not $r) { End-Op (T '没有完成') }
+            else {
+                $text = (@($r.Lines) -join "`r`n")
+                $file = Join-Path $script:appDir 'selftest.txt'
+                try { New-Item -ItemType Directory -Force -Path $script:appDir | Out-Null; [IO.File]::WriteAllText($file, $text, (New-Object Text.UTF8Encoding $true)) } catch {}
+                $copied = $true; try { [System.Windows.Clipboard]::SetText($text) } catch { $copied = $false }
+                $x = $r.Res
+                $sum = (T "{0} 项正常，{1} 项提醒，{2} 项有问题") -f $x.Pass, $x.Warn, $x.Fail
+                End-Op $(if ($r.Stopped) { (T '已中途停止') } else { $sum })
+                UI-Log ((T "检查扫描功能：{0}；结果存在 {1}") -f $sum, $file)
+                $msg = $sum + (T '。') + $(if ($copied) { (T '结果已经复制，可以直接粘贴到微信里发给开发者。') } else { '' }) + "`n`n" + ((T "完整结果存在 {0}") -f $file)
+                if ($x.Fail -gt 0) { $msg += "`n`n" + (T '有问题的项目，扫描时会自动改用逐个文件夹扫描，不影响使用；把结果发给开发者可以帮助修好它。') }
+                $script:pendingDialog = @{ Title = (T '扫描功能检查完了'); Kind = $(if ($x.Fail -gt 0) { 'warn' } else { 'done' }); Text = $msg
+                    Buttons = @((T '好'), (T '打开结果')); Primary = (T '打开结果'); Cancel = (T '好'); Then = { Start-Process -FilePath "$env:SystemRoot\System32\notepad.exe" -ArgumentList ('"{0}"' -f $file) }.GetNewClosure() }
+            }
+        }
+        elseif ($sync.Mode -eq 'update') {
+            $u = $sync.Update
+            End-Op (T '完成')
+            $cur = $null; [void][version]::TryParse([string]$script:AppVersion, [ref]$cur)
+            $new = $null; if ($u -and $u.Ok) { [void][version]::TryParse(([string]$u.Tag).TrimStart('v', 'V'), [ref]$new) }
+            $url = if ($u -and $u.Url -and ([string]$u.Url).StartsWith('https://github.com/')) { [string]$u.Url } else { $script:releasePage }
+            $open = { Start-Process $url }.GetNewClosure()
+            if (-not $u -or -not $u.Ok) {
+                $script:pendingDialog = @{ Title = (T '没能检查新版本'); Kind = 'warn'; Text = ((T "连不上 GitHub：{0}`n`n可以直接打开下载页面看看。") -f $(if ($u) { $u.Err } else { '' }))
+                    Buttons = @((T '好'), (T '打开下载页面')); Primary = (T '打开下载页面'); Cancel = (T '好'); Then = $open }
+            } elseif ($new -and $cur -and $new -gt $cur) {
+                $notes = @(([string]$u.Body -split "`r?`n") | Where-Object { $_ -match '^\s*[-*] ' } | Select-Object -First 6 | ForEach-Object { ($_ -replace '^\s*[-*]\s*', '' -replace '\*\*', '').Trim() })
+                $script:pendingDialog = @{ Title = ((T "有新版本 {0}") -f $u.Tag); Kind = 'info'; Text = ((T "现在用的是 {0}。下载页面会在浏览器里打开，下载新的 exe 替换现在这个就好，设置都会保留。") -f $script:AppVersion); Items = $notes
+                    Buttons = @((T '以后再说'), (T '打开下载页面')); Primary = (T '打开下载页面'); Cancel = (T '以后再说'); Then = $open }
+            } else {
+                $script:pendingDialog = @{ Title = (T '已经是最新版本'); Kind = 'done'; Text = ((T "现在用的是 {0}，GitHub 上最新的是 {1}。") -f $script:AppVersion, $u.Tag) }
             }
         }
         elseif ($sync.Mode -eq 'fcompress') {
@@ -10992,7 +11533,10 @@ $timer.Add_Tick({
         if ($script:pendingDialog) {
             # 先清掉再弹，避免对话框打开期间定时器再弹一次
             $d = $script:pendingDialog; $script:pendingDialog = $null
-            Show-Sheet -Kind $(if ($d.Kind) { $d.Kind } else { 'done' }) -Title $d.Title -Text $d.Text -Items $d.Items | Out-Null
+            if ($d.Buttons) {
+                $ans = Show-Sheet -Kind $(if ($d.Kind) { $d.Kind } else { 'done' }) -Title $d.Title -Text $d.Text -Items $d.Items -Buttons $d.Buttons -Primary $d.Primary -Cancel $d.Cancel
+                if ($d.Then -and $ans -eq $d.Primary) { try { & $d.Then } catch {} }
+            } else { Show-Sheet -Kind $(if ($d.Kind) { $d.Kind } else { 'done' }) -Title $d.Title -Text $d.Text -Items $d.Items | Out-Null }
         }
         if ($script:askRemindNow) { $script:askRemindNow = $false; Ask-EnableRemind }
     }
@@ -11057,6 +11601,27 @@ $pruned = Prune-OpLog (Get-LogMonths)
 if ($pruned -gt 0) { OpLog '日志' (T '自动删除超过保存时间的旧记录') '' ((T "{0} 条，保存时间 {1} 个月") -f $pruned, (Get-LogMonths)) }
 $timer.Start()
 
+# 重新打开本工具（换语言、换外观后）
+function Restart-App {
+    try {
+        if ($env:CLEANC_SELF -and (Test-Path -LiteralPath $env:CLEANC_SELF)) { Start-Process -FilePath $env:CLEANC_SELF }
+        elseif ($script:selfScript) { Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList ('-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}"' -f $script:selfScript) }
+    } catch {}
+    $win.Close()
+}
+# 外观：浅色 / 深色 / 跟随系统
+$script:themeNames = @{ light = (T '浅色'); dark = (T '深色'); system = (T '跟随系统') }
+$ctl.BtnThemeText.Text = (T "外观：{0}") -f $script:themeNames[$(if ($script:themeNames.ContainsKey($script:themePref)) { $script:themePref } else { 'light' })]
+$ctl.BtnTheme.Add_Click({
+    if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return }
+    $ans = Show-Sheet -Title (T '选择外观') -Text ((T "深色适合在暗的环境里用；跟随系统会照 Windows 设置里「选择应用模式」来。换了以后本工具会关闭，再自动打开。`n`n现在：{0}") -f $script:themeNames[$script:themePref]) `
+        -Buttons @((T '取消'), (T '跟随系统'), (T '深色'), (T '浅色')) -Primary (T '浅色') -Cancel (T '取消')
+    $to = if ($ans -eq (T '浅色')) { 'light' } elseif ($ans -eq (T '深色')) { 'dark' } elseif ($ans -eq (T '跟随系统')) { 'system' } else { '' }
+    if (-not $to -or $to -eq $script:themePref) { return }
+    Set-Setting 'Theme' $to
+    OpLog '系统设置' (T '切换外观') $to ''
+    Restart-App
+})
 # 界面语言切换：存到设置里，关掉本窗口，用新语言重新打开
 $ctl.BtnLangText.Text = if ($script:Lang -eq 'en') { '中文' } else { 'English' }
 $ctl.BtnLang.Add_Click({
@@ -11079,6 +11644,12 @@ $ctl.CleanMore.Add_Click({ $ctl.CleanScroll.PageDown() })
 $script:riskFile = Join-Path $env:LOCALAPPDATA 'CleanC\risk-accepted.txt'
 $win.Add_ContentRendered({
     try { $sync.Hwnd = [long](New-Object System.Windows.Interop.WindowInteropHelper $win).Handle } catch { $sync.Hwnd = [long]0 }
+    if (-not $script:startLogged) {
+        $script:startLogged = $true
+        $shown = $script:startClock.Elapsed.TotalSeconds
+        $proc = 0.0; try { $proc = ((Get-Date) - (Get-Process -Id $PID).StartTime).TotalSeconds } catch {}
+        Write-LogFile ((T "启动用时 {0:N1} 秒：准备 {1:N1} 秒，加载界面 {2:N1} 秒，显示 {3:N1} 秒") -f [math]::Max($proc, $shown), $script:tPrep, ($script:tUi - $script:tPrep), ($shown - $script:tUi))
+    }
     if ($script:riskShown) { return }
     $script:riskShown = $true
     if (Test-Path -LiteralPath $script:riskFile) { return }
