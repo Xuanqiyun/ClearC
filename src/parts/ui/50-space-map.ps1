@@ -55,7 +55,7 @@ function New-MapRow($name, $path, [double]$size, [double]$max, [double]$parent, 
 }
 # 路径在不在某个聊天软件的聊天记录文件夹里（这些只看不删，要腾地方就整体搬家）
 function Test-ChatPath([string]$path) {
-    if (-not $script:chatDirs) {
+    if ($null -eq $script:chatDirs) {
         $script:chatDirs = New-Object System.Collections.Generic.List[string]
         foreach ($c in $catalog) {
             if (-not ([string]$c.G).StartsWith('聊天软件') -or -not $c.Paths) { continue }

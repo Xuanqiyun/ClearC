@@ -11,7 +11,7 @@ public static class Theme {
         int a = (int)(argb >> 24), r = (int)((argb >> 16) & 255), g = (int)((argb >> 8) & 255), b = (int)(argb & 255);
         if (a == 0) return c;                                        // 透明
         if (a < 255 && r < 48 && g < 48 && b < 48) return c;         // 阴影、半透明遮罩
-        if (role == 'b' && a == 255 && (argb & 0xFFFFFF) == 0xFEFEFE) return "#48484C";   // 浮起来的选中块（分段按钮）：比卡片亮
+        if (role == 'b' && a == 255 && (argb & 0xFFFFFF) == 0xFEFEFE) return "#3A3A3E";   // 浮起来的选中块（分段按钮）：比卡片亮一点，红色、蓝色的字照样看得清
         if (role == 'b' && a == 255 && (argb & 0xFFFFFF) == 0) return "#FFFFFF";          // 按钮上的黑色遮罩（按下变暗）：深色时改成变亮
         double h, s, l; ToHsl(r, g, b, out h, out s, out l);
         double chroma = (Math.Max(r, Math.Max(g, b)) - Math.Min(r, Math.Min(g, b))) / 255.0;

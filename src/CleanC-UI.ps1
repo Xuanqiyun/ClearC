@@ -2158,7 +2158,7 @@ public static class Theme {
         int a = (int)(argb >> 24), r = (int)((argb >> 16) & 255), g = (int)((argb >> 8) & 255), b = (int)(argb & 255);
         if (a == 0) return c;                                        // 透明
         if (a < 255 && r < 48 && g < 48 && b < 48) return c;         // 阴影、半透明遮罩
-        if (role == 'b' && a == 255 && (argb & 0xFFFFFF) == 0xFEFEFE) return "#48484C";   // 浮起来的选中块（分段按钮）：比卡片亮
+        if (role == 'b' && a == 255 && (argb & 0xFFFFFF) == 0xFEFEFE) return "#3A3A3E";   // 浮起来的选中块（分段按钮）：比卡片亮一点，红色、蓝色的字照样看得清
         if (role == 'b' && a == 255 && (argb & 0xFFFFFF) == 0) return "#FFFFFF";          // 按钮上的黑色遮罩（按下变暗）：深色时改成变亮
         double h, s, l; ToHsl(r, g, b, out h, out s, out l);
         double chroma = (Math.Max(r, Math.Max(g, b)) - Math.Min(r, Math.Min(g, b))) / 255.0;
@@ -3894,8 +3894,13 @@ function Invoke-SelfTest([string]$Version) {
     $step++; SetP @{ Steps = $steps; Step = $step; StepName = (T '试一下按变更日志更新'); SubKind = 'action'; SubStart = (Get-Date); Detail = '' }
     $own = Join-Path $env:LOCALAPPDATA 'CleanC'
     try { New-Item -ItemType Directory -Force -Path $own | Out-Null } catch {}
-    # 上次没做完留下的测试文件夹（本工具自己建的）先清掉
-    foreach ($old in @(Get-ChildItem -LiteralPath $own -Directory -Filter 'selftest-*' -Force -ErrorAction SilentlyContinue)) { Remove-Item -LiteralPath $old.FullName -Recurse -Force -ErrorAction SilentlyContinue }
+    # 上次没做完留下的测试文件夹（本工具自己建的）先清掉：只认本工具起的名字，链接一律不碰
+    if (-not (IsLink $own) -and -not (Get-LinkedAncestor $own)) {
+        foreach ($old in @(Get-ChildItem -LiteralPath $own -Directory -Force -ErrorAction SilentlyContinue)) {
+            if ($old.Name -notmatch '^selftest-[0-9a-f]{8}$' -or ($old.Attributes -band [IO.FileAttributes]::ReparsePoint)) { continue }
+            try { [IO.Directory]::Delete($old.FullName, $true) } catch {}
+        }
+    }
     if ($tree -and ((IsLink $env:LOCALAPPDATA) -or (IsLink $own) -or (Get-LinkedAncestor $own) -or -not $own.StartsWith($sd, [StringComparison]::OrdinalIgnoreCase))) {
         & $add 'warn' 'journal test skipped: the app folder is a link or not on the system drive'
     } elseif ($tree) {
@@ -3926,12 +3931,12 @@ function Invoke-SelfTest([string]$Version) {
             & $check 'file still open' { param($t) $x = [DiskMap]::Find($t, $base); if ($x -and $x.Own -ne 530000) { "own bytes {0} while the file is open, 530000 after writing (sizes of open files may lag)" -f $x.Own } } $true
             $fs.Write($b1, 0, 25000); $fs.Close(); $fs = $null
             & $check 'file closed' { param($t) $x = [DiskMap]::Find($t, $base); if (-not $x) { 'test folder missing' } elseif ($x.Own -ne 555000) { "own bytes {0}, expected 555000" -f $x.Own } } $false
-            Remove-Item -LiteralPath $base -Recurse -Force
+            [IO.Directory]::Delete($base, $true)
             & $check 'remove' { param($t) if ([DiskMap]::Find($t, $base)) { 'test folder still there after removing it' } } $false
         } catch { & $add 'fail' ("journal test error: {0}" -f $_.Exception.Message) }
         finally {
             if ($fs) { try { $fs.Close() } catch {} }
-            if (Test-Path -LiteralPath $base) { Remove-Item -LiteralPath $base -Recurse -Force -ErrorAction SilentlyContinue }
+            if (Test-Path -LiteralPath $base) { try { [IO.Directory]::Delete($base, $true) } catch {} }
         }
     }
     $L.Add('')
@@ -5609,11 +5614,6 @@ function Show-Toast([string]$Title, [string]$Text, [string[]]$Buttons = @((T '�
         $b.Padding = New-Object System.Windows.Thickness 14, 6, 14, 6; $b.Margin = New-Object System.Windows.Thickness 8, 0, 0, 0
         $b.Cursor = [System.Windows.Input.Cursors]::Hand
         if ($i -eq $Buttons.Count - 1) { $b.Background = New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color]::FromRgb(0, 0x71, 0xE3)); $b.Foreground = [System.Windows.Media.Brushes]::White; $b.BorderThickness = 0 }
-        elseif ([Theme]::Dark) {
-            $b.Background = New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color][System.Windows.Media.ColorConverter]::ConvertFromString('#3A3A3C'))
-            $b.Foreground = New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color][System.Windows.Media.ColorConverter]::ConvertFromString('#F2F2F7'))
-            $b.BorderThickness = 0
-        }
         $b.Add_Click({ $script:toastResult = [string]$this.Tag; [System.Windows.Window]::GetWindow($this).Close() })
         [void]$panel.Children.Add($b)
     }
@@ -9529,7 +9529,7 @@ function New-MapRow($name, $path, [double]$size, [double]$max, [double]$parent, 
 }
 # 路径在不在某个聊天软件的聊天记录文件夹里（这些只看不删，要腾地方就整体搬家）
 function Test-ChatPath([string]$path) {
-    if (-not $script:chatDirs) {
+    if ($null -eq $script:chatDirs) {
         $script:chatDirs = New-Object System.Collections.Generic.List[string]
         foreach ($c in $catalog) {
             if (-not ([string]$c.G).StartsWith('聊天软件') -or -not $c.Paths) { continue }
