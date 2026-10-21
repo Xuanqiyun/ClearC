@@ -1338,7 +1338,8 @@ public static class Mft {
                 // 只有目录联接、符号链接这类「代替名字」的重解析点才是链接；OneDrive 等云端文件夹也带重解析点，但里面的东西在这块盘上，要算
                 uint tag = 0; bool known = false;
                 if (!nonRes) { int c = a + U16(b, a + 0x14); if (c + 4 <= a + len) { tag = U32(b, c); known = true; } }
-                else known = ReparseTag(ix, b, a, len, out tag);   // 数据太长放在盘上别处（很长的链接目标、云端文件夹的数据）
+                // 数据太长放在盘上别处（很长的链接目标、云端文件夹的数据）：只有文件夹才去盘上读它的类型，文件用不着（读多了很慢）
+                else if ((ext ? (ix.Flag[owner] & 2) : (flags & 2)) != 0) known = ReparseTag(ix, b, a, len, out tag);
                 if (known && (tag & 0x20000000) != 0) ix.Flag[owner] |= 4; else ix.Flag[owner] |= 16;
             }
             a += len;
@@ -1644,7 +1645,7 @@ public static class DiskMap {
     public static volatile string Current = "";
     public static List<DmFile> BigFiles = new List<DmFile>();   // 空间地图现在显示的那棵树的大文件
     public static string LastMethod = "", LastNote = "";        // mft / mft-usn / mft-partial / walk；没能读文件表的原因
-    public static long LastMs, LastChanged;
+    public static long LastMs, LastChanged, LastFailed;
     static int pending;
 
     public const long BigMin = 1L * 1024 * 1024;   // 「找文件」只在这些文件里找
@@ -1664,7 +1665,7 @@ public static class DiskMap {
     // allowWalk：读不了文件表时，要不要逐个文件夹扫一遍（慢）；fresh：逐个扫描的结果要不要重新扫（不用 10 分钟内的旧结果）
     public static DmNode GetTree(string root, int threads, bool allowWalk, bool fresh) {
         Stopwatch sw = Stopwatch.StartNew();
-        LastNote = ""; LastChanged = 0; Mft.RecordsDone = 0; Mft.RecordsTotal = 0;
+        LastNote = ""; LastChanged = 0; LastFailed = 0; Mft.RecordsDone = 0; Mft.RecordsTotal = 0;
         string key = root.Substring(0, 1);
         try { return GetTree2(root, key, threads, allowWalk, fresh, sw); } finally { Phase = ""; }
     }
@@ -1752,7 +1753,7 @@ public static class DiskMap {
                 List<DmFile> big; long files, dirs, orphans;
                 DmNode t = Mft.BuildTree(ix, out big, out files, out dirs, out orphans);
                 Finish(t, big);
-                FilesSeen = files; DirsSeen = dirs; BytesSeen = t.Size;
+                FilesSeen = files; DirsSeen = dirs; BytesSeen = t.Size; LastFailed = ix.Failed.Count;
                 if (ix.Partial) { lock (cacheLock) mftIdx.Remove(key); LastMethod = "mft-partial"; return t; }
                 string bad = orphans > Math.Max(500, files / 200) ? "files without a folder: " + orphans : Verify(t);
                 if (bad != null) {
@@ -2382,6 +2383,7 @@ function Get-SysTree {
     if ($m -eq 'mft-partial' -or (Stopping)) { return $null }
     if ($m -eq 'mft') { Log ((T "读取 C 盘的文件表：{0:N0} 个文件，用时 {1:N1} 秒") -f $t.Files, ([double][DiskMap]::LastMs / 1000)) }
     elseif ($m -eq 'mft-usn') { Log ((T "按变更日志更新了 C 盘的文件表（{0:N0} 处改动），用时 {1:N1} 秒") -f [DiskMap]::LastChanged, ([double][DiskMap]::LastMs / 1000)) }
+    if ([DiskMap]::LastFailed -gt 0) { Log ((T "文件表里有 {0} 条记录这次没读到，下次扫描时再补") -f [DiskMap]::LastFailed) }
     return $t
 }
 # 估计一个文件夹的大小：树上有就直接查，查不到（不在 C 盘、路径里有链接、短文件名等）再逐个统计
@@ -4734,6 +4736,7 @@ Zoom 装在这里的程序和本地数据。会议录像默认存在「文档」
 读取 C 盘的文件表：{0:N0} 个文件，用时 {1:N1} 秒	Read the C: file table: {0:N0} files, took {1:N1} s
 按变更日志更新了 C 盘的文件表（{0:N0} 处改动），用时 {1:N1} 秒	Updated the C: file table from the change journal ({0:N0} changes), took {1:N1} s
 没有权限打开这个文件夹，看不到里面有什么，不删。	ClearC does not have permission to open this folder and cannot see what is inside, so it will not delete it.
+文件表里有 {0} 条记录这次没读到，下次扫描时再补	{0} records in the file table could not be read this time; they will be picked up on the next scan
 '@
 # 英文的帮助页（整页替换中文的那一页）
 $script:helpEnXaml = @'
