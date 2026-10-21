@@ -1196,3 +1196,5 @@ Zoom 装在这里的程序和本地数据。会议录像默认存在「文档」
 直接读取 NTFS 的文件表（MFT），比逐个文件夹查看快得多。少数安全软件对直接读盘会提示，可以关掉，改为逐个文件夹扫描。清理、搬家、软件管理统计大小时也按这个设置。	Reads the NTFS file table (MFT) directly, which is much faster than going through every folder. A few security programs warn about direct disk reads; turn this off to scan folder by folder instead. Clean up, Moved folders and Apps follow this setting too.
 只找聊天软件里的	Only in chat apps
 微信、QQ、企业微信、飞书、钉钉、Telegram 等聊天记录文件夹里的大文件。这些文件只能查看、打开位置；要腾地方，可以到「搬家管理」把整个聊天记录搬到其他盘。	Large files in the chat data folders of WeChat, QQ, WeCom, Feishu, DingTalk, Telegram and others. These files can only be viewed and located; to free up space, move the whole chat data to another drive on the "Moved folders" page.
+深色界面没能打开，这次用浅色：{0}	The dark interface could not be loaded, using light this time: {0}
+返回的内容里没有版本号	The response did not contain a version number

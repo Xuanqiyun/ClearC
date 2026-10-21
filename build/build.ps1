@@ -18,8 +18,11 @@ $script = Join-Path $root 'src\CleanC-UI.ps1'
 $obj = Join-Path $here 'obj'
 New-Item -ItemType Directory -Force -Path $obj, (Split-Path $Out -Parent) | Out-Null
 
-# 0. 源码分成了 src/parts/ 下的多个文件：先拼成 src/CleanC-UI.ps1，保证用的是最新的
-if (Test-Path -LiteralPath (Join-Path $root 'src\parts\order.txt')) { & (Join-Path $here 'merge.ps1') }
+# 0. 源码分成了 src/parts/ 下的多个文件：src/CleanC-UI.ps1 必须和它们一致，不一致就停下（不替你决定以哪边为准）
+if (Test-Path -LiteralPath (Join-Path $root 'src\parts\order.txt')) {
+    & (Join-Path $here 'merge.ps1') -Check | Out-Host
+    if ($LASTEXITCODE) { throw 'src\CleanC-UI.ps1 和 src\parts 不一致：改了 parts 就先运行 build\merge.ps1；直接改了 CleanC-UI.ps1 就先运行 python build\split.py' }
+}
 
 # 1. 从脚本里取出 C# 代码，和启动器一起编译
 $src = [IO.File]::ReadAllText($script)
@@ -52,14 +55,16 @@ if ($pfx -or $thumb) {
     $cmd = Get-Command signtool.exe -ErrorAction SilentlyContinue
     if ($cmd) { $signtool = $cmd.Source }
     if (-not $signtool) {
-        $kit = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
+        $pf86 = if (${env:ProgramFiles(x86)}) { ${env:ProgramFiles(x86)} } else { $env:ProgramFiles }
+        $kit = Join-Path $pf86 'Windows Kits\10\bin'
         $signtool = Get-ChildItem -Path $kit -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue | Where-Object { $_.FullName -match '\\x64\\' } |
             Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName
     }
     if (-not $signtool) { throw '要签名，但找不到 signtool.exe（安装 Windows SDK 时勾选「Windows SDK Signing Tools」）' }
     $ts = if ($env:CLEARC_SIGN_TIMESTAMP) { $env:CLEARC_SIGN_TIMESTAMP } else { 'http://timestamp.digicert.com' }
     $sa = @('sign', '/fd', 'SHA256', '/tr', $ts, '/td', 'SHA256', '/d', 'ClearC', '/du', 'https://github.com/Xuanqiyun/ClearC')
-    if ($pfx) { $sa += @('/f', $pfx); if ($env:CLEARC_SIGN_PASSWORD) { $sa += @('/p', $env:CLEARC_SIGN_PASSWORD) } } else { $sa += @('/sha1', $thumb) }
+    # 从证书管理器复制的指纹常带看不见的字符和空格，只留十六进制
+    if ($pfx) { $sa += @('/f', $pfx); if ($env:CLEARC_SIGN_PASSWORD) { $sa += @('/p', $env:CLEARC_SIGN_PASSWORD) } } else { $sa += @('/sha1', ($thumb -replace '[^0-9A-Fa-f]', '')) }
     & $signtool @sa $Out
     if ($LASTEXITCODE -ne 0) { throw "签名失败（signtool 返回 $LASTEXITCODE）" }
     "已签名：$Out"
