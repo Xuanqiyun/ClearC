@@ -280,7 +280,7 @@ public static class DiskMap {
                             try { if (!Cancel) Enumerate(n, work, mine, rd); } catch { n.Denied = true; }
                             if (Interlocked.Decrement(ref pending) == 0) break;
                         } else {
-                            if (Thread.VolatileRead(ref pending) == 0) break;
+                            if (Volatile.Read(ref pending) == 0) break;
                             Thread.Sleep(1);
                         }
                     }

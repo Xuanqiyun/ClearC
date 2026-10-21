@@ -1327,7 +1327,6 @@ function Invoke-SelfTest([string]$Version) {
         $r = [DirReader]::Compare($d)
         & $add $(if ($r -match 'differ 0\b' -and $r -notmatch 'fell back') { 'pass' } elseif ($r -match '^batch \d') { 'fail' } else { 'warn' }) ("listing {0}: {1}" -f $d, $r)
     }
-    $L.Add(("listing mode in use: {0} (1 batch, 2 FindFirstFileEx)" -f [DirReader]::Mode))
     if (Stopping) { return @{ Lines = $L; Res = $res; Stopped = $true } }
     # 2. 读文件表
     $step++; SetP @{ Steps = $steps; Step = $step; StepName = (T '读取 C 盘的文件表'); SubKind = 'mft'; SubStart = (Get-Date); Detail = '' }
@@ -1357,6 +1356,7 @@ function Invoke-SelfTest([string]$Version) {
             if ($kind -ne 'pass') { foreach ($x in [DiskMap]::Diff($node, $w, 8)) { $L.Add('       ' + $x) } }
         }
     }
+    $L.Add(("listing mode in use: {0} (1 batch, 2 FindFirstFileEx, 0 not decided yet)" -f [DirReader]::Mode))
     if (Stopping) { return @{ Lines = $L; Res = $res; Stopped = $true } }
     # 4. 按变更日志更新：建、改、删几个文件，看看每次都对
     $step++; SetP @{ Steps = $steps; Step = $step; StepName = (T '试一下按变更日志更新'); SubKind = 'action'; SubStart = (Get-Date); Detail = '' }
