@@ -1362,8 +1362,13 @@ function Invoke-SelfTest([string]$Version) {
     $step++; SetP @{ Steps = $steps; Step = $step; StepName = (T '试一下按变更日志更新'); SubKind = 'action'; SubStart = (Get-Date); Detail = '' }
     $own = Join-Path $env:LOCALAPPDATA 'CleanC'
     try { New-Item -ItemType Directory -Force -Path $own | Out-Null } catch {}
-    # 上次没做完留下的测试文件夹（本工具自己建的）先清掉
-    foreach ($old in @(Get-ChildItem -LiteralPath $own -Directory -Filter 'selftest-*' -Force -ErrorAction SilentlyContinue)) { Remove-Item -LiteralPath $old.FullName -Recurse -Force -ErrorAction SilentlyContinue }
+    # 上次没做完留下的测试文件夹（本工具自己建的）先清掉：只认本工具起的名字，链接一律不碰
+    if (-not (IsLink $own) -and -not (Get-LinkedAncestor $own)) {
+        foreach ($old in @(Get-ChildItem -LiteralPath $own -Directory -Force -ErrorAction SilentlyContinue)) {
+            if ($old.Name -notmatch '^selftest-[0-9a-f]{8}$' -or ($old.Attributes -band [IO.FileAttributes]::ReparsePoint)) { continue }
+            try { [IO.Directory]::Delete($old.FullName, $true) } catch {}
+        }
+    }
     if ($tree -and ((IsLink $env:LOCALAPPDATA) -or (IsLink $own) -or (Get-LinkedAncestor $own) -or -not $own.StartsWith($sd, [StringComparison]::OrdinalIgnoreCase))) {
         & $add 'warn' 'journal test skipped: the app folder is a link or not on the system drive'
     } elseif ($tree) {
@@ -1394,12 +1399,12 @@ function Invoke-SelfTest([string]$Version) {
             & $check 'file still open' { param($t) $x = [DiskMap]::Find($t, $base); if ($x -and $x.Own -ne 530000) { "own bytes {0} while the file is open, 530000 after writing (sizes of open files may lag)" -f $x.Own } } $true
             $fs.Write($b1, 0, 25000); $fs.Close(); $fs = $null
             & $check 'file closed' { param($t) $x = [DiskMap]::Find($t, $base); if (-not $x) { 'test folder missing' } elseif ($x.Own -ne 555000) { "own bytes {0}, expected 555000" -f $x.Own } } $false
-            Remove-Item -LiteralPath $base -Recurse -Force
+            [IO.Directory]::Delete($base, $true)
             & $check 'remove' { param($t) if ([DiskMap]::Find($t, $base)) { 'test folder still there after removing it' } } $false
         } catch { & $add 'fail' ("journal test error: {0}" -f $_.Exception.Message) }
         finally {
             if ($fs) { try { $fs.Close() } catch {} }
-            if (Test-Path -LiteralPath $base) { Remove-Item -LiteralPath $base -Recurse -Force -ErrorAction SilentlyContinue }
+            if (Test-Path -LiteralPath $base) { try { [IO.Directory]::Delete($base, $true) } catch {} }
         }
     }
     $L.Add('')

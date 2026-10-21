@@ -69,11 +69,6 @@ function Show-Toast([string]$Title, [string]$Text, [string[]]$Buttons = @((T 'å¥
         $b.Padding = New-Object System.Windows.Thickness 14, 6, 14, 6; $b.Margin = New-Object System.Windows.Thickness 8, 0, 0, 0
         $b.Cursor = [System.Windows.Input.Cursors]::Hand
         if ($i -eq $Buttons.Count - 1) { $b.Background = New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color]::FromRgb(0, 0x71, 0xE3)); $b.Foreground = [System.Windows.Media.Brushes]::White; $b.BorderThickness = 0 }
-        elseif ([Theme]::Dark) {
-            $b.Background = New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color][System.Windows.Media.ColorConverter]::ConvertFromString('#3A3A3C'))
-            $b.Foreground = New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color][System.Windows.Media.ColorConverter]::ConvertFromString('#F2F2F7'))
-            $b.BorderThickness = 0
-        }
         $b.Add_Click({ $script:toastResult = [string]$this.Tag; [System.Windows.Window]::GetWindow($this).Close() })
         [void]$panel.Children.Add($b)
     }

@@ -8,7 +8,7 @@
 powershell -NoProfile -ExecutionPolicy Bypass -File build\merge.ps1
 ```
 
-`build\build.ps1` 构建 exe 前会自动拼一次；`tests\Checks.ps1` 会检查 `src\CleanC-UI.ps1` 是不是最新的。
+`build\build.ps1` 构建 exe 前会检查两边是否一致，不一致就停下；`tests\Checks.ps1` 会检查 `src\CleanC-UI.ps1` 是不是最新的。
 
 | 文件夹 | 内容 |
 |---|---|
