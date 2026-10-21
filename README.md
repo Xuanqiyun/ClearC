@@ -1,9 +1,9 @@
 
-<p align="center"><img src="docs/icon.png" width="96" alt="C盘清理工具"></p>
+<p align="center"><img src="docs/icon.png" width="96" alt="腾挪 ClearC"></p>
 
-<h1 align="center">C盘清理工具</h1>
+<h1 align="center">腾挪 ClearC</h1>
 
-<p align="center">Windows 10 / 11 上给 C 盘腾空间的小工具：清缓存、把聊天记录和软件搬到其他盘、找出大文件和重复文件。<br>单个 exe，双击就能用，不用安装。</p>
+<p align="center">Windows 10 / 11 上给 C 盘腾空间的小工具（原名「C盘清理工具」）：清缓存、把聊天记录和软件搬到其他盘、找出大文件和重复文件。<br>单个 exe，双击就能用，不用安装。</p>
 
 <p align="center">中文 · <a href="#english">English</a></p>
 
@@ -44,7 +44,7 @@
 
 ## 下载和使用
 
-1. 到 [Releases](../../releases) 下载最新的 `ClearC-vX.X.exe`（就是 C盘清理工具，用英文文件名是因为 GitHub 不支持中文的下载文件名）。
+1. 到 [Releases](../../releases) 下载最新的 `ClearC-vX.X.exe`（就是腾挪 ClearC，用英文文件名是因为 GitHub 不支持中文的下载文件名）。
 2. 放到一个固定的位置（比如 `D:\工具\`），双击运行。需要管理员权限，会弹出 UAC 确认。
 3. 第一次打开会显示安全风险提示，同意后才能使用。左侧「帮助」里有完整的使用说明。
 
@@ -120,7 +120,7 @@ build/build-roslyn.ps1   其他系统上构建 exe
 
 ## English
 
-ClearC frees up space on drive C: on Windows 10 / 11. It is a single exe that needs no installation and runs on the PowerShell 5.1 and .NET Framework 4.8 that ship with Windows.
+ClearC (Chinese name 腾挪, "make room") frees up space on drive C: on Windows 10 / 11. It is a single exe that needs no installation and runs on the PowerShell 5.1 and .NET Framework 4.8 that ship with Windows.
 
 - **Clean up C:** lists what can be removed (caches, temp files, update leftovers) and what has a cost (Windows.old, Recycle Bin), each with Delete / Move / Skip.
 - **Move chat history and apps to another drive.** WeChat, QQ, WeCom, Tencent Meeting, Feishu, DingTalk, Telegram, Discord, Slack, Signal, LINE, Viber, KakaoTalk and Zoom data, as well as installed apps, are copied to another drive, verified, and replaced by a directory link, so the software keeps working unchanged.

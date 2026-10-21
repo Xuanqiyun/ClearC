@@ -1,4 +1,4 @@
-﻿# 在 Windows 上把源码构建成单个 exe：C盘清理工具.exe
+﻿# 在 Windows 上把源码构建成单个 exe：ClearC.exe
 #
 # 只用 Windows 自带的 .NET Framework 4.x 编译器 csc.exe，不需要安装 Visual Studio 或任何 SDK。
 # 用法（在仓库根目录）：
@@ -13,7 +13,7 @@ param([string]$Out)
 $ErrorActionPreference = 'Stop'
 $here = $PSScriptRoot
 $root = Split-Path $here -Parent
-if (-not $Out) { $Out = Join-Path $root 'out\C盘清理工具.exe' }
+if (-not $Out) { $Out = Join-Path $root 'out\ClearC.exe' }
 $script = Join-Path $root 'src\CleanC-UI.ps1'
 $obj = Join-Path $here 'obj'
 New-Item -ItemType Directory -Force -Path $obj, (Split-Path $Out -Parent) | Out-Null

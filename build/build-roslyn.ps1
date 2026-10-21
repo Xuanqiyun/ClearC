@@ -13,7 +13,7 @@ param([string]$Out)
 $ErrorActionPreference = 'Stop'
 $B = $PSScriptRoot
 $root = Split-Path $B -Parent
-if (-not $Out) { $Out = Join-Path $root 'out/C盘清理工具.exe' }
+if (-not $Out) { $Out = Join-Path $root 'out/ClearC.exe' }
 $Script = Join-Path $root 'src/CleanC-UI.ps1'
 $obj = Join-Path $B 'obj'
 New-Item -ItemType Directory -Force -Path $obj, (Split-Path $Out -Parent) | Out-Null
