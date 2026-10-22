@@ -59,7 +59,7 @@ function Show-Health($r) {
         $tier = $script:hcGreen
         $sub = if ($d.Model) { [string]$d.Model } else { (T '型号读不到') }
         $card = New-HealthCard ((T "磁盘 {0}") -f $d.Drive) $sub $tier
-        try { $di = New-Object System.IO.DriveInfo ($d.Drive + '\'); $pct = [int][math]::Round(100.0 * ($di.TotalSize - $di.TotalFreeSpace) / [math]::Max(1, $di.TotalSize)); $card.HasBar = $true; $card.BarW = [math]::Max(2, 2.5 * $pct); $card.Chips.Add((New-Chip ((T "已用 {0}%") -f $pct) $(if ($pct -ge 95) { $script:hcRed } elseif ($pct -ge 85) { $script:hcAmber } else { $script:hcGreen }))) } catch {}
+        try { $di = New-Object System.IO.DriveInfo ($d.Drive + '\'); $pct = [int][math]::Round(100.0 * ($di.TotalSize - $di.TotalFreeSpace) / [math]::Max([double]1, [double]$di.TotalSize)); $card.HasBar = $true; $card.BarW = [math]::Max(2, 2.5 * $pct); $card.Chips.Add((New-Chip ((T "已用 {0}%") -f $pct) $(if ($pct -ge 95) { $script:hcRed } elseif ($pct -ge 85) { $script:hcAmber } else { $script:hcGreen }))) } catch {}
         if ($d.Ok) {
             $h = [string]$d.Health
             $t2 = if ($h -match 'Healthy|正常|OK') { $script:hcGreen } elseif ($h) { $script:hcRed } else { $script:hcGrey }

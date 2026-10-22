@@ -6,7 +6,7 @@
 param()
 
 $ErrorActionPreference = 'SilentlyContinue'
-$script:AppVersion = '2.8'
+$script:AppVersion = '3.0'
 $script:AppBuildStamp = ''   # 构建 exe 时由 build 脚本填上构建时间（UTC）：写进诊断信息和运行记录，反馈问题时好对上是哪一次构建的
 $script:startClock = [Diagnostics.Stopwatch]::StartNew()   # 记下启动各阶段用了多久，写进运行记录
 
@@ -7469,15 +7469,31 @@ $script:helpEnXaml = @'
               <StackPanel>
                 <DockPanel Margin="0,16,0,0"><TextBlock DockPanel.Dock="Left" Text="What the list holds" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
                 <Grid Margin="0,10,0,0">
-                  <Grid.ColumnDefinitions><ColumnDefinition Width="150"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                  <Grid.ColumnDefinitions><ColumnDefinition Width="180"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                   <Border Grid.Row="0" Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="Safe to clean" FontSize="12.5" Foreground="#1D7A35" TextWrapping="Wrap"/></Border>
                   <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>Caches, temporary files and logs, which apps rebuild automatically.</Run></TextBlock>
-                  <Border Grid.Row="1" Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="Needs confirmation" FontSize="12.5" Foreground="#995700" TextWrapping="Wrap"/></Border>
-                  <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>Items that come at a cost. They are skipped by default; read the description before selecting them. For example, after deleting Windows.old you can't go back to your previous version of Windows, and after emptying the Recycle Bin you can't get back files you deleted earlier.</Run></TextBlock>
-                  <Border Grid.Row="2" Style="{StaticResource HelpPill}" Background="#E8F1FC"><TextBlock Text="Move only" FontSize="12.5" Foreground="#0B5CAD" TextWrapping="Wrap"/></Border>
-                  <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>"Chat history" and "Other movable folders": this data can't be deleted, only moved as a whole to another drive.</Run></TextBlock>
+                  <Border Grid.Row="1" Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="Careful cleanup" FontSize="12.5" Foreground="#995700" TextWrapping="Wrap"/></Border>
+                  <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>Browser caches, thumbnails, shader caches and download caches: downloaded or generated again after deletion, so the first start is slower. Cleaned by default, but in their own group and listed separately before running.</Run></TextBlock>
+                  <Border Grid.Row="2" Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="Needs confirmation" FontSize="12.5" Foreground="#995700" TextWrapping="Wrap"/></Border>
+                  <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>Items that come at a cost. They are skipped by default; read the description before selecting them. For example, after deleting Windows.old you can't go back to your previous version of Windows, and after emptying the Recycle Bin you can't get back files you deleted earlier.</Run></TextBlock>
+                  <Border Grid.Row="3" Style="{StaticResource HelpPill}" Background="#E8F1FC"><TextBlock Text="Move only" FontSize="12.5" Foreground="#0B5CAD" TextWrapping="Wrap"/></Border>
+                  <TextBlock Grid.Row="3" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>"Chat history" and "Other movable folders": this data can't be deleted, only moved as a whole to another drive.</Run></TextBlock>
+                  <Border Grid.Row="4" Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="Protected" FontSize="12.5" Foreground="#1D7A35" TextWrapping="Wrap"/></Border>
+                  <TextBlock Grid.Row="4" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Personal folders, system folders, app installation folders and data in use: no cleanup touches them, and a wrong selection is skipped automatically.</Run></TextBlock>
                 </Grid>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="File list before deleting"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Click "View file list" in the confirmation: which files and folders the current selection deletes. The largest 60 are shown; the full list is saved as a text file you can open.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Recoverable deletion"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Turn on "Recycle Bin first" under Settings → Cleanup list: files deleted by a manual cleanup go to the Recycle Bin, so a mistake can be undone. Slower, the Recycle Bin grows, and Windows asks about files too large for it. Scheduled cleanup is not affected.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Cleanup audit"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Every item is in the operation log: what was deleted, free space on C: before and after, whether it went to the Recycle Bin, and what was not deleted and why.</Run></TextBlock>
+                </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Easy to see after a scan"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>The top of the list shows how many items were found and how many groups they fall into; each group heading also shows its item count. When there are many items, scroll down the page; a hint at the bottom tells you how many more are below.</Run></TextBlock>
@@ -7585,8 +7601,22 @@ $script:helpEnXaml = @'
                 </StackPanel>
                 <DockPanel Margin="0,26,0,0"><TextBlock DockPanel.Dock="Left" Text="Results and deleting" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
                 <StackPanel Margin="0,10,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Similar photos"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Choose "Similar photos" under "What counts as a duplicate": each picture is shrunk to a 9×8 grayscale thumbnail and turned into a 64-bit fingerprint; pictures within a few bits form a group. Different resolutions, recompressed and lightly cropped photos are recognised. Three levels: almost identical (4 bits), similar (8), roughly similar (12, which also groups bursts).</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Similar is not identical: each group is sorted by resolution and every photo shows its size and distance. Nothing is checked automatically; they can only go to the Recycle Bin or be archived, never deleted permanently or merged.</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Only jpg, png, bmp, gif, tif, webp and heic.</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Which copy to keep"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>Each group lists all copies. By default the newest copy in each group is kept and the rest are selected; you can instead keep the oldest, prefer keeping copies outside C:, or select them yourself. "Open location" shows the file in File Explorer.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Keep the one in a folder, keep the shortest path"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>"Keep the one in a folder…" picks a folder and keeps the copy inside it (or its subfolders) in each group; "Keep shortest path" keeps the shallowest copy.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Archive the checked files"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Deletes nothing: moves the checked files into a folder you choose, laid out as "drive\original path" so nothing is overwritten; at least one copy per group stays put. Delete from the archive later once you are sure.</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Recycle Bin"/>
@@ -7740,6 +7770,10 @@ $script:helpEnXaml = @'
                   <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>When a level holds a lot (WinSxS has tens of thousands of items), only the 500 largest are listed and the rest are combined into the last row; "Open location" shows everything in File Explorer.</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Drive overview"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>After scanning a whole drive, a line above the list shows used / total and the percentage, with a bar split into system and apps, personal files, cleanable caches, other and free space. Caches are estimated from the "Safe to clean" folders of the cleanup page.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Treemap"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>Draws the folders and files of the current level as blocks; the bigger the block, the more space it takes, so the largest ones stand out at a glance. Click to select; double-click a folder to open it.</Run></TextBlock>
                 </StackPanel>
@@ -7760,8 +7794,20 @@ $script:helpEnXaml = @'
                   </DockPanel>
                 </Border>
                 <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="By type"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>While scanning, every file on the drive is grouped by extension into ten types (video, pictures, music, documents, archives and installers, disk images, programs, logs and temporary files, code and developer files, other), with count and size per type. Double-click a type to see its largest files under "Find files".</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Owner and sorting"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>"Find files" lists up to 1,000 files, sorted by size or date, filtered by file owner (Windows account); NTFS-compressed files show their compressed size.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Recent changes"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Reads the file system change journal (USN) and lists the folders where the most files were created or written in the last 24 hours, 3, 7 or 30 days: that is usually where the extra space went. Sizes are the files' current sizes (the journal does not record bytes written); deleted files are only counted. Needs a fast scan that read the file table.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Since last scan"/>
-                  <TextBlock Style="{StaticResource HelpBody}"><Run>Lists folders that grew or shrank by more than 100 MB since the previous scan, so you can find what has been slowly eating up your space; double-click a row to open that folder. The folder list also shows changes such as "+2.1 GB since last scan".</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Lists folders that grew or shrank by more than 100 MB since the previous scan, so you can find what has been slowly eating up your space; double-click a row to open that folder. The folder list also shows changes such as "+2.1 GB since last scan". Every scan keeps a dated snapshot (up to 40 per drive); "Compare with" picks 1, 3, 7 or 30 days ago or the earliest one. A sentence above the list says how much used space grew (or shrank) and where: Docker data, a WSL distribution, browser caches, Windows Update, a particular folder, and the rest.</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Export"/>
@@ -7890,6 +7936,52 @@ $script:helpEnXaml = @'
             <Expander Style="{StaticResource HelpSection}">
               <Expander.Header>
                 <DockPanel>
+                  <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE95E;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="System health" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
+                    <TextBlock Text="Hardware status, boot time, blue screen causes, what eats resources; read-only" Style="{StaticResource HelpSum}"/>
+                  </StackPanel>
+                </DockPanel>
+              </Expander.Header>
+              <StackPanel>
+                <StackPanel Margin="0,14,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Hardware"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>One card per item, colored by tier (green OK, amber watch, red problem, grey unavailable): CPU load, current and maximum clock, performance counter (persistently below the rated clock means throttling), ACPI temperature; memory used, commit, hard faults and WHEA memory errors; each drive's SMART health, temperature, wear, read errors and hours; battery design capacity, full-charge capacity and cycles; GPU load, VRAM and driver; Windows uptime, pending restart, last update and devices with problems.</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Anything that cannot be read says "unavailable" instead of an estimate: Windows does not provide CPU core or GPU temperatures (vendor tools do); desktops have no battery; USB enclosures and some virtual machines report no SMART.</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Boot time"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>From Windows' own Diagnostics-Performance log: how long the last boot took (to the desktop, and how long startup programs kept busy afterwards), the average of recent boots, and the programs Windows blamed for slowing boot down and by how many seconds. Disable them under "Apps → Startup".</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Blue screens and crashes"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>ClearC parses the dump files in C:\Windows\Minidump itself: bug check code and name, the four parameters, drivers loaded at the time, which driver the fault address falls in and which drivers appear on the stack, giving a "probably driver X" hint. It also lists the last 30 days of unexpected shutdowns, blue screen records, WHEA hardware errors, disk and file system errors, and recently installed drivers: a blue screen that matches a driver installation points at that driver first.</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>A hint, not a verdict, and less accurate than WinDbg.</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>"Check system files (read-only)" runs sfc /verifyonly and DISM /ScanHealth in a terminal, checking only; "Repair system files" runs sfc /scannow and DISM /RestoreHealth, replacing damaged system files with good copies (only Windows' own files), and asks first.</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="What is slowing the PC down"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Click "Start monitoring" to sample every 3 seconds: how much CPU each program used, how much memory it holds, how fast it writes to disk, how much it wrote while monitoring and since it started; processes with the same name are combined, sortable by writes, CPU or memory. No resident service; it stops when ClearC closes.</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Bytes written are not the same as space used (temporary files get written and deleted). Which process wrote which file can only be matched while monitoring is on: compare the folders that grew under "Space map → Recent changes" with the programs that wrote the most here.</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Windows events"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Critical and error events of the System log from the last 7 days, grouped by source. Many are harmless; a source that repeats and matches the time of a problem is worth a look.</Run></TextBlock>
+                </StackPanel>
+                <Border Background="#EFF8F1" BorderBrush="#CFE9D6" BorderThickness="1" CornerRadius="10" Padding="14,11,16,12" Margin="0,16,0,0">
+                  <DockPanel>
+                    <TextBlock DockPanel.Dock="Left" Text="&#xEA18;" FontFamily="{StaticResource Icons}" FontSize="15" Foreground="#248A3D" VerticalAlignment="Top" Margin="0,2,12,0"/>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="This page changes nothing"/>
+                      <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>Everything is read-only. The only thing that changes the system is "Repair system files", which is separate and asks first.</Run></TextBlock>
+                    </StackPanel>
+                  </DockPanel>
+                </Border>
+              </StackPanel>
+            </Expander>
+            <Expander Style="{StaticResource HelpSection}">
+              <Expander.Header>
+                <DockPanel>
                   <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE8AB;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                   <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="Moved folders" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
@@ -8011,8 +8103,8 @@ $script:helpEnXaml = @'
                   <TextBlock Style="{StaticResource HelpLead}" Text="Mode"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>Three modes decide how much the window shows. ClearC asks once on first start; after that, change it at the top of Settings at any time. Switching never loses settings or records. The current mode is written under the version number at the bottom left; click it to go to Settings.</Run></TextBlock>
                   <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Home user</Run><Run>: Clean C:, Save space, Space map, Apps and Help. The cleanup list only has common caches and temporary files that apps rebuild; items with a cost are still skipped by default.</Run></TextBlock></DockPanel>
-                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Engineer</Run><Run>: adds Duplicates, Moves, Reminders and the operation log; find files, compare with last time, export and compress in the space map; page file, restore points, compressed folders, virtual disks and merge duplicates in Save space; startup, leftover folders, update check and move in Apps; developer tool caches and driver leftovers in the cleanup list.</Run></TextBlock></DockPanel>
-                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Developer and IT</Run><Run>: everything. Adds scheduled tasks, context menu, reserved storage, component store analysis, crash dumps, temp folder location, custom cleanup list and exclusions, the fast scan switch, space breakdown, scan check, the run log, and items such as orphaned Installer packages, event logs and NuGet / Gradle / Maven / JetBrains caches.</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Engineer</Run><Run>: adds Duplicates, Moves, Reminders and the operation log; find files, compare with last time, recent changes, export and compress in the space map; page file, restore points, compressed folders, virtual disks and merge duplicates in Save space; startup, leftover folders, update check and move in Apps; boot time, crash diagnosis and the activity monitor in System health; developer tool caches and driver leftovers in the cleanup list.</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Developer and IT</Run><Run>: everything. Adds scheduled tasks, context menu, reserved storage, component store analysis, crash dumps, temp folder location, custom cleanup list and exclusions, the fast scan switch, space breakdown, scan check, the run log, system file repair, the Windows event summary, and items such as orphaned Installer packages, event logs, old driver packages and NuGet / Gradle / Maven / JetBrains caches.</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Appearance and language"/>
@@ -8032,6 +8124,10 @@ $script:helpEnXaml = @'
                   <TextBlock Style="{StaticResource HelpBody}"><Run>Files are read in Windows' background mode, behind other programs for both disk and memory, so the programs you are using don't slow down; the search is slower while you are doing other things.</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Recycle Bin first"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>In the "Cleanup list" card. When on, files deleted by a manual cleanup go to the Recycle Bin first; scheduled cleanup is not affected.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Cleanup list"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>Add your own folders to clean (their contents are deleted, the folders themselves kept), or exclude folders that cleanup must leave alone. Personal folders, system folders and app installation folders can't be added.</Run></TextBlock>
                 </StackPanel>
@@ -8045,6 +8141,18 @@ $script:helpEnXaml = @'
                 <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="Why can't I find some features?"/></Expander.Header>
                 <StackPanel>
                   <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Usually the mode: Home user shows only the basics, Engineer adds more, and Developer and IT shows everything. Change it at the top of Settings. Anything hidden by hand under "What the window shows" is turned back on there too. The cleanup list is built by mode when scanning, so scan again after switching.</Run></TextBlock>
+                </StackPanel>
+              </Expander>
+              <Expander Style="{StaticResource HelpQ}">
+                <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="C: lost tens of GB this week. Where did it go?"/></Expander.Header>
+                <StackPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Scan it under "Space map" and look at the overview and "Since last scan": it says how much used space grew in that time and where (Docker, WSL, browser caches, Windows Update or a particular folder). Then "Recent changes" lists, from the change journal, the folders where files were created or written most. To see which program is writing, run the activity monitor under "System health" for a while.</Run></TextBlock>
+                </StackPanel>
+              </Expander>
+              <Expander Style="{StaticResource HelpQ}">
+                <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="How do I investigate a blue screen?"/></Expander.Header>
+                <StackPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>"System health → Blue screens and crashes": the bug check code and the "probably driver X" hint from the dump, matched against drivers installed in the last 30 days; then the hardware and disk error events. Usual order: update or roll back the matching driver, run "Check system files", and with many hardware errors run the memory diagnostic and check drive health.</Run></TextBlock>
                 </StackPanel>
               </Expander>
               <Expander Style="{StaticResource HelpQ}">
@@ -11131,15 +11239,31 @@ if ($script:mode -match '(?i)/autoclean') {
               <StackPanel>
                 <DockPanel Margin="0,16,0,0"><TextBlock DockPanel.Dock="Left" Text="列表里有什么" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
                 <Grid Margin="0,10,0,0">
-                  <Grid.ColumnDefinitions><ColumnDefinition Width="100"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                  <Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                   <Border Grid.Row="0" Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="安全清理" FontSize="12.5" Foreground="#1D7A35" TextWrapping="Wrap"/></Border>
                   <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>缓存、临时文件和日志，删了软件会自动重建。</Run></TextBlock>
-                  <Border Grid.Row="1" Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="需确认" FontSize="12.5" Foreground="#995700" TextWrapping="Wrap"/></Border>
-                  <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>有代价的项目，默认跳过，看清说明再选。比如删掉 Windows.old 后不能退回旧系统，清空回收站后找不回以前删的文件。</Run></TextBlock>
-                  <Border Grid.Row="2" Style="{StaticResource HelpPill}" Background="#E8F1FC"><TextBlock Text="只能搬走" FontSize="12.5" Foreground="#0B5CAD" TextWrapping="Wrap"/></Border>
-                  <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>「聊天软件的聊天记录」和「其他可搬的文件夹」：数据不能删，只能整体搬到其他盘。</Run></TextBlock>
+                  <Border Grid.Row="1" Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="谨慎清理" FontSize="12.5" Foreground="#995700" TextWrapping="Wrap"/></Border>
+                  <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>浏览器缓存、缩略图、着色器缓存、下载缓存：删了要重新下载或重新生成，第一次打开慢一点。默认也清，但单独成组，执行前会单独列出来。</Run></TextBlock>
+                  <Border Grid.Row="2" Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="需确认" FontSize="12.5" Foreground="#995700" TextWrapping="Wrap"/></Border>
+                  <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>有代价的项目，默认跳过，看清说明再选。比如删掉 Windows.old 后不能退回旧系统，清空回收站后找不回以前删的文件。</Run></TextBlock>
+                  <Border Grid.Row="3" Style="{StaticResource HelpPill}" Background="#E8F1FC"><TextBlock Text="只能搬走" FontSize="12.5" Foreground="#0B5CAD" TextWrapping="Wrap"/></Border>
+                  <TextBlock Grid.Row="3" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>「聊天软件的聊天记录」和「其他可搬的文件夹」：数据不能删，只能整体搬到其他盘。</Run></TextBlock>
+                  <Border Grid.Row="4" Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="受保护" FontSize="12.5" Foreground="#1D7A35" TextWrapping="Wrap"/></Border>
+                  <TextBlock Grid.Row="4" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>个人文件夹、系统文件夹、软件安装文件夹、正在使用的数据：任何清理都不碰，误选也自动跳过。</Run></TextBlock>
                 </Grid>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="删除前看清单"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>确认对话框里点「看文件清单」：按现在的选择会删掉哪些文件和文件夹，最大的 60 项列在对话框里，完整清单存成文本文件，可以打开核对。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="可恢复删除"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>设置「清理列表」里打开「删除时先放进回收站」：手动清理删掉的文件先进回收站，删错了能恢复。慢一些、回收站会变大，太大放不进回收站的文件 Windows 会问你。定期自动清理不受影响。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="清理审计"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>每一项都记在操作日志里：删了什么、删前删后 C 盘剩余多少、有没有放进回收站、哪些没删掉和原因。</Run></TextBlock>
+                </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="扫完一目了然"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>列表上方写明一共扫到几项、分成几类，每组标题旁也标着几项。项目多时整页往下滚动，底部会提示「下面还有几项」。</Run></TextBlock>
@@ -11247,8 +11371,22 @@ if ($script:mode -match '(?i)/autoclean') {
                 </StackPanel>
                 <DockPanel Margin="0,26,0,0"><TextBlock DockPanel.Dock="Left" Text="结果和删除" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
                 <StackPanel Margin="0,10,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="相似照片"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>「怎样算重复」里选「相似照片」：把每张图缩成 9×8 的灰度小图算 64 位指纹，相差几位以内算一组。不同分辨率、重新压缩过、轻微裁剪过的照片也认得出。相似程度有三档：几乎一样（4 位）、相似（8 位）、大致相似（12 位，连拍也会归到一起）。</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>相似不等于相同：每组按分辨率排序，每一张都写着尺寸和相差位数，看过再勾。不自动勾选，只能放进回收站或归档，不能永久删除，也不能合并。</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>只看 jpg、png、bmp、gif、tif、webp、heic。</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="留哪一份"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>每组列出所有副本。默认每组留最新的一份、勾选其余的；也可以改成留最早的、优先留 C 盘以外的，或者自己勾选。「打开位置」可以在资源管理器里看到这个文件。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="留某个文件夹里的、留路径最短的"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>「留某个文件夹里的…」选一个文件夹，每组优先保留在它（含子文件夹）里的那份；「留路径最短的」保留层级最浅的那份。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="归档勾选的"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>不删：把勾选的文件搬到你选的一个文件夹，里面按「盘符\原来的路径」放，不会重名覆盖；每组照样至少留一份不动。想清楚了再从归档里删。</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="放入回收站"/>
@@ -11402,6 +11540,10 @@ if ($script:mode -match '(?i)/autoclean') {
                   <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>一层里东西很多时（比如 WinSxS 有上万个），只列最大的 500 项，其余合成最后一行；点「打开位置」可以在资源管理器里看全部。</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="盘的概览"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>扫完整块盘后，列表上方一行概览：已用 / 总量、百分比，以及系统与软件、个人文件、可清理的缓存、其他、剩余空间各占多少的分段条。缓存按清理页「安全清理」里的目录估算。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="方块图"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>把这一层的文件夹和文件画成方块，方块越大占的空间越多，一眼看出谁最大。单击选中，双击文件夹往里点。</Run></TextBlock>
                 </StackPanel>
@@ -11422,8 +11564,20 @@ if ($script:mode -match '(?i)/autoclean') {
                   </DockPanel>
                 </Border>
                 <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="按类型"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>扫描时顺手把这块盘上所有文件按扩展名分成十类（视频、图片、音乐、文档、压缩包和安装包、镜像和虚拟磁盘、程序、日志和临时文件、代码和开发文件、其他），列出每类多少个、多大。双击一类，到「找文件」里看这一类最大的文件。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="所有者和排序"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>「找文件」最多列 1000 个，可以按大小或修改时间排序，按文件的所有者（Windows 账户）筛选；NTFS 压缩过的文件写明压缩后的大小。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="最近改动"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>读文件系统的变更日志（USN），列出最近 24 小时 / 3 天 / 7 天 / 30 天里新建、改写的文件最集中的文件夹：多出来的空间多半在那里。大小按文件现在的大小算（日志里没有写了多少字节），删掉的只计个数。要先用快速扫描读过文件表。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="和上次比"/>
-                  <TextBlock Style="{StaticResource HelpBody}"><Run>列出比上一次扫描变大或变小超过 100 MB 的文件夹，找出空间是被谁慢慢吃掉的；双击一行跳到那个文件夹。文件夹列表里也会标出「比上次 +2.1 GB」这样的变化。</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>列出比上一次扫描变大或变小超过 100 MB 的文件夹，找出空间是被谁慢慢吃掉的；双击一行跳到那个文件夹。文件夹列表里也会标出「比上次 +2.1 GB」这样的变化。每次扫描的快照都带日期保留（每块盘最多 40 份），「和哪次比」可以选 1 天前、3 天前、7 天前、30 天前或最早的一次。列表上方一句话说清：这段时间已用空间多了（或少了）多少，主要在哪（Docker 数据、WSL 发行版、浏览器缓存、Windows 更新、某个文件夹……），其余多少。</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="导出"/>
@@ -11552,6 +11706,52 @@ if ($script:mode -match '(?i)/autoclean') {
             <Expander Style="{StaticResource HelpSection}">
               <Expander.Header>
                 <DockPanel>
+                  <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE95E;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="系统健康" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
+                    <TextBlock Text="硬件状态、开机用时、蓝屏原因、谁在吃资源；只看不改" Style="{StaticResource HelpSum}"/>
+                  </StackPanel>
+                </DockPanel>
+              </Expander.Header>
+              <StackPanel>
+                <StackPanel Margin="0,14,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="硬件"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>每一项一张卡片，按档位标色（绿正常、橙留意、红有问题、灰读不到）：CPU 的负载、当前和最高频率、性能计数器（持续低于标称频率说明在降频）、ACPI 温度；内存的已用、提交、硬错误、WHEA 记录过的内存错误；每块盘的 SMART 健康状态、温度、磨损、读错误、通电时间；电池的设计容量、现在充满能到多少、循环次数；显卡的占用、显存、驱动版本；Windows 开机多久、等待重启、最近更新、有问题的设备。</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>读不到的直接写「读不到」，不用估算冒充：CPU 内核温度和显卡温度 Windows 不提供，要厂商工具；台式机没有电池；USB 硬盘盒和部分虚拟机不报 SMART。</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="开机用时"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Windows 自己记在「诊断-性能」日志里：最近一次开机用了多久（到桌面多久、桌面出来后开机程序又忙了多久），最近几次平均多少，以及 Windows 点名拖慢开机的程序和拖慢了几秒。拖慢的程序可以到「软件管理 → 开机启动」里关掉。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="蓝屏和崩溃"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>本工具自己解析 C:\Windows\Minidump 里的转储文件：错误码和名字、四个参数、出事时加载的驱动、异常地址落在哪个驱动里、调用栈上出现的驱动，给出「可能是某驱动」的提示。再列最近 30 天的意外关机、蓝屏记录、WHEA 硬件错误、磁盘和文件系统错误事件，以及最近 30 天装的驱动：蓝屏时间和装驱动的时间对得上的，优先怀疑那个驱动。</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>这是提示不是定论，准确度不如 WinDbg。</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>「检查系统文件（只看）」在终端里跑 sfc /verifyonly 和 DISM /ScanHealth，只检查不改；「修复系统文件」跑 sfc /scannow 和 DISM /RestoreHealth，会把损坏的系统文件换成正常副本（只动 Windows 自己的文件），点了先确认。</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="谁在让电脑变慢"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>点「开始监控」，每 3 秒采一次样：各程序这段时间用了多少 CPU、占多少内存、往磁盘写得多快、本次监控一共写了多少、从进程启动起一共写了多少；同名进程合在一起算，可以按写入、CPU、内存排。不装常驻服务，关掉本工具就停。</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>写入量不等于磁盘净占用增长（临时文件写了又删）。哪个进程写了哪个文件，只有监控开着的时间段能对上：把「空间地图 → 最近改动」里变大的文件夹和这里写入多的程序放在一起看。</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Windows 事件"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>最近 7 天系统日志里的严重和错误事件按来源归并。很多错误是无害的，同一个来源反复出现、时间又和故障对得上的才值得查。</Run></TextBlock>
+                </StackPanel>
+                <Border Background="#EFF8F1" BorderBrush="#CFE9D6" BorderThickness="1" CornerRadius="10" Padding="14,11,16,12" Margin="0,16,0,0">
+                  <DockPanel>
+                    <TextBlock DockPanel.Dock="Left" Text="&#xEA18;" FontFamily="{StaticResource Icons}" FontSize="15" Foreground="#248A3D" VerticalAlignment="Top" Margin="0,2,12,0"/>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="这一页什么都不改"/>
+                      <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>全部是读取。会改系统的只有「修复系统文件」，而且分开放、点了先确认。</Run></TextBlock>
+                    </StackPanel>
+                  </DockPanel>
+                </Border>
+              </StackPanel>
+            </Expander>
+            <Expander Style="{StaticResource HelpSection}">
+              <Expander.Header>
+                <DockPanel>
                   <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE8AB;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                   <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="搬家管理" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
@@ -11673,8 +11873,8 @@ if ($script:mode -match '(?i)/autoclean') {
                   <TextBlock Style="{StaticResource HelpLead}" Text="使用模式"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>三种，按你的需要决定界面上有多少东西。第一次打开时会问一句，之后在「设置」最上面随时换，换了不丢任何设置和记录。左下角版本号下面写着当前模式，点一下就到设置。</Run></TextBlock>
                   <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">普通用户</Run><Run>：清理 C 盘、省空间、空间地图、软件管理、帮助。清理列表里只有常见的缓存和临时文件，删了软件会自动重建；有代价的项目仍然默认跳过。</Run></TextBlock></DockPanel>
-                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">工程师</Run><Run>：再加上重复文件、搬家管理、自动提醒、操作日志；空间地图的找文件、和上次比、导出、压缩；省空间的页面文件、还原点、压缩文件夹、虚拟磁盘、合并重复文件；软件管理的开机启动、残留文件夹、检查新版本、搬到其他盘；清理列表里多出开发工具的缓存和驱动残留。</Run></TextBlock></DockPanel>
-                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">开发者和 IT</Run><Run>：全部功能。再加上计划任务、右键菜单、保留的存储、组件存储分析、蓝屏转储、临时文件夹位置、自定义清理列表和排除、快速扫描开关、空间明细、检查扫描功能、运行记录，以及 Installer 孤儿安装包、事件日志、NuGet / Gradle / Maven / JetBrains 缓存这类项目。</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">工程师</Run><Run>：再加上重复文件、搬家管理、自动提醒、操作日志；空间地图的找文件、和上次比、最近改动、导出、压缩；省空间的页面文件、还原点、压缩文件夹、虚拟磁盘、合并重复文件；软件管理的开机启动、残留文件夹、检查新版本、搬到其他盘；系统健康的开机用时、蓝屏诊断、活动监控；清理列表里多出开发工具的缓存和驱动残留。</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">开发者和 IT</Run><Run>：全部功能。再加上计划任务、右键菜单、保留的存储、组件存储分析、蓝屏转储、临时文件夹位置、自定义清理列表和排除、快速扫描开关、空间明细、检查扫描功能、运行记录、修复系统文件、Windows 事件汇总，以及 Installer 孤儿安装包、事件日志、旧版驱动包、NuGet / Gradle / Maven / JetBrains 缓存这类项目。</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="外观和语言"/>
@@ -11694,6 +11894,10 @@ if ($script:mode -match '(?i)/autoclean') {
                   <TextBlock Style="{StaticResource HelpBody}"><Run>读文件时用 Windows 的后台模式，磁盘和内存都排在其他程序后面，不拖慢正在用的程序；同时在做别的事时，查得会慢一些。</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="删除时先放进回收站"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>在「清理列表」卡片里。打开后手动清理删掉的文件先进回收站；自动清理不受影响。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="清理列表"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>自己加要清理的文件夹（删里面的东西，文件夹本身保留），或排除清理时不想碰的文件夹。个人文件夹、系统文件夹和软件的安装文件夹加不进来。</Run></TextBlock>
                 </StackPanel>
@@ -11707,6 +11911,18 @@ if ($script:mode -match '(?i)/autoclean') {
                 <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="为什么有些功能找不到？"/></Expander.Header>
                 <StackPanel>
                   <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>多半是使用模式的关系：普通用户模式只显示基础功能，工程师模式多一些，开发者和 IT 模式才是全部。到「设置」最上面换一下模式就有了；另外「界面上显示什么」里手动隐藏过的也要在那里打开。清理列表是扫描时按模式决定列什么的，换了模式再扫描一次。</Run></TextBlock>
+                </StackPanel>
+              </Expander>
+              <Expander Style="{StaticResource HelpQ}">
+                <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="C 盘这几天少了几十 GB，去哪了？"/></Expander.Header>
+                <StackPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>「空间地图」扫一遍，看上方概览和「和上次比」：它会说清这段时间已用空间多了多少、主要在哪（Docker、WSL、浏览器缓存、Windows 更新或某个文件夹）。再看「最近改动」，按变更日志列出这几天新建、改写的文件最集中的文件夹。想知道是哪个程序在写，到「系统健康」开一会儿活动监控。</Run></TextBlock>
+                </StackPanel>
+              </Expander>
+              <Expander Style="{StaticResource HelpQ}">
+                <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="蓝屏了怎么查？"/></Expander.Header>
+                <StackPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>「系统健康 → 蓝屏和崩溃」：转储文件解析出的错误码和「可能是某驱动」，和最近 30 天装的驱动对一对；再看硬件错误和磁盘错误事件。常见的处理顺序：先更新或回退对得上的驱动，再跑「检查系统文件」，硬件错误多的跑内存诊断、看硬盘健康。</Run></TextBlock>
                 </StackPanel>
               </Expander>
               <Expander Style="{StaticResource HelpQ}">
@@ -15535,7 +15751,7 @@ function Show-Health($r) {
         $tier = $script:hcGreen
         $sub = if ($d.Model) { [string]$d.Model } else { (T '型号读不到') }
         $card = New-HealthCard ((T "磁盘 {0}") -f $d.Drive) $sub $tier
-        try { $di = New-Object System.IO.DriveInfo ($d.Drive + '\'); $pct = [int][math]::Round(100.0 * ($di.TotalSize - $di.TotalFreeSpace) / [math]::Max(1, $di.TotalSize)); $card.HasBar = $true; $card.BarW = [math]::Max(2, 2.5 * $pct); $card.Chips.Add((New-Chip ((T "已用 {0}%") -f $pct) $(if ($pct -ge 95) { $script:hcRed } elseif ($pct -ge 85) { $script:hcAmber } else { $script:hcGreen }))) } catch {}
+        try { $di = New-Object System.IO.DriveInfo ($d.Drive + '\'); $pct = [int][math]::Round(100.0 * ($di.TotalSize - $di.TotalFreeSpace) / [math]::Max([double]1, [double]$di.TotalSize)); $card.HasBar = $true; $card.BarW = [math]::Max(2, 2.5 * $pct); $card.Chips.Add((New-Chip ((T "已用 {0}%") -f $pct) $(if ($pct -ge 95) { $script:hcRed } elseif ($pct -ge 85) { $script:hcAmber } else { $script:hcGreen }))) } catch {}
         if ($d.Ok) {
             $h = [string]$d.Health
             $t2 = if ($h -match 'Healthy|正常|OK') { $script:hcGreen } elseif ($h) { $script:hcRed } else { $script:hcGrey }
