@@ -105,6 +105,9 @@ if ($script:mode -match '(?i)/check') {
 }
 # 界面自测（给自动测试用）：照常打开窗口，点一遍界面功能，对话框一律当作点了「取消」，做完自己关掉
 $script:uiTest = [bool]($script:mode -match '(?i)/uitest')
+# 这个 exe 是什么时候构建的（同一个版本号可能构建过好几次，反馈问题时好对上）
+$script:AppBuild = ''
+try { $bf = if ($env:CLEANC_SELF -and (Test-Path -LiteralPath $env:CLEANC_SELF)) { $env:CLEANC_SELF } elseif ($script:selfScript) { $script:selfScript } else { '' }; if ($bf) { $script:AppBuild = '{0:yyyy-MM-dd HH:mm}' -f (Get-Item -LiteralPath $bf).LastWriteTime } } catch {}
 $script:uiSheets = New-Object System.Collections.Generic.List[string]
 if ($script:mode -match '(?i)/selftest') {
     Init-DriveThreads

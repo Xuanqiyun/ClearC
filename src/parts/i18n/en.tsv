@@ -1216,6 +1216,7 @@ Zoom 装在这里的程序和本地数据。会议录像默认存在「文档」
 选中一行可以打开位置、压缩或删除；勾选前面的方框，或按住 Ctrl、Shift，可以选多项一起删；按住鼠标（左键或右键）上下拖可以一次选中连着的几行。系统文件夹、软件安装文件夹、C 盘个人文件夹和搬家后的数据带小锁，不能在这里删。	Select a row to open its location, compress or delete it. Tick the boxes in front, or hold Ctrl or Shift, to select several and delete them together; hold the left or right mouse button and drag up or down to select a run of rows. System folders, app installation folders, personal folders on C: and moved data have a lock and can't be deleted here.
 删除选中的 {0} 项…	Delete {0} selected items…
 已复制 {0} 个路径	Copied {0} paths
+空间地图：双击的「{0}」进不去（扫描结果里没有它的下一层）	Space map: can't open "{0}" by double-clicking (the scan has nothing below it)
 。点行前面的方框取消某一项，按 Esc 全部取消	. Click a row's box to clear it, or press Esc to clear all
 勾选行前面的方框来选中，可以勾一项或多项，再打开位置、压缩或删除；单击行的其他地方不会选中，双击文件夹往里点；按住鼠标上下拖可以一次勾上连着的几行。系统文件夹、软件安装文件夹、C 盘个人文件夹和搬家后的数据带小锁，不能在这里删。	Tick the box at the start of a row to select it, one row or several, then open its location, compress or delete. Clicking elsewhere on a row doesn't select it; double-click a folder to open it; hold the mouse button and drag up or down to tick a run of rows. System folders, app installation folders, personal folders on C: and moved data have a lock and can't be deleted here.
 \n\n按快速扫描的结果，实际能腾出 {0} 到 {1}：其中 {2} 是硬链接，同一份文件在别处还有名字，那些名字还在就不会腾出空间。	\n\nAccording to the fast scan, this frees between {0} and {1}: {2} of it is hard links, files that still have names elsewhere, and their space is freed only once all their names are gone.
