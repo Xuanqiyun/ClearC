@@ -12277,7 +12277,7 @@ function Invoke-UiTest {
             if ($lv.SelectedItems.Count -ne 3) { throw ("clicking a row after ticking: {0} selected, expected 3" -f $lv.SelectedItems.Count) }
             Invoke-TickClick 6 $true
             if ($lv.SelectedItems.Count -ne 5) { throw ("shift-click after ticking: {0} selected, expected 5" -f $lv.SelectedItems.Count) }
-            Refresh-MapRows
+            Refresh-MapRows; $win.UpdateLayout()
             if ($lv.SelectedItems.Count -ne 5) { throw ("refreshing the list kept {0} of 5" -f $lv.SelectedItems.Count) }
             $src = [System.Windows.PresentationSource]::FromVisual($lv)
             if ($src) {
@@ -12293,7 +12293,7 @@ function Invoke-UiTest {
             & $click $ctl.MapAll; if ($lv.SelectedItems.Count -ne 0 -or $ctl.MapAll.IsChecked -ne $false) { throw 'not all cleared' }
         }
         & $step 'left and right drag select a run of rows' {
-            $lv = $ctl.MapList; $n = $lv.Items.Count
+            $lv = $ctl.MapList; $n = $lv.Items.Count; $win.UpdateLayout()   # 列表刚换过内容：先排好版，行才生成出来
             if ($n -lt 3) { throw 'too few rows' }
             if ((Get-RowAt $lv 6) -ne 0) { throw ("row at the top is {0}" -f (Get-RowAt $lv 6)) }
             $lv.UnselectAll()
