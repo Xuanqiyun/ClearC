@@ -10,10 +10,10 @@
 - **查重复文件时让着其他程序**（设置里打开）：用 Windows 的后台模式读文件，磁盘和内存都用低优先级，不拖慢正在用的程序，也不把它们缓存的数据挤出内存。
 - 「崩溃转储与错误报告」也清 `C:\Windows\LiveKernelReports`（显卡驱动重置等留下的诊断转储）。
 - 帮助里新增几条常见问题：扫描合计和已用空间为什么对不上、WinSxS 能不能删、为什么不清 Prefetch 也没有「内存加速」。
-- 「使用反馈」加了 GitHub 项目主页和提交问题的按钮。
+- 「使用反馈」只留 GitHub：项目主页和提交问题的按钮，不再显示开发者微信号；诊断信息和检查扫描功能的结果都可以贴到 GitHub 的问题里。
 - 修正：点「使用反馈」后再点「帮助」，回不到帮助的开头。
 - 测试：自检也核对实际占用和硬链接；新增 `ClearC.exe /uitest`，在真的 Windows 上把界面功能点一遍；NTFS 镜像测试也比实际占用、硬链接和压缩文件夹。
-- Item check boxes, right-button drag selection and a right-click menu in the space map; a Settings page that hides pages, buttons, descriptions and columns you don't use; size on disk and hard links from the file table, with a "Space breakdown" of the used space; restore point usage on "Save space"; low-priority duplicate search; LiveKernelReports cleanup; GitHub links under Feedback; fixed Help not returning to the top after Feedback; `/uitest` for automated UI tests.
+- Item check boxes, right-button drag selection and a right-click menu in the space map; a Settings page that hides pages, buttons, descriptions and columns you don't use; size on disk and hard links from the file table, with a "Space breakdown" of the used space; restore point usage on "Save space"; low-priority duplicate search; LiveKernelReports cleanup; Feedback now points only to GitHub (the WeChat ID was removed); fixed Help not returning to the top after Feedback; `/uitest` for automated UI tests.
 
 ## 2.6
 - **深色模式**：左下角「外观」可以选浅色、深色或跟随系统（照 Windows 的「选择应用模式」）。

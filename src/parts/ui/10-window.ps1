@@ -74,7 +74,7 @@ foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageM
                'BtnMovesRefresh','MovesInfo','MovesList','EmptyMoves','EmptyMovesText',
                'AutoRemindOn','AutoRemindGB','AutoRemindNote','AutoCleanOn','AutoCleanNote','HistInfo','HistChart','HistLast','HistFirst',
                'BtnLogOpenDir','BtnLogRefresh','LogKeep','LogKeepNote','LogCats','LogRange','LogSearch','LogCount','LogList','EmptyLog','EmptyLogText',
-               'BtnLang','BtnLangText','BtnTheme','BtnThemeText','NavHelp','PageHelp','HelpScroll','FeedbackCard','RiskCard','BtnFeedback','BtnCopyWx','BtnGitHub','BtnIssue','BtnCopyDiag','BtnOpenLog','CopyHint','DevWx','BtnSelfTest','BtnCheckUpdate','MapFast','MapChat',
+               'BtnLang','BtnLangText','BtnTheme','BtnThemeText','NavHelp','PageHelp','HelpScroll','FeedbackCard','RiskCard','BtnFeedback','BtnGitHub','BtnIssue','BtnCopyDiag','BtnOpenLog','CopyHint','BtnSelfTest','BtnCheckUpdate','MapFast','MapChat',
                'NavClean','NavDup','PageClean','PageDup','AppVer','BtnLog','BtnLogText','BtnLogHide','LogPanel','Dim',
                'CapFree','CapTotal','CapBar','CapReclaim','EmptyClean','EmptyCleanText','EmptyDup','EmptyDupText','SizeCustomRow',
                'DestPick','BtnDestBrowse','DestHint','BtnOneClick','BtnScan','BtnRun','BtnHogs','Hint','List','Summary','Log',
@@ -126,7 +126,6 @@ foreach ($k in $script:pageList.Keys) {
 }
 
 # ---------- 帮助页：使用反馈 ----------
-$script:devWechat = '45915504'
 function Show-CopyHint([string]$t) { $ctl.CopyHint.Text = $t }
 $ctl.BtnFeedback.Add_Click({
     Show-Page 'help'
@@ -143,9 +142,6 @@ function Open-Web([string]$url) {
 }
 $ctl.BtnGitHub.Add_Click({ Open-Web $script:projectPage })
 $ctl.BtnIssue.Add_Click({ Open-Web ($script:projectPage + '/issues') })
-$ctl.BtnCopyWx.Add_Click({
-    try { [System.Windows.Clipboard]::SetText($script:devWechat); $ctl.BtnCopyWx.Content = (T '已复制') } catch { $ctl.BtnCopyWx.Content = (T '复制失败，请手动输入') }
-})
 $ctl.BtnCopyDiag.Add_Click({
     $c = $null; try { $c = New-Object System.IO.DriveInfo 'C:\' } catch {}
     $info = @(
@@ -158,7 +154,7 @@ $ctl.BtnCopyDiag.Add_Click({
     )
     $tail = @()
     try { $tail = @(Get-Content -LiteralPath $script:logFile -Encoding UTF8 -Tail 80 -ErrorAction Stop) } catch { $tail = @(($ctl.Log.Text -split "`r?`n") | Select-Object -Last 80) }
-    try { [System.Windows.Clipboard]::SetText((($info + $tail) -join "`r`n")); Show-CopyHint (T '已复制，可以直接粘贴到微信里发给开发者') }
+    try { [System.Windows.Clipboard]::SetText((($info + $tail) -join "`r`n")); Show-CopyHint (T '已复制，可以粘贴到 GitHub 的问题（Issue）里') }
     catch { Show-CopyHint (T '复制失败，可以点「打开运行记录文件」再手动复制') }
 })
 # ---------- 检查扫描功能（自检）、检查新版本 ----------

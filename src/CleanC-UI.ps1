@@ -4067,14 +4067,12 @@ C 盘只剩 {0} 了	Only {0} left on C:
 C 盘多出 {0}；{1}	Freed {0} on C:; {1}
 ；	; 
 C 盘多出 {0}。只清了临时文件、缓存和日志，没有碰任何个人文件。每一项都记在「操作日志」里。	Freed {0} on C:. Only temporary files, caches and logs were cleaned; no personal files were touched. Every item is recorded in the "Activity log".
-已复制	Copied
-复制失败，请手动输入	Couldn't copy. Please type it in manually.
 腾挪 ClearC {0}	ClearC {0}
 Windows {0}，{1} 位	Windows {0}, {1}-bit
 C 盘剩余 {0} / 共 {1}	Free on C: {0} / {1} total
 屏幕可用区域 {0:N0} x {1:N0}	Screen work area {0:N0} x {1:N0}
 ---- 最近的运行记录 ----	---- Recent run log ----
-已复制，可以直接粘贴到微信里发给开发者	Copied. You can paste it straight into WeChat and send it to the developer.
+已复制，可以粘贴到 GitHub 的问题（Issue）里	Copied. You can paste it into a GitHub issue.
 复制失败，可以点「打开运行记录文件」再手动复制	Couldn't copy. Click "Open run log file" and copy it manually.
 还没有运行记录	No run log yet
 收起运行记录	Hide run log
@@ -5230,9 +5228,9 @@ Zoom 装在这里的程序和本地数据。会议录像默认存在「文档」
 已中途停止	Stopped partway
 检查扫描功能：{0}；结果存在 {1}	Scanning check: {0}; result saved to {1}
 。	. 
-结果已经复制，可以直接粘贴到微信里发给开发者。	The result has been copied; you can paste it straight into a message to the developer.
+结果已经复制，可以粘贴到 GitHub 的问题（Issue）里。	The result has been copied; you can paste it into a GitHub issue.
 完整结果存在 {0}	Full result saved to {0}
-有问题的项目，扫描时会自动改用逐个文件夹扫描，不影响使用；把结果发给开发者可以帮助修好它。	Where there are problems, scanning automatically falls back to the folder-by-folder method, so ClearC keeps working; sending the result to the developer helps get it fixed.
+有问题的项目，扫描时会自动改用逐个文件夹扫描，不影响使用；把结果贴到 GitHub 的问题里可以帮助修好它。	Where there are problems, scanning automatically falls back to the folder-by-folder method, so ClearC keeps working; posting the result in a GitHub issue helps get it fixed.
 没能检查新版本	Could not check for updates
 连不上 GitHub：{0}\n\n可以直接打开下载页面看看。	Could not reach GitHub: {0}\n\nYou can open the download page directly.
 打开下载页面	Open download page
@@ -5342,7 +5340,7 @@ $script:helpEnXaml = @'
       <ScrollViewer x:Name="HelpScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
         <StackPanel Margin="30,24,30,28" MaxWidth="880" HorizontalAlignment="Left">
           <TextBlock Text="Help" Style="{StaticResource PageTitle}"/>
-          <TextBlock Style="{StaticResource PageSub}" Text="How to use ClearC, the safety notice, and how to contact the developer."/>
+          <TextBlock Style="{StaticResource PageSub}" Text="How to use ClearC, the safety notice, and how to report problems."/>
           <Border x:Name="RiskCard" Background="#FFF6F6" BorderBrush="#F3C4C8" BorderThickness="1" CornerRadius="12" Padding="24,20,24,20" Margin="0,20,0,0">
             <DockPanel>
               <TextBlock DockPanel.Dock="Left" Text="&#xE7BA;" FontFamily="{StaticResource Icons}" FontSize="20" Foreground="#D70015" VerticalAlignment="Top" Margin="0,1,14,0"/>
@@ -5698,25 +5696,11 @@ $script:helpEnXaml = @'
                 <TextBlock Text="&#xE8BD;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
                 <TextBlock Text="Feedback" Style="{StaticResource HelpHead}"/>
               </StackPanel>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,8,0,0" Text="If you run into a problem, find a bug or have a suggestion, add the developer on WeChat or open an issue on GitHub."/>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,8,0,0" Text="If you run into a problem, find a bug or have a suggestion, please open an issue on GitHub."/>
               <Border Background="#F5F5F7" CornerRadius="10" Padding="18,14" Margin="0,14,0,0">
                 <DockPanel>
-                  <Button x:Name="BtnCopyWx" DockPanel.Dock="Right" Style="{StaticResource Primary}" Content="Copy WeChat ID" Padding="18,7" VerticalAlignment="Center"/>
-                  <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <Border Width="40" Height="40" CornerRadius="20" Background="#E6F4EA">
-                      <TextBlock Text="&#xE8BD;" FontFamily="{StaticResource Icons}" FontSize="18" Foreground="#248A3D" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    </Border>
-                    <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
-                      <TextBlock Text="Developer's WeChat" Style="{StaticResource Caption}"/>
-                      <TextBlock x:Name="DevWx" Text="45915504" FontSize="20" FontWeight="SemiBold" Margin="0,1,0,0" TextOptions.TextFormattingMode="Ideal"/>
-                    </StackPanel>
-                  </StackPanel>
-                </DockPanel>
-              </Border>
-              <Border Background="#F5F5F7" CornerRadius="10" Padding="18,14" Margin="0,10,0,0">
-                <DockPanel>
                   <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button x:Name="BtnIssue" Content="Report an issue" Padding="14,7" Margin="0,0,8,0"/>
+                    <Button x:Name="BtnIssue" Content="Report an issue" Style="{StaticResource Primary}" Padding="14,7" Margin="0,0,8,0"/>
                     <Button x:Name="BtnGitHub" Content="Open page" Padding="14,7"/>
                   </StackPanel>
                   <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -5736,7 +5720,7 @@ $script:helpEnXaml = @'
                 <Button x:Name="BtnOpenLog" Content="Open run log file"/>
                 <TextBlock x:Name="CopyHint" Style="{StaticResource Caption}" Foreground="#248A3D" Margin="14,0,0,0"/>
               </StackPanel>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,18,0,0" Text="&quot;Check scanning&quot; verifies the fast scan on this PC: it compares reading the file table with a folder-by-folder scan, then creates a few files in ClearC's own folder, changes and deletes them to check updates from the change journal. It only reads drive C:, leaves your files alone and takes a minute or two; the result is copied so you can send it to the developer. &quot;Check for updates&quot; contacts GitHub only when you click it."/>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,18,0,0" Text="&quot;Check scanning&quot; verifies the fast scan on this PC: it compares reading the file table with a folder-by-folder scan, then creates a few files in ClearC's own folder, changes and deletes them to check updates from the change journal. It only reads drive C:, leaves your files alone and takes a minute or two; the result is copied so you can paste it into a GitHub issue. &quot;Check for updates&quot; contacts GitHub only when you click it."/>
               <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
                 <Button x:Name="BtnSelfTest" Content="Check scanning" Margin="0,0,8,0"/>
                 <Button x:Name="BtnCheckUpdate" Content="Check for updates"/>
@@ -7923,7 +7907,7 @@ if ($script:mode -match '(?i)/autoclean') {
       <ScrollViewer x:Name="HelpScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
         <StackPanel Margin="30,24,30,28" MaxWidth="880" HorizontalAlignment="Left">
           <TextBlock Text="帮助" Style="{StaticResource PageTitle}"/>
-          <TextBlock Style="{StaticResource PageSub}" Text="使用说明、安全风险提示，以及怎么联系开发者。"/>
+          <TextBlock Style="{StaticResource PageSub}" Text="使用说明、安全风险提示，以及怎么反馈问题。"/>
           <Border x:Name="RiskCard" Background="#FFF6F6" BorderBrush="#F3C4C8" BorderThickness="1" CornerRadius="12" Padding="24,20,24,20" Margin="0,20,0,0">
             <DockPanel>
               <TextBlock DockPanel.Dock="Left" Text="&#xE7BA;" FontFamily="{StaticResource Icons}" FontSize="20" Foreground="#D70015" VerticalAlignment="Top" Margin="0,1,14,0"/>
@@ -8279,25 +8263,11 @@ if ($script:mode -match '(?i)/autoclean') {
                 <TextBlock Text="&#xE8BD;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
                 <TextBlock Text="使用反馈" Style="{StaticResource HelpHead}"/>
               </StackPanel>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,8,0,0" Text="遇到问题、发现错误或有改进建议，欢迎加开发者微信，或在 GitHub 上提交问题（Issues）。"/>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,8,0,0" Text="遇到问题、发现错误或有改进建议，欢迎在 GitHub 上提交问题（Issues）。"/>
               <Border Background="#F5F5F7" CornerRadius="10" Padding="18,14" Margin="0,14,0,0">
                 <DockPanel>
-                  <Button x:Name="BtnCopyWx" DockPanel.Dock="Right" Style="{StaticResource Primary}" Content="复制微信号" Padding="18,7" VerticalAlignment="Center"/>
-                  <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <Border Width="40" Height="40" CornerRadius="20" Background="#E6F4EA">
-                      <TextBlock Text="&#xE8BD;" FontFamily="{StaticResource Icons}" FontSize="18" Foreground="#248A3D" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    </Border>
-                    <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
-                      <TextBlock Text="开发者微信" Style="{StaticResource Caption}"/>
-                      <TextBlock x:Name="DevWx" Text="45915504" FontSize="20" FontWeight="SemiBold" Margin="0,1,0,0" TextOptions.TextFormattingMode="Ideal"/>
-                    </StackPanel>
-                  </StackPanel>
-                </DockPanel>
-              </Border>
-              <Border Background="#F5F5F7" CornerRadius="10" Padding="18,14" Margin="0,10,0,0">
-                <DockPanel>
                   <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button x:Name="BtnIssue" Content="提交问题" Padding="14,7" Margin="0,0,8,0"/>
+                    <Button x:Name="BtnIssue" Content="提交问题" Style="{StaticResource Primary}" Padding="14,7" Margin="0,0,8,0"/>
                     <Button x:Name="BtnGitHub" Content="打开主页" Padding="14,7"/>
                   </StackPanel>
                   <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -8311,13 +8281,13 @@ if ($script:mode -match '(?i)/autoclean') {
                   </StackPanel>
                 </DockPanel>
               </Border>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,14,0,0" Text="反馈时附上问题截图和诊断信息，能更快找到原因。诊断信息包括软件版本、Windows 版本、C 盘空间和最近的运行记录（里面有文件夹路径），发送前可以先看一下。"/>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,14,0,0" Text="提交问题时附上截图和诊断信息，能更快找到原因。诊断信息包括软件版本、Windows 版本、C 盘空间和最近的运行记录（里面有文件夹路径），贴出去之前可以先看一下。"/>
               <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
                 <Button x:Name="BtnCopyDiag" Content="复制诊断信息" Margin="0,0,8,0"/>
                 <Button x:Name="BtnOpenLog" Content="打开运行记录文件"/>
                 <TextBlock x:Name="CopyHint" Style="{StaticResource Caption}" Foreground="#248A3D" Margin="14,0,0,0"/>
               </StackPanel>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,18,0,0" Text="「检查扫描功能」在这台电脑上核对快速扫描：比较直接读文件表和逐个文件夹扫描的结果，再在本工具自己的文件夹里建几个文件、改一改、删掉，看按变更日志更新对不对。只读 C 盘，不动你的文件，大约要一两分钟；结果会复制下来，可以直接发给开发者。「检查新版本」只在你点的时候连一次 GitHub。"/>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,18,0,0" Text="「检查扫描功能」在这台电脑上核对快速扫描：比较直接读文件表和逐个文件夹扫描的结果，再在本工具自己的文件夹里建几个文件、改一改、删掉，看按变更日志更新对不对。只读 C 盘，不动你的文件，大约要一两分钟；结果会复制下来，可以贴到 GitHub 的问题里。「检查新版本」只在你点的时候连一次 GitHub。"/>
               <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
                 <Button x:Name="BtnSelfTest" Content="检查扫描功能" Margin="0,0,8,0"/>
                 <Button x:Name="BtnCheckUpdate" Content="检查新版本"/>
@@ -8471,7 +8441,7 @@ foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageM
                'BtnMovesRefresh','MovesInfo','MovesList','EmptyMoves','EmptyMovesText',
                'AutoRemindOn','AutoRemindGB','AutoRemindNote','AutoCleanOn','AutoCleanNote','HistInfo','HistChart','HistLast','HistFirst',
                'BtnLogOpenDir','BtnLogRefresh','LogKeep','LogKeepNote','LogCats','LogRange','LogSearch','LogCount','LogList','EmptyLog','EmptyLogText',
-               'BtnLang','BtnLangText','BtnTheme','BtnThemeText','NavHelp','PageHelp','HelpScroll','FeedbackCard','RiskCard','BtnFeedback','BtnCopyWx','BtnGitHub','BtnIssue','BtnCopyDiag','BtnOpenLog','CopyHint','DevWx','BtnSelfTest','BtnCheckUpdate','MapFast','MapChat',
+               'BtnLang','BtnLangText','BtnTheme','BtnThemeText','NavHelp','PageHelp','HelpScroll','FeedbackCard','RiskCard','BtnFeedback','BtnGitHub','BtnIssue','BtnCopyDiag','BtnOpenLog','CopyHint','BtnSelfTest','BtnCheckUpdate','MapFast','MapChat',
                'NavClean','NavDup','PageClean','PageDup','AppVer','BtnLog','BtnLogText','BtnLogHide','LogPanel','Dim',
                'CapFree','CapTotal','CapBar','CapReclaim','EmptyClean','EmptyCleanText','EmptyDup','EmptyDupText','SizeCustomRow',
                'DestPick','BtnDestBrowse','DestHint','BtnOneClick','BtnScan','BtnRun','BtnHogs','Hint','List','Summary','Log',
@@ -8523,7 +8493,6 @@ foreach ($k in $script:pageList.Keys) {
 }
 
 # ---------- 帮助页：使用反馈 ----------
-$script:devWechat = '45915504'
 function Show-CopyHint([string]$t) { $ctl.CopyHint.Text = $t }
 $ctl.BtnFeedback.Add_Click({
     Show-Page 'help'
@@ -8540,9 +8509,6 @@ function Open-Web([string]$url) {
 }
 $ctl.BtnGitHub.Add_Click({ Open-Web $script:projectPage })
 $ctl.BtnIssue.Add_Click({ Open-Web ($script:projectPage + '/issues') })
-$ctl.BtnCopyWx.Add_Click({
-    try { [System.Windows.Clipboard]::SetText($script:devWechat); $ctl.BtnCopyWx.Content = (T '已复制') } catch { $ctl.BtnCopyWx.Content = (T '复制失败，请手动输入') }
-})
 $ctl.BtnCopyDiag.Add_Click({
     $c = $null; try { $c = New-Object System.IO.DriveInfo 'C:\' } catch {}
     $info = @(
@@ -8555,7 +8521,7 @@ $ctl.BtnCopyDiag.Add_Click({
     )
     $tail = @()
     try { $tail = @(Get-Content -LiteralPath $script:logFile -Encoding UTF8 -Tail 80 -ErrorAction Stop) } catch { $tail = @(($ctl.Log.Text -split "`r?`n") | Select-Object -Last 80) }
-    try { [System.Windows.Clipboard]::SetText((($info + $tail) -join "`r`n")); Show-CopyHint (T '已复制，可以直接粘贴到微信里发给开发者') }
+    try { [System.Windows.Clipboard]::SetText((($info + $tail) -join "`r`n")); Show-CopyHint (T '已复制，可以粘贴到 GitHub 的问题（Issue）里') }
     catch { Show-CopyHint (T '复制失败，可以点「打开运行记录文件」再手动复制') }
 })
 # ---------- 检查扫描功能（自检）、检查新版本 ----------
@@ -12456,8 +12422,8 @@ $timer.Add_Tick({
                 $sum = (T "{0} 项正常，{1} 项提醒，{2} 项有问题") -f $x.Pass, $x.Warn, $x.Fail
                 End-Op $(if ($r.Stopped) { (T '已中途停止') } else { $sum })
                 UI-Log ((T "检查扫描功能：{0}；结果存在 {1}") -f $sum, $file)
-                $msg = $sum + (T '。') + $(if ($copied) { (T '结果已经复制，可以直接粘贴到微信里发给开发者。') } else { '' }) + "`n`n" + ((T "完整结果存在 {0}") -f $file)
-                if ($x.Fail -gt 0) { $msg += "`n`n" + (T '有问题的项目，扫描时会自动改用逐个文件夹扫描，不影响使用；把结果发给开发者可以帮助修好它。') }
+                $msg = $sum + (T '。') + $(if ($copied) { (T '结果已经复制，可以粘贴到 GitHub 的问题（Issue）里。') } else { '' }) + "`n`n" + ((T "完整结果存在 {0}") -f $file)
+                if ($x.Fail -gt 0) { $msg += "`n`n" + (T '有问题的项目，扫描时会自动改用逐个文件夹扫描，不影响使用；把结果贴到 GitHub 的问题里可以帮助修好它。') }
                 $script:pendingDialog = @{ Title = (T '扫描功能检查完了'); Kind = $(if ($x.Fail -gt 0) { 'warn' } else { 'done' }); Text = $msg
                     Buttons = @((T '好'), (T '打开结果')); Primary = (T '打开结果'); Cancel = (T '好'); Then = { Start-Process -FilePath "$env:SystemRoot\System32\notepad.exe" -ArgumentList ('"{0}"' -f $file) }.GetNewClosure() }
             }
