@@ -20,18 +20,25 @@ Step 'checks (PS 5.1)' { powershell -NoProfile -ExecutionPolicy Bypass -File tes
 Step 'engine tests (PS 5.1)' { powershell -NoProfile -ExecutionPolicy Bypass -File tests\Engine.Tests.ps1 }
 Step 'build exe' { powershell -NoProfile -ExecutionPolicy Bypass -File build\build.ps1 }
 if (Test-Path out\ClearC.exe) {
-    # 界面自测：照常打开窗口（放在屏幕外），把界面功能点一遍，对话框都当作点了取消，做完自己关掉
-    $env:CLEANC_REPORT = Join-Path $PWD 'out\uitest.txt'   # 不设 CLEANC_TEST：那会让启动器不用 STA 线程，WPF 窗口打不开
-    $u = Start-Process -FilePath .\out\ClearC.exe -ArgumentList '/uitest' -PassThru
-    $ulines = @()
-    if (-not $u.WaitForExit(300000)) { Write-Host '::error title=UI test::did not finish within 5 minutes'; $fail = 1; try { $u.Kill() } catch {} }   # 只结束这次测试自己开的进程
-    else {
-        if (Test-Path $env:CLEANC_REPORT) { $ulines = @(Get-Content $env:CLEANC_REPORT -Encoding UTF8) }
-        $ulines | ForEach-Object { Write-Host $_ }
-        $ufails = @($ulines | Where-Object { $_ -like 'FAIL*' })
-        if (-not $ulines -or -not ($ulines | Where-Object { $_ -like 'summary:*' })) { Write-Host ("::error title=UI test::no complete report was written (exit {0})" -f $u.ExitCode); $fail = 1 }
-        elseif ($u.ExitCode -or $ufails) { Write-Host ("::error title=UI test (exit {0})::{1}" -f $u.ExitCode, (Esc ((@($ulines) | Where-Object { $_ -like 'FAIL*' } | Select-Object -First 20) -join "`n"))); $fail = 1 }
-        else { Write-Host ("::notice title=UI test::{0}" -f (Esc (($ulines | Select-Object -First 40) -join "`n"))) }   # 整份报告（含跳过的说明）
+    # 界面自测：照常打开窗口（放在屏幕外），把界面功能点一遍，对话框都当作点了取消，做完自己关掉。
+    # 跑两遍：先照这台测试机的显示语言（英文）、浅色，再在设置里写上中文、深色跑一遍（测完设置原样放回）
+    $setFile = Join-Path $env:LOCALAPPDATA 'CleanC\settings.txt'
+    foreach ($run in @(@{ Title = 'UI test'; Set = ''; Report = 'uitest.txt' }, @{ Title = 'UI test (zh, dark)'; Set = "Lang=zh`r`nTheme=dark`r`n"; Report = 'uitest-zh-dark.txt' })) {
+        $setBak = $null; if (Test-Path $setFile) { $setBak = [IO.File]::ReadAllBytes($setFile) }
+        if ($run.Set) { New-Item -ItemType Directory -Force (Split-Path $setFile) | Out-Null; [IO.File]::WriteAllText($setFile, $run.Set) }
+        $env:CLEANC_REPORT = Join-Path $PWD ('out\' + $run.Report)   # 不设 CLEANC_TEST：那会让启动器不用 STA 线程，WPF 窗口打不开
+        $u = Start-Process -FilePath .\out\ClearC.exe -ArgumentList '/uitest' -PassThru
+        $ulines = @()
+        if (-not $u.WaitForExit(300000)) { Write-Host ("::error title={0}::did not finish within 5 minutes" -f $run.Title); $fail = 1; try { $u.Kill() } catch {} }   # 只结束这次测试自己开的进程
+        else {
+            if (Test-Path $env:CLEANC_REPORT) { $ulines = @(Get-Content $env:CLEANC_REPORT -Encoding UTF8) }
+            $ulines | ForEach-Object { Write-Host $_ }
+            $ufails = @($ulines | Where-Object { $_ -like 'FAIL*' })
+            if (-not $ulines -or -not ($ulines | Where-Object { $_ -like 'summary:*' })) { Write-Host ("::error title={0}::no complete report was written (exit {1})" -f $run.Title, $u.ExitCode); $fail = 1 }
+            elseif ($u.ExitCode -or $ufails) { Write-Host ("::error title={0} (exit {1})::{2}" -f $run.Title, $u.ExitCode, (Esc ((@($ulines) | Where-Object { $_ -like 'FAIL*' } | Select-Object -First 20) -join "`n"))); $fail = 1 }
+            else { Write-Host ("::notice title={0}::{1}" -f $run.Title, (Esc (($ulines | Select-Object -First 40) -join "`n"))) }   # 整份报告（含跳过的说明）
+        }
+        if ($run.Set) { if ($setBak) { [IO.File]::WriteAllBytes($setFile, $setBak) } else { Remove-Item -LiteralPath $setFile -ErrorAction SilentlyContinue } }
     }
     $env:CLEANC_QUIET = '1'; $env:CLEANC_REPORT = Join-Path $PWD 'out\selftest.txt'
     $p = Start-Process -FilePath .\out\ClearC.exe -ArgumentList '/selftest' -Wait -PassThru

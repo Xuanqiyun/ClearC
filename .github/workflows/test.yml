@@ -29,5 +29,6 @@ jobs:
           path: |
             out/ClearC.exe
             out/selftest.txt
-            out/uitest.txt
+            out/uitest*.txt
+            out/uitest-*.png
           retention-days: 14

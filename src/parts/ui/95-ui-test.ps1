@@ -23,6 +23,27 @@ function Invoke-UiTest {
         if ($why) { $L.Add("FAIL ${name}: $why"); $script:uiFail++ } else { $L.Add("ok   $name") }
     }
     $click = { param($b) $b.RaiseEvent((New-Object System.Windows.RoutedEventArgs ([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))) }
+    # 把一块界面整块画成 PNG，放在报告旁边（GitHub 上的自动测试会一起上传，方便看排版）；画不出来只记一笔，不算失败
+    $snap = {
+        param($el, [string]$name)
+        try {
+            $el.UpdateLayout()
+            $w = [math]::Ceiling($el.ActualWidth); $h = [math]::Ceiling($el.ActualHeight)
+            if ($w -lt 1 -or $h -lt 1 -or $h -gt 30000) { return }
+            $r = New-Object System.Windows.Rect 0, 0, $w, $h
+            $vb = New-Object System.Windows.Media.VisualBrush $el
+            $vb.ViewboxUnits = [System.Windows.Media.BrushMappingMode]::Absolute; $vb.Viewbox = $r
+            $dv = New-Object System.Windows.Media.DrawingVisual
+            $dc = $dv.RenderOpen(); $dc.DrawRectangle($win.Background, $null, $r); $dc.DrawRectangle($vb, $null, $r); $dc.Close()
+            $bmp = New-Object System.Windows.Media.Imaging.RenderTargetBitmap ([int]$w), ([int]$h), 96, 96, ([System.Windows.Media.PixelFormats]::Pbgra32)
+            $bmp.Render($dv)
+            $enc = New-Object System.Windows.Media.Imaging.PngBitmapEncoder
+            $enc.Frames.Add([System.Windows.Media.Imaging.BitmapFrame]::Create($bmp))
+            $dir = if ($env:CLEANC_REPORT) { Split-Path ([IO.Path]::GetFullPath($env:CLEANC_REPORT)) } else { $script:appDir }
+            $fs = [IO.File]::Create((Join-Path $dir ('uitest-{0}-{1}{2}.png' -f $name, $script:Lang, $(if ([Theme]::Dark) { '-dark' } else { '' }))))
+            try { $enc.Save($fs) } finally { $fs.Close() }
+        } catch { $L.Add(('note snapshot {0}: {1}' -f $name, $_.Exception.Message)); if ($Error.Count) { $Error.RemoveAt(0) } }
+    }
     try {
         & $step 'every page opens' {
             # 「搬家管理」和「软件管理」一打开就在后台开始统计，不在这里点
@@ -38,6 +59,25 @@ function Invoke-UiTest {
             & $click $ctl.NavHelp; $win.UpdateLayout()
             if ($down -le 0) { throw 'Feedback did not scroll down' }
             if ($ctl.HelpScroll.VerticalOffset -ne 0) { throw ("still at {0} after clicking Help" -f $ctl.HelpScroll.VerticalOffset) }
+        }
+        & $step 'help: sections fold and unfold' {
+            Show-Page 'help'; $win.UpdateLayout()
+            $all = Get-HelpSections
+            if ($all.Count -lt 8) { throw ('only {0} sections' -f $all.Count) }
+            if (@($all | Where-Object { $_.IsExpanded }).Count) { throw 'sections should start folded' }
+            $h0 = $ctl.HelpScroll.ExtentHeight
+            & $snap $ctl.HelpScroll.Content 'help'
+            & $click $ctl.BtnHelpExpand; $win.UpdateLayout()
+            & $snap $ctl.HelpScroll.Content 'help-open'
+            if (@($all | Where-Object { -not $_.IsExpanded }).Count) { throw 'Expand all left some sections folded' }
+            if ([string]$ctl.BtnHelpExpand.Content -ne (T '全部收起')) { throw ('button says {0} after expanding' -f $ctl.BtnHelpExpand.Content) }
+            if ($ctl.HelpScroll.ExtentHeight -le $h0 + 2000) { throw ('page grew only from {0} to {1}' -f $h0, $ctl.HelpScroll.ExtentHeight) }
+            & $click $ctl.BtnHelpExpand; $win.UpdateLayout()
+            if (@($all | Where-Object { $_.IsExpanded }).Count) { throw 'Collapse all left some sections open' }
+            $q = @($ctl.HelpFaq.Children)[0]
+            $q.IsExpanded = $true; $win.UpdateLayout()
+            if ([string]$ctl.BtnHelpExpand.Content -ne (T '全部展开')) { throw 'a question changed the sections button' }
+            $q.IsExpanded = $false; $ctl.HelpScroll.ScrollToTop(); $win.UpdateLayout()
         }
         & $step 'settings page shows the current settings' {
             Show-Page 'settings'

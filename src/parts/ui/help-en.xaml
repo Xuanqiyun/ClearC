@@ -28,338 +28,628 @@
               </StackPanel>
             </DockPanel>
           </Border>
-          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
+          <Border Style="{StaticResource Card}" Padding="22,18,22,22" Margin="0,16,0,0">
             <StackPanel>
-              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                <TextBlock Text="&#xE768;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                <TextBlock Text="Getting started" Style="{StaticResource HelpHead}"/>
-              </StackPanel>
-              <DockPanel Margin="0,10,0,0">
-                <Border DockPanel.Dock="Left" Width="22" Height="22" CornerRadius="11" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0">
-                  <TextBlock Text="1" Foreground="White" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+              <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE768;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/><TextBlock Text="Getting started" Style="{StaticResource HelpHead}"/></StackPanel>
+              <Grid Margin="0,14,0,0">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="10"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource HelpTile}">
+                  <DockPanel>
+                    <Border DockPanel.Dock="Left" Width="22" Height="22" CornerRadius="11" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,11,0"><TextBlock Text="1" Foreground="White" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="One-click cleanup" Margin="0,2,0,0"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>On the "Clean up C:" page, click "One-click cleanup". ClearC scans first, then handles the items selected by default: it deletes caches, temporary files and logs, and moves chat history from WeChat, QQ and similar apps to the other drive with the most free space. Before it starts, it lists every item for you to confirm.</Run></TextBlock>
+                    </StackPanel>
+                  </DockPanel>
                 </Border>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">One-click cleanup</Run><Run>: on the "Clean up C:" page, click "One-click cleanup". ClearC scans first, then handles the items selected by default: it deletes caches, temporary files and logs, and moves chat history from WeChat, QQ, WeCom, Feishu, DingTalk and similar apps to the other drive with the most free space. Before it starts, it lists every item for you to confirm.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,10,0,0">
-                <Border DockPanel.Dock="Left" Width="22" Height="22" CornerRadius="11" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0">
-                  <TextBlock Text="2" Foreground="White" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                <Border Grid.Row="0" Grid.Column="2" Style="{StaticResource HelpTile}">
+                  <DockPanel>
+                    <Border DockPanel.Dock="Left" Width="22" Height="22" CornerRadius="11" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,11,0"><TextBlock Text="2" Foreground="White" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Choose for yourself" Margin="0,2,0,0"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Click "Scan" first, choose "Delete", "Move to another drive" or "Skip" on each row, then click "Run selected" at the bottom right.</Run></TextBlock>
+                    </StackPanel>
+                  </DockPanel>
                 </Border>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Choose for yourself</Run><Run>: click "Scan" first, choose "Delete", "Move to another drive" or "Skip" on each row, then click "Run selected" at the bottom right.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,10,0,0">
-                <Border DockPanel.Dock="Left" Width="22" Height="22" CornerRadius="11" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0">
-                  <TextBlock Text="3" Foreground="White" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                <Border Grid.Row="2" Grid.Column="0" Style="{StaticResource HelpTile}">
+                  <DockPanel>
+                    <Border DockPanel.Dock="Left" Width="22" Height="22" CornerRadius="11" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,11,0"><TextBlock Text="3" Foreground="White" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Find duplicates" Margin="0,2,0,0"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Switch to "Duplicates" on the left, choose the locations and criteria, then click "Start search". After checking the selection, click "Delete checked files".</Run></TextBlock>
+                    </StackPanel>
+                  </DockPanel>
                 </Border>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Find duplicates</Run><Run>: switch to "Duplicates" on the left, choose the locations and criteria, then click "Start search". After checking the selection, click "Delete checked files".</Run></TextBlock>
-              </DockPanel>
+                <Border Grid.Row="2" Grid.Column="2" Style="{StaticResource HelpTile}">
+                  <DockPanel>
+                    <Border DockPanel.Dock="Left" Width="22" Height="22" CornerRadius="11" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,11,0"><TextBlock Text="4" Foreground="White" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="See what takes space" Margin="0,2,0,0"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Switch to "Space map" on the left, choose C: and click "Scan", then double-click folders to look inside, level by level.</Run></TextBlock>
+                    </StackPanel>
+                  </DockPanel>
+                </Border>
+              </Grid>
             </StackPanel>
           </Border>
-          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
-            <StackPanel>
-              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                <TextBlock Text="&#xEDA2;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                <TextBlock Text="Clean up C:" Style="{StaticResource HelpHead}"/>
+          <DockPanel Margin="2,30,2,10">
+            <Button x:Name="BtnHelpExpand" DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="Expand all" FontSize="12.5" VerticalAlignment="Bottom"/>
+            <TextBlock Text="Features" Style="{StaticResource HelpListHead}"/>
+          </DockPanel>
+          <StackPanel x:Name="HelpSections">
+            <Expander Style="{StaticResource HelpSection}">
+              <Expander.Header>
+                <DockPanel>
+                  <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xEDA2;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Clean up C:" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
+                    <TextBlock Text="Delete caches and temporary files; move chat history to another drive as a whole" Style="{StaticResource HelpSum}"/>
+                  </StackPanel>
+                </DockPanel>
+              </Expander.Header>
+              <StackPanel>
+                <DockPanel Margin="0,16,0,0"><TextBlock DockPanel.Dock="Left" Text="What the list holds" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
+                <Grid Margin="0,10,0,0">
+                  <Grid.ColumnDefinitions><ColumnDefinition Width="150"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                  <Border Grid.Row="0" Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="Safe to clean" FontSize="12.5" Foreground="#1D7A35" TextWrapping="Wrap"/></Border>
+                  <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>Caches, temporary files and logs, which apps rebuild automatically.</Run></TextBlock>
+                  <Border Grid.Row="1" Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="Needs confirmation" FontSize="12.5" Foreground="#995700" TextWrapping="Wrap"/></Border>
+                  <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>Items that come at a cost. They are skipped by default; read the description before selecting them. For example, after deleting Windows.old you can't go back to your previous version of Windows, and after emptying the Recycle Bin you can't get back files you deleted earlier.</Run></TextBlock>
+                  <Border Grid.Row="2" Style="{StaticResource HelpPill}" Background="#E8F1FC"><TextBlock Text="Move only" FontSize="12.5" Foreground="#0B5CAD" TextWrapping="Wrap"/></Border>
+                  <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>"Chat history" and "Other movable folders": this data can't be deleted, only moved as a whole to another drive.</Run></TextBlock>
+                </Grid>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Easy to see after a scan"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>The top of the list shows how many items were found and how many groups they fall into; each group heading also shows its item count. When there are many items, scroll down the page; a hint at the bottom tells you how many more are below.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Analyze usage"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Opens the "Space map" and scans drive C:, so you can see which folders and files take up the most space.</Run></TextBlock>
+                </StackPanel>
+                <Border Background="#EFF8F1" BorderBrush="#CFE9D6" BorderThickness="1" CornerRadius="10" Padding="14,11,16,12" Margin="0,16,0,0">
+                  <DockPanel>
+                    <TextBlock DockPanel.Dock="Left" Text="&#xEA18;" FontFamily="{StaticResource Icons}" FontSize="15" Foreground="#248A3D" VerticalAlignment="Top" Margin="0,2,12,0"/>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Nothing in your personal folders is ever deleted"/>
+                      <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>Cleanup never deletes any file in your personal folders on C: (Desktop, Documents, Downloads, Pictures, Videos, Music, Favorites, OneDrive and so on); even if you select one by mistake, it is skipped automatically. Desktop and Downloads offer only "Move to another drive" (your files are kept as they are), and they are skipped by default.</Run></TextBlock>
+                    </StackPanel>
+                  </DockPanel>
+                </Border>
+                <DockPanel Margin="0,26,0,0"><TextBlock DockPanel.Dock="Left" Text="Moving chat history" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
+                <StackPanel Margin="0,10,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Supported apps"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>WeChat (new and old versions), QQ, WeCom, Tencent Meeting, Feishu and DingTalk, plus Telegram, Discord, Slack, Signal, LINE, Viber, KakaoTalk and Zoom. The scan lists whichever of these are installed on your PC.</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Apps installed from the Microsoft Store (such as WhatsApp and Microsoft Teams) are managed by Windows; use "Move" in Windows Settings → Apps to move them.</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Where to"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>The local drive with the most free space is chosen by default. You can pick a different drive from the drop-down list, or click "Choose folder…". Only local hard drives can be used; network drives, cloud drives and USB flash drives can't.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="How moving works"/>
+                  <WrapPanel Margin="0,8,0,0">
+                    <Border Style="{StaticResource HelpPill}" Background="#E8F1FC" Margin="0,0,0,6"><StackPanel Orientation="Horizontal"><TextBlock Text="1" FontSize="12.5" FontWeight="SemiBold" Foreground="#0B5CAD"/><TextBlock Text="Close the apps using it" FontSize="12.5" Foreground="#0B5CAD" Margin="6,0,0,0"/></StackPanel></Border>
+                    <TextBlock Text="&#xE76C;" FontFamily="{StaticResource Icons}" FontSize="10" Foreground="#86868B" VerticalAlignment="Center" Margin="8,0,8,6"/>
+                    <Border Style="{StaticResource HelpPill}" Background="#E8F1FC" Margin="0,0,0,6"><StackPanel Orientation="Horizontal"><TextBlock Text="2" FontSize="12.5" FontWeight="SemiBold" Foreground="#0B5CAD"/><TextBlock Text="Copy to the target drive" FontSize="12.5" Foreground="#0B5CAD" Margin="6,0,0,0"/></StackPanel></Border>
+                    <TextBlock Text="&#xE76C;" FontFamily="{StaticResource Icons}" FontSize="10" Foreground="#86868B" VerticalAlignment="Center" Margin="8,0,8,6"/>
+                    <Border Style="{StaticResource HelpPill}" Background="#E8F1FC" Margin="0,0,0,6"><StackPanel Orientation="Horizontal"><TextBlock Text="3" FontSize="12.5" FontWeight="SemiBold" Foreground="#0B5CAD"/><TextBlock Text="Verify both sides" FontSize="12.5" Foreground="#0B5CAD" Margin="6,0,0,0"/></StackPanel></Border>
+                    <TextBlock Text="&#xE76C;" FontFamily="{StaticResource Icons}" FontSize="10" Foreground="#86868B" VerticalAlignment="Center" Margin="8,0,8,6"/>
+                    <Border Style="{StaticResource HelpPill}" Background="#E8F1FC" Margin="0,0,0,6"><StackPanel Orientation="Horizontal"><TextBlock Text="4" FontSize="12.5" FontWeight="SemiBold" Foreground="#0B5CAD"/><TextBlock Text="Replace the original with a link" FontSize="12.5" Foreground="#0B5CAD" Margin="6,0,0,0"/></StackPanel></Border>
+                    <TextBlock Text="&#xE76C;" FontFamily="{StaticResource Icons}" FontSize="10" Foreground="#86868B" VerticalAlignment="Center" Margin="8,0,8,6"/>
+                    <Border Style="{StaticResource HelpPill}" Background="#E8F1FC" Margin="0,0,0,6"><StackPanel Orientation="Horizontal"><TextBlock Text="5" FontSize="12.5" FontWeight="SemiBold" Foreground="#0B5CAD"/><TextBlock Text="Delete the original folder on C:" FontSize="12.5" Foreground="#0B5CAD" Margin="6,0,0,0"/></StackPanel></Border>
+                  </WrapPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,1,0,0"><Run>Afterwards only a link remains at the original location on C:, taking up almost no space. When an app opens the original path, Windows redirects reads and writes to the target drive, so the app notices no change and you don't need to change any settings.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Deleted only when nothing is missing"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>If the chat app is still open, you'll be asked to quit it first. After copying, ClearC verifies the number of files and their size on both sides again, and deletes the original folder on C: only if not a single file is missing.</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>If the original folder is still in use by another program, the copy already made is kept; quit the related apps and run the move again, and only changed files are copied, so it finishes quickly.</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <Border Background="#FFF8EC" BorderBrush="#F5E1BC" BorderThickness="1" CornerRadius="10" Padding="14,11,16,12" Margin="0,16,0,0">
+                  <DockPanel>
+                    <TextBlock DockPanel.Dock="Left" Text="&#xE7BA;" FontFamily="{StaticResource Icons}" FontSize="15" Foreground="#B25E00" VerticalAlignment="Top" Margin="0,2,12,0"/>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Leave the CDriveMoved folder on the target drive alone"/>
+                      <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>If you delete, rename or move it, WeChat, QQ and other apps won't be able to find their chat history and files.</Run></TextBlock>
+                    </StackPanel>
+                  </DockPanel>
+                </Border>
               </StackPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>The list is split into groups. </Run><Run FontWeight="SemiBold">Safe to delete</Run><Run>: caches, temporary files and logs, which apps rebuild automatically. </Run><Run FontWeight="SemiBold">Needs confirmation</Run><Run>: items that come at a cost (for example, after deleting Windows.old you can't go back to your previous version of Windows, and after emptying the Recycle Bin you can't get back files you deleted earlier). These are skipped by default; read the description before selecting them. </Run><Run FontWeight="SemiBold">Chat history</Run><Run> and </Run><Run FontWeight="SemiBold">other movable folders</Run><Run>: this data can't be deleted, only moved as a whole to another drive.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Nothing in your personal folders is ever deleted</Run><Run>: cleanup never deletes any file in your personal folders on C: (Desktop, Documents, Downloads, Pictures, Videos, Music, Favorites, OneDrive and so on). Even if you select one by mistake, it is skipped automatically. Desktop and Downloads offer only "Move to another drive" (your files are kept as they are), and they are skipped by default.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>After a scan, the top of the list shows how many items were found and how many groups they fall into; each group heading also shows its item count. When there are many items, scroll down the page; a hint at the bottom tells you how many more are below.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Chat apps that can be moved</Run><Run>: WeChat (new and old versions), QQ, WeCom, Tencent Meeting, Feishu and DingTalk, plus Telegram, Discord, Slack, Signal, LINE, Viber, KakaoTalk and Zoom. The scan lists whichever of these are installed on your PC; apps that aren't installed don't appear. Apps installed from the Microsoft Store (such as WhatsApp and Microsoft Teams) are managed by Windows; use "Move" in Windows Settings → Apps to move them.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>The </Run><Run FontWeight="SemiBold">Move destination</Run><Run> defaults to the local drive with the most free space. You can pick a different drive from the drop-down list, or click "Choose folder…". Only local hard drives can be used; network drives, cloud drives and USB flash drives can't.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">How moving works</Run><Run>: ClearC closes the apps using the folder, copies it to the target drive, verifies the size on both sides, replaces the original location with a link, and finally deletes the original folder on C:. Afterwards only a link remains at the original location on C: (it takes up almost no space). When an app opens the original path, Windows automatically redirects reads and writes to the target drive, so the app notices no change and you don't need to change any settings.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>Please </Run><Run FontWeight="SemiBold">don't delete, rename or move</Run><Run> the CDriveMoved folder on the target drive, or WeChat, QQ and other apps won't be able to find their chat history and files.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>When you move chat history and the chat app is still open, you'll be asked to quit it first. After copying, ClearC verifies the number of files and their size on both sides again, and deletes the original folder on C: only if not a single file is missing. If the original folder is still in use by another program, the copy already made is kept; quit the related apps and run the move again, and only changed files are copied, so it finishes quickly.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Analyze usage</Run><Run> opens the "Space map" and scans drive C:, so you can see which folders and files take up the most space.</Run></TextBlock>
-              </DockPanel>
+            </Expander>
+            <Expander Style="{StaticResource HelpSection}">
+              <Expander.Header>
+                <DockPanel>
+                  <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE8C8;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Duplicates" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
+                    <TextBlock Text="Find files with identical content; keep one copy and delete the rest" Style="{StaticResource HelpSum}"/>
+                  </StackPanel>
+                </DockPanel>
+              </Expander.Header>
+              <StackPanel>
+                <DockPanel Margin="0,16,0,0"><TextBlock DockPanel.Dock="Left" Text="Search criteria" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
+                <StackPanel Margin="0,10,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Search locations"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Click a chip to select or deselect it. Use "Add folder…" to add your own locations; those with a small × can be removed. System folders, program folders and development environments are skipped automatically.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="File type and size"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Only the selected types and size range are searched; the narrower the range, the faster the search. Choose "Custom" to enter a size yourself.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="What counts as a duplicate"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>By default, both the file name and the content must match. With "Content only", files with different names but the same content also count. Either way, the content must be identical byte for byte.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Comparison method"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>"Quick" reads only samples of large files; "Full comparison" reads every file completely, which is slower but more thorough.</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>In Quick mode, files are still fully verified byte for byte before deletion, and nothing is deleted if there is any difference.</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <DockPanel Margin="0,26,0,0"><TextBlock DockPanel.Dock="Left" Text="Results and deleting" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
+                <StackPanel Margin="0,10,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Which copy to keep"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Each group lists all copies. By default the newest copy in each group is kept and the rest are selected; you can instead keep the oldest, prefer keeping copies outside C:, or select them yourself. "Open location" shows the file in File Explorer.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Recycle Bin"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Files are moved to the Recycle Bin by default, so anything deleted by mistake can be restored from there. Clearing "Move to Recycle Bin" deletes files permanently, and they can't be recovered.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Marked &quot;Caution&quot;"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>These copies are in program folders or WeChat data; check them carefully before deleting.</Run></TextBlock>
+                </StackPanel>
+                <Border Background="#EFF8F1" BorderBrush="#CFE9D6" BorderThickness="1" CornerRadius="10" Padding="14,11,16,12" Margin="0,16,0,0">
+                  <DockPanel>
+                    <TextBlock DockPanel.Dock="Left" Text="&#xEA18;" FontFamily="{StaticResource Icons}" FontSize="15" Foreground="#248A3D" VerticalAlignment="Top" Margin="0,2,12,0"/>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Personal folders on C: are protected"/>
+                      <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>"Don't delete files in personal folders on C:" is on by default. Copies in Desktop, Documents, Downloads, Pictures, Videos, Music and similar locations show a small lock and can't be selected or deleted; only copies elsewhere are deleted. If you really want to delete copies in these locations, clear that checkbox and confirm again.</Run></TextBlock>
+                    </StackPanel>
+                  </DockPanel>
+                </Border>
+              </StackPanel>
+            </Expander>
+            <Expander Style="{StaticResource HelpSection}">
+              <Expander.Header>
+                <DockPanel>
+                  <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE7B8;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Save space (without deleting files)" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
+                    <TextBlock Text="Compress or relocate; every file stays where you can use it" Style="{StaticResource HelpSum}"/>
+                  </StackPanel>
+                </DockPanel>
+              </Expander.Header>
+              <StackPanel>
+                <Grid Margin="0,14,0,0">
+                  <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="10"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                  <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="System compression (CompactOS)"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Built into Windows: stores system files compressed, usually saving 2 to 4 GB without affecting everyday use.</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Row="0" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Page file"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Moves pagefile.sys to another drive, freeing a few GB on C:. It takes effect after a restart, and you can restore the Windows default at any time.</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Row="2" Grid.Column="0" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Hibernation file"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>"Keep Fast Startup only" shrinks hiberfil.sys by about half; "Turn off hibernation" removes it entirely.</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Row="2" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Restore points"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Shows how many restore points there are, how much space they take and the most they may use. To lower the limit or delete restore points, click "Open System Protection" and change it in Windows' own settings; ClearC never deletes restore points itself.</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Row="4" Grid.Column="0" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Compress folders"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>NTFS compression: files open and edit as usual; they just take up less space. Good for documents, code and old projects.</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Row="4" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Virtual disks"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>WSL and Docker virtual disks don't shrink when you delete files inside them; compacting them gives the space back to Windows. Android emulator and virtual machine folders can be moved to another drive as a whole.</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="3" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Merge duplicate files"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>On the "Duplicates" page, click "Merge into one copy". Duplicate files on the same drive then take up the space of just one copy, while the file stays in every location. After merging, editing the file in one location changes it in all the others, so this suits photos, videos and installers you won't change again.</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                </Grid>
+              </StackPanel>
+            </Expander>
+            <Expander Style="{StaticResource HelpSection}">
+              <Expander.Header>
+                <DockPanel>
+                  <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE9D9;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Space map" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
+                    <TextBlock Text="See which folders and files take up the most space" Style="{StaticResource HelpSum}"/>
+                  </StackPanel>
+                </DockPanel>
+              </Expander.Header>
+              <StackPanel>
+                <DockPanel Margin="0,16,0,0"><TextBlock DockPanel.Dock="Left" Text="Scanning" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
+                <StackPanel Margin="0,10,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Start a scan"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Choose a drive and click "Scan" to measure the size of every folder. It only looks and changes nothing.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Why scanning is fast"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>On NTFS drives (C: almost always is), ClearC reads the file table on the disk (the MFT) directly, so hundreds of thousands of files usually take seconds rather than minutes.</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>The result is checked against a direct folder listing. If it does not match or the table cannot be read (not NTFS, not enough permission and so on), ClearC goes back to scanning folder by folder, with several threads at once (more on SSDs, fewer on hard disks).</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Scanning again while ClearC is still open only updates what changed, using the Windows change journal.</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Reading the file table also sees folders that a folder-by-folder scan cannot open (such as System Volume Information), so the totals of the two methods can differ slightly.</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Prefer no direct disk reads"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>A few security programs warn about direct disk reads. Untick "Fast scan" at the top right to scan folder by folder from then on; Clean up, Moved folders and Apps follow the same setting.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Read once, shared by every page"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>"Clean up C:", "Moved folders" and "Apps" also read the C: file table once to look up how big each folder is. These numbers are only for display and estimates; when something is actually deleted or moved, every item is measured and checked again, never decided from this result.</Run></TextBlock>
+                </StackPanel>
+                <DockPanel Margin="0,26,0,0"><TextBlock DockPanel.Dock="Left" Text="Browsing" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
+                <StackPanel Margin="0,10,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Drill down"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Double-click a folder to open the next level, and click "Up one level" to go back. The blue bar on each row shows how large it is within the current level.</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>When a level holds a lot (WinSxS has tens of thousands of items), only the 500 largest are listed and the rest are combined into the last row; "Open location" shows everything in File Explorer.</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Treemap"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Draws the folders and files of the current level as blocks; the bigger the block, the more space it takes, so the largest ones stand out at a glance. Click to select; double-click a folder to open it.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Find files"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Searches the files of 1 MB or more recorded during the scan, largest first.</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Filter by size, how long since they were modified (for example 6+ months), type (videos, archives and installers, disc images and virtual disks…) and name; names can use * and ?, for example *.mp4.</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Tick "Only in the current folder" to search just the folder you opened.</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Tick "Only in chat apps" to search only the chat data of WeChat, QQ, WeCom, Feishu, DingTalk, Telegram and others, and see which videos and files take up the space.</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <Border Background="#EEF5FD" BorderBrush="#D2E3FA" BorderThickness="1" CornerRadius="10" Padding="14,11,16,12" Margin="0,16,0,0">
+                  <DockPanel>
+                    <TextBlock DockPanel.Dock="Left" Text="&#xE946;" FontFamily="{StaticResource Icons}" FontSize="15" Foreground="#0071E3" VerticalAlignment="Top" Margin="0,2,12,0"/>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Files in chat data are view-only"/>
+                      <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>Here they can only be viewed and located, not deleted. To free up space, move the whole chat data to another drive on the "Moved folders" page.</Run></TextBlock>
+                    </StackPanel>
+                  </DockPanel>
+                </Border>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Since last scan"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Lists folders that grew or shrank by more than 100 MB since the previous scan, so you can find what has been slowly eating up your space; double-click a row to open that folder. The folder list also shows changes such as "+2.1 GB since last scan".</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Export"/>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Export CSV</Run><Run>: saves the list you see (folders, found files or the comparison) as a CSV file you can open, sort and share in Excel.</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Export report</Run><Run>: saves the whole drive as a web page with a treemap, the largest folders and files, space by file type and changes since the last scan; press Ctrl+P in the browser to save it as PDF.</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <DockPanel Margin="0,26,0,0"><TextBlock DockPanel.Dock="Left" Text="Selecting and acting" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
+                <TextBlock Style="{StaticResource HelpBody}" Margin="0,10,0,0"><Run>Selected rows can be opened in File Explorer, compressed (keeps files) or deleted. Each row has a box at its start, like "Item check boxes" in File Explorer:</Run></TextBlock>
+                <Grid Margin="0,10,0,0">
+                  <Grid.ColumnDefinitions><ColumnDefinition Width="200"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                  <Border Grid.Row="0" Style="{StaticResource HelpPill}"><TextBlock Text="Click the box" FontSize="12.5" Foreground="#1D1D1F" TextWrapping="Wrap"/></Border>
+                  <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>Selects or clears that row; tick one row or several</Run></TextBlock>
+                  <Border Grid.Row="1" Style="{StaticResource HelpPill}"><TextBlock Text="Click elsewhere on a row" FontSize="12.5" Foreground="#1D1D1F" TextWrapping="Wrap"/></Border>
+                  <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>Doesn't select it</Run></TextBlock>
+                  <Border Grid.Row="2" Style="{StaticResource HelpPill}"><TextBlock Text="Double-click a folder" FontSize="12.5" Foreground="#1D1D1F" TextWrapping="Wrap"/></Border>
+                  <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>Opens the next level</Run></TextBlock>
+                  <Border Grid.Row="3" Style="{StaticResource HelpPill}"><TextBlock Text="Shift + click a box" FontSize="12.5" Foreground="#1D1D1F" TextWrapping="Wrap"/></Border>
+                  <TextBlock Grid.Row="3" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>Ticks every row from the last one you ticked to this one</Run></TextBlock>
+                  <Border Grid.Row="4" Style="{StaticResource HelpPill}"><TextBlock Text="Drag with either button" FontSize="12.5" Foreground="#1D1D1F" TextWrapping="Wrap"/></Border>
+                  <TextBlock Grid.Row="4" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>Drag up or down to tick a run of rows at once; after a right-button drag, the right-click menu opens when you let go</Run></TextBlock>
+                  <Border Grid.Row="5" Style="{StaticResource HelpPill}"><TextBlock Text="Right-click a row" FontSize="12.5" Foreground="#1D1D1F" TextWrapping="Wrap"/></Border>
+                  <TextBlock Grid.Row="5" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>The menu acts on that row only, or on all ticked rows if you right-click a ticked one</Run></TextBlock>
+                  <Border Grid.Row="6" Style="{StaticResource HelpPill}"><TextBlock Text="Esc" FontSize="12.5" Foreground="#1D1D1F" TextWrapping="Wrap"/></Border>
+                  <TextBlock Grid.Row="6" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Clears them all</Run></TextBlock>
+                </Grid>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Prefer no check boxes"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Turn them off in "Settings" to get the usual Windows list behavior: a click selects one row, Ctrl or Shift selects several.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Delete"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Choose "Move to Recycle Bin" (can be restored) or "Delete permanently" (frees space immediately); either way, you must tick the confirmation box first.</Run></TextBlock>
+                </StackPanel>
+                <Border Background="#F5F5F7" BorderBrush="#E5E5EA" BorderThickness="1" CornerRadius="10" Padding="14,11,16,12" Margin="0,16,0,0">
+                  <DockPanel>
+                    <TextBlock DockPanel.Dock="Left" Text="&#xE72E;" FontFamily="{StaticResource Icons}" FontSize="15" Foreground="#6E6E73" VerticalAlignment="Top" Margin="0,2,12,0"/>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Items with a small lock can't be deleted here"/>
+                      <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>System folders, app installation folders (uninstall those on the "Apps" page), personal folders on C:, and moved data (the CDriveMoved folder).</Run></TextBlock>
+                    </StackPanel>
+                  </DockPanel>
+                </Border>
+                <DockPanel Margin="0,26,0,0"><TextBlock DockPanel.Dock="Left" Text="Real space used" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
+                <StackPanel Margin="0,10,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Size on disk and hard links"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>With the fast scan, the line under each name notes how little compressed, sparse and cloud-only (OneDrive and the like) files really take, and how much of folders such as WinSxS is hard links.</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>A hard link means the same file also has a name elsewhere, so deleting this name frees nothing.</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Space breakdown"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Click "Space breakdown" to see how the used space splits into file data, the file table (MFT) and the rest, and why it differs from adding up file sizes. Deleting also tells you how much space you will really get back.</Run></TextBlock>
+                </StackPanel>
+              </StackPanel>
+            </Expander>
+            <Expander Style="{StaticResource HelpSection}">
+              <Expander.Header>
+                <DockPanel>
+                  <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE71D;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Apps" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
+                    <TextBlock Text="See how much each app takes; uninstall, clean up leftovers, move to another drive" Style="{StaticResource HelpSum}"/>
+                  </StackPanel>
+                </DockPanel>
+              </Expander.Header>
+              <StackPanel>
+                <StackPanel Margin="0,14,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="App list"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Lists all installed apps (including Microsoft Store apps), sorted by size from largest to smallest. You can show only apps installed on C:, or search by name.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Uninstall"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Opens the app's own uninstaller; just follow its prompts.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Check leftovers"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>When the uninstall is done, come back here and click "Check leftovers". ClearC looks for folders named after the app that remain after uninstalling, and moves them to the Recycle Bin once you confirm.</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>A publisher's top-level folder (such as Tencent or Microsoft) is never treated as leftovers, and neither are built-in Windows programs.</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Move to another drive"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>For apps installed on C:, the whole installation folder can be moved to another drive, leaving a link at the original location on C:. Shortcuts, the Start menu, uninstalling and automatic updates all keep working, with no reinstall needed.</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>The copy on C: is deleted only after ClearC verifies that the files on both sides are identical; if the app is running, you'll be asked before it's closed.</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Not suitable for moving"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>ClearC tells you why and never forces it:</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Apps with system services or drivers (antivirus, VPN, drivers, remote control and so on)</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Apps that add right-click menus to File Explorer, and input methods</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Microsoft's own software (Office, Visual Studio and so on) and built-in Windows components</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Apps whose folder contains links or files compressed with Windows compression (they could be missed when copying)</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Apps that don't state which folder they're installed in</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Microsoft Store apps: use "Move" in Windows Settings → Apps</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="After moving"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Moved apps appear in "Moved folders", where you can "Move back to C:" at any time. When an app gets a major upgrade later, a few installers will reinstall it on C:; just move it again then.</Run></TextBlock>
+                </StackPanel>
+              </StackPanel>
+            </Expander>
+            <Expander Style="{StaticResource HelpSection}">
+              <Expander.Header>
+                <DockPanel>
+                  <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE8AB;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Moved folders" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
+                    <TextBlock Text="Move several items at once; check that moved folders are OK" Style="{StaticResource HelpSum}"/>
+                  </StackPanel>
+                </DockPanel>
+              </Expander.Header>
+              <StackPanel>
+                <DockPanel Margin="0,16,0,0"><TextBlock DockPanel.Dock="Left" Text="Can be moved" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
+                <StackPanel Margin="0,10,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Move several at once"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Automatically lists what can still be moved off C:, in three groups (chat histories, apps installed on C:, and other folders), each with its size. Tick the items, choose the target drive at the bottom right and click "Move to another drive".</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Before starting, every item is listed, along with any apps that need to be closed first.</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Apps that shouldn't be moved"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Apps with system services or drivers, apps that add right-click menu entries to File Explorer, Microsoft's own software and the like are listed separately under "Apps that shouldn't be moved" with the reason, and can't be ticked.</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Chat apps installed from the Microsoft Store (such as WhatsApp and Microsoft Teams) are managed by Windows; a note at the bottom of the page explains how to move them with "Move" in Windows Settings.</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <DockPanel Margin="0,26,0,0"><TextBlock DockPanel.Dock="Left" Text="Moved" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
+                <TextBlock Style="{StaticResource HelpBody}" Margin="0,10,0,0"><Run>Every folder moved to another drive is listed here, each with its current status:</Run></TextBlock>
+                <Grid Margin="0,10,0,0">
+                  <Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                  <Border Grid.Row="0" Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="OK" FontSize="12.5" Foreground="#1D7A35" TextWrapping="Wrap"/></Border>
+                  <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>The data is on the target drive, and the original location on C: holds only a link to it, which takes no space on C:. Apps work as usual. If needed, you can "Move back to C:": the data is copied back, the link is removed only after the copy is verified, and finally the copy on the target drive is deleted.</Run></TextBlock>
+                  <Border Grid.Row="1" Style="{StaticResource HelpPill}" Background="#FDEBEC"><TextBlock Text="Broken link" FontSize="12.5" Foreground="#C0101C" TextWrapping="Wrap"/></Border>
+                  <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>The target drive was unplugged or its drive letter changed. Plug the drive back in (or change the drive letter back) to fix it. If a copy with the same name is found on another drive, use "Repair link" to point the link to it.</Run></TextBlock>
+                  <Border Grid.Row="2" Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="Incomplete" FontSize="12.5" Foreground="#995700" TextWrapping="Wrap"/></Border>
+                  <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>The original folder is still on C:, and there is a copy on the target drive. You can move it again under "Can be moved" (only the differences are copied), or delete the extra copy.</Run></TextBlock>
+                </Grid>
+              </StackPanel>
+            </Expander>
+            <Expander Style="{StaticResource HelpSection}">
+              <Expander.Header>
+                <DockPanel>
+                  <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE823;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Reminders" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
+                    <TextBlock Text="A low-space reminder and a weekly cleanup; both are off by default" Style="{StaticResource HelpSum}"/>
+                  </StackPanel>
+                </DockPanel>
+              </Expander.Header>
+              <StackPanel>
+                <StackPanel Margin="0,14,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Low-space reminder"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>When turned on, ClearC checks drive C: 2 minutes after each sign-in and again at noon every day. If free space falls below the value you set (20 GB by default), a reminder appears at the bottom right of the screen, at most once a day; if there is enough space, nothing is shown.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Weekly cleanup"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>When turned on, temporary files, caches and logs are cleaned up automatically every Sunday. It doesn't move anything, doesn't empty the Recycle Bin and doesn't touch personal folders; files in use are simply skipped.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Space on C: over time"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Free space is recorded each time you open ClearC and at each scheduled check, and shown as a bar chart of the last 30 days.</Run></TextBlock>
+                </StackPanel>
+                <Border Background="#EEF5FD" BorderBrush="#D2E3FA" BorderThickness="1" CornerRadius="10" Padding="14,11,16,12" Margin="0,16,0,0">
+                  <DockPanel>
+                    <TextBlock DockPanel.Dock="Left" Text="&#xE946;" FontFamily="{StaticResource Icons}" FontSize="15" Foreground="#0071E3" VerticalAlignment="Top" Margin="0,2,12,0"/>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="No need to keep ClearC open"/>
+                      <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>Windows Task Scheduler runs ClearC on schedule for both, and you don't need to set it to start with Windows either. The task names start with CleanC. Both are off by default, and turning a switch off deletes its task.</Run></TextBlock>
+                    </StackPanel>
+                  </DockPanel>
+                </Border>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Keep it in one place"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Please keep ClearC in a fixed location (such as D:\Tools) and don't delete it. If you move it, open it once and the tasks will switch to the new location automatically.</Run></TextBlock>
+                </StackPanel>
+              </StackPanel>
+            </Expander>
+            <Expander Style="{StaticResource HelpSection}">
+              <Expander.Header>
+                <DockPanel>
+                  <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE81C;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Activity log" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
+                    <TextBlock Text="Every change is recorded, and you can search it" Style="{StaticResource HelpSum}"/>
+                  </StackPanel>
+                </DockPanel>
+              </Expander.Header>
+              <StackPanel>
+                <StackPanel Margin="0,14,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="What is recorded"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Every change made by deleting, moving, merging, compressing, uninstalling and system settings: when, what was done, to which file or folder, and the result. Only the actions are recorded; file contents are never saved.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Finding records"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Filter by category (Delete, Move, Merge…), time (7 days, 30 days, All) and keyword. The logs are plain .txt files, one per month; click "Open log folder" to read them directly in Notepad.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="How long records are kept"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>6 months by default; you can change this to anywhere from 1 month to 2 years, or keep them forever.</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Each time you open ClearC, records older than the retention period are deleted automatically and can't be recovered.</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>When you shorten the retention period, ClearC first tells you the date before which records will be deleted.</Run></TextBlock></DockPanel>
+                </StackPanel>
+              </StackPanel>
+            </Expander>
+            <Expander Style="{StaticResource HelpSection}">
+              <Expander.Header>
+                <DockPanel>
+                  <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE713;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Settings" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
+                    <TextBlock Text="Appearance, language and what the window shows" Style="{StaticResource HelpSum}"/>
+                  </StackPanel>
+                </DockPanel>
+              </Expander.Header>
+              <StackPanel>
+                <StackPanel Margin="0,14,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Appearance and language"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Light, Dark or Follow Windows (the "Choose your app mode" setting), and 中文 or English. ClearC closes and reopens after you change them. "Appearance" and "Switch language" at the bottom left change them too.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="What the window shows"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Pages you don't use, the buttons at the bottom left, the descriptions under page titles, and the space map's check boxes, bars, percentages, details and "Fast scan" switch can all be hidden.</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Anything hidden can be turned back on at any time, and its settings and records are kept; "Restore default display" brings everything back at once.</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Fast scan"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Reads the NTFS file table (MFT) directly, which is much faster than going through every folder and also shows the real space used and hard links. Turn it off to scan folder by folder.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Give way to other programs when finding duplicates"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Files are read in Windows' background mode, behind other programs for both disk and memory, so the programs you are using don't slow down; the search is slower while you are doing other things.</Run></TextBlock>
+                </StackPanel>
+              </StackPanel>
+            </Expander>
+          </StackPanel>
+          <TextBlock Text="Common questions" Style="{StaticResource HelpListHead}" Margin="2,30,2,10"/>
+          <Border Style="{StaticResource Card}" Padding="22,2,22,4">
+            <StackPanel x:Name="HelpFaq">
+              <Expander Style="{StaticResource HelpQ}" BorderThickness="0">
+                <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="Why does ClearC need administrator rights?"/></Expander.Header>
+                <StackPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Cleaning locations such as system temporary files and the Windows Update cache requires administrator rights.</Run></TextBlock>
+                </StackPanel>
+              </Expander>
+              <Expander Style="{StaticResource HelpQ}">
+                <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="Can I cancel partway?"/></Expander.Header>
+                <StackPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Yes. The progress card and the bottom of the window both have a "Cancel" button. It stops at a safe point and doesn't undo what's already done:</Run></TextBlock>
+                  <DockPanel Margin="0,6,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Cleanup</Run><Run> stops.</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Moving</Run><Run>: if it is still copying, the original folder on C: is left untouched and the copied part stays on the target drive, so the next move picks up where it left off.</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Moving back to C:</Run><Run>: the partial copy is deleted and nothing is changed.</Run></TextBlock></DockPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,8,0,0"><Run>While it is creating a link, deleting a backup or running a system command (such as cleaning up Windows Update), the button is greyed out; you can cancel as soon as that step is done.</Run></TextBlock>
+                </StackPanel>
+              </Expander>
+              <Expander Style="{StaticResource HelpQ}">
+                <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="Can I close the window while it's running?"/></Expander.Header>
+                <StackPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Please don't close the window until the work is done; to stop, click "Cancel". You can click "Continue in background" to collapse the progress card; progress is still shown at the bottom of the window and on the taskbar icon.</Run></TextBlock>
+                </StackPanel>
+              </Expander>
+              <Expander Style="{StaticResource HelpQ}">
+                <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="Where can I see the details?"/></Expander.Header>
+                <StackPanel>
+                  <DockPanel Margin="0,0,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Deletions and moves that were made: see "Activity log" on the left.</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Technical details of what the program did: see "Run log" at the bottom left; the full file is at %TEMP%\CleanC-run.log.</Run></TextBlock></DockPanel>
+                </StackPanel>
+              </Expander>
+              <Expander Style="{StaticResource HelpQ}">
+                <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="Less space freed than expected?"/></Expander.Header>
+                <StackPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Files moved to the Recycle Bin only free up space after you empty the Recycle Bin, and files in use by other programs are skipped.</Run></TextBlock>
+                </StackPanel>
+              </Expander>
+              <Expander Style="{StaticResource HelpQ}">
+                <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="Is there a dark mode?"/></Expander.Header>
+                <StackPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Yes. On the "Settings" page on the left (or with "Appearance" at the bottom left), choose Light, Dark or Follow Windows. ClearC closes and reopens after you change it.</Run></TextBlock>
+                </StackPanel>
+              </Expander>
+              <Expander Style="{StaticResource HelpQ}">
+                <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="Can I hide pages and buttons I don't use?"/></Expander.Header>
+                <StackPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Yes, turn them off on the "Settings" page on the left. Anything hidden can be turned back on there at any time, and its settings and records are kept.</Run></TextBlock>
+                </StackPanel>
+              </Expander>
+              <Expander Style="{StaticResource HelpQ}">
+                <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="Why doesn't the scanned total match the used space?"/></Expander.Header>
+                <StackPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Adding up file sizes is not the same as the space really used on the drive:</Run></TextBlock>
+                  <DockPanel Margin="0,6,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Hard links (one file with several names, common in WinSxS and System32) are counted more than once.</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Compressed, sparse and cloud-only files take less space than their size.</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>The file table (MFT), the NTFS logs and the space Windows reserves for updates (reserved storage) take space without being ordinary files.</Run></TextBlock></DockPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,8,0,0"><Run>After a fast scan, click "Space breakdown" in the space map to see how big each part is.</Run></TextBlock>
+                </StackPanel>
+              </Expander>
+              <Expander Style="{StaticResource HelpQ}">
+                <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="WinSxS looks huge. Can I delete it?"/></Expander.Header>
+                <StackPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Not by hand; that can break Windows.</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,8,0,0"><Run>Many of its files are the same files as in System32 and other places (hard links), so File Explorer counts them twice and WinSxS looks bigger than it is; with the fast scan, the space map notes how much of it is hard links.</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,8,0,0"><Run>What can really go is the old components left behind by updates: use "WinSxS component cleanup (DISM)" on the "Clean up C:" page.</Run></TextBlock>
+                </StackPanel>
+              </Expander>
+              <Expander Style="{StaticResource HelpQ}">
+                <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="Why doesn't ClearC clean the Prefetch folder or &quot;boost memory&quot;?"/></Expander.Header>
+                <StackPanel>
+                  <DockPanel Margin="0,0,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Prefetch</Run><Run> records which files programs read when they start, so Windows can open your usual programs faster. It is only a few dozen MB, deleting it makes the next starts slower, and it grows back within days.</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Memory</Run><Run> is similar: Windows uses free memory to cache files you use often ("Cached" in Task Manager) and hands it over the moment another program needs it, so forcing it empty only slows the PC down.</Run></TextBlock></DockPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,8,0,0"><Run>That is why ClearC does neither.</Run></TextBlock>
+                </StackPanel>
+              </Expander>
+              <Expander Style="{StaticResource HelpQ}">
+                <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="How do I know about new versions?"/></Expander.Header>
+                <StackPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Click "Check for updates" under "Feedback" below. If there is a new version, the download page opens; replace the old exe with the new one and your settings, logs and reminders are kept. ClearC does not go online otherwise; it contacts GitHub only when you click that button.</Run></TextBlock>
+                </StackPanel>
+              </Expander>
             </StackPanel>
           </Border>
-          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
+          <Border x:Name="FeedbackCard" Style="{StaticResource Card}" Padding="22,18,22,22" Margin="0,30,0,0">
             <StackPanel>
-              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                <TextBlock Text="&#xE8C8;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                <TextBlock Text="Duplicates" Style="{StaticResource HelpHead}"/>
-              </StackPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Search locations</Run><Run>: click a chip to select or deselect it. Use "Add folder…" to add your own locations; those with a small × can be removed. System folders, program folders and development environments are skipped automatically.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">File type, file size</Run><Run>: only the selected types and size range are searched; the narrower the range, the faster the search. Choose "Custom" to enter a size yourself.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">What counts as a duplicate</Run><Run>: by default, both the file name and the content must match. With "Content only", files with different names but the same content also count. Either way, files count as duplicates only if their content is identical byte for byte.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Comparison method</Run><Run>: "Quick" reads only samples of large files; "Full comparison" reads every file completely, which is slower but more thorough. In Quick mode, files are still fully verified byte for byte before deletion, and nothing is deleted if there is any difference.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Results</Run><Run>: each group lists all copies. By default the newest copy in each group is kept and the rest are selected; you can instead keep the oldest, prefer keeping copies outside C:, or select them yourself. "Open location" shows the file in File Explorer.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Personal folders on C: are protected</Run><Run>: "Don't delete files in personal folders on C:" is on by default. Copies in Desktop, Documents, Downloads, Pictures, Videos, Music and similar locations show a small lock and can't be selected or deleted; only copies elsewhere are deleted. If you really want to delete copies in these locations, clear that checkbox and confirm again.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>Files are </Run><Run FontWeight="SemiBold">moved to the Recycle Bin</Run><Run> by default, so anything deleted by mistake can be restored from there. Clearing "Move to Recycle Bin" deletes files permanently, and they can't be recovered. Items marked "Caution" are in program folders or WeChat data; check them carefully before deleting.</Run></TextBlock>
-              </DockPanel>
-            </StackPanel>
-          </Border>
-          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
-            <StackPanel>
-              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                <TextBlock Text="&#xE7B8;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                <TextBlock Text="Save space (without deleting files)" Style="{StaticResource HelpHead}"/>
-              </StackPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">System compression (CompactOS)</Run><Run>: built into Windows, it stores system files compressed, usually saving 2 to 4 GB without affecting everyday use.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Page file</Run><Run>: moves pagefile.sys to another drive, freeing a few GB on C:. It takes effect after a restart, and you can restore the Windows default at any time.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Hibernation file</Run><Run>: "Keep Fast Startup only" shrinks hiberfil.sys by about half; "Turn off hibernation" removes it entirely.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Restore points</Run><Run>: shows how many restore points there are, how much space they take and the most they may use. To lower the limit or delete restore points, click "Open System Protection" and change it in Windows' own settings; ClearC never deletes restore points itself.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Compress folders</Run><Run>: uses NTFS compression. Files open and edit as usual; they just take up less space. Good for documents, code and old projects.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Virtual disks</Run><Run>: WSL and Docker virtual disks don't shrink automatically when you delete files inside them; compacting them gives the space back to Windows. Android emulator and virtual machine folders can be moved to another drive as a whole.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Merge duplicate files</Run><Run>: on the "Duplicates" page, click "Merge into one copy". Duplicate files on the same drive then take up the space of just one copy, while the file stays in every location. After merging, editing the file in one location changes it in all the others, so this suits photos, videos and installers you won't change again.</Run></TextBlock>
-              </DockPanel>
-            </StackPanel>
-          </Border>
-          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
-            <StackPanel>
-              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                <TextBlock Text="&#xE9D9;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                <TextBlock Text="Space map" Style="{StaticResource HelpHead}"/>
-              </StackPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Scan</Run><Run>: choose a drive and click "Scan" to measure the size of every folder. It only looks and changes nothing.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Why scanning is fast</Run><Run>: on NTFS drives (C: almost always is), ClearC reads the file table on the disk (the MFT) directly, so hundreds of thousands of files usually take seconds rather than minutes. The result is checked against a direct folder listing; if it does not match or the table cannot be read (not NTFS, not enough permission and so on), ClearC goes back to scanning folder by folder, with several threads at once (more on SSDs, fewer on hard disks). Scanning again while ClearC is still open only updates what changed, using the Windows change journal. Reading the file table also sees folders that a folder-by-folder scan cannot open (such as System Volume Information), so the totals of the two methods can differ slightly. A few security programs warn about direct disk reads; untick "Fast scan" at the top right to scan folder by folder from then on (Clean up, Moved folders and Apps follow the same setting).</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Read once, shared by every page</Run><Run>: "Clean up C:", "Moved folders" and "Apps" also read the C: file table once to look up how big each folder is. These numbers are only for display and estimates; when something is actually deleted or moved, every item is measured and checked again, never decided from this result.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Drill down</Run><Run>: double-click a folder to open the next level, and click "Up one level" to go back. The blue bar on each row shows how large it is within the current level. When a level holds a lot (WinSxS has tens of thousands of items), only the 500 largest are listed and the rest are combined into the last row; "Open location" shows everything in File Explorer.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Treemap</Run><Run>: draws the folders and files of the current level as blocks; the bigger the block, the more space it takes, so the largest ones stand out at a glance. Click to select; double-click a folder to open it.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Find files</Run><Run>: searches the files of 1 MB or more recorded during the scan, largest first. Filter by size, how long since they were modified (for example 6+ months), type (videos, archives and installers, disc images and virtual disks…) and name; names can use * and ? (for example *.mp4). Tick "Only in the current folder" to search just the folder you opened, or "Only in chat apps" to search only the chat data of WeChat, QQ, WeCom, Feishu, DingTalk, Telegram and others and see which videos and files take up the space. Files in chat data can only be viewed and located here, not deleted; to free up space, move the whole chat data to another drive on the "Moved folders" page.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Since last scan</Run><Run>: compares with the previous scan and lists folders that grew or shrank by more than 100 MB, so you can find what has been slowly eating up your space; double-click a row to open that folder. The folder list also shows changes such as "+2.1 GB since last scan".</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Export CSV</Run><Run>: saves the list you see (folders, found files or the comparison) as a CSV file you can open, sort and share in Excel. </Run><Run FontWeight="SemiBold">Export report</Run><Run>: saves the whole drive as a web page with a treemap, the largest folders and files, space by file type and changes since the last scan; press Ctrl+P in the browser to save it as PDF.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>Select a row to </Run><Run FontWeight="SemiBold">Open location</Run><Run>, </Run><Run FontWeight="SemiBold">Compress (keeps files)</Run><Run> or </Run><Run FontWeight="SemiBold">Delete</Run><Run>. Each row has a box at its start (like "Item check boxes" in File Explorer): </Run><Run FontWeight="SemiBold">only clicking the box selects or clears a row</Run><Run>, so you can tick one row or several. Clicking elsewhere on a row doesn't select it, and double-clicking a folder still opens it; Shift-click ticks every row from the last one you ticked to this one; Esc clears them all. </Run><Run FontWeight="SemiBold">Hold the left or right mouse button and drag up or down</Run><Run> to tick a run of rows at once; after a right-button drag, the right-click menu opens when you let go. Right-clicking a row opens the menu for that row only, or for all ticked rows if you right-click a ticked one. Turn the check boxes off in "Settings" to get the usual Windows list behavior: a click selects one row, Ctrl or Shift selects several. When deleting, you can choose "Move to Recycle Bin" (can be restored) or "Delete permanently" (frees space immediately); either way, you must tick the confirmation box first.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Size on disk and hard links</Run><Run>: with the fast scan, the line under each name notes how little compressed, sparse and cloud-only (OneDrive and the like) files really take, and how much of folders such as WinSxS is hard links (the same file also has a name elsewhere, so deleting this name frees nothing). Click "</Run><Run FontWeight="SemiBold">Space breakdown</Run><Run>" to see how the used space splits into file data, the file table (MFT) and the rest, and why it differs from adding up file sizes. Deleting also tells you how much space you will really get back.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>Items with a </Run><Run FontWeight="SemiBold">small lock</Run><Run> can't be deleted here: system folders, app installation folders (uninstall those on the "Apps" page), personal folders on C:, and moved data (the CDriveMoved folder).</Run></TextBlock>
-              </DockPanel>
-            </StackPanel>
-          </Border>
-          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
-            <StackPanel>
-              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                <TextBlock Text="&#xE71D;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                <TextBlock Text="Apps" Style="{StaticResource HelpHead}"/>
-              </StackPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>Lists all installed apps (including Microsoft Store apps), sorted by size from largest to smallest. You can show only apps installed on C:, or search by name.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Uninstall</Run><Run> opens the app's own uninstaller; just follow its prompts. When it's done, come back here and click "</Run><Run FontWeight="SemiBold">Check leftovers</Run><Run>". ClearC looks for folders named after the app that remain after uninstalling, and moves them to the Recycle Bin once you confirm.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>A publisher's top-level folder (such as Tencent or Microsoft) is never treated as leftovers, and neither are built-in Windows programs.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Move to another drive</Run><Run>: for apps installed on C:, the whole installation folder can be moved to another drive, leaving a link at the original location on C:. Shortcuts, the Start menu, uninstalling and automatic updates all keep working, with no reinstall needed. The copy on C: is deleted only after ClearC verifies that the files on both sides are identical; if the app is running, you'll be asked before it's closed.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>Apps that aren't suitable for moving are never forced; ClearC tells you why. These include apps with system services or drivers (antivirus, VPN, drivers, remote control and so on), apps that add right-click menus to File Explorer, input methods, Microsoft's own software (Office, Visual Studio and so on), built-in Windows components, apps whose folder contains links or files compressed with Windows compression (they could be missed when copying), and apps that don't state which folder they're installed in. For Microsoft Store apps, use "Move" in Windows Settings → Apps.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>Moved apps appear in "</Run><Run FontWeight="SemiBold">Moved folders</Run><Run>", where you can "Move back to C:" at any time. When an app gets a major upgrade later, a few installers will reinstall it on C:; just move it again then.</Run></TextBlock>
-              </DockPanel>
-            </StackPanel>
-          </Border>
-          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
-            <StackPanel>
-              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                <TextBlock Text="&#xE8AB;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                <TextBlock Text="Moved folders" Style="{StaticResource HelpHead}"/>
-              </StackPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Can be moved</Run><Run>: automatically lists what can still be moved off C:, in three groups (chat histories, apps installed on C:, and other folders), each with its size. Tick the items, choose the target drive at the bottom right and click "Move to another drive" to move several at once. Before starting, every item is listed, along with any apps that need to be closed first.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>Apps with system services or drivers, apps that add right-click menu entries to File Explorer, Microsoft's own software and the like are listed separately under "Apps that shouldn't be moved" with the reason, and can't be ticked. Chat apps installed from the Microsoft Store (such as WhatsApp and Microsoft Teams) are managed by Windows; a note at the bottom of the page explains how to move them with "Move" in Windows Settings.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Moved</Run><Run>: every folder moved to another drive is listed here, each with its current status.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">OK</Run><Run>: the data is on the target drive, and the original location on C: holds only a link to it, which takes no space on C:. Apps work as usual. If needed, you can "</Run><Run FontWeight="SemiBold">Move back to C:</Run><Run>": the data is copied back, the link is removed only after the copy is verified, and finally the copy on the target drive is deleted.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Broken link</Run><Run>: the target drive was unplugged or its drive letter changed. Plug the drive back in (or change the drive letter back) to fix it. If a copy with the same name is found on another drive, use "Repair link" to point the link to it.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Incomplete</Run><Run>: the original folder is still on C:, and there is a copy on the target drive. You can move it again under "Can be moved" (only the differences are copied), or delete the extra copy.</Run></TextBlock>
-              </DockPanel>
-            </StackPanel>
-          </Border>
-          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
-            <StackPanel>
-              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                <TextBlock Text="&#xE823;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                <TextBlock Text="Reminders" Style="{StaticResource HelpHead}"/>
-              </StackPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Low-space reminder</Run><Run>: when turned on, ClearC checks drive C: 2 minutes after each sign-in and again at noon every day. If free space falls below the value you set (20 GB by default), a reminder appears at the bottom right of the screen, at most once a day; if there is enough space, nothing is shown.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Weekly cleanup</Run><Run>: when turned on, temporary files, caches and logs are cleaned up automatically every Sunday. It doesn't move anything, doesn't empty the Recycle Bin and doesn't touch personal folders; files in use are simply skipped.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>Windows Task Scheduler runs ClearC on schedule for both, so </Run><Run FontWeight="SemiBold">you don't need to keep ClearC open or set it to start with Windows</Run><Run>. The task names start with CleanC. Both are </Run><Run FontWeight="SemiBold">off by default</Run><Run>, and turning a switch off deletes its task.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>Please keep ClearC in a fixed location (such as D:\Tools) and don't delete it. If you move it, open it once and the tasks will switch to the new location automatically.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Space on C: over time</Run><Run>: free space is recorded each time you open ClearC and at each scheduled check, and shown as a bar chart of the last 30 days.</Run></TextBlock>
-              </DockPanel>
-            </StackPanel>
-          </Border>
-          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
-            <StackPanel>
-              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                <TextBlock Text="&#xE81C;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                <TextBlock Text="Activity log" Style="{StaticResource HelpHead}"/>
-              </StackPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>Every change made by </Run><Run FontWeight="SemiBold">deleting, moving, merging, compressing, uninstalling and system settings</Run><Run> is recorded: when, what was done, to which file or folder, and the result. Only the actions are recorded; file contents are never saved.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>You can filter by category (Delete, Move, Merge…), time (7 days, 30 days, All) and keyword. The logs are plain .txt files, one per month; click "Open log folder" to read them directly in Notepad.</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Records are kept for 6 months by default</Run><Run>; you can change this to anywhere from 1 month to 2 years, or keep them forever. Each time you open ClearC, records older than the retention period are deleted automatically and can't be recovered. When you shorten the retention period, ClearC first tells you the date before which records will be deleted.</Run></TextBlock>
-              </DockPanel>
-            </StackPanel>
-          </Border>
-          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
-            <StackPanel>
-              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                <TextBlock Text="&#xE897;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                <TextBlock Text="Common questions" Style="{StaticResource HelpHead}"/>
-              </StackPanel>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Why does ClearC need administrator rights?</Run><LineBreak/><Run>Cleaning locations such as system temporary files and the Windows Update cache requires administrator rights.</Run></TextBlock>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Can I cancel partway?</Run><LineBreak/><Run>Yes. The progress card and the bottom of the window both have a "Cancel" button. It stops at a safe point and doesn't undo what's already done: a cleanup stops where it is; a move that is still copying leaves the original folder on C: untouched and keeps the copied part on the target drive, so the next move picks up where it left off; when moving back to C:, the partial copy is deleted and nothing is changed. While it is creating a link, deleting a backup or running a system command (such as cleaning up Windows Update), the button is greyed out; you can cancel as soon as that step is done.</Run></TextBlock>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Can I close the window while it's running?</Run><LineBreak/><Run>Please don't close the window until the work is done; to stop, click "Cancel". You can click "Continue in background" to collapse the progress card; progress is still shown at the bottom of the window and on the taskbar icon.</Run></TextBlock>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Where can I see the details?</Run><LineBreak/><Run>For the deletions and moves that were made, see "Activity log" on the left. For technical details of what the program did, see "Run log" at the bottom left; the full file is at %TEMP%\CleanC-run.log.</Run></TextBlock>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Less space freed than expected?</Run><LineBreak/><Run>Files moved to the Recycle Bin only free up space after you empty the Recycle Bin, and files in use by other programs are skipped.</Run></TextBlock>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Is there a dark mode?</Run><LineBreak/><Run>Yes. On the "Settings" page on the left (or with "Appearance" at the bottom left), choose Light, Dark or Follow Windows (the "Choose your app mode" setting). ClearC closes and reopens after you change it.</Run></TextBlock>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Can I hide pages and buttons I don't use?</Run><LineBreak/><Run>Yes. On the "Settings" page, untick the pages you don't use, the buttons at the bottom left, the description under page titles, and the check boxes, bars, percentages, details and "Fast scan" switch of the space map. Anything hidden can be turned back on there at any time, and its settings and records are kept; "Restore default display" brings everything back at once.</Run></TextBlock>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Why doesn't the scanned total match the used space?</Run><LineBreak/><Run>Adding up file sizes counts hard links (one file with several names, common in WinSxS and System32) more than once; compressed, sparse and cloud-only files take less space than their size; and the file table (MFT), the NTFS logs and the space Windows reserves for updates (reserved storage) take space without being ordinary files. After a fast scan, click "Space breakdown" in the space map to see how big each part is.</Run></TextBlock>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">WinSxS looks huge. Can I delete it?</Run><LineBreak/><Run>Not by hand; that can break Windows. Many of its files are the same files as in System32 and other places (hard links), so File Explorer counts them twice and WinSxS looks bigger than it is; with the fast scan, the space map notes how much of it is hard links. What can really go is the old components left behind by updates: use "WinSxS component cleanup (DISM)" on the "Clean up C:" page.</Run></TextBlock>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Why doesn't ClearC clean the Prefetch folder or "boost memory"?</Run><LineBreak/><Run>Prefetch records which files programs read when they start, so Windows can open your usual programs faster. It is only a few dozen MB, deleting it makes the next starts slower, and it grows back within days. Memory is similar: Windows uses free memory to cache files you use often ("Cached" in Task Manager) and hands it over the moment another program needs it, so forcing it empty only slows the PC down. That is why ClearC does neither.</Run></TextBlock>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">How do I know about new versions?</Run><LineBreak/><Run>Click "Check for updates" under "Feedback" below. If there is a new version, the download page opens; replace the old exe with the new one and your settings, logs and reminders are kept. ClearC does not go online otherwise; it contacts GitHub only when you click that button.</Run></TextBlock>
-            </StackPanel>
-          </Border>
-          <Border x:Name="FeedbackCard" Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
-            <StackPanel>
-              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                <TextBlock Text="&#xE8BD;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                <TextBlock Text="Feedback" Style="{StaticResource HelpHead}"/>
-              </StackPanel>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,8,0,0" Text="If you run into a problem, find a bug or have a suggestion, please open an issue on GitHub."/>
+              <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE8BD;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/><TextBlock Text="Feedback" Style="{StaticResource HelpHead}"/></StackPanel>
+              <TextBlock Style="{StaticResource HelpBody}" Margin="0,8,0,0" Text="If you run into a problem, find a bug or have a suggestion, please open an issue on GitHub."/>
               <Border Background="#F5F5F7" CornerRadius="10" Padding="18,14" Margin="0,14,0,0">
                 <DockPanel>
                   <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
@@ -377,16 +667,30 @@
                   </StackPanel>
                 </DockPanel>
               </Border>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,14,0,0" Text="Including a screenshot of the problem and the diagnostic info helps find the cause faster. Diagnostic info includes the app version, Windows version, space on C: and the recent run log (which contains folder paths), so you may want to review it before sending."/>
-              <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
-                <Button x:Name="BtnCopyDiag" Content="Copy diagnostic info" Margin="0,0,8,0"/>
-                <Button x:Name="BtnOpenLog" Content="Open run log file"/>
-                <TextBlock x:Name="CopyHint" Style="{StaticResource Caption}" Foreground="#248A3D" Margin="14,0,0,0"/>
+              <StackPanel Margin="0,18,0,0">
+                <TextBlock Style="{StaticResource HelpLead}" Text="Include diagnostic info"/>
+                <TextBlock Style="{StaticResource HelpBody}" Text="A screenshot of the problem and the diagnostic info help find the cause faster. Diagnostic info includes the app version, Windows version, space on C: and the recent run log (which contains folder paths), so you may want to review it before sending."/>
+                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                  <Button x:Name="BtnCopyDiag" Content="Copy diagnostic info" Margin="0,0,8,0"/>
+                  <Button x:Name="BtnOpenLog" Content="Open run log file"/>
+                  <TextBlock x:Name="CopyHint" Style="{StaticResource Caption}" Foreground="#248A3D" Margin="14,0,0,0"/>
+                </StackPanel>
               </StackPanel>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,18,0,0" Text="&quot;Check scanning&quot; verifies the fast scan on this PC: it compares reading the file table with a folder-by-folder scan, then creates a few files in ClearC's own folder, changes and deletes them to check updates from the change journal. It only reads drive C:, leaves your files alone and takes a minute or two; the result is copied so you can paste it into a GitHub issue. &quot;Check for updates&quot; contacts GitHub only when you click it."/>
-              <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
-                <Button x:Name="BtnSelfTest" Content="Check scanning" Margin="0,0,8,0"/>
-                <Button x:Name="BtnCheckUpdate" Content="Check for updates"/>
+              <Border Height="1" Background="#EDEDF0" Margin="0,18,0,0"/>
+              <StackPanel Margin="0,18,0,0">
+                <TextBlock Style="{StaticResource HelpLead}" Text="Check scanning"/>
+                <TextBlock Style="{StaticResource HelpBody}" Text="Verifies the fast scan on this PC: it compares reading the file table with a folder-by-folder scan, then creates a few files in ClearC's own folder, changes and deletes them to check updates from the change journal. It only reads drive C:, leaves your files alone and takes a minute or two; the result is copied so you can paste it into a GitHub issue."/>
+                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                  <Button x:Name="BtnSelfTest" Content="Check scanning"/>
+                </StackPanel>
+              </StackPanel>
+              <Border Height="1" Background="#EDEDF0" Margin="0,18,0,0"/>
+              <StackPanel Margin="0,18,0,0">
+                <TextBlock Style="{StaticResource HelpLead}" Text="Check for updates"/>
+                <TextBlock Style="{StaticResource HelpBody}" Text="If there is a new version, the download page opens; replace the old exe with the new one. ClearC contacts GitHub only when you click this button."/>
+                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                  <Button x:Name="BtnCheckUpdate" Content="Check for updates"/>
+                </StackPanel>
               </StackPanel>
             </StackPanel>
           </Border>

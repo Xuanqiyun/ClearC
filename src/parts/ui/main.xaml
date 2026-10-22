@@ -67,6 +67,148 @@
       <Setter Property="TextWrapping" Value="Wrap"/>
       <Setter Property="LineHeight" Value="22"/>
     </Style>
+    <!-- 帮助页：每一节是一张能折叠的卡片；条目是一行粗体标题，下面一两行说明 -->
+    <Style x:Key="HelpLead" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="13.5"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Foreground" Value="#1D1D1F"/>
+      <Setter Property="TextWrapping" Value="Wrap"/>
+    </Style>
+    <Style x:Key="HelpBody" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Foreground" Value="#515154"/>
+      <Setter Property="TextWrapping" Value="Wrap"/>
+      <Setter Property="LineHeight" Value="21"/>
+      <Setter Property="Margin" Value="0,3,0,0"/>
+      <Setter Property="MaxWidth" Value="720"/>
+      <Setter Property="HorizontalAlignment" Value="Left"/>
+    </Style>
+    <Style x:Key="HelpGroup" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Foreground" Value="#0066CC"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style x:Key="HelpSum" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="12.5"/>
+      <Setter Property="Foreground" Value="#6E6E73"/>
+      <Setter Property="TextWrapping" Value="Wrap"/>
+      <Setter Property="Margin" Value="0,2,0,0"/>
+    </Style>
+    <Style x:Key="HelpListHead" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Foreground" Value="#6E6E73"/>
+      <Setter Property="VerticalAlignment" Value="Bottom"/>
+    </Style>
+    <Style x:Key="HelpIcon" TargetType="Border">
+      <Setter Property="Width" Value="36"/>
+      <Setter Property="Height" Value="36"/>
+      <Setter Property="CornerRadius" Value="10"/>
+      <Setter Property="Background" Value="#EAF2FD"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="Margin" Value="0,0,14,0"/>
+    </Style>
+    <Style x:Key="HelpPill" TargetType="Border">
+      <Setter Property="Background" Value="#F0F0F3"/>
+      <Setter Property="CornerRadius" Value="6"/>
+      <Setter Property="Padding" Value="8,1,8,2"/>
+      <Setter Property="HorizontalAlignment" Value="Left"/>
+      <Setter Property="VerticalAlignment" Value="Top"/>
+      <Setter Property="Margin" Value="0,1,12,0"/>
+    </Style>
+    <Style x:Key="HelpTile" TargetType="Border">
+      <Setter Property="Background" Value="#F5F5F7"/>
+      <Setter Property="CornerRadius" Value="10"/>
+      <Setter Property="Padding" Value="14,11,14,13"/>
+    </Style>
+    <Style x:Key="HelpSection" TargetType="Expander">
+      <Setter Property="Margin" Value="0,0,0,10"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Expander">
+            <Border Background="White" BorderBrush="#E5E5EA" BorderThickness="1" CornerRadius="12">
+              <DockPanel>
+                <ToggleButton DockPanel.Dock="Top" Focusable="False" Cursor="Hand" Content="{TemplateBinding Header}"
+                              IsChecked="{Binding IsExpanded, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                  <ToggleButton.Template>
+                    <ControlTemplate TargetType="ToggleButton">
+                      <Border x:Name="Hd" Background="Transparent" CornerRadius="11" Padding="16,13,20,13">
+                        <DockPanel>
+                          <TextBlock x:Name="Chev" DockPanel.Dock="Right" Text="&#xE70D;" FontFamily="{StaticResource Icons}" FontSize="12"
+                                     Foreground="#86868B" VerticalAlignment="Center" Margin="14,0,0,0" RenderTransformOrigin="0.5,0.5">
+                            <TextBlock.RenderTransform><RotateTransform Angle="0"/></TextBlock.RenderTransform>
+                          </TextBlock>
+                          <ContentPresenter VerticalAlignment="Center"/>
+                        </DockPanel>
+                      </Border>
+                      <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Chev" Property="Foreground" Value="#0071E3"/></Trigger>
+                        <MultiTrigger>
+                          <MultiTrigger.Conditions><Condition Property="IsMouseOver" Value="True"/><Condition Property="IsChecked" Value="False"/></MultiTrigger.Conditions>
+                          <Setter TargetName="Hd" Property="Background" Value="#F7F7F9"/>
+                        </MultiTrigger>
+                        <Trigger Property="IsChecked" Value="True">
+                          <Setter TargetName="Chev" Property="RenderTransform"><Setter.Value><RotateTransform Angle="180"/></Setter.Value></Setter>
+                        </Trigger>
+                      </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                  </ToggleButton.Template>
+                </ToggleButton>
+                <StackPanel x:Name="Body" Visibility="Collapsed">
+                  <Border Height="1" Background="#EDEDF0" Margin="16,0,16,0"/>
+                  <ContentPresenter Margin="22,0,22,20"/>
+                </StackPanel>
+              </DockPanel>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsExpanded" Value="True"><Setter TargetName="Body" Property="Visibility" Value="Visible"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <!-- 常见问题：一行一个问题，点开看答案 -->
+    <Style x:Key="HelpQ" TargetType="Expander">
+      <Setter Property="BorderBrush" Value="#EDEDF0"/>
+      <Setter Property="BorderThickness" Value="0,1,0,0"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Expander">
+            <Border BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
+              <DockPanel>
+                <ToggleButton DockPanel.Dock="Top" Focusable="False" Cursor="Hand" Content="{TemplateBinding Header}"
+                              IsChecked="{Binding IsExpanded, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                  <ToggleButton.Template>
+                    <ControlTemplate TargetType="ToggleButton">
+                      <Border Background="Transparent" Padding="0,13,2,13">
+                        <DockPanel>
+                          <TextBlock x:Name="Chev" DockPanel.Dock="Right" Text="&#xE70D;" FontFamily="{StaticResource Icons}" FontSize="11"
+                                     Foreground="#86868B" VerticalAlignment="Center" Margin="16,0,0,0" RenderTransformOrigin="0.5,0.5">
+                            <TextBlock.RenderTransform><RotateTransform Angle="0"/></TextBlock.RenderTransform>
+                          </TextBlock>
+                          <ContentPresenter VerticalAlignment="Center"/>
+                        </DockPanel>
+                      </Border>
+                      <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Chev" Property="Foreground" Value="#0071E3"/></Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                          <Setter TargetName="Chev" Property="RenderTransform"><Setter.Value><RotateTransform Angle="180"/></Setter.Value></Setter>
+                        </Trigger>
+                      </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                  </ToggleButton.Template>
+                </ToggleButton>
+                <ContentPresenter x:Name="Body" Visibility="Collapsed" Margin="0,0,30,15"/>
+              </DockPanel>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsExpanded" Value="True"><Setter TargetName="Body" Property="Visibility" Value="Visible"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
 
     <!-- ===== 卡片 ===== -->
     <Style x:Key="Card" TargetType="Border">
@@ -1768,7 +1910,7 @@
                 <TextBlock Text="每周自动清理一次" Style="{StaticResource CardHead}" VerticalAlignment="Center"/>
               </DockPanel>
               <TextBlock Style="{StaticResource Body}" Margin="0,10,0,0"
-                         Text="不用开着本工具。每周日中午 12:30（错过了就在下次开机后）由 Windows 任务计划在后台自动做一遍「可以放心删」里的项目：临时文件、各类缓存和日志。不搬家、不清空回收站、不碰任何个人文件夹，也不会关闭正在运行的软件（被占用的文件直接跳过）。做完在右下角告诉你释放了多少，每一项都记在「操作日志」里。"/>
+                         Text="不用开着本工具。每周日中午 12:30（错过了就在下次开机后）由 Windows 任务计划在后台自动做一遍「安全清理」里的项目：临时文件、各类缓存和日志。不搬家、不清空回收站、不碰任何个人文件夹，也不会关闭正在运行的软件（被占用的文件直接跳过）。做完在右下角告诉你释放了多少，每一项都记在「操作日志」里。"/>
               <TextBlock x:Name="AutoCleanNote" Style="{StaticResource Body}" Margin="0,10,0,0" Foreground="#6E6E73"/>
             </StackPanel>
           </Border>
@@ -2065,338 +2207,628 @@
               </StackPanel>
             </DockPanel>
           </Border>
-          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
+          <Border Style="{StaticResource Card}" Padding="22,18,22,22" Margin="0,16,0,0">
             <StackPanel>
-              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                <TextBlock Text="&#xE768;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                <TextBlock Text="快速上手" Style="{StaticResource HelpHead}"/>
-              </StackPanel>
-              <DockPanel Margin="0,10,0,0">
-                <Border DockPanel.Dock="Left" Width="22" Height="22" CornerRadius="11" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0">
-                  <TextBlock Text="1" Foreground="White" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+              <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE768;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/><TextBlock Text="快速上手" Style="{StaticResource HelpHead}"/></StackPanel>
+              <Grid Margin="0,14,0,0">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="10"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource HelpTile}">
+                  <DockPanel>
+                    <Border DockPanel.Dock="Left" Width="22" Height="22" CornerRadius="11" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,11,0"><TextBlock Text="1" Foreground="White" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="一键清理" Margin="0,2,0,0"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>在「清理 C 盘」页点「一键清理」。先扫描，再处理默认选中的项目：删除缓存、临时文件和日志，把微信、QQ 等聊天记录搬到空间最大的其他盘。开始前会列出全部项目让你确认。</Run></TextBlock>
+                    </StackPanel>
+                  </DockPanel>
                 </Border>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">一键清理</Run><Run>：在「清理 C 盘」页点「一键清理」。工具会先扫描，再处理默认选中的项目：删除缓存、临时文件和日志，把微信、QQ、企业微信、飞书、钉钉等聊天记录搬到空间最大的其他盘。开始前会列出全部项目让你确认。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,10,0,0">
-                <Border DockPanel.Dock="Left" Width="22" Height="22" CornerRadius="11" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0">
-                  <TextBlock Text="2" Foreground="White" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                <Border Grid.Row="0" Grid.Column="2" Style="{StaticResource HelpTile}">
+                  <DockPanel>
+                    <Border DockPanel.Dock="Left" Width="22" Height="22" CornerRadius="11" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,11,0"><TextBlock Text="2" Foreground="White" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="自己挑选" Margin="0,2,0,0"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>先点「扫描」，在每一行选「删除」「搬到其他盘」或「跳过」，再点右下角「执行所选操作」。</Run></TextBlock>
+                    </StackPanel>
+                  </DockPanel>
                 </Border>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">自己挑选</Run><Run>：先点「扫描」，在每一行选「删除」「搬到其他盘」或「跳过」，再点右下角「执行所选操作」。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,10,0,0">
-                <Border DockPanel.Dock="Left" Width="22" Height="22" CornerRadius="11" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0">
-                  <TextBlock Text="3" Foreground="White" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                <Border Grid.Row="2" Grid.Column="0" Style="{StaticResource HelpTile}">
+                  <DockPanel>
+                    <Border DockPanel.Dock="Left" Width="22" Height="22" CornerRadius="11" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,11,0"><TextBlock Text="3" Foreground="White" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="找重复文件" Margin="0,2,0,0"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>在左边切到「重复文件」，选好位置和条件，点「开始查找」。核对勾选后，点「删除勾选的文件」。</Run></TextBlock>
+                    </StackPanel>
+                  </DockPanel>
                 </Border>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">找重复文件</Run><Run>：在左边切到「重复文件」，选好位置和条件，点「开始查找」。核对勾选后，点「删除勾选的文件」。</Run></TextBlock>
-              </DockPanel>
+                <Border Grid.Row="2" Grid.Column="2" Style="{StaticResource HelpTile}">
+                  <DockPanel>
+                    <Border DockPanel.Dock="Left" Width="22" Height="22" CornerRadius="11" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,11,0"><TextBlock Text="4" Foreground="White" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="看谁占地方" Margin="0,2,0,0"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>在左边切到「空间地图」，选 C 盘点「扫描」，双击文件夹一层层往里看。</Run></TextBlock>
+                    </StackPanel>
+                  </DockPanel>
+                </Border>
+              </Grid>
             </StackPanel>
           </Border>
-          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
-            <StackPanel>
-              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                <TextBlock Text="&#xEDA2;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                <TextBlock Text="清理 C 盘" Style="{StaticResource HelpHead}"/>
+          <DockPanel Margin="2,30,2,10">
+            <Button x:Name="BtnHelpExpand" DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="全部展开" FontSize="12.5" VerticalAlignment="Bottom"/>
+            <TextBlock Text="功能说明" Style="{StaticResource HelpListHead}"/>
+          </DockPanel>
+          <StackPanel x:Name="HelpSections">
+            <Expander Style="{StaticResource HelpSection}">
+              <Expander.Header>
+                <DockPanel>
+                  <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xEDA2;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="清理 C 盘" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
+                    <TextBlock Text="删除缓存和临时文件；聊天记录整体搬到其他盘" Style="{StaticResource HelpSum}"/>
+                  </StackPanel>
+                </DockPanel>
+              </Expander.Header>
+              <StackPanel>
+                <DockPanel Margin="0,16,0,0"><TextBlock DockPanel.Dock="Left" Text="列表里有什么" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
+                <Grid Margin="0,10,0,0">
+                  <Grid.ColumnDefinitions><ColumnDefinition Width="100"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                  <Border Grid.Row="0" Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="安全清理" FontSize="12.5" Foreground="#1D7A35" TextWrapping="Wrap"/></Border>
+                  <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>缓存、临时文件和日志，删了软件会自动重建。</Run></TextBlock>
+                  <Border Grid.Row="1" Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="需确认" FontSize="12.5" Foreground="#995700" TextWrapping="Wrap"/></Border>
+                  <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>有代价的项目，默认跳过，看清说明再选。比如删掉 Windows.old 后不能退回旧系统，清空回收站后找不回以前删的文件。</Run></TextBlock>
+                  <Border Grid.Row="2" Style="{StaticResource HelpPill}" Background="#E8F1FC"><TextBlock Text="只能搬走" FontSize="12.5" Foreground="#0B5CAD" TextWrapping="Wrap"/></Border>
+                  <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>「聊天软件的聊天记录」和「其他可搬的文件夹」：数据不能删，只能整体搬到其他盘。</Run></TextBlock>
+                </Grid>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="扫完一目了然"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>列表上方写明一共扫到几项、分成几类，每组标题旁也标着几项。项目多时整页往下滚动，底部会提示「下面还有几项」。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="分析占用"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>打开「空间地图」并扫描 C 盘，看清哪些文件夹和文件最占地方。</Run></TextBlock>
+                </StackPanel>
+                <Border Background="#EFF8F1" BorderBrush="#CFE9D6" BorderThickness="1" CornerRadius="10" Padding="14,11,16,12" Margin="0,16,0,0">
+                  <DockPanel>
+                    <TextBlock DockPanel.Dock="Left" Text="&#xEA18;" FontFamily="{StaticResource Icons}" FontSize="15" Foreground="#248A3D" VerticalAlignment="Top" Margin="0,2,12,0"/>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="个人文件夹里的东西一律不删"/>
+                      <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>桌面、文档、下载、图片、视频、音乐、收藏夹、OneDrive 等 C 盘个人文件夹，清理时不删除里面的任何文件，误选也会自动跳过。桌面和下载只能「搬到其他盘」（文件原样保留），而且默认跳过。</Run></TextBlock>
+                    </StackPanel>
+                  </DockPanel>
+                </Border>
+                <DockPanel Margin="0,26,0,0"><TextBlock DockPanel.Dock="Left" Text="搬聊天记录" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
+                <StackPanel Margin="0,10,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="支持的软件"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>微信（新版和旧版）、QQ、企业微信、腾讯会议、飞书、钉钉，以及 Telegram、Discord、Slack、Signal、LINE、Viber、KakaoTalk、Zoom。电脑上装了哪个，扫描后就列出哪个。</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>从应用商店装的（比如 WhatsApp、Microsoft Teams）由 Windows 管理，请在 Windows 设置 → 应用里用「移动」换盘。</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="搬到哪里"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>默认选空闲最多的本机硬盘，也可以从下拉框换盘，或点「选择文件夹…」。只能选本机硬盘，网络盘、网盘和 U 盘不行。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="怎么搬"/>
+                  <WrapPanel Margin="0,8,0,0">
+                    <Border Style="{StaticResource HelpPill}" Background="#E8F1FC" Margin="0,0,0,6"><StackPanel Orientation="Horizontal"><TextBlock Text="1" FontSize="12.5" FontWeight="SemiBold" Foreground="#0B5CAD"/><TextBlock Text="关闭占用的软件" FontSize="12.5" Foreground="#0B5CAD" Margin="6,0,0,0"/></StackPanel></Border>
+                    <TextBlock Text="&#xE76C;" FontFamily="{StaticResource Icons}" FontSize="10" Foreground="#86868B" VerticalAlignment="Center" Margin="8,0,8,6"/>
+                    <Border Style="{StaticResource HelpPill}" Background="#E8F1FC" Margin="0,0,0,6"><StackPanel Orientation="Horizontal"><TextBlock Text="2" FontSize="12.5" FontWeight="SemiBold" Foreground="#0B5CAD"/><TextBlock Text="复制到目标盘" FontSize="12.5" Foreground="#0B5CAD" Margin="6,0,0,0"/></StackPanel></Border>
+                    <TextBlock Text="&#xE76C;" FontFamily="{StaticResource Icons}" FontSize="10" Foreground="#86868B" VerticalAlignment="Center" Margin="8,0,8,6"/>
+                    <Border Style="{StaticResource HelpPill}" Background="#E8F1FC" Margin="0,0,0,6"><StackPanel Orientation="Horizontal"><TextBlock Text="3" FontSize="12.5" FontWeight="SemiBold" Foreground="#0B5CAD"/><TextBlock Text="核对两边大小" FontSize="12.5" Foreground="#0B5CAD" Margin="6,0,0,0"/></StackPanel></Border>
+                    <TextBlock Text="&#xE76C;" FontFamily="{StaticResource Icons}" FontSize="10" Foreground="#86868B" VerticalAlignment="Center" Margin="8,0,8,6"/>
+                    <Border Style="{StaticResource HelpPill}" Background="#E8F1FC" Margin="0,0,0,6"><StackPanel Orientation="Horizontal"><TextBlock Text="4" FontSize="12.5" FontWeight="SemiBold" Foreground="#0B5CAD"/><TextBlock Text="原位置换成链接" FontSize="12.5" Foreground="#0B5CAD" Margin="6,0,0,0"/></StackPanel></Border>
+                    <TextBlock Text="&#xE76C;" FontFamily="{StaticResource Icons}" FontSize="10" Foreground="#86868B" VerticalAlignment="Center" Margin="8,0,8,6"/>
+                    <Border Style="{StaticResource HelpPill}" Background="#E8F1FC" Margin="0,0,0,6"><StackPanel Orientation="Horizontal"><TextBlock Text="5" FontSize="12.5" FontWeight="SemiBold" Foreground="#0B5CAD"/><TextBlock Text="删除 C 盘上的原文件夹" FontSize="12.5" Foreground="#0B5CAD" Margin="6,0,0,0"/></StackPanel></Border>
+                  </WrapPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,1,0,0"><Run>之后 C 盘原位置只剩一个链接，几乎不占空间。软件打开原来的路径时，Windows 自动转到目标盘上读写，软件察觉不到变化，不用改任何设置。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="一个文件都不少才删"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>软件还开着会先提示你退出。复制完重新核对两边的文件个数和大小，一个文件都不少，才删除 C 盘上的原文件夹。</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>原文件夹万一仍被别的程序占用，已复制好的副本会保留；退出相关软件后再执行一次，只补复制有变化的文件，很快就好。</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <Border Background="#FFF8EC" BorderBrush="#F5E1BC" BorderThickness="1" CornerRadius="10" Padding="14,11,16,12" Margin="0,16,0,0">
+                  <DockPanel>
+                    <TextBlock DockPanel.Dock="Left" Text="&#xE7BA;" FontFamily="{StaticResource Icons}" FontSize="15" Foreground="#B25E00" VerticalAlignment="Top" Margin="0,2,12,0"/>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="不要动目标盘上的 CDriveMoved 文件夹"/>
+                      <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>删除、改名或移动它，微信、QQ 等就会找不到聊天记录和文件。</Run></TextBlock>
+                    </StackPanel>
+                  </DockPanel>
+                </Border>
               </StackPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>列表分几组。</Run><Run FontWeight="SemiBold">可以放心删</Run><Run>：缓存、临时文件和日志，删了软件会自动重建。</Run><Run FontWeight="SemiBold">需要确认</Run><Run>：有代价的项目（例如删掉 Windows.old 后不能退回旧系统、清空回收站后找不回以前删的文件），默认跳过，看清说明再选。</Run><Run FontWeight="SemiBold">聊天软件的聊天记录</Run><Run>和</Run><Run FontWeight="SemiBold">其他可搬的文件夹</Run><Run>：数据不能删，只能整体搬到其他盘。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">个人文件夹里的东西一律不删</Run><Run>：桌面、文档、下载、图片、视频、音乐、收藏夹、OneDrive 等 C 盘个人文件夹，清理时不会删除里面的任何文件，即使误选也会自动跳过。桌面和下载只能「搬到其他盘」（文件原样保留），而且默认跳过。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>扫描完，列表上方会写明一共扫到几项、分成几类；每组标题旁边也标着这一组有几项。项目多时整页往下滚动，底部会提示「下面还有几项」。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">支持搬家的聊天软件</Run><Run>：微信（新版和旧版）、QQ、企业微信、腾讯会议、飞书、钉钉，以及 Telegram、Discord、Slack、Signal、LINE、Viber、KakaoTalk、Zoom。电脑上装了哪个，扫描后就会列出哪个；没装的不显示。从应用商店装的（比如 WhatsApp、Microsoft Teams）由 Windows 管理，请在 Windows 设置 → 应用里用「移动」换盘。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">搬家目标</Run><Run>默认选空闲最多的本机硬盘，也可以从下拉框换盘，或点「选择文件夹…」。只能选本机硬盘，网络盘、网盘和 U 盘不行。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">搬家的过程</Run><Run>：关闭占用的软件，复制到目标盘，核对两边大小，把原位置换成一个链接，最后删除 C 盘上的原文件夹。之后 C 盘原位置只剩一个链接（几乎不占空间），软件打开原来的路径时，Windows 自动转到目标盘上读写，软件察觉不到变化，不用改任何设置。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>请</Run><Run FontWeight="SemiBold">不要删除、改名或移动</Run><Run>目标盘上的 CDriveMoved 文件夹，否则微信、QQ 等会找不到聊天记录和文件。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>搬聊天记录时，如果对应的软件还开着，会先提示你退出。复制完会把两边的文件个数和大小重新核对一遍，一个文件都不少才会删除 C 盘上的原文件夹。万一原文件夹仍被别的程序占用，已复制好的副本会保留；退出相关软件后再执行一次，只补复制有变化的文件，很快就好。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">分析占用</Run><Run>会打开「空间地图」并扫描 C 盘，看清哪些文件夹和文件最占地方。</Run></TextBlock>
-              </DockPanel>
+            </Expander>
+            <Expander Style="{StaticResource HelpSection}">
+              <Expander.Header>
+                <DockPanel>
+                  <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE8C8;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="重复文件" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
+                    <TextBlock Text="找出内容完全相同的文件，留一份、删其余" Style="{StaticResource HelpSum}"/>
+                  </StackPanel>
+                </DockPanel>
+              </Expander.Header>
+              <StackPanel>
+                <DockPanel Margin="0,16,0,0"><TextBlock DockPanel.Dock="Left" Text="查找条件" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
+                <StackPanel Margin="0,10,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="查找位置"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>点胶囊勾选或取消；「添加文件夹…」可以加自己的位置，带小叉的可以移除。系统目录、程序目录和开发环境会自动跳过。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="文件类型和大小"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>只找选中的类型和大小范围，范围越小找得越快。选「自定义」可以手填大小。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="怎样算重复"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>默认要求文件名和内容都相同；选「只看内容」时，名字不同但内容相同也算。无论哪种，内容都要逐字节完全相同。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="比对方式"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>「快速」对大文件只抽样读取；「完整比对」读完每个文件，更慢但更彻底。</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>快速模式下，删除前也会逐字节完整核对，有任何不同就不删。</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <DockPanel Margin="0,26,0,0"><TextBlock DockPanel.Dock="Left" Text="结果和删除" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
+                <StackPanel Margin="0,10,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="留哪一份"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>每组列出所有副本。默认每组留最新的一份、勾选其余的；也可以改成留最早的、优先留 C 盘以外的，或者自己勾选。「打开位置」可以在资源管理器里看到这个文件。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="放入回收站"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>默认放入回收站，误删可以从回收站恢复；取消勾选「放入回收站」就是永久删除，不能恢复。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="带「注意」的"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>是程序目录或微信数据里的副本，删除前请看清楚。</Run></TextBlock>
+                </StackPanel>
+                <Border Background="#EFF8F1" BorderBrush="#CFE9D6" BorderThickness="1" CornerRadius="10" Padding="14,11,16,12" Margin="0,16,0,0">
+                  <DockPanel>
+                    <TextBlock DockPanel.Dock="Left" Text="&#xEA18;" FontFamily="{StaticResource Icons}" FontSize="15" Foreground="#248A3D" VerticalAlignment="Top" Margin="0,2,12,0"/>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="C 盘个人文件夹受保护"/>
+                      <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>默认勾选「不删 C 盘个人文件夹里的文件」：桌面、文档、下载、图片、视频、音乐等位置的副本显示一把小锁，不会被勾选或删除，只删其他位置的副本。确实要删这些位置的副本，取消勾选并再次确认才行。</Run></TextBlock>
+                    </StackPanel>
+                  </DockPanel>
+                </Border>
+              </StackPanel>
+            </Expander>
+            <Expander Style="{StaticResource HelpSection}">
+              <Expander.Header>
+                <DockPanel>
+                  <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE7B8;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="省空间（不删文件）" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
+                    <TextBlock Text="压缩，或者换个位置放，文件都还在" Style="{StaticResource HelpSum}"/>
+                  </StackPanel>
+                </DockPanel>
+              </Expander.Header>
+              <StackPanel>
+                <Grid Margin="0,14,0,0">
+                  <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="10"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                  <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="系统压缩（CompactOS）"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Windows 自带，把系统文件压缩存放，通常省 2 到 4 GB，不影响使用。</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Row="0" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="页面文件"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>把 pagefile.sys 改到其他硬盘，C 盘多出几个 GB。重启后生效，随时可以恢复系统默认。</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Row="2" Grid.Column="0" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="休眠文件"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>「只留快速启动」能把 hiberfil.sys 缩小一半左右；「关闭休眠」整个删掉它。</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Row="2" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="系统还原点"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>显示还原点有几个、占了多少、最多能用到多少。要调小上限或删掉还原点，点「打开系统保护设置」在 Windows 自己的设置里改；本工具不直接删还原点。</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Row="4" Grid.Column="0" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="压缩文件夹"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>NTFS 压缩：文件照常打开和修改，只是占的空间变小。适合文档、代码、旧项目。</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Row="4" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="虚拟磁盘"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>WSL、Docker 的虚拟磁盘在里面删了文件也不会自动变小，压缩一下就能把空间还给 Windows；安卓模拟器和虚拟机的文件夹可以整个搬到其他盘。</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="3" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="合并重复文件"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>在「重复文件」页点「合并为一份」，同一块盘上的重复文件只占一份空间，每个位置的文件都还在。合并后改动其中一个位置，其他位置会跟着变，所以适合不会再改的照片、视频、安装包。</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                </Grid>
+              </StackPanel>
+            </Expander>
+            <Expander Style="{StaticResource HelpSection}">
+              <Expander.Header>
+                <DockPanel>
+                  <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE9D9;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="空间地图" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
+                    <TextBlock Text="看清哪些文件夹和文件最占地方" Style="{StaticResource HelpSum}"/>
+                  </StackPanel>
+                </DockPanel>
+              </Expander.Header>
+              <StackPanel>
+                <DockPanel Margin="0,16,0,0"><TextBlock DockPanel.Dock="Left" Text="扫描" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
+                <StackPanel Margin="0,10,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="开始扫描"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>选一块盘点「扫描」，把每个文件夹的大小都数一遍。只是查看，不改动任何东西。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="为什么快"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>NTFS 格式的盘（C 盘基本都是）直接读盘上的文件表（MFT），几十万个文件一般几秒到十几秒就读完，不用一个个文件夹去看。</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>读完会和直接列目录的结果核对。对不上或读不了（不是 NTFS、权限不够等），就自动改回逐个文件夹扫描，多个线程一起数（固态硬盘多一些，机械硬盘少一些）。</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>同一次打开工具里再扫描，按系统的变更日志只更新改过的部分，更快。</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>读文件表能看到逐个扫描进不去的文件夹（比如 System Volume Information），所以两种方式的总数可能略有出入。</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="不想直接读盘"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>少数安全软件对直接读盘会提示。取消右上角的「快速扫描」，以后都逐个文件夹扫描；清理、搬家、软件管理统计大小时也一样。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="各页共用一次读取"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>「清理 C 盘」「搬家管理」「软件管理」统计大小时也先读一次 C 盘的文件表。这些数字只用来显示和估算；真正删除、搬家时，每一项都会重新统计、重新检查，不会拿这份结果做判断。</Run></TextBlock>
+                </StackPanel>
+                <DockPanel Margin="0,26,0,0"><TextBlock DockPanel.Dock="Left" Text="浏览" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
+                <StackPanel Margin="0,10,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="往里点"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>双击文件夹进入下一层，点「上一级」返回。每一行的蓝色条表示它在这一层里有多大。</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>一层里东西很多时（比如 WinSxS 有上万个），只列最大的 500 项，其余合成最后一行；点「打开位置」可以在资源管理器里看全部。</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="方块图"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>把这一层的文件夹和文件画成方块，方块越大占的空间越多，一眼看出谁最大。单击选中，双击文件夹往里点。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="找文件"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>在扫描时记下的 1 MB 以上的文件里找，从大到小排。</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>可以按大小、多久没改过（比如半年以上）、类型（视频、压缩包和安装包、光盘映像和虚拟磁盘……）和名称筛选；名称里可以用 * 和 ?，比如 *.mp4。</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>勾选「只找当前文件夹里的」，就只找刚才点进去的那个文件夹。</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>勾选「只找聊天软件里的」，就只在微信、QQ、企业微信、飞书、钉钉、Telegram 等的聊天记录里找，看清是哪些视频和文件占了地方。</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <Border Background="#EEF5FD" BorderBrush="#D2E3FA" BorderThickness="1" CornerRadius="10" Padding="14,11,16,12" Margin="0,16,0,0">
+                  <DockPanel>
+                    <TextBlock DockPanel.Dock="Left" Text="&#xE946;" FontFamily="{StaticResource Icons}" FontSize="15" Foreground="#0071E3" VerticalAlignment="Top" Margin="0,2,12,0"/>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="聊天记录里的文件只能查看"/>
+                      <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>在这里只能查看、打开位置，不能删。要腾地方，到「搬家管理」把整个聊天记录搬到其他盘。</Run></TextBlock>
+                    </StackPanel>
+                  </DockPanel>
+                </Border>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="和上次比"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>列出比上一次扫描变大或变小超过 100 MB 的文件夹，找出空间是被谁慢慢吃掉的；双击一行跳到那个文件夹。文件夹列表里也会标出「比上次 +2.1 GB」这样的变化。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="导出"/>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">导出 CSV</Run><Run>：把现在看到的列表（文件夹、找到的文件或和上次比的结果）存成 CSV 文件，可以用 Excel 打开、排序、发给别人。</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">导出报告</Run><Run>：把整块盘的情况存成一个网页，有方块图、最大的文件夹和文件、各类文件占多少、和上次比的变化；在浏览器里按 Ctrl+P 可以存成 PDF。</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <DockPanel Margin="0,26,0,0"><TextBlock DockPanel.Dock="Left" Text="选中和操作" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
+                <TextBlock Style="{StaticResource HelpBody}" Margin="0,10,0,0"><Run>选中后可以「打开位置」「压缩（不删文件）」或「删除」。每一行前面有方框，和资源管理器的「项目复选框」一样：</Run></TextBlock>
+                <Grid Margin="0,10,0,0">
+                  <Grid.ColumnDefinitions><ColumnDefinition Width="150"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                  <Border Grid.Row="0" Style="{StaticResource HelpPill}"><TextBlock Text="点方框" FontSize="12.5" Foreground="#1D1D1F" TextWrapping="Wrap"/></Border>
+                  <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>选中或取消这一行，可以勾一项或多项</Run></TextBlock>
+                  <Border Grid.Row="1" Style="{StaticResource HelpPill}"><TextBlock Text="点行的其他地方" FontSize="12.5" Foreground="#1D1D1F" TextWrapping="Wrap"/></Border>
+                  <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>不会选中</Run></TextBlock>
+                  <Border Grid.Row="2" Style="{StaticResource HelpPill}"><TextBlock Text="双击文件夹" FontSize="12.5" Foreground="#1D1D1F" TextWrapping="Wrap"/></Border>
+                  <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>进入下一层</Run></TextBlock>
+                  <Border Grid.Row="3" Style="{StaticResource HelpPill}"><TextBlock Text="Shift + 点方框" FontSize="12.5" Foreground="#1D1D1F" TextWrapping="Wrap"/></Border>
+                  <TextBlock Grid.Row="3" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>把上次勾的那一行到这一行都勾上</Run></TextBlock>
+                  <Border Grid.Row="4" Style="{StaticResource HelpPill}"><TextBlock Text="按住左键或右键拖" FontSize="12.5" Foreground="#1D1D1F" TextWrapping="Wrap"/></Border>
+                  <TextBlock Grid.Row="4" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>上下拖，一次勾上连着的几行；用右键拖的话，松开后弹出右键菜单</Run></TextBlock>
+                  <Border Grid.Row="5" Style="{StaticResource HelpPill}"><TextBlock Text="右键点一行" FontSize="12.5" Foreground="#1D1D1F" TextWrapping="Wrap"/></Border>
+                  <TextBlock Grid.Row="5" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>菜单只对这一行起作用；点在勾着的行上，就对全部勾着的行起作用</Run></TextBlock>
+                  <Border Grid.Row="6" Style="{StaticResource HelpPill}"><TextBlock Text="Esc" FontSize="12.5" Foreground="#1D1D1F" TextWrapping="Wrap"/></Border>
+                  <TextBlock Grid.Row="6" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>全部取消</Run></TextBlock>
+                </Grid>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="不想要复选框"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>在「设置」里关掉，就照 Windows 列表原来的做法：单击选中一行，按住 Ctrl 或 Shift 多选。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="删除"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>可以选「移到回收站」（能恢复）或「永久删除」（立刻腾出空间），都要先勾选确认。</Run></TextBlock>
+                </StackPanel>
+                <Border Background="#F5F5F7" BorderBrush="#E5E5EA" BorderThickness="1" CornerRadius="10" Padding="14,11,16,12" Margin="0,16,0,0">
+                  <DockPanel>
+                    <TextBlock DockPanel.Dock="Left" Text="&#xE72E;" FontFamily="{StaticResource Icons}" FontSize="15" Foreground="#6E6E73" VerticalAlignment="Top" Margin="0,2,12,0"/>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="带小锁的不能在这里删"/>
+                      <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>系统文件夹、软件的安装文件夹（请到「软件管理」卸载）、C 盘个人文件夹，以及搬家后的数据（CDriveMoved 文件夹）。</Run></TextBlock>
+                    </StackPanel>
+                  </DockPanel>
+                </Border>
+                <DockPanel Margin="0,26,0,0"><TextBlock DockPanel.Dock="Left" Text="实际占用" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
+                <StackPanel Margin="0,10,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="实际占用和硬链接"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>快速扫描时，名字下面会注明压缩、稀疏和只在云端（OneDrive 等）的文件实际只占多少，以及 WinSxS 这类文件夹里有多少是硬链接。</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>硬链接是同一份文件在别处也有名字，删了这个名字不腾空间。</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="空间明细"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>点「空间明细」，看已用空间分成哪几块：文件实际占用、文件表（MFT）和其他，以及为什么和按文件大小相加对不上。删除时也会写明实际能腾出多少。</Run></TextBlock>
+                </StackPanel>
+              </StackPanel>
+            </Expander>
+            <Expander Style="{StaticResource HelpSection}">
+              <Expander.Header>
+                <DockPanel>
+                  <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE71D;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="软件管理" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
+                    <TextBlock Text="看软件占多少；卸载、清残留、搬到其他盘" Style="{StaticResource HelpSum}"/>
+                  </StackPanel>
+                </DockPanel>
+              </Expander.Header>
+              <StackPanel>
+                <StackPanel Margin="0,14,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="软件列表"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>列出装过的所有软件（包括应用商店里的），按占用空间从大到小排。可以只看装在 C 盘的，或者按名字搜索。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="卸载"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>打开软件自带的卸载程序，按提示操作即可。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="检查残留"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>卸载完回到这里点「检查残留」，找出以软件名命名、卸载后剩下的文件夹，确认后移到回收站。</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>发行商的总文件夹（比如 Tencent、Microsoft）不会被当成残留，系统自带的程序也不会。</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="搬到其他盘"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>装在 C 盘的软件可以把整个安装文件夹搬到其他硬盘，C 盘原位置留一个链接。快捷方式、开始菜单、卸载和自动更新都照常可用，不用重装。</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>核对两边文件完全一致，才删掉 C 盘上的那份；正在运行的会先问你再关掉。</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="不适合搬的"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>会直接告诉你原因，不会硬搬：</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>带系统服务或驱动的（杀毒、VPN、驱动、远程控制等）</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>给资源管理器装了右键菜单的，以及输入法</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>微软自己的软件（Office、Visual Studio 等）和 Windows 自带组件</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>文件夹里有链接或用 Windows 压缩功能压过的文件（复制时可能漏掉）</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>没写明装在哪个文件夹的</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>应用商店的软件：请在 Windows 设置 → 应用里用「移动」</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="搬走以后"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>在「搬家管理」里能看到，随时可以「搬回 C 盘」。以后软件大版本升级时，个别安装程序会把它重新装回 C 盘，到时再搬一次即可。</Run></TextBlock>
+                </StackPanel>
+              </StackPanel>
+            </Expander>
+            <Expander Style="{StaticResource HelpSection}">
+              <Expander.Header>
+                <DockPanel>
+                  <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE8AB;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="搬家管理" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
+                    <TextBlock Text="一次搬好几项；看搬走的文件夹是否正常" Style="{StaticResource HelpSum}"/>
+                  </StackPanel>
+                </DockPanel>
+              </Expander.Header>
+              <StackPanel>
+                <DockPanel Margin="0,16,0,0"><TextBlock DockPanel.Dock="Left" Text="可以搬的" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
+                <StackPanel Margin="0,10,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="批量搬走"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>自动列出 C 盘上还能搬走的东西，分成聊天记录、装在 C 盘的软件和其他文件夹三组，每项都标着大小。勾选后在右下角选好目标盘，点「搬到其他盘」。</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>开始前会列出全部项目，要先关掉的软件也会告诉你。</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="不适合搬的软件"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>带系统服务或驱动的、给资源管理器装了右键菜单的、微软自己的软件等，单独列在「不适合搬的软件」里，写明原因，不能勾选。</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>从应用商店装的聊天软件（比如 WhatsApp、Microsoft Teams）由 Windows 管理，页面下方会提示在 Windows 设置里用「移动」换盘。</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <DockPanel Margin="0,26,0,0"><TextBlock DockPanel.Dock="Left" Text="已经搬走的" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
+                <TextBlock Style="{StaticResource HelpBody}" Margin="0,10,0,0"><Run>所有搬到其他盘的文件夹都列在这里，每一项都显示现在的状态：</Run></TextBlock>
+                <Grid Margin="0,10,0,0">
+                  <Grid.ColumnDefinitions><ColumnDefinition Width="96"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                  <Border Grid.Row="0" Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="正常" FontSize="12.5" Foreground="#1D7A35" TextWrapping="Wrap"/></Border>
+                  <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>数据在目标盘上，C 盘原位置只留一个指向它的链接，不占 C 盘空间，软件照常使用。需要时可以「搬回 C 盘」：复制回来、核对一致后才拆掉链接，最后删除目标盘上的那份。</Run></TextBlock>
+                  <Border Grid.Row="1" Style="{StaticResource HelpPill}" Background="#FDEBEC"><TextBlock Text="链接断了" FontSize="12.5" Foreground="#C0101C" TextWrapping="Wrap"/></Border>
+                  <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>目标盘拔了或者盘符变了。把硬盘插回去（或改回原来的盘符）就好；如果在其他盘找到了同名的副本，可以「修复链接」改指向它。</Run></TextBlock>
+                  <Border Grid.Row="2" Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="没搬完" FontSize="12.5" Foreground="#995700" TextWrapping="Wrap"/></Border>
+                  <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>C 盘原文件夹还在，目标盘上有一份副本。可以在「可以搬的」里再搬一次（只补差异），或者删掉这份多余的副本。</Run></TextBlock>
+                </Grid>
+              </StackPanel>
+            </Expander>
+            <Expander Style="{StaticResource HelpSection}">
+              <Expander.Header>
+                <DockPanel>
+                  <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE823;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="自动提醒" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
+                    <TextBlock Text="空间不够时提醒，每周自动清理；默认都关着" Style="{StaticResource HelpSum}"/>
+                  </StackPanel>
+                </DockPanel>
+              </Expander.Header>
+              <StackPanel>
+                <StackPanel Margin="0,14,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="空间不足提醒"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>打开后，每次登录电脑 2 分钟后、以及每天中午各检查一次 C 盘，低于你设定的值（默认 20 GB）就在屏幕右下角提醒，每天最多一次；空间够就什么都不显示。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="每周自动清理"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>打开后，每周日自动清理一次临时文件、缓存和日志。不搬家、不清空回收站、不碰个人文件夹，被占用的文件直接跳过。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="C 盘空间变化"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>每次打开本工具、每次定时检查都记一笔，画成最近 30 天的柱状图。</Run></TextBlock>
+                </StackPanel>
+                <Border Background="#EEF5FD" BorderBrush="#D2E3FA" BorderThickness="1" CornerRadius="10" Padding="14,11,16,12" Margin="0,16,0,0">
+                  <DockPanel>
+                    <TextBlock DockPanel.Dock="Left" Text="&#xE946;" FontFamily="{StaticResource Icons}" FontSize="15" Foreground="#0071E3" VerticalAlignment="Top" Margin="0,2,12,0"/>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="不用一直开着本工具"/>
+                      <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>这两项都由 Windows「任务计划程序」按时运行本工具，也不需要设置开机启动。任务名字以 CleanC 开头，默认关闭，关掉开关就删除任务。</Run></TextBlock>
+                    </StackPanel>
+                  </DockPanel>
+                </Border>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="放在固定的位置"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>请把本工具放在一个固定的位置（比如 D:\工具），不要删掉。挪了位置后打开一次，任务会自动改用新位置。</Run></TextBlock>
+                </StackPanel>
+              </StackPanel>
+            </Expander>
+            <Expander Style="{StaticResource HelpSection}">
+              <Expander.Header>
+                <DockPanel>
+                  <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE81C;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="操作日志" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
+                    <TextBlock Text="每一次改动都记下来，可以查" Style="{StaticResource HelpSum}"/>
+                  </StackPanel>
+                </DockPanel>
+              </Expander.Header>
+              <StackPanel>
+                <StackPanel Margin="0,14,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="记什么"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>删除、搬运、合并、压缩、卸载和系统设置的每一次改动：什么时间、做了什么、对哪个文件或文件夹、结果怎样。只记操作，不保存文件内容。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="怎么查"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>按类别（删除、搬运、合并……）、时间（7 天、30 天、全部）和关键字查找。日志是普通的 txt 文件，每月一个，点「打开日志文件夹」可以用记事本直接看。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="保存多久"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>默认半年，可以改成 1 个月到 2 年，或者永久保存。</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>每次打开本工具时，超过保存时间的记录会自动删除，删掉后找不回来。</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>把保存时间改短时，会先提示哪天之前的记录会被删掉。</Run></TextBlock></DockPanel>
+                </StackPanel>
+              </StackPanel>
+            </Expander>
+            <Expander Style="{StaticResource HelpSection}">
+              <Expander.Header>
+                <DockPanel>
+                  <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE713;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="设置" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
+                    <TextBlock Text="外观、语言，以及界面上显示什么" Style="{StaticResource HelpSum}"/>
+                  </StackPanel>
+                </DockPanel>
+              </Expander.Header>
+              <StackPanel>
+                <StackPanel Margin="0,14,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="外观和语言"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>浅色、深色或跟随系统（照 Windows 设置里「选择应用模式」来），中文或 English。换了以后本工具会关闭，再自动打开。左下角的「外观」和「切换语言」也能改。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="界面上显示什么"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>用不上的页面、左下角的按钮、页面标题下的说明，以及空间地图的复选框、占比条、百分比、详细信息和「快速扫描」开关都可以关掉。</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>关掉的随时可以回来打开，里面的设置和记录都不受影响；「恢复默认显示」一下全部恢复。</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="快速扫描"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>直接读 NTFS 的文件表（MFT），比逐个文件夹查看快得多，还能看出实际占用和硬链接。关掉就改为逐个文件夹扫描。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="查重复文件时让着其他程序"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>读文件时用 Windows 的后台模式，磁盘和内存都排在其他程序后面，不拖慢正在用的程序；同时在做别的事时，查得会慢一些。</Run></TextBlock>
+                </StackPanel>
+              </StackPanel>
+            </Expander>
+          </StackPanel>
+          <TextBlock Text="常见问题" Style="{StaticResource HelpListHead}" Margin="2,30,2,10"/>
+          <Border Style="{StaticResource Card}" Padding="22,2,22,4">
+            <StackPanel x:Name="HelpFaq">
+              <Expander Style="{StaticResource HelpQ}" BorderThickness="0">
+                <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="为什么要管理员权限？"/></Expander.Header>
+                <StackPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>清理系统临时文件、Windows 更新缓存等位置，需要管理员权限。</Run></TextBlock>
+                </StackPanel>
+              </Expander>
+              <Expander Style="{StaticResource HelpQ}">
+                <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="做到一半能取消吗？"/></Expander.Header>
+                <StackPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>可以。进度卡片和窗口底部都有「取消」按钮，会停在安全的地方，已经做完的不会撤销：</Run></TextBlock>
+                  <DockPanel Margin="0,6,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">清理</Run><Run>：停下来。</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">搬家</Run><Run>：如果还在复制，C 盘上的原文件夹不动，已复制的部分留在目标盘，下次再搬会接着复制。</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">搬回 C 盘</Run><Run>：复制回来的那一半会删掉，什么都不改。</Run></TextBlock></DockPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,8,0,0"><Run>正在换成链接、删除备份或运行系统命令（比如清理 Windows 更新）时按钮是灰的，等这一步做完就能取消。</Run></TextBlock>
+                </StackPanel>
+              </Expander>
+              <Expander Style="{StaticResource HelpQ}">
+                <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="执行时能关窗口吗？"/></Expander.Header>
+                <StackPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>做完前请不要关闭窗口，想停下请点「取消」。可以点「在后台继续」收起进度卡片，窗口底部和任务栏图标上都能看到进度。</Run></TextBlock>
+                </StackPanel>
+              </Expander>
+              <Expander Style="{StaticResource HelpQ}">
+                <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="在哪看详细过程？"/></Expander.Header>
+                <StackPanel>
+                  <DockPanel Margin="0,0,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>做过哪些删除和搬运：看左侧的「操作日志」。</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>程序运行的技术细节：看左下角「运行记录」，完整文件在 %TEMP%\CleanC-run.log。</Run></TextBlock></DockPanel>
+                </StackPanel>
+              </Expander>
+              <Expander Style="{StaticResource HelpQ}">
+                <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="释放的空间比预计少？"/></Expander.Header>
+                <StackPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>放进回收站的文件，要清空回收站后才真正释放空间；正被其他程序占用的文件会被跳过。</Run></TextBlock>
+                </StackPanel>
+              </Expander>
+              <Expander Style="{StaticResource HelpQ}">
+                <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="能用深色界面吗？"/></Expander.Header>
+                <StackPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>可以。在左边的「设置」里（或点左下角的「外观」）选浅色、深色或跟随系统。换了以后本工具会关闭，再自动打开。</Run></TextBlock>
+                </StackPanel>
+              </Expander>
+              <Expander Style="{StaticResource HelpQ}">
+                <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="能把用不上的页面和按钮藏起来吗？"/></Expander.Header>
+                <StackPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>可以，在左边的「设置」里关掉就行。藏起来的随时可以在那里打开，里面的设置和记录都不受影响。</Run></TextBlock>
+                </StackPanel>
+              </Expander>
+              <Expander Style="{StaticResource HelpQ}">
+                <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="为什么扫描出来的合计和「已用空间」对不上？"/></Expander.Header>
+                <StackPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>按文件大小相加，和盘上实际用掉的空间不是一回事：</Run></TextBlock>
+                  <DockPanel Margin="0,6,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>硬链接（同一份文件有好几个名字，WinSxS 和 System32 里很多）会重复算。</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>压缩、稀疏和只在云端的文件，实际占得比文件大小少。</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>文件表（MFT）、NTFS 的日志、Windows 给更新预留的空间（保留的存储）也占地方，但不是普通文件。</Run></TextBlock></DockPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,8,0,0"><Run>快速扫描后，在空间地图点「空间明细」可以看到每一块各多少。</Run></TextBlock>
+                </StackPanel>
+              </Expander>
+              <Expander Style="{StaticResource HelpQ}">
+                <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="WinSxS 看起来很大，能删吗？"/></Expander.Header>
+                <StackPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>不能手动删，删了系统可能坏掉。</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,8,0,0"><Run>里面很多文件和 System32 等位置是同一份（硬链接），资源管理器按名字相加会重复算，实际占的比看上去小；快速扫描时，空间地图会注明其中多少是硬链接。</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,8,0,0"><Run>真正能清掉的是更新替换下来的旧组件：用「清理 C 盘」里的「WinSxS 组件清理 (DISM)」。</Run></TextBlock>
+                </StackPanel>
+              </Expander>
+              <Expander Style="{StaticResource HelpQ}">
+                <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="为什么不清理 Prefetch 文件夹，也没有「内存加速」？"/></Expander.Header>
+                <StackPanel>
+                  <DockPanel Margin="0,0,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Prefetch</Run><Run> 里记的是程序启动时要读哪些文件，Windows 靠它让常用软件打开得更快。一共只有几十 MB，删了下次启动反而变慢，过几天又会长回来。</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">内存</Run><Run>也一样：Windows 会把空闲的内存拿来缓存常用的文件（任务管理器里的「已缓存」），别的程序要用时马上让出来，强行清空只会让电脑变慢。</Run></TextBlock></DockPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,8,0,0"><Run>所以这两样本工具都不做。</Run></TextBlock>
+                </StackPanel>
+              </Expander>
+              <Expander Style="{StaticResource HelpQ}">
+                <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="怎么知道有没有新版本？"/></Expander.Header>
+                <StackPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>在下面「使用反馈」里点「检查新版本」，有新版本会打开下载页面；下载新的 exe 换掉旧的就行，设置、日志和自动提醒都会保留。本工具平时不联网，只在你点这个按钮时连一次 GitHub。</Run></TextBlock>
+                </StackPanel>
+              </Expander>
             </StackPanel>
           </Border>
-          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
+          <Border x:Name="FeedbackCard" Style="{StaticResource Card}" Padding="22,18,22,22" Margin="0,30,0,0">
             <StackPanel>
-              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                <TextBlock Text="&#xE8C8;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                <TextBlock Text="重复文件" Style="{StaticResource HelpHead}"/>
-              </StackPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">查找位置</Run><Run>：点胶囊勾选或取消；「添加文件夹…」可以加自己的位置，带小叉的可以移除。系统目录、程序目录和开发环境会自动跳过。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">文件类型、文件大小</Run><Run>：只找选中的类型和大小范围，范围越小找得越快。选「自定义」可以手填大小。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">怎样算重复</Run><Run>：默认要求文件名和内容都相同；选「只看内容」时，名字不同但内容相同也算。无论哪种，只有内容逐字节完全相同才算重复。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">比对方式</Run><Run>：「快速」对大文件只抽样读取；「完整比对」读完每个文件，更慢但更彻底。快速模式下，删除前也会逐字节完整核对，有任何不同就不删。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">结果</Run><Run>：每组列出所有副本。默认每组留最新的一份、勾选其余的；也可以改成留最早的、优先留 C 盘以外的，或者自己勾选。「打开位置」可以在资源管理器里看到这个文件。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">C 盘个人文件夹受保护</Run><Run>：默认勾选「不删 C 盘个人文件夹里的文件」，桌面、文档、下载、图片、视频、音乐等位置的副本显示一把小锁，不会被勾选或删除，只删其他位置的副本。确实要删这些位置的副本，取消勾选并再次确认才行。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>默认</Run><Run FontWeight="SemiBold">放入回收站</Run><Run>，误删可以从回收站恢复；取消勾选「放入回收站」就是永久删除，不能恢复。带「注意」提示的是程序目录或微信数据，删除前请看清楚。</Run></TextBlock>
-              </DockPanel>
-            </StackPanel>
-          </Border>
-          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
-            <StackPanel>
-              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                <TextBlock Text="&#xE7B8;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                <TextBlock Text="省空间（不删文件）" Style="{StaticResource HelpHead}"/>
-              </StackPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">系统压缩（CompactOS）</Run><Run>：Windows 自带，把系统文件压缩存放，通常省 2 到 4 GB，不影响使用。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">页面文件</Run><Run>：把 pagefile.sys 改到其他硬盘，C 盘多出几个 GB，重启后生效，随时可以恢复系统默认。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">休眠文件</Run><Run>：「只留快速启动」能把 hiberfil.sys 缩小一半左右；「关闭休眠」整个删掉它。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">系统还原点</Run><Run>：显示还原点有几个、占了多少、最多能用到多少。要调小上限或删掉还原点，点「打开系统保护设置」在 Windows 自己的设置里改；本工具不直接删还原点。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">压缩文件夹</Run><Run>：NTFS 压缩，文件照常打开和修改，只是占的空间变小。适合文档、代码、旧项目。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">虚拟磁盘</Run><Run>：WSL、Docker 的虚拟磁盘在里面删了文件也不会自动变小，压缩一下就能把空间还给 Windows；安卓模拟器和虚拟机的文件夹可以整个搬到其他盘。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">合并重复文件</Run><Run>：在「重复文件」页点「合并为一份」，同一块盘上的重复文件只占一份空间，每个位置的文件都还在。合并后改动其中一个位置，其他位置会跟着变，所以适合不会再改的照片、视频、安装包。</Run></TextBlock>
-              </DockPanel>
-            </StackPanel>
-          </Border>
-          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
-            <StackPanel>
-              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                <TextBlock Text="&#xE9D9;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                <TextBlock Text="空间地图" Style="{StaticResource HelpHead}"/>
-              </StackPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">扫描</Run><Run>：选一块盘点「扫描」，把每个文件夹的大小都数一遍。只是查看，不改动任何东西。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">扫描为什么快</Run><Run>：NTFS 格式的盘（C 盘基本都是），工具直接读盘上的文件表（MFT），几十万个文件一般几秒到十几秒就读完，不用一个个文件夹去看。读完会和直接列目录的结果核对一下，对不上或读不了（不是 NTFS、权限不够等）就自动改回逐个文件夹扫描，多个线程一起数（固态硬盘线程多一些，机械硬盘少一些）。同一次打开工具里再扫描，按系统的变更日志只更新改过的部分，更快。读文件表能看到逐个扫描进不去的文件夹（比如 System Volume Information），所以两种方式的总数可能略有出入。少数安全软件对直接读盘会提示，可以取消右上角的「快速扫描」，以后都逐个文件夹扫描（清理、搬家、软件管理统计大小时也一样）。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">一次读取，各页共用</Run><Run>：「清理 C 盘」「搬家管理」「软件管理」统计大小时也先读一次 C 盘的文件表，直接查出每个文件夹多大。这些数字只用来显示和估算；真正删除、搬家的时候，每一项都会重新统计、重新检查，不会拿这份结果做判断。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">往里点</Run><Run>：双击文件夹进入下一层，点「上一级」返回。每一行的蓝色条表示它在这一层里有多大。一层里东西很多时（比如 WinSxS 有上万个），只列最大的 500 项，其余合成最后一行，点「打开位置」可以在资源管理器里看全部。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">方块图</Run><Run>：把这一层的文件夹和文件画成方块，方块越大占的空间越多，一眼就能看出谁最大。单击选中，双击文件夹往里点。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">找文件</Run><Run>：在扫描时记下的 1 MB 以上的文件里找，从大到小排。可以按大小、多久没改过（比如半年以上）、类型（视频、压缩包和安装包、光盘映像和虚拟磁盘……）和名称筛选，名称里可以用 * 和 ?（比如 *.mp4）；勾选「只找当前文件夹里的」，就只找刚才点进去的那个文件夹；勾选「只找聊天软件里的」，就只在微信、QQ、企业微信、飞书、钉钉、Telegram 等的聊天记录里找，看清是哪些视频和文件占了地方。聊天记录里的文件在这里只能查看、打开位置，不能删；要腾地方，到「搬家管理」把整个聊天记录搬到其他盘。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">和上次比</Run><Run>：和上一次扫描对比，列出变大或变小超过 100 MB 的文件夹，找出空间是被谁慢慢吃掉的；双击一行跳到那个文件夹。文件夹列表里也会标出「比上次 +2.1 GB」这样的变化。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">导出 CSV</Run><Run>：把现在看到的列表（文件夹、找到的文件或和上次比的结果）存成 CSV 文件，可以用 Excel 打开、排序、发给别人。</Run><Run FontWeight="SemiBold">导出报告</Run><Run>：把整块盘的情况存成一个网页：方块图、最大的文件夹和文件、各类文件占多少、和上次比的变化；在浏览器里按 Ctrl+P 可以存成 PDF。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>选中一行可以</Run><Run FontWeight="SemiBold">打开位置</Run><Run>、</Run><Run FontWeight="SemiBold">压缩（不删文件）</Run><Run>或</Run><Run FontWeight="SemiBold">删除</Run><Run>。每一行前面有方框（和资源管理器的「项目复选框」一样）：</Run><Run FontWeight="SemiBold">只有点方框才选中或取消</Run><Run>，可以勾一项或多项；单击行的其他地方不会选中，双击文件夹照常往里点；按住 Shift 点，是把上次勾的那一行到这一行都勾上；按 Esc 全部取消。</Run><Run FontWeight="SemiBold">按住鼠标左键或右键上下拖</Run><Run>可以一次勾上连着的几行，用右键拖的话松开后弹出右键菜单。右键点一行，菜单只对这一行起作用；点在勾着的行上，就对全部勾着的行起作用。在「设置」里关掉复选框，就照 Windows 列表原来的做法：单击选中一行，按住 Ctrl 或 Shift 多选。删除时可以选「移到回收站」（能恢复）或「永久删除」（立刻腾出空间），都要先勾选确认。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">实际占用和硬链接</Run><Run>：快速扫描时，名字下面会注明压缩、稀疏和只在云端（OneDrive 等）的文件实际只占多少，以及 WinSxS 这类文件夹里有多少是硬链接（同一份文件在别处也有名字，删了这个名字不腾空间）。点「</Run><Run FontWeight="SemiBold">空间明细</Run><Run>」可以看到已用空间分成哪几块：文件实际占用、文件表（MFT）和其他，以及为什么和按文件大小相加对不上。删除时也会写明实际能腾出多少。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>带</Run><Run FontWeight="SemiBold">小锁</Run><Run>的不能在这里删：系统文件夹、软件的安装文件夹（请到「软件管理」卸载）、C 盘个人文件夹，以及搬家后的数据（CDriveMoved 文件夹）。</Run></TextBlock>
-              </DockPanel>
-            </StackPanel>
-          </Border>
-          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
-            <StackPanel>
-              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                <TextBlock Text="&#xE71D;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                <TextBlock Text="软件管理" Style="{StaticResource HelpHead}"/>
-              </StackPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>列出装过的所有软件（包括应用商店里的），按占用空间从大到小排。可以只看装在 C 盘的，或者按名字搜索。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">卸载</Run><Run>会打开软件自带的卸载程序，按提示操作即可。卸载完回到这里点「</Run><Run FontWeight="SemiBold">检查残留</Run><Run>」，工具会找以软件名命名、卸载后剩下的文件夹，确认后移到回收站。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>发行商的总文件夹（比如 Tencent、Microsoft）不会被当成残留，系统自带的程序也不会。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">搬到其他盘</Run><Run>：装在 C 盘的软件可以把整个安装文件夹搬到其他硬盘，C 盘原位置留一个链接。快捷方式、开始菜单、卸载和自动更新都照常可用，不用重装。搬之前会核对两边文件完全一致，才删掉 C 盘上的那份；正在运行的会先问你再关掉。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>不适合搬的会直接告诉你原因，不会硬搬：带系统服务或驱动的（杀毒、VPN、驱动、远程控制等）、给资源管理器装了右键菜单的、输入法、微软自己的软件（Office、Visual Studio 等）、Windows 自带组件、文件夹里有链接或用 Windows 压缩功能压过的文件（复制时可能漏掉），以及没写明装在哪个文件夹的。应用商店的软件请在 Windows 设置 → 应用里用「移动」。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>搬走的软件在「</Run><Run FontWeight="SemiBold">搬家管理</Run><Run>」里能看到，随时可以「搬回 C 盘」。以后软件大版本升级时，个别安装程序会把它重新装回 C 盘，到时再搬一次即可。</Run></TextBlock>
-              </DockPanel>
-            </StackPanel>
-          </Border>
-          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
-            <StackPanel>
-              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                <TextBlock Text="&#xE8AB;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                <TextBlock Text="搬家管理" Style="{StaticResource HelpHead}"/>
-              </StackPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">可以搬的</Run><Run>：自动列出 C 盘上还能搬走的东西，分成聊天记录、装在 C 盘的软件和其他文件夹三组，每一项都标着大小。勾选后在右下角选好目标盘，点「搬到其他盘」，可以一次搬好几项。开始前会列出全部项目，要先关掉的软件也会告诉你。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>带系统服务或驱动的、给资源管理器装了右键菜单的、微软自己的软件等，单独列在「不适合搬的软件」里，写明原因，不能勾选。从应用商店装的聊天软件（比如 WhatsApp、Microsoft Teams）由 Windows 管理，页面下方会提示在 Windows 设置里用「移动」换盘。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">已经搬走的</Run><Run>：所有搬到其他盘的文件夹都列在这里，每一项都显示现在的状态。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">正常</Run><Run>：数据在目标盘上，C 盘原位置只留了一个指向它的链接，不占 C 盘空间，软件照常使用。需要时可以「</Run><Run FontWeight="SemiBold">搬回 C 盘</Run><Run>」：复制回来、核对一致后才拆掉链接，最后删除目标盘上的那份。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">链接断了</Run><Run>：目标盘拔了或者盘符变了。把硬盘插回去（或改回原来的盘符）就好；如果在其他盘找到了同名的副本，可以「修复链接」改指向它。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">没搬完</Run><Run>：C 盘原文件夹还在，目标盘上有一份副本。可以在「可以搬的」里再搬一次（只补差异），或者删掉这份多余的副本。</Run></TextBlock>
-              </DockPanel>
-            </StackPanel>
-          </Border>
-          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
-            <StackPanel>
-              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                <TextBlock Text="&#xE823;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                <TextBlock Text="自动提醒" Style="{StaticResource HelpHead}"/>
-              </StackPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">空间不足提醒</Run><Run>：打开开关后，每次登录电脑 2 分钟后、以及每天中午，各检查一次 C 盘，低于你设定的值（默认 20 GB）就在屏幕右下角提醒，每天最多一次；空间够就什么都不显示。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">每周自动清理</Run><Run>：打开开关后，每周日自动清理一次临时文件、缓存和日志。不搬家、不清空回收站、不碰个人文件夹，被占用的文件直接跳过。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>这两项都由 Windows「任务计划程序」按时运行本工具，</Run><Run FontWeight="SemiBold">不需要一直开着本工具，也不需要设置开机启动</Run><Run>。任务名字以 CleanC 开头，</Run><Run FontWeight="SemiBold">默认关闭</Run><Run>，关掉开关就删除任务。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>请把本工具放在一个固定的位置（比如 D:\工具），不要删掉。挪了位置后打开一次，任务会自动改用新位置。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">C 盘空间变化</Run><Run>：每次打开本工具、每次定时检查都记一笔，画成最近 30 天的柱状图。</Run></TextBlock>
-              </DockPanel>
-            </StackPanel>
-          </Border>
-          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
-            <StackPanel>
-              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                <TextBlock Text="&#xE81C;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                <TextBlock Text="操作日志" Style="{StaticResource HelpHead}"/>
-              </StackPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">删除、搬运、合并、压缩、卸载和系统设置</Run><Run>的每一次改动都会记下来：什么时间、做了什么、对哪个文件或文件夹、结果怎样。只记操作，不保存文件内容。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>可以按类别（删除、搬运、合并……）、时间（7 天、30 天、全部）和关键字查找。日志是普通的 txt 文件，每月一个，点「打开日志文件夹」可以用记事本直接看。</Run></TextBlock>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">保存时间默认半年</Run><Run>，可以改成 1 个月到 2 年，或者永久保存。每次打开本工具时，超过保存时间的记录会自动删除，删掉后找不回来；把保存时间改短时，会先提示哪天之前的记录会被删掉。</Run></TextBlock>
-              </DockPanel>
-            </StackPanel>
-          </Border>
-          <Border Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
-            <StackPanel>
-              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                <TextBlock Text="&#xE897;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                <TextBlock Text="常见问题" Style="{StaticResource HelpHead}"/>
-              </StackPanel>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">为什么要管理员权限？</Run><LineBreak/><Run>清理系统临时文件、Windows 更新缓存等位置，需要管理员权限。</Run></TextBlock>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">做到一半能取消吗？</Run><LineBreak/><Run>可以。进度卡片和窗口底部都有「取消」按钮，会停在安全的地方，已经做完的不会撤销：清理会停下；搬家如果还在复制，C 盘上的原文件夹不动，已复制的部分留在目标盘，下次再搬会接着复制；搬回 C 盘时复制回来的那一半会删掉，什么都不改。正在换成链接、删除备份或运行系统命令（比如清理 Windows 更新）时按钮是灰的，等这一步做完就能取消。</Run></TextBlock>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">执行时能关窗口吗？</Run><LineBreak/><Run>做完前请不要关闭窗口，想停下请点「取消」。可以点「在后台继续」收起进度卡片，窗口底部和任务栏图标上都能看到进度。</Run></TextBlock>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">在哪看详细过程？</Run><LineBreak/><Run>做过哪些删除和搬运，看左侧的「操作日志」；程序运行的技术细节，看左下角「运行记录」，完整文件在 %TEMP%\CleanC-run.log。</Run></TextBlock>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">释放的空间比预计少？</Run><LineBreak/><Run>放进回收站的文件，要清空回收站后才真正释放空间；正被其他程序占用的文件会被跳过。</Run></TextBlock>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">能用深色界面吗？</Run><LineBreak/><Run>可以。在左边的「设置」里（或点左下角的「外观」）选浅色、深色或跟随系统（照 Windows 设置里「选择应用模式」来）。换了以后本工具会关闭，再自动打开。</Run></TextBlock>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">能把用不上的页面和按钮藏起来吗？</Run><LineBreak/><Run>可以。在左边的「设置」里勾掉不用的页面、左下角的按钮、页面标题下的说明，以及空间地图里的复选框、占比条、百分比、详细信息和「快速扫描」开关。藏起来的随时可以在那里打开，里面的设置和记录都不受影响；「恢复默认显示」一下全部恢复。</Run></TextBlock>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">为什么扫描出来的合计和「已用空间」对不上？</Run><LineBreak/><Run>按文件大小相加时，硬链接（同一份文件有好几个名字，WinSxS 和 System32 里很多）会重复算；压缩、稀疏和只在云端的文件实际占得比文件大小少；文件表（MFT）、NTFS 的日志、Windows 给更新预留的空间（保留的存储）也占地方，但不是普通文件。快速扫描后，在空间地图点「空间明细」可以看到每一块各多少。</Run></TextBlock>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">WinSxS 看起来很大，能删吗？</Run><LineBreak/><Run>不能手动删，删了系统可能坏掉。里面很多文件和 System32 等位置是同一份（硬链接），资源管理器按名字相加会重复算，实际占的比看上去小；快速扫描时空间地图会注明其中多少是硬链接。真正能清掉的是更新替换下来的旧组件，用「清理 C 盘」里的「WinSxS 组件清理 (DISM)」。</Run></TextBlock>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">为什么不清理 Prefetch 文件夹，也没有「内存加速」？</Run><LineBreak/><Run>Prefetch 里记的是程序启动时要读哪些文件，Windows 靠它让常用软件打开得更快，一共只有几十 MB，删了下次启动反而变慢，过几天又会长回来。内存也一样：Windows 会把空闲的内存拿来缓存常用的文件（任务管理器里的「已缓存」），别的程序要用时马上让出来，强行清空只会让电脑变慢。所以这两样本工具都不做。</Run></TextBlock>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">怎么知道有没有新版本？</Run><LineBreak/><Run>在下面「使用反馈」里点「检查新版本」，有新版本会打开下载页面；下载新的 exe 换掉旧的就行，设置、日志和自动提醒都会保留。本工具平时不联网，只在你点这个按钮时连一次 GitHub。</Run></TextBlock>
-            </StackPanel>
-          </Border>
-          <Border x:Name="FeedbackCard" Style="{StaticResource Card}" Padding="24,20,24,20" Margin="0,16,0,0">
-            <StackPanel>
-              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                <TextBlock Text="&#xE8BD;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                <TextBlock Text="使用反馈" Style="{StaticResource HelpHead}"/>
-              </StackPanel>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,8,0,0" Text="遇到问题、发现错误或有改进建议，欢迎在 GitHub 上提交问题（Issues）。"/>
+              <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE8BD;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/><TextBlock Text="使用反馈" Style="{StaticResource HelpHead}"/></StackPanel>
+              <TextBlock Style="{StaticResource HelpBody}" Margin="0,8,0,0" Text="遇到问题、发现错误或有改进建议，欢迎在 GitHub 上提交问题（Issues）。"/>
               <Border Background="#F5F5F7" CornerRadius="10" Padding="18,14" Margin="0,14,0,0">
                 <DockPanel>
                   <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
@@ -2414,16 +2846,30 @@
                   </StackPanel>
                 </DockPanel>
               </Border>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,14,0,0" Text="提交问题时附上截图和诊断信息，能更快找到原因。诊断信息包括软件版本、Windows 版本、C 盘空间和最近的运行记录（里面有文件夹路径），贴出去之前可以先看一下。"/>
-              <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
-                <Button x:Name="BtnCopyDiag" Content="复制诊断信息" Margin="0,0,8,0"/>
-                <Button x:Name="BtnOpenLog" Content="打开运行记录文件"/>
-                <TextBlock x:Name="CopyHint" Style="{StaticResource Caption}" Foreground="#248A3D" Margin="14,0,0,0"/>
+              <StackPanel Margin="0,18,0,0">
+                <TextBlock Style="{StaticResource HelpLead}" Text="附上诊断信息"/>
+                <TextBlock Style="{StaticResource HelpBody}" Text="提交问题时附上截图和诊断信息，能更快找到原因。诊断信息包括软件版本、Windows 版本、C 盘空间和最近的运行记录（里面有文件夹路径），贴出去之前可以先看一下。"/>
+                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                  <Button x:Name="BtnCopyDiag" Content="复制诊断信息" Margin="0,0,8,0"/>
+                  <Button x:Name="BtnOpenLog" Content="打开运行记录文件"/>
+                  <TextBlock x:Name="CopyHint" Style="{StaticResource Caption}" Foreground="#248A3D" Margin="14,0,0,0"/>
+                </StackPanel>
               </StackPanel>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,18,0,0" Text="「检查扫描功能」在这台电脑上核对快速扫描：比较直接读文件表和逐个文件夹扫描的结果，再在本工具自己的文件夹里建几个文件、改一改、删掉，看按变更日志更新对不对。只读 C 盘，不动你的文件，大约要一两分钟；结果会复制下来，可以贴到 GitHub 的问题里。「检查新版本」只在你点的时候连一次 GitHub。"/>
-              <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
-                <Button x:Name="BtnSelfTest" Content="检查扫描功能" Margin="0,0,8,0"/>
-                <Button x:Name="BtnCheckUpdate" Content="检查新版本"/>
+              <Border Height="1" Background="#EDEDF0" Margin="0,18,0,0"/>
+              <StackPanel Margin="0,18,0,0">
+                <TextBlock Style="{StaticResource HelpLead}" Text="检查扫描功能"/>
+                <TextBlock Style="{StaticResource HelpBody}" Text="在这台电脑上核对快速扫描：比较直接读文件表和逐个文件夹扫描的结果，再在本工具自己的文件夹里建几个文件、改一改、删掉，看按变更日志更新对不对。只读 C 盘，不动你的文件，大约要一两分钟；结果会复制下来，可以贴到 GitHub 的问题里。"/>
+                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                  <Button x:Name="BtnSelfTest" Content="检查扫描功能"/>
+                </StackPanel>
+              </StackPanel>
+              <Border Height="1" Background="#EDEDF0" Margin="0,18,0,0"/>
+              <StackPanel Margin="0,18,0,0">
+                <TextBlock Style="{StaticResource HelpLead}" Text="检查新版本"/>
+                <TextBlock Style="{StaticResource HelpBody}" Text="有新版本会打开下载页面，下载新的 exe 换掉旧的就行。只在你点这个按钮时连一次 GitHub。"/>
+                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                  <Button x:Name="BtnCheckUpdate" Content="检查新版本"/>
+                </StackPanel>
               </StackPanel>
             </StackPanel>
           </Border>
