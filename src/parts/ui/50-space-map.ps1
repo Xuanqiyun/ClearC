@@ -243,7 +243,7 @@ function Show-MapLevel($node) {
     Restore-MapKeep $keep
     $ctl.MapPath.Text = $path
     $ctl.MapInfo.Text = (T "这一层共 {0}，{1:N0} 个文件{2}") -f (Fmt $node.Size), $node.Files, $(if ($script:mapScanAt) { (T " · 扫描于 {0:HH:mm}（{1}）") -f $script:mapScanAt, $script:mapHow } else { '' })
-    $ctl.BtnMapAcct.Visibility = if ($script:mapRoot -and $script:mapRoot.HasDisk) { 'Visible' } else { 'Collapsed' }
+    $ctl.BtnMapAcct.Visibility = if ($script:mapRoot -and $script:mapRoot.HasDisk -and (Get-Mode) -ge 2) { 'Visible' } else { 'Collapsed' }
     $ctl.BtnMapUp.IsEnabled = ($null -ne $node.Parent)
     $ctl.EmptyMap.Visibility = if ($rows.Count -gt 0) { 'Collapsed' } else { 'Visible' }
     if ($rows.Count -eq 0) { $ctl.EmptyMapText.Text = (T '这个文件夹是空的') }

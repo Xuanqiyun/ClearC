@@ -257,6 +257,7 @@ function PathHasAny([string]$path, $frags) {
 #   路径：多个用 ; 隔开；可以用 %LOCALAPPDATA%、%APPDATA%、%PROGRAMDATA%、%TEMP%、%USERPROFILE%、%SYSTEMROOT%、%SYSTEMDRIVE% 这类变量，
 #         以及 %STEAM%（Steam 的安装目录，从注册表查）；可以用 * 通配一层文件夹；@chromium:<User Data 目录> 展开成 Chromium 系浏览器的各个缓存目录
 #   选项：filter=*.log（只删匹配的文件）  whole（整个文件夹删掉，不只是里面的东西）  confirm（放进「需确认」，默认跳过）  svc=服务,服务（删之前停掉、删完再启动）
+#         pro / expert（只在「工程师」/「开发者和 IT」模式下显示；不写的普通用户也看得到）
 # 只删缓存：不碰 Cookie、历史记录、密码、设置和用户保存的数据。每一条的名称和说明都在翻译表里有英文
 $script:cacheLib = @(
     '用户临时文件 | %TEMP% | 各软件运行时的临时文件，关掉软件就没用了'
@@ -286,35 +287,35 @@ $script:cacheLib = @(
     'QQ 浏览器缓存 | @chromium:%LOCALAPPDATA%\Tencent\QQBrowser\User Data | 网页缓存。请先关闭浏览器。不影响密码、书签、历史记录'
     'Steam 着色器与网页缓存 | %STEAM%\steamapps\shadercache;%STEAM%\appcache\httpcache;%STEAM%\dumps;%STEAM%\logs | 游戏的着色器缓存（首次启动会重建）、Steam 商店页面的缓存、崩溃转储和日志。请先退出 Steam。游戏本身不动'
     'Epic Games 启动器缓存 | %LOCALAPPDATA%\EpicGamesLauncher\Saved\webcache*;%LOCALAPPDATA%\EpicGamesLauncher\Saved\Logs | 启动器的网页缓存和日志。请先退出 Epic Games 启动器。游戏本身不动'
-    'Unity 缓存 | %LOCALAPPDATA%\Unity\cache | Unity 编辑器的资源商店下载和全局光照缓存，需要时会重新下载或生成'
+    'Unity 缓存 | %LOCALAPPDATA%\Unity\cache | Unity 编辑器的资源商店下载和全局光照缓存，需要时会重新下载或生成 | pro'
     'Adobe 媒体缓存 | %APPDATA%\Adobe\Common\Media Cache Files;%APPDATA%\Adobe\Common\Media Cache;%APPDATA%\Adobe\Common\Peak Files | Premiere、After Effects、Audition 导入素材时生成的缓存，打开项目会重新生成。请先关闭 Adobe 软件'
     'Microsoft Teams (旧版) 缓存 | %APPDATA%\Microsoft\Teams\Cache;%APPDATA%\Microsoft\Teams\Code Cache;%APPDATA%\Microsoft\Teams\GPUCache;%APPDATA%\Microsoft\Teams\Service Worker\CacheStorage;%APPDATA%\Microsoft\Teams\tmp | 旧版 Teams 的网页缓存。请先退出 Teams。不影响登录和聊天记录'
     'Discord 缓存 | %APPDATA%\discord\Cache;%APPDATA%\discord\Code Cache;%APPDATA%\discord\GPUCache | 看过的图片和视频的缓存。请先退出 Discord（包括托盘图标）。不影响登录'
     'Slack 缓存 | %APPDATA%\Slack\Cache;%APPDATA%\Slack\Code Cache;%APPDATA%\Slack\GPUCache;%APPDATA%\Slack\Service Worker\CacheStorage | 网页缓存和文件预览。请先退出 Slack。不影响登录'
-    'VS Code 缓存 | %APPDATA%\Code\Cache;%APPDATA%\Code\CachedData;%APPDATA%\Code\Code Cache;%APPDATA%\Code\GPUCache;%APPDATA%\Code\CachedExtensionVSIXs;%APPDATA%\Code\logs | 编辑器的缓存、下载过的扩展安装包和日志。请先关闭 VS Code。不影响设置和扩展'
-    'Cursor 缓存 | %APPDATA%\Cursor\Cache;%APPDATA%\Cursor\CachedData;%APPDATA%\Cursor\Code Cache;%APPDATA%\Cursor\GPUCache;%APPDATA%\Cursor\logs | 编辑器的缓存和日志。请先关闭 Cursor。不影响设置和扩展'
-    'Cursor 状态库备份 | %APPDATA%\Cursor\User\globalStorage\state.vscdb.backup | Cursor 编辑器状态库的备份副本，主文件保留'
+    'VS Code 缓存 | %APPDATA%\Code\Cache;%APPDATA%\Code\CachedData;%APPDATA%\Code\Code Cache;%APPDATA%\Code\GPUCache;%APPDATA%\Code\CachedExtensionVSIXs;%APPDATA%\Code\logs | 编辑器的缓存、下载过的扩展安装包和日志。请先关闭 VS Code。不影响设置和扩展 | pro'
+    'Cursor 缓存 | %APPDATA%\Cursor\Cache;%APPDATA%\Cursor\CachedData;%APPDATA%\Cursor\Code Cache;%APPDATA%\Cursor\GPUCache;%APPDATA%\Cursor\logs | 编辑器的缓存和日志。请先关闭 Cursor。不影响设置和扩展 | pro'
+    'Cursor 状态库备份 | %APPDATA%\Cursor\User\globalStorage\state.vscdb.backup | Cursor 编辑器状态库的备份副本，主文件保留 | pro'
     'Spotify 缓存 | %LOCALAPPDATA%\Spotify\Data;%LOCALAPPDATA%\Spotify\Browser\Cache | 播放过的歌曲的缓存。下载供离线听的歌不在这里。请先退出 Spotify'
     '网易云音乐缓存 | %LOCALAPPDATA%\NetEase\CloudMusic\Cache | 听过的歌的缓存。下载的歌不在这里。请先退出网易云音乐'
-    'pip 缓存 | %LOCALAPPDATA%\pip\cache | Python 装包时下载的安装包副本，再装时会重新下载'
-    'uv 缓存 | %LOCALAPPDATA%\uv\cache | uv 装 Python 包时的下载缓存，再装时会重新下载'
-    'npm 缓存 | %LOCALAPPDATA%\npm-cache | Node.js 装包时的下载缓存'
-    'Yarn 缓存 | %LOCALAPPDATA%\Yarn\Cache | Yarn 装包时的下载缓存'
-    'NuGet 下载缓存 | %LOCALAPPDATA%\NuGet\v3-cache;%LOCALAPPDATA%\NuGet\http-cache;%LOCALAPPDATA%\NuGet\plugins-cache | .NET 装包时的下载缓存。项目用的包在全局包目录里，不在这里'
-    'Go 编译缓存 | %LOCALAPPDATA%\go-build | Go 的编译结果缓存，下次编译会重新生成'
-    'Rust crate 下载缓存 | %USERPROFILE%\.cargo\registry\cache | cargo 下载过的 crate 压缩包，需要时会重新下载'
-    'Clash Verge 代理日志 | %APPDATA%\io.github.clash-verge-rev.clash-verge-rev\logs;%APPDATA%\clash-verge\logs;%LOCALAPPDATA%\io.github.clash-verge-rev.clash-verge-rev\logs | 代理软件的运行日志，会无限增长。建议在它设置里把日志等级改成 warn'
-    'Intel XTU 超频日志 | %PROGRAMDATA%\Intel\Intel Extreme Tuning Utility\Logs | Intel 超频组件的日志，会无限增长'
+    'pip 缓存 | %LOCALAPPDATA%\pip\cache | Python 装包时下载的安装包副本，再装时会重新下载 | pro'
+    'uv 缓存 | %LOCALAPPDATA%\uv\cache | uv 装 Python 包时的下载缓存，再装时会重新下载 | pro'
+    'npm 缓存 | %LOCALAPPDATA%\npm-cache | Node.js 装包时的下载缓存 | pro'
+    'Yarn 缓存 | %LOCALAPPDATA%\Yarn\Cache | Yarn 装包时的下载缓存 | pro'
+    'NuGet 下载缓存 | %LOCALAPPDATA%\NuGet\v3-cache;%LOCALAPPDATA%\NuGet\http-cache;%LOCALAPPDATA%\NuGet\plugins-cache | .NET 装包时的下载缓存。项目用的包在全局包目录里，不在这里 | pro'
+    'Go 编译缓存 | %LOCALAPPDATA%\go-build | Go 的编译结果缓存，下次编译会重新生成 | pro'
+    'Rust crate 下载缓存 | %USERPROFILE%\.cargo\registry\cache | cargo 下载过的 crate 压缩包，需要时会重新下载 | pro'
+    'Clash Verge 代理日志 | %APPDATA%\io.github.clash-verge-rev.clash-verge-rev\logs;%APPDATA%\clash-verge\logs;%LOCALAPPDATA%\io.github.clash-verge-rev.clash-verge-rev\logs | 代理软件的运行日志，会无限增长。建议在它设置里把日志等级改成 warn | pro'
+    'Intel XTU 超频日志 | %PROGRAMDATA%\Intel\Intel Extreme Tuning Utility\Logs | Intel 超频组件的日志，会无限增长 | pro'
     'Apple 设备系统更新包 | %PROGRAMDATA%\Apple\AMPDevicesAgent\*-Temporary-Files;%APPDATA%\Apple Computer\iTunes\*Software Updates | 给 iPhone/iPad 升级时下载的固件，装完就没用了'
     'Dell 更新程序缓存 | %PROGRAMDATA%\Dell\DTP;%PROGRAMDATA%\Dell\SupportAssist | 戴尔驱动更新工具下载的安装包'
     '罗技 Options+ 缓存 | %PROGRAMDATA%\LogiOptionsPlus\cache;%PROGRAMDATA%\LogiOptionsPlus\depots | 罗技驱动的更新包缓存'
-    '驱动安装包解压残留 | %SYSTEMDRIVE%\NVIDIA;%SYSTEMDRIVE%\AMD;%SYSTEMDRIVE%\Intel;%SYSTEMDRIVE%\SWSetup;%SYSTEMDRIVE%\Drivers;%SYSTEMDRIVE%\Dell\Drivers | 显卡驱动和品牌机驱动安装时解压到 C 盘根目录的文件，装完就没用了。以后要重装驱动再下载一次即可 | confirm'
-    'NI 安装包缓存 | %PROGRAMDATA%\National Instruments\MDF\ProductCache;%PROGRAMDATA%\National Instruments\NI Package Manager\packages | LabVIEW 等 NI 软件的安装媒体缓存。软件本身不受影响；以后修复或重装时需重新下载 | confirm'
-    'NuGet 全局包目录 | %USERPROFILE%\.nuget\packages | .NET 项目引用的包都放在这里。删了以后打开项目要联网重新还原（Visual Studio 会自动做，但要等一会儿） | confirm'
-    'Gradle 依赖缓存 | %USERPROFILE%\.gradle\caches | Android Studio 和 Gradle 项目下载的依赖。删了下次构建要重新下载，国内网络可能很慢 | confirm'
-    'Maven 本地仓库 | %USERPROFILE%\.m2\repository | Maven 项目下载的依赖。删了下次构建要重新下载 | confirm'
-    'JetBrains IDE 缓存和索引 | %LOCALAPPDATA%\JetBrains\*\caches;%LOCALAPPDATA%\JetBrains\*\index | IntelliJ IDEA、PyCharm 等的缓存和代码索引。删了打开项目要重新索引（几分钟）。请先关闭这些 IDE | confirm'
-    '虚幻引擎派生数据缓存 | %LOCALAPPDATA%\UnrealEngine\Common\DerivedDataCache | Unreal Engine 给项目生成的派生数据，常有几十 GB。删了打开项目要重新生成，很慢 | confirm'
+    '驱动安装包解压残留 | %SYSTEMDRIVE%\NVIDIA;%SYSTEMDRIVE%\AMD;%SYSTEMDRIVE%\Intel;%SYSTEMDRIVE%\SWSetup;%SYSTEMDRIVE%\Drivers;%SYSTEMDRIVE%\Dell\Drivers | 显卡驱动和品牌机驱动安装时解压到 C 盘根目录的文件，装完就没用了。以后要重装驱动再下载一次即可 | confirm pro'
+    'NI 安装包缓存 | %PROGRAMDATA%\National Instruments\MDF\ProductCache;%PROGRAMDATA%\National Instruments\NI Package Manager\packages | LabVIEW 等 NI 软件的安装媒体缓存。软件本身不受影响；以后修复或重装时需重新下载 | confirm expert'
+    'NuGet 全局包目录 | %USERPROFILE%\.nuget\packages | .NET 项目引用的包都放在这里。删了以后打开项目要联网重新还原（Visual Studio 会自动做，但要等一会儿） | confirm expert'
+    'Gradle 依赖缓存 | %USERPROFILE%\.gradle\caches | Android Studio 和 Gradle 项目下载的依赖。删了下次构建要重新下载，国内网络可能很慢 | confirm expert'
+    'Maven 本地仓库 | %USERPROFILE%\.m2\repository | Maven 项目下载的依赖。删了下次构建要重新下载 | confirm expert'
+    'JetBrains IDE 缓存和索引 | %LOCALAPPDATA%\JetBrains\*\caches;%LOCALAPPDATA%\JetBrains\*\index | IntelliJ IDEA、PyCharm 等的缓存和代码索引。删了打开项目要重新索引（几分钟）。请先关闭这些 IDE | confirm expert'
+    '虚幻引擎派生数据缓存 | %LOCALAPPDATA%\UnrealEngine\Common\DerivedDataCache | Unreal Engine 给项目生成的派生数据，常有几十 GB。删了打开项目要重新生成，很慢 | confirm expert'
 )
 function Get-SteamPath {
     try { $p = [string](Get-ItemProperty 'HKCU:\Software\Valve\Steam' -EA SilentlyContinue).SteamPath; if ($p) { return $p.Replace('/', '\').TrimEnd('\') } } catch {}
@@ -342,7 +343,7 @@ function Get-CacheLibrary {
         if ($f.Count -lt 3) { continue }
         $paths = @()
         foreach ($p in $f[1].Split(';')) { if ($p.Trim()) { $paths += Expand-LibPath $p } }
-        $x = @{ N = (T $f[0].Trim()); Note = (T $f[2].Trim()); Paths = $paths; Confirm = $false; Whole = $false; Filter = ''; Svc = $null }
+        $x = @{ N = (T $f[0].Trim()); Note = (T $f[2].Trim()); Paths = $paths; Confirm = $false; Whole = $false; Filter = ''; Svc = $null; Lvl = 0 }
         if ($f.Count -gt 3) {
             foreach ($o in $f[3].Trim().Split(' ')) {
                 $o = $o.Trim(); if (-not $o) { continue }
@@ -350,6 +351,8 @@ function Get-CacheLibrary {
                 elseif ($o -eq 'confirm') { $x.Confirm = $true }
                 elseif ($o.StartsWith('filter=')) { $x.Filter = $o.Substring(7) }
                 elseif ($o.StartsWith('svc=')) { $x.Svc = @($o.Substring(4).Split(',') | Where-Object { $_ }) }
+                elseif ($o -eq 'pro') { $x.Lvl = 1 }
+                elseif ($o -eq 'expert') { $x.Lvl = 2 }
             }
         }
         $out += $x
@@ -613,6 +616,8 @@ function Get-OrphanFolders($apps) {
     return $out
 }
 
+# 使用模式：0 普通用户  1 工程师  2 开发者和 IT。目录项的 Lvl 比当前模式高就不在清理页列出（自动清理不受影响）
+function Get-Mode { switch ((Get-Setting 'Mode' 'expert')) { 'basic' { 0 } 'pro' { 1 } default { 2 } } }
 # Kind: cache = 缓存类(删除/跳过)   action = 操作类(执行/跳过)   move = 只能搬(搬到其他盘/跳过)   flex = 可搬可删
 function Get-Catalog {
     $docs = [Environment]::GetFolderPath('MyDocuments')
@@ -629,7 +634,7 @@ function Get-Catalog {
     # ---- 安全清理：缓存 / 临时文件 / 日志，删了程序自动重建（目录库里的）----
     foreach ($x in $lib) {
         if ($x.Confirm) { continue }
-        $list += @{ G=$safeG; Kind='cache'; Def=(T '删除'); N=$x.N; Paths=$x.Paths; Note=$x.Note; Filter=$x.Filter; Whole=$x.Whole; Svc=$x.Svc }
+        $list += @{ G=$safeG; Kind='cache'; Def=(T '删除'); N=$x.N; Paths=$x.Paths; Note=$x.Note; Filter=$x.Filter; Whole=$x.Whole; Svc=$x.Svc; Lvl=$x.Lvl }
     }
     $list += @(
         @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); N=(T '清空回收站');            Note=(T '回收站里是你以前删掉、但还能找回的文件。清空后就永远找不回了，请先打开回收站确认里面没有要的东西')
@@ -642,24 +647,24 @@ function Get-Catalog {
         # ---- 需确认：有代价 ----
         @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache';  Def=(T '跳过'); One=(T '删除'); N='Windows.old';        Paths=@('C:\Windows.old'); Whole=$true; Note=(T '上一版 Windows 的完整副本。删后不能回退到上一版系统（系统升级 10 天后会自动删）')
            Act ={ & "$env:SystemRoot\System32\takeown.exe" /F 'C:\Windows.old' /R /A /D Y | Out-Null; & "$env:SystemRoot\System32\icacls.exe" 'C:\Windows.old' /grant Administrators:F /T /C /Q | Out-Null; Remove-Item 'C:\Windows.old' -Recurse -Force -ErrorAction SilentlyContinue } }
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def=(T '跳过'); One=(T '执行'); N=(T '重建 Windows 搜索索引'); Note=(T '搜索索引膨胀时可重建，重建后通常只剩 1 到 2 GB。重建期间（约 1 小时）搜文件会变慢')
+        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def=(T '跳过'); One=(T '执行'); N=(T '重建 Windows 搜索索引'); Lvl=1; Note=(T '搜索索引膨胀时可重建，重建后通常只剩 1 到 2 GB。重建期间（约 1 小时）搜文件会变慢')
            Size={ $s = 0; foreach ($f in 'C:\ProgramData\Microsoft\Search\Data\Applications\Windows\Windows.edb','C:\ProgramData\Microsoft\Search\Data\Applications\Windows\Windows.db') { $i = Get-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue; if ($i) { $s += $i.Length } }; if ($s -gt 2GB) { $s } else { 0 } }
            Act ={ Stop-Service WSearch -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 3; Remove-Item 'C:\ProgramData\Microsoft\Search\Data\Applications\Windows\Windows.edb','C:\ProgramData\Microsoft\Search\Data\Applications\Windows\Windows.db' -Force -ErrorAction SilentlyContinue; Set-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows Search' -Name SetupCompletedSuccessfully -Value 0 -ErrorAction SilentlyContinue; Start-Service WSearch -ErrorAction SilentlyContinue } }
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def=(T '跳过'); N=(T '关闭休眠 (hiberfil.sys)'); Paths=@('C:\hiberfil.sys'); Note=(T '休眠文件约等于内存大小。关闭后睡眠不受影响，只是没有「休眠」和「快速启动」')
+        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def=(T '跳过'); N=(T '关闭休眠 (hiberfil.sys)'); Lvl=1; Paths=@('C:\hiberfil.sys'); Note=(T '休眠文件约等于内存大小。关闭后睡眠不受影响，只是没有「休眠」和「快速启动」')
            Act ={ & "$env:SystemRoot\System32\powercfg.exe" /h off } }
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def=(T '跳过'); One=(T '执行'); N=(T '禁用 XTU 超频日志服务'); Note=(T '外星人 Command Center 的 CPU 超频组件，会持续写几 GB 日志。不超频可禁用，AWCC 的风扇和性能档位不受影响')
+        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def=(T '跳过'); One=(T '执行'); N=(T '禁用 XTU 超频日志服务'); Lvl=2; Note=(T '外星人 Command Center 的 CPU 超频组件，会持续写几 GB 日志。不超频可禁用，AWCC 的风扇和性能档位不受影响')
            Size={ $s = Get-Service XTU3SERVICE -ErrorAction SilentlyContinue; if ($s -and $s.Status -eq 'Running') { -1 } else { 0 } }
            Act ={ Stop-Service XTU3SERVICE -Force -ErrorAction SilentlyContinue; Set-Service XTU3SERVICE -StartupType Disabled -ErrorAction SilentlyContinue } }
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T 'Windows Installer 孤儿安装包'); Note=(T 'C:\Windows\Installer 里没有任何已装软件和补丁再引用的安装包（.msi / .msp），多半是软件升级、卸载后留下的。判断方法和 PatchCleaner 一样。删了以后，万一哪个软件修复或卸载时提示找不到安装包，重新下载安装一次即可')
+        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T 'Windows Installer 孤儿安装包'); Lvl=2; Note=(T 'C:\Windows\Installer 里没有任何已装软件和补丁再引用的安装包（.msi / .msp），多半是软件升级、卸载后留下的。判断方法和 PatchCleaner 一样。删了以后，万一哪个软件修复或卸载时提示找不到安装包，重新下载安装一次即可')
            Size={ $s = [double]0; foreach ($f in (Get-InstallerOrphans)) { $s += $f.Length }; $s }
            Act ={ $n = 0; $b = [double]0; foreach ($f in (Get-InstallerOrphans)) { try { Remove-Item -LiteralPath $f.FullName -Force -ErrorAction Stop; $n++; $b += $f.Length } catch { Log ((T "  没删掉：{0}（{1}）") -f $f.FullName, $_.Exception.Message) } }; Log ((T "  Windows Installer 孤儿安装包：删了 {0} 个，{1}") -f $n, (GB $b)) } }
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T '开始菜单里失效的快捷方式'); Note=(T '指向的程序已经不在了的快捷方式（只看开始菜单，不碰桌面）。目标在没插着的硬盘上的不算。不占什么空间，只是清爽')
+        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T '开始菜单里失效的快捷方式'); Lvl=1; Note=(T '指向的程序已经不在了的快捷方式（只看开始菜单，不碰桌面）。目标在没插着的硬盘上的不算。不占什么空间，只是清爽')
            Size={ $s = [double]0; foreach ($f in (Get-BrokenShortcuts)) { $s += $f.Length }; $s }
            Act ={ $n = 0; foreach ($f in (Get-BrokenShortcuts)) { try { Remove-Item -LiteralPath $f.FullName -Force -ErrorAction Stop; $n++; OpLog '删除' (T '失效的快捷方式') $f.FullName '' } catch {} }; Log ((T "  删了 {0} 个失效的快捷方式") -f $n) } }
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T 'Windows 事件日志'); Note=(T '系统、应用程序、安全等日志，排查问题的工程师会看。清空后就查不到以前的记录了，不确定就跳过')
+        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T 'Windows 事件日志'); Lvl=2; Note=(T '系统、应用程序、安全等日志，排查问题的工程师会看。清空后就查不到以前的记录了，不确定就跳过')
            Size={ $s = [double]0; foreach ($f in @(Get-ChildItem -LiteralPath "$env:SystemRoot\System32\winevt\Logs" -Filter '*.evtx' -File -Force -ErrorAction SilentlyContinue)) { $s += $f.Length }; $s }
            Act ={ $n = 0; foreach ($l in @(& "$sys32\wevtutil.exe" el 2>$null)) { if (Stopping) { break }; & "$sys32\wevtutil.exe" cl "$l" 2>$null | Out-Null; if ($LASTEXITCODE -eq 0) { $n++ } }; Log ((T "  清空了 {0} 个事件日志") -f $n) } }
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def=(T '跳过'); One=(T '执行'); N=(T 'WinSxS 组件清理 (DISM)'); Note=(T '清掉系统更新替换下来的旧组件，通常能省 2 到 10 GB。耗时 10 到 20 分钟，完成后建议重启'); Last=$true
+        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def=(T '跳过'); One=(T '执行'); N=(T 'WinSxS 组件清理 (DISM)'); Lvl=1; Note=(T '清掉系统更新替换下来的旧组件，通常能省 2 到 10 GB。耗时 10 到 20 分钟，完成后建议重启'); Last=$true
            Size={ -1 }
            Act ={ & "$env:SystemRoot\System32\Dism.exe" /Online /Cleanup-Image /StartComponentCleanup /ResetBase | Out-Null }; Slow=$true }
 
@@ -683,19 +688,19 @@ function Get-Catalog {
         @{ G=$chatG; Kind='move'; Def=(T '搬到其他盘'); N=(T 'Zoom 程序和数据');         Paths=@("$env:APPDATA\Zoom");                                  Apps=@('Zoom'); Note=(T 'Zoom 装在这里的程序和本地数据。会议录像默认存在「文档」里的 Zoom 文件夹，那里属于个人文件夹，不动') }
 
         # ---- 其他可搬的文件夹 ----
-        @{ G=$otherG; Kind='move'; Def=(T '跳过');    N=(T '桌面');                   Paths=@($desk); NoOneDrive=$true; Note=(T '桌面上的所有文件。搬后桌面照常显示，文件实际在 D 盘') }
-        @{ G=$otherG; Kind='move'; Def=(T '跳过');    N=(T '下载');                   Paths=@($down); NoOneDrive=$true; Note=(T '下载文件夹。搬后浏览器照常下载到这里，文件实际在 D 盘') }
-        @{ G=$otherG; Kind='flex'; Def=(T '跳过');    N=(T '用户目录 .cache');        Paths=@("$env:USERPROFILE\.cache"); Note=(T '各类开发工具的缓存（HuggingFace 模型、uv、playwright 等）。删了会重新下载；也可搬走') }
-        @{ G=$otherG; Kind='flex'; Def=(T '跳过');    N=(T 'conda 环境 (.conda)');    Paths=@("$env:USERPROFILE\.conda"); Note=(T 'conda 创建的 Python 环境。搬走后照常使用；删了要重建环境') }
-        @{ G=$otherG; Kind='flex'; Def=(T '跳过');    N=(T 'pip --user 安装的包');    Paths=@("$env:APPDATA\Python"); Note=(T '用 pip install --user 装的 Python 包。有 conda 的话多半已不用，可删；不确定就搬走') }
+        @{ G=$otherG; Kind='move'; Def=(T '跳过');    N=(T '桌面'); Lvl=1;                   Paths=@($desk); NoOneDrive=$true; Note=(T '桌面上的所有文件。搬后桌面照常显示，文件实际在 D 盘') }
+        @{ G=$otherG; Kind='move'; Def=(T '跳过');    N=(T '下载'); Lvl=1;                   Paths=@($down); NoOneDrive=$true; Note=(T '下载文件夹。搬后浏览器照常下载到这里，文件实际在 D 盘') }
+        @{ G=$otherG; Kind='flex'; Def=(T '跳过');    N=(T '用户目录 .cache'); Lvl=2;        Paths=@("$env:USERPROFILE\.cache"); Note=(T '各类开发工具的缓存（HuggingFace 模型、uv、playwright 等）。删了会重新下载；也可搬走') }
+        @{ G=$otherG; Kind='flex'; Def=(T '跳过');    N=(T 'conda 环境 (.conda)'); Lvl=2;    Paths=@("$env:USERPROFILE\.conda"); Note=(T 'conda 创建的 Python 环境。搬走后照常使用；删了要重建环境') }
+        @{ G=$otherG; Kind='flex'; Def=(T '跳过');    N=(T 'pip --user 安装的包'); Lvl=2;    Paths=@("$env:APPDATA\Python"); Note=(T '用 pip install --user 装的 Python 包。有 conda 的话多半已不用，可删；不确定就搬走') }
     )
     foreach ($x in $lib) {
         if (-not $x.Confirm) { continue }
-        $list += @{ G=$confG; Kind='cache'; Def=(T '跳过'); One=(T '删除'); N=$x.N; Paths=$x.Paths; Note=$x.Note; Filter=$x.Filter; Whole=$x.Whole; Svc=$x.Svc }
+        $list += @{ G=$confG; Kind='cache'; Def=(T '跳过'); One=(T '删除'); N=$x.N; Paths=$x.Paths; Note=$x.Note; Filter=$x.Filter; Whole=$x.Whole; Svc=$x.Svc; Lvl=$x.Lvl }
     }
     # ---- 自定义：用户在设置里加的文件夹，删里面的东西 ----
     foreach ($p in (Get-CustomClean)) {
-        $list += @{ G=$customG; Kind='cache'; Def=(T '删除'); N=(Split-Path $p -Leaf); Paths=@($p); Note=$p; Custom=$true }
+        $list += @{ G=$customG; Kind='cache'; Def=(T '删除'); N=(Split-Path $p -Leaf); Paths=@($p); Note=$p; Custom=$true; Lvl=2 }
     }
     $apps = Get-ChatApps
     $i = 0

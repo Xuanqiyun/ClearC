@@ -62,6 +62,8 @@ try {
     $chrome = @($lib | Where-Object { $_.N -eq 'Chrome 浏览器缓存' })[0]
     Check 'chromium entry expands to the cache folders' ($chrome -and $chrome.Paths.Count -eq 10 -and ($chrome.Paths -like '*\*\Cache').Count -eq 1)
     Check 'library options: filter, whole, svc, confirm' ((@($lib | Where-Object { $_.Filter -eq '*.log' }).Count -ge 1) -and (@($lib | Where-Object { $_.Whole }).Count -ge 1) -and (@($lib | Where-Object { $_.Svc -contains 'bits' }).Count -eq 1) -and (@($lib | Where-Object { $_.Confirm }).Count -ge 3))
+    Check 'library levels: pro and expert entries, Chrome stays basic' ((@($lib | Where-Object { $_.Lvl -eq 1 }).Count -ge 8) -and (@($lib | Where-Object { $_.Lvl -eq 2 }).Count -ge 4) -and $chrome.Lvl -eq 0)
+    Check 'catalog carries levels (basic, pro and expert items)' ((@($cat | Where-Object { -not $_.Lvl }).Count -ge 20) -and (@($cat | Where-Object { $_.Lvl -eq 1 }).Count -ge 10) -and (@($cat | Where-Object { $_.Lvl -eq 2 }).Count -ge 6))
     Check 'every library entry has a name, a note and at least one path or Steam' (@($lib | Where-Object { -not $_.N -or -not $_.Note }).Count -eq 0)
     Check 'the catalog has one index per entry' ((@($cat | ForEach-Object { $_.Idx } | Sort-Object -Unique).Count) -eq $cat.Count)
     # winget 的表格
@@ -133,6 +135,9 @@ try {
     $x = [Theme]::Xaml('<Border Background="White" BorderBrush="#E5E5EA"><TextBlock Foreground="#1D1D1F" Text="a #FFFFFF b"/><Border.Background><SolidColorBrush Color="#F5F5F7"/></Border.Background></Border>')
     Check "XAML colors replaced by role ($x)" ($x -match 'Background="#2' -and $x -match 'Foreground="#F' -and $x -match 'Text="a #FFFFFF b"' -and $x -notmatch 'Color="#F5F5F7"')
     [Theme]::Dark = $false
+    # 使用模式（放最后：写设置文件会多出一个文件，别影响前面的空间地图比较）
+    Set-Setting 'Mode' 'basic'; $m0 = Get-Mode; Set-Setting 'Mode' 'pro'; $m1 = Get-Mode; Set-Setting 'Mode' ''; $m2 = Get-Mode
+    Check 'Get-Mode: basic 0, pro 1, unset = expert 2' ($m0 -eq 0 -and $m1 -eq 1 -and $m2 -eq 2)
 } finally {
     Remove-Item -LiteralPath $lk -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue

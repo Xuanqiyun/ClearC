@@ -532,7 +532,7 @@ $win.Add_ContentRendered({
     }
     if ($script:riskShown) { return }
     $script:riskShown = $true
-    if (Test-Path -LiteralPath $script:riskFile) { return }
+    if (Test-Path -LiteralPath $script:riskFile) { Ask-Mode; return }
     $ans = Show-Sheet -Kind warn -Title (T '使用前请先阅读安全风险提示') `
         -Text (T "本工具会按你的选择删除或搬移电脑上的文件。删除的文件可能无法恢复，存在资料丢失的风险。`n`n每次删除前，请确认这些资料确实不再需要、删除不会给你带来损失；重要资料请先备份。因使用本工具造成的资料丢失或其他损失，责任由使用者自行承担，开发者不承担责任。`n`n完整说明随时可以在左侧「帮助」里查看。") `
         -Confirm (T '我已阅读并了解上述风险，同意自行承担使用本工具的后果。') -Buttons @((T '退出'), (T '同意并继续')) -Primary (T '同意并继续') -Cancel (T '退出')
@@ -542,7 +542,16 @@ $win.Add_ContentRendered({
         [IO.File]::WriteAllText($script:riskFile, ((T "{0:yyyy-MM-dd HH:mm:ss}  已同意（版本 {1}）") -f (Get-Date), $script:AppVersion), [Text.Encoding]::UTF8)
     } catch {}
     Write-LogFile (T '用户已同意安全风险提示')
+    Ask-Mode
 })
+# 还没选过模式就问一句（老版本升上来的也会问一次）
+function Ask-Mode {
+    if ((Get-Setting 'Mode' '')) { return }
+    $ans = Show-Sheet -Title (T '你是哪类用户？') -Text (T "按你的需要决定界面上有多少东西，随时可以在「设置」里换。`n`n普通用户：清理缓存、省空间、看哪里占地方、卸载软件，够用也不复杂。`n工程师：再加上重复文件、搬家管理、自动提醒、操作日志，以及各页的进阶功能。`n开发者和 IT：全部功能，包括计划任务、右键菜单、保留的存储、组件存储分析、自定义清理列表、空间明细和自检。") `
+        -Buttons @((T '普通用户'), (T '工程师'), (T '开发者和 IT')) -Primary (T '普通用户') -Cancel (T '普通用户')
+    $mode = switch ($ans) { (T '工程师') { 'pro' } (T '开发者和 IT') { 'expert' } default { 'basic' } }
+    Set-Mode $mode
+}
 $global:CLEANC_UI_SHOWN = $true   # 告诉外层 exe：界面已经正常打开
 if ($script:uiTest) { $win.WindowStartupLocation = 'Manual'; $win.Left = -32000; $win.Top = -32000; $win.ShowActivated = $false; $win.ShowInTaskbar = $false }
 $win.ShowDialog() | Out-Null

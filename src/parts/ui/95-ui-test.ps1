@@ -9,6 +9,7 @@ function Invoke-UiTest {
     # 设置先存一份，测完原样放回去
     $setBak = $null; try { if (Test-Path -LiteralPath $script:settingsFile) { $setBak = [IO.File]::ReadAllBytes($script:settingsFile) } } catch {}
     $fast0 = [bool]$ctl.MapFast.IsChecked
+    Set-Setting 'Mode' 'expert'; Apply-Mode
     $step = {
         param([string]$name, [scriptblock]$body)
         $e0 = $Error.Count; $why = $null
@@ -230,6 +231,18 @@ function Invoke-UiTest {
             $hidden = $ctl.MapHealthBox.Visibility -ne 'Visible'
             $ctl.SetMapHealth.IsChecked = $true; & $click $ctl.SetMapHealth; $win.UpdateLayout()
             if (-not $hidden) { throw 'switch did not hide the disk cards' }
+        }
+        & $step 'modes hide and show features' {
+            Set-Mode 'basic'
+            if ($ctl.NavDup.Visibility -ne 'Collapsed' -or $ctl.NavLog.Visibility -ne 'Collapsed' -or $ctl.BtnLog.Visibility -ne 'Collapsed') { throw 'basic mode still shows advanced pages' }
+            if ($ctl.SaveCardRs.Visibility -ne 'Collapsed' -or $ctl.AppsViewBox.Visibility -ne 'Collapsed' -or $ctl.MapViewFiles.Visibility -ne 'Collapsed' -or $ctl.SetCleanCard.Visibility -ne 'Collapsed') { throw 'basic mode still shows advanced cards' }
+            if ($ctl.NavClean.Visibility -ne 'Visible' -or $ctl.SaveCardCos.Visibility -ne 'Visible' -or $ctl.SaveCardOd.Visibility -ne 'Visible') { throw 'basic mode hides basic things' }
+            if ($ctl.ModeTag.Text -ne ((T '普通用户') + (T '模式'))) { throw ('mode tag: ' + $ctl.ModeTag.Text) }
+            Set-Mode 'pro'
+            if ($ctl.NavDup.Visibility -ne 'Visible' -or $ctl.AppsViewStartup.Visibility -ne 'Visible' -or $ctl.AppsViewTasks.Visibility -ne 'Collapsed' -or $ctl.SaveCardPf.Visibility -ne 'Visible' -or $ctl.SaveCardRs.Visibility -ne 'Collapsed') { throw 'pro mode wrong' }
+            Set-Mode 'expert'
+            if ($ctl.AppsViewTasks.Visibility -ne 'Visible' -or $ctl.SaveCardRs.Visibility -ne 'Visible' -or $ctl.BtnLog.Visibility -ne 'Visible' -or $ctl.SetCleanCard.Visibility -ne 'Visible') { throw 'expert mode wrong' }
+            if (@($catalog | Where-Object { [int]$_.Lvl -eq 2 }).Count -lt 5 -or @($catalog | Where-Object { [int]$_.Lvl -eq 1 }).Count -lt 5) { throw 'catalog levels missing' }
         }
         & $step 'restore points card' {
             Show-Page 'save'

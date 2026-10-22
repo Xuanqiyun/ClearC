@@ -266,7 +266,7 @@ function Show-AppsView {
     $ctl.AppsList.Visibility = if ($isApps) { 'Visible' } else { 'Collapsed' }
     $ctl.StartList.Visibility = if ($isApps) { 'Collapsed' } else { 'Visible' }
     $ctl.AppsFilterBox.Visibility = if ($isApps) { 'Visible' } else { 'Collapsed' }
-    $ctl.BtnAppsUpdates.Visibility = if ($isApps) { 'Visible' } else { 'Collapsed' }
+    $ctl.BtnAppsUpdates.Visibility = if ($isApps -and $script:appsUpdatesAllowed) { 'Visible' } else { 'Collapsed' }
     if ($isApps) { Filter-Apps; return }
     if (-not $script:startRows.ContainsKey($v)) { Load-StartRows $v } else { Filter-StartRows }
 }
