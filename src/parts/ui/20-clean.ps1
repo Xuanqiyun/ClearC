@@ -44,9 +44,11 @@ function Build-Rows($sizes) {
     $col = New-Object 'System.Collections.ObjectModel.ObservableCollection[RowItem]'
     $total = [double]0
     $seen = @{}
+    $mode = Get-Mode
     foreach ($it in $catalog) {
         $b = $sizes[$it.Idx]
         if (-not $b) { continue }
+        if ($it.Lvl -and [int]$it.Lvl -gt $mode) { continue }   # 这个模式下不列（换到更高的模式再扫描就有）
         $r = New-Object RowItem
         $r.Idx = $it.Idx; $r.Group = $it.G; $r.Name = $it.N; $r.Note = $it.Note; $r.Actions = $it.Actions; $r.Action = $it.Def
         # 组名「安全清理（缓存、临时文件……）」拆成标题和说明两行显示

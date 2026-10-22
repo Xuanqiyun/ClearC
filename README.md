@@ -22,7 +22,15 @@
 | **搬家管理** | 「可以搬的」自动列出 C 盘上还能搬走的聊天记录、软件和其他大文件夹，勾选后一次搬好几项；不适合搬的软件单独列出并写明原因。「已经搬走的」显示每个搬走的文件夹现在的状态，可以搬回 C 盘、修复断掉的链接、删掉没搬完留下的多余副本。 |
 | **自动提醒** | C 盘剩余空间低于设定值、或者可以清理的缓存超过设定值时在右下角提醒（每次登录电脑后和每天中午各检查一次）；定期自动清一次缓存，每周某一天或每天。两项默认关闭，由 Windows 任务计划运行，不用一直开着本工具。 |
 | **操作日志** | 每一次删除、搬运、合并、压缩、卸载和系统设置改动都记成 txt，可以按类别和时间查看。默认保存半年，可以改。 |
-| **设置** | 外观、语言，以及界面上显示什么：用不上的页面、左下角的按钮、页面说明、空间地图的复选框和各列都可以关掉；快速扫描的开关；查重复文件时让着其他程序（Windows 的后台模式，磁盘和内存都用低优先级）；清理列表：自己加要清理的文件夹、排除不想碰的文件夹。 |
+| **设置** | **使用模式**：普通用户、工程师、开发者和 IT 三档，决定界面上有多少东西（第一次打开时问一句，随时可以换，不丢设置）。外观、语言，以及界面上显示什么：用不上的页面、左下角的按钮、页面说明、空间地图的复选框和各列都可以关掉；快速扫描的开关；查重复文件时让着其他程序（Windows 的后台模式，磁盘和内存都用低优先级）；清理列表：自己加要清理的文件夹、排除不想碰的文件夹。 |
+
+**三种使用模式**，功能一级比一级多，换模式不丢任何设置和记录：
+
+| 模式 | 给谁 | 有什么 |
+|---|---|---|
+| **普通用户** | 只想把 C 盘清干净 | 清理 C 盘、省空间、空间地图、软件管理、帮助。清理列表里只有常见的缓存和临时文件，删了软件会自动重建；有代价的项目仍然默认跳过。 |
+| **工程师** | 自己维护电脑的人 | 再加上重复文件、搬家管理、自动提醒、操作日志；空间地图的找文件、和上次比、导出、压缩；省空间的页面文件、还原点、压缩文件夹、虚拟磁盘、合并重复文件；软件管理的开机启动、残留文件夹、检查新版本、搬到其他盘；清理列表里多出开发工具的缓存和驱动残留。 |
+| **开发者和 IT** | 开发者、运维、IT 支持 | 全部功能。再加上计划任务、右键菜单、保留的存储、组件存储分析、蓝屏转储、临时文件夹位置、自定义清理列表和排除、快速扫描开关、空间明细、检查扫描功能、运行记录，以及 Installer 孤儿安装包、事件日志、NuGet / Gradle / Maven / JetBrains 缓存这类项目。 |
 
 界面支持**中文和英文**、**浅色和深色**，在「设置」里或左侧栏底部的「English / 中文」「外观」切换。「帮助」页里可以**检查新版本**（只在点的时候联网），以及**检查扫描功能**：在你的电脑上核对快速扫描是否准确，结果可以发给开发者。
 
@@ -164,7 +172,7 @@ ClearC (Chinese name 腾挪, "make room") frees up space on drive C: on Windows 
 - **Duplicates, Save space, Space map, Apps, Moved folders, Reminders, Activity log, Settings.** Find duplicate files or merge them into hard links. Use CompactOS, NTFS folder compression, page-file and hibernation settings, WSL / Docker disk compaction, move WSL distributions, make OneDrive files online-only, turn off reserved storage, keep crash dumps small, move the temp folder and let DISM analyze the component store. The "Moved folders" page lists everything on C: that can still be moved and moves several items at once. Browse folder sizes as a list or treemap (NTFS drives are read straight from the file table, the MFT, so even large drives take seconds; "Fast scan" can be turned off), look at the large files inside chat data (view only), find large files by size, age, type and name and delete several at once (item check boxes like File Explorer's, left- or right-button drag to select a run of rows, and a right-click menu), see size on disk and hard links with the fast scan plus a "Space breakdown" of the used space, check how much restore points take, export an HTML report, see which folders grew since the last scan, export lists to CSV, uninstall apps and clean leftovers, check for updates with winget, disable startup items, third-party scheduled tasks and context menu extensions, find leftover folders of uninstalled apps, see disk health cards, move folders back, and get low-space and junk-size reminders. Every change is logged.
 - **Safety rules.** Personal folders (Desktop, Documents, Downloads…) are never deleted, every deletion needs an explicit confirmation, and system locations are blocked. Long operations can be cancelled at any time and stop at a safe point.
 
-The interface is available in English and Chinese, light and dark. Switch on the "Settings" page or with "English / 中文" and "Appearance" at the bottom of the sidebar; "Settings" also hides pages, buttons, descriptions and space-map columns you don't use; the first launch follows the Windows display language. The Help page can check for updates (only when you click it) and run "Check scanning", which verifies the fast scan on your PC and produces a report you can send to the developer (also `ClearC.exe /selftest`; `ClearC.exe /uitest` clicks through the interface for automated testing).
+Three **modes** decide how much the window shows: **Home user** (Clean up C:, Save space, Space map, Apps, Help; only everyday caches in the cleanup list), **Engineer** (adds Duplicates, Moves, Reminders, the log and the advanced features on each page) and **Developer and IT** (everything). ClearC asks once on first start; change it at the top of Settings at any time without losing anything. The interface is available in English and Chinese, light and dark. Switch on the "Settings" page or with "English / 中文" and "Appearance" at the bottom of the sidebar; "Settings" also hides pages, buttons, descriptions and space-map columns you don't use; the first launch follows the Windows display language. The Help page can check for updates (only when you click it) and run "Check scanning", which verifies the fast scan on your PC and produces a report you can send to the developer (also `ClearC.exe /selftest`; `ClearC.exe /uitest` clicks through the interface for automated testing).
 
 <table>
   <tr>

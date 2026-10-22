@@ -8,7 +8,61 @@ $script:optLinks = [ordered]@{ theme = @('SetLinkTheme', 'BtnTheme'); lang = @('
 $script:optSwitches = [ordered]@{ PageSub = 'SetPageSub'; MapCheck = 'SetMapCheck'; MapBar = 'SetMapBar'; MapPct = 'SetMapPct'; MapMeta = 'SetMapMeta'; MapDisk = 'SetMapDisk'; MapFastBtn = 'SetMapFastBtn'; MapHealth = 'SetMapHealth' }
 function Get-Flag([string]$k) { (Get-Setting $k '1') -ne '0' }
 function Get-HiddenSet([string]$k) { $h = @{}; foreach ($x in ((Get-Setting $k '') -split ',')) { $x = $x.Trim(); if ($x) { $h[$x] = $true } }; return $h }
+# 三种模式各显示什么：页面、左下角按钮、各页里的高级功能。换模式只改显示，不丢设置
+$script:pageLvl = @{ dup = 1; moves = 1; auto = 1; log = 1 }
+$script:linkLvl = @{ log = 2 }
+$script:appsUpdatesAllowed = $true
+function Get-ModeName([int]$m = (Get-Mode)) { switch ($m) { 0 { (T '普通用户') } 1 { (T '工程师') } default { (T '开发者和 IT') } } }
+function Apply-Mode {
+    $m = Get-Mode
+    $v = { param([int]$need) if ($m -ge $need) { [System.Windows.Visibility]::Visible } else { [System.Windows.Visibility]::Collapsed } }
+    # 空间地图：找文件、和上次比、导出、压缩是工程师的；快速扫描开关、空间明细是开发者的
+    foreach ($n in 'MapViewFiles', 'MapViewGrow', 'BtnMapExport', 'BtnMapReport', 'BtnMapCompress') { $ctl[$n].Visibility = & $v 1 }
+    if ($m -lt 1 -and -not $ctl.MapViewDirs.IsChecked -and -not $ctl.MapViewTree.IsChecked) { $ctl.MapViewDirs.IsChecked = $true }
+    # 省空间
+    foreach ($n in 'SaveCardPf', 'SaveCardRp', 'SaveCardFc', 'SaveCardVd', 'SaveCardMerge') { $ctl[$n].Visibility = & $v 1 }
+    foreach ($n in 'SaveCardRs', 'SaveCardCs', 'SaveCardDump', 'SaveCardTmp') { $ctl[$n].Visibility = & $v 2 }
+    # 软件管理
+    $ctl.AppsViewBox.Visibility = & $v 1
+    foreach ($n in 'AppsViewStartup', 'AppsViewLeft') { $ctl[$n].Visibility = & $v 1 }
+    foreach ($n in 'AppsViewTasks', 'AppsViewMenu') { $ctl[$n].Visibility = & $v 2 }
+    if (($m -lt 1 -and -not $ctl.AppsViewApps.IsChecked) -or ($m -lt 2 -and ($ctl.AppsViewTasks.IsChecked -or $ctl.AppsViewMenu.IsChecked))) { $ctl.AppsViewApps.IsChecked = $true }
+    $win.Resources['AppMoveVis'] = & $v 1
+    $script:appsUpdatesAllowed = ($m -ge 1)
+    if ($ctl.BtnAppsUpdates.Visibility -eq 'Visible' -and $m -lt 1) { $ctl.BtnAppsUpdates.Visibility = 'Collapsed' }
+    # 清理页、自动提醒、帮助、设置
+    $ctl.BtnCleanCustom.Visibility = & $v 2
+    $ctl.AutoJunkRow.Visibility = & $v 1
+    $ctl.FbCopyDiag.Visibility = & $v 1; $ctl.FbSelfTest.Visibility = & $v 2
+    $ctl.SetCardDisplay.Visibility = & $v 1; $ctl.SetCardScan.Visibility = & $v 2; $ctl.SetCleanCard.Visibility = & $v 2
+    $ctl.ModeTag.Text = (Get-ModeName $m) + (T '模式')
+    $ctl.SetModeNote.Text = switch ($m) {
+        0 { (T '普通用户：清理 C 盘、省空间、空间地图、软件管理、帮助。清理列表里只有常见的缓存和临时文件，删了都会自动重建；有代价的项目仍然默认跳过。') }
+        1 { (T '工程师：再加上重复文件、搬家管理、自动提醒、操作日志；空间地图的找文件、和上次比、导出；省空间的页面文件、还原点、压缩文件夹、虚拟磁盘；软件管理的开机启动、残留文件夹、检查新版本和搬到其他盘；清理列表里多出开发工具的缓存。') }
+        default { (T '开发者和 IT：全部功能。再加上计划任务、右键菜单、保留的存储、组件存储分析、蓝屏转储、临时文件夹位置、自定义清理列表和排除、快速扫描开关、空间明细、检查扫描功能、运行记录，以及 Installer 孤儿安装包、事件日志、NuGet / Gradle / Maven / JetBrains 缓存这类项目。') }
+    }
+    $script:setLoading = $true
+    try { $ctl.SetModeBasic.IsChecked = ($m -eq 0); $ctl.SetModePro.IsChecked = ($m -eq 1); $ctl.SetModeExpert.IsChecked = ($m -eq 2) } finally { $script:setLoading = $false }
+    Apply-Display
+    # 正在看的页面在这个模式下没有了：回到清理页
+    if ($script:curPage -and $script:pageLvl.ContainsKey($script:curPage) -and $script:pageLvl[$script:curPage] -gt $m) { Show-Page 'clean' }
+    if ($script:mapRoot) { try { $ctl.BtnMapAcct.Visibility = if ($script:mapRoot.HasDisk -and $m -ge 2) { 'Visible' } else { 'Collapsed' } } catch {} }
+}
+function Set-Mode([string]$mode) {
+    Set-Setting 'Mode' $mode
+    Apply-Mode
+    OpLog '系统设置' (T '使用模式') (Get-ModeName) ''
+    UI-Log ((T "使用模式：{0}") -f (Get-ModeName))
+}
+foreach ($rb in @($ctl.SetModeBasic, $ctl.SetModePro, $ctl.SetModeExpert)) {
+    $rb.Add_Checked({
+        if ($script:setLoading) { return }
+        Set-Mode $(if ([object]::ReferenceEquals($this, $ctl.SetModeBasic)) { 'basic' } elseif ([object]::ReferenceEquals($this, $ctl.SetModePro)) { 'pro' } else { 'expert' })
+    })
+}
+$ctl.ModeTag.Add_MouseLeftButtonUp({ Show-Page 'settings'; $ctl.SetScroll.ScrollToTop() })
 function Apply-Display {
+    $m = Get-Mode
     $vis = { param([bool]$on) if ($on) { [System.Windows.Visibility]::Visible } else { [System.Windows.Visibility]::Collapsed } }
     $win.Resources['SubVis'] = & $vis (Get-Flag 'PageSub')
     $win.Resources['MapCkVis'] = & $vis (Get-Flag 'MapCheck')
@@ -16,12 +70,13 @@ function Apply-Display {
     $win.Resources['MapPctVis'] = & $vis (Get-Flag 'MapPct')
     $win.Resources['MapMetaVis'] = & $vis (Get-Flag 'MapMeta')
     $win.Resources['MapHealthVis'] = & $vis (Get-Flag 'MapHealth')
-    $ctl.MapFast.Visibility = & $vis (Get-Flag 'MapFastBtn')
+    $ctl.MapFast.Visibility = & $vis ((Get-Flag 'MapFastBtn') -and $m -ge 2)
     $hp = Get-HiddenSet 'HidePages'
-    foreach ($k in $script:optPages.Keys) { $ctl[$script:pageList[$k][1]].Visibility = & $vis (-not $hp.ContainsKey($k)) }
-    $ctl.NavHeadManage.Visibility = & $vis (-not ($hp.ContainsKey('moves') -and $hp.ContainsKey('auto') -and $hp.ContainsKey('log')))
+    $show = @{}
+    foreach ($k in $script:optPages.Keys) { $show[$k] = (-not $hp.ContainsKey($k)) -and (-not $script:pageLvl.ContainsKey($k) -or $script:pageLvl[$k] -le $m); $ctl[$script:pageList[$k][1]].Visibility = & $vis $show[$k] }
+    $ctl.NavHeadManage.Visibility = & $vis ($show['moves'] -or $show['auto'] -or $show['log'])
     $hl = Get-HiddenSet 'HideLinks'
-    foreach ($k in $script:optLinks.Keys) { $ctl[$script:optLinks[$k][1]].Visibility = & $vis (-not $hl.ContainsKey($k)) }
+    foreach ($k in $script:optLinks.Keys) { $ctl[$script:optLinks[$k][1]].Visibility = & $vis ((-not $hl.ContainsKey($k)) -and (-not $script:linkLvl.ContainsKey($k) -or $script:linkLvl[$k] -le $m)) }
 }
 # 换了「实际占用和硬链接」这类要重新生成行的设置：当前这一层重新列一遍
 function Refresh-MapRows {
@@ -128,5 +183,5 @@ foreach ($rb in @($ctl.SetLangZh, $ctl.SetLangEn)) {
         if ($to -eq $script:Lang -or -not (Request-Lang)) { Load-Settings }
     })
 }
-Apply-Display
+Apply-Mode
 

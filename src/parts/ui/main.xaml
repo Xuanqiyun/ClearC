@@ -10,6 +10,7 @@
     <Visibility x:Key="MapPctVis">Visible</Visibility>
     <Visibility x:Key="MapMetaVis">Visible</Visibility>
     <Visibility x:Key="MapHealthVis">Visible</Visibility>
+    <Visibility x:Key="AppMoveVis">Visible</Visibility>
     <Visibility x:Key="SubVis">Visible</Visibility>
     <!-- 配色：浅灰底 #F5F5F7、白色卡片、正文 #1D1D1F、次要文字 #6E6E73、分隔线 #E5E5EA、唯一的强调色是蓝 #0071E3，红色只给删除 -->
     <FontFamily x:Key="Icons">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
@@ -1046,6 +1047,7 @@
           <StackPanel Margin="11,0,0,0" VerticalAlignment="Center">
             <TextBlock Text="腾挪 ClearC" FontSize="15" FontWeight="SemiBold" TextOptions.TextFormattingMode="Ideal"/>
             <TextBlock x:Name="AppVer" Text="" FontSize="11.5" Foreground="#86868B" Margin="0,1,0,0"/>
+            <TextBlock x:Name="ModeTag" Text="" FontSize="11" Foreground="#0066CC" Margin="0,1,0,0" Cursor="Hand" ToolTip="点一下到设置里换模式"/>
           </StackPanel>
         </StackPanel>
         <StackPanel DockPanel.Dock="Bottom">
@@ -1503,7 +1505,7 @@
         </StackPanel>
       </Border>
       <DockPanel Grid.Row="2" Margin="0,0,0,10">
-        <Border DockPanel.Dock="Right" Style="{StaticResource SegBox}" VerticalAlignment="Center">
+        <Border x:Name="MapViewBox" DockPanel.Dock="Right" Style="{StaticResource SegBox}" VerticalAlignment="Center">
           <StackPanel Orientation="Horizontal">
             <RadioButton x:Name="MapViewDirs" GroupName="mapview" Content="文件夹" IsChecked="True" Style="{StaticResource Seg}"/>
             <RadioButton x:Name="MapViewTree" GroupName="mapview" Content="方块图" Style="{StaticResource Seg}" ToolTip="每个方块的大小就是它占的空间。单击选中，双击文件夹往里点"/>
@@ -1636,7 +1638,7 @@
             </StackPanel>
           </DockPanel>
 
-          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,20,0,0">
+          <Border x:Name="SaveCardCos" Style="{StaticResource Card}" Padding="24,20" Margin="0,20,0,0">
             <DockPanel>
               <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="20,0,0,0">
                 <Button x:Name="BtnCosOff" Content="关闭" Margin="0,0,8,0"/>
@@ -1651,7 +1653,7 @@
             </DockPanel>
           </Border>
 
-          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+          <Border x:Name="SaveCardPf" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
             <StackPanel>
               <TextBlock Text="页面文件（pagefile.sys）" Style="{StaticResource CardHead}"/>
               <TextBlock x:Name="SavePfState" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
@@ -1665,7 +1667,7 @@
             </StackPanel>
           </Border>
 
-          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+          <Border x:Name="SaveCardHib" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
             <StackPanel>
               <TextBlock Text="休眠文件（hiberfil.sys）" Style="{StaticResource CardHead}"/>
               <TextBlock x:Name="SaveHibState" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
@@ -1679,7 +1681,7 @@
             </StackPanel>
           </Border>
 
-          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+          <Border x:Name="SaveCardRp" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
             <DockPanel>
               <Button x:Name="BtnRestoreOpen" DockPanel.Dock="Right" Content="打开系统保护设置" VerticalAlignment="Center" Margin="20,0,0,0"/>
               <StackPanel>
@@ -1691,7 +1693,7 @@
             </DockPanel>
           </Border>
 
-          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+          <Border x:Name="SaveCardFc" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
             <DockPanel>
               <Button x:Name="BtnFolderCompress" DockPanel.Dock="Right" Content="选择文件夹…" Style="{StaticResource Primary}" VerticalAlignment="Center" Margin="20,0,0,0"/>
               <StackPanel>
@@ -1703,7 +1705,7 @@
             </DockPanel>
           </Border>
 
-          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+          <Border x:Name="SaveCardOd" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
             <DockPanel>
               <Button x:Name="BtnOdFree" DockPanel.Dock="Right" Content="改成仅在线" Style="{StaticResource Primary}" VerticalAlignment="Center" Margin="20,0,0,0" IsEnabled="False"/>
               <StackPanel>
@@ -1715,7 +1717,7 @@
             </DockPanel>
           </Border>
 
-          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+          <Border x:Name="SaveCardRs" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
             <DockPanel>
               <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="20,0,0,0">
                 <Button x:Name="BtnRsOn" Content="重新开启" Margin="0,0,8,0" IsEnabled="False"/>
@@ -1730,7 +1732,7 @@
             </DockPanel>
           </Border>
 
-          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+          <Border x:Name="SaveCardCs" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
             <DockPanel>
               <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="20,0,0,0">
                 <Button x:Name="BtnCsAnalyze" Content="分析" Style="{StaticResource Primary}" Margin="0,0,8,0"/>
@@ -1745,7 +1747,7 @@
             </DockPanel>
           </Border>
 
-          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+          <Border x:Name="SaveCardDump" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
             <DockPanel>
               <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="20,0,0,0">
                 <Button x:Name="BtnDumpSmall" Content="改成小转储" Style="{StaticResource Primary}" Margin="0,0,8,0"/>
@@ -1760,7 +1762,7 @@
             </DockPanel>
           </Border>
 
-          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+          <Border x:Name="SaveCardTmp" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
             <StackPanel>
               <TextBlock Text="临时文件夹的位置" Style="{StaticResource CardHead}"/>
               <TextBlock x:Name="SaveTmpState" Style="{StaticResource Caption}" Margin="0,4,0,0" TextTrimming="CharacterEllipsis"/>
@@ -1774,7 +1776,7 @@
             </StackPanel>
           </Border>
 
-          <Border Style="{StaticResource Card}" Padding="24,20,24,14" Margin="0,14,0,0">
+          <Border x:Name="SaveCardVd" Style="{StaticResource Card}" Padding="24,20,24,14" Margin="0,14,0,0">
             <StackPanel>
               <TextBlock Text="虚拟磁盘、模拟器和虚拟机" Style="{StaticResource CardHead}"/>
               <TextBlock Style="{StaticResource Body}" Margin="0,8,0,4"
@@ -1808,7 +1810,7 @@
             </StackPanel>
           </Border>
 
-          <Border Style="{StaticResource Card}" Padding="24,18" Margin="0,14,0,0">
+          <Border x:Name="SaveCardMerge" Style="{StaticResource Card}" Padding="24,18" Margin="0,14,0,0">
             <DockPanel>
               <Button x:Name="BtnGoDup" DockPanel.Dock="Right" Content="去找重复文件" VerticalAlignment="Center" Margin="20,0,0,0"/>
               <StackPanel>
@@ -1841,7 +1843,7 @@
         </StackPanel>
       </DockPanel>
       <DockPanel Grid.Row="1" Margin="0,0,0,10">
-        <Border DockPanel.Dock="Left" Style="{StaticResource SegBox}" VerticalAlignment="Center" Margin="0,0,14,0">
+        <Border x:Name="AppsViewBox" DockPanel.Dock="Left" Style="{StaticResource SegBox}" VerticalAlignment="Center" Margin="0,0,14,0">
           <StackPanel Orientation="Horizontal">
             <RadioButton x:Name="AppsViewApps" GroupName="appsv" Content="软件" IsChecked="True" Style="{StaticResource Seg}"/>
             <RadioButton x:Name="AppsViewStartup" GroupName="appsv" Content="开机启动" Style="{StaticResource Seg}"/>
@@ -1895,7 +1897,7 @@
                     <Button x:Name="AppUpgrade" Content="升级" Tag="{Binding}" Style="{StaticResource Small}" Foreground="#0066CC" Margin="0,0,6,0" Visibility="Collapsed"
                             ToolTip="在终端窗口里用 winget 升级这个软件，过程和提示都看得见"/>
                     <Button x:Name="AppOpen" Content="打开位置" Tag="{Binding}" Style="{StaticResource Small}" Margin="0,0,6,0"/>
-                    <Button x:Name="AppMove" Content="搬到其他盘" Tag="{Binding}" Style="{StaticResource Small}" Margin="0,0,6,0"
+                    <Button x:Name="AppMove" Content="搬到其他盘" Tag="{Binding}" Style="{StaticResource Small}" Margin="0,0,6,0" Visibility="{DynamicResource AppMoveVis}"
                             ToolTip="把整个安装文件夹搬到其他盘，C 盘原位置留一个链接，软件照常使用，不用重装"/>
                     <Button x:Name="AppUninstall" Content="卸载" Tag="{Binding}" Style="{StaticResource Small}"/>
                   </StackPanel>
@@ -2061,7 +2063,7 @@
                 </ComboBox>
                 <TextBlock Text="时，在屏幕右下角弹出提醒（每天最多一次）" VerticalAlignment="Center" Margin="10,0,0,0"/>
               </StackPanel>
-              <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+              <StackPanel x:Name="AutoJunkRow" Orientation="Horizontal" Margin="0,10,0,0">
                 <TextBlock Text="可以清理的临时文件、缓存和日志超过" VerticalAlignment="Center" Margin="0,0,10,0"/>
                 <ComboBox x:Name="AutoJunkGB" Width="100">
                   <ComboBoxItem Content="不提醒"/><ComboBoxItem Content="1 GB"/><ComboBoxItem Content="2 GB"/><ComboBoxItem Content="5 GB"/><ComboBoxItem Content="10 GB"/>
@@ -2220,7 +2222,22 @@
             </StackPanel>
           </DockPanel>
 
-          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,20,0,0">
+          <Border x:Name="SetCardMode" Style="{StaticResource Card}" Padding="24,20" Margin="0,20,0,0">
+            <StackPanel>
+              <TextBlock Text="使用模式" Style="{StaticResource CardHead}"/>
+              <TextBlock Style="{StaticResource SetNote}" Text="按你的需要决定界面上有多少东西。换模式不会丢任何设置和记录，随时可以换回来。"/>
+              <Border Style="{StaticResource SegBox}" HorizontalAlignment="Left" Margin="0,12,0,0">
+                <StackPanel Orientation="Horizontal">
+                  <RadioButton x:Name="SetModeBasic" GroupName="mode" Content="普通用户" Style="{StaticResource Seg}"/>
+                  <RadioButton x:Name="SetModePro" GroupName="mode" Content="工程师" Style="{StaticResource Seg}"/>
+                  <RadioButton x:Name="SetModeExpert" GroupName="mode" Content="开发者和 IT" Style="{StaticResource Seg}"/>
+                </StackPanel>
+              </Border>
+              <TextBlock x:Name="SetModeNote" Style="{StaticResource SetNote}" Margin="0,10,0,0"/>
+            </StackPanel>
+          </Border>
+
+          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
             <StackPanel>
               <TextBlock Text="外观和语言" Style="{StaticResource CardHead}"/>
               <DockPanel Margin="0,14,0,0">
@@ -2251,7 +2268,7 @@
             </StackPanel>
           </Border>
 
-          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+          <Border x:Name="SetCardDisplay" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
             <StackPanel>
               <TextBlock Text="界面上显示什么" Style="{StaticResource CardHead}"/>
               <TextBlock Text="左侧显示的页面" Style="{StaticResource SetName}" Margin="0,14,0,0"/>
@@ -2337,7 +2354,7 @@
             </StackPanel>
           </Border>
 
-          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+          <Border x:Name="SetCardScan" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
             <StackPanel>
               <TextBlock Text="扫描和查重" Style="{StaticResource CardHead}"/>
               <DockPanel Margin="0,14,0,0">
@@ -3026,6 +3043,13 @@
               </Expander.Header>
               <StackPanel>
                 <StackPanel Margin="0,14,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="使用模式"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>三种，按你的需要决定界面上有多少东西。第一次打开时会问一句，之后在「设置」最上面随时换，换了不丢任何设置和记录。左下角版本号下面写着当前模式，点一下就到设置。</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">普通用户</Run><Run>：清理 C 盘、省空间、空间地图、软件管理、帮助。清理列表里只有常见的缓存和临时文件，删了软件会自动重建；有代价的项目仍然默认跳过。</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">工程师</Run><Run>：再加上重复文件、搬家管理、自动提醒、操作日志；空间地图的找文件、和上次比、导出、压缩；省空间的页面文件、还原点、压缩文件夹、虚拟磁盘、合并重复文件；软件管理的开机启动、残留文件夹、检查新版本、搬到其他盘；清理列表里多出开发工具的缓存和驱动残留。</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">开发者和 IT</Run><Run>：全部功能。再加上计划任务、右键菜单、保留的存储、组件存储分析、蓝屏转储、临时文件夹位置、自定义清理列表和排除、快速扫描开关、空间明细、检查扫描功能、运行记录，以及 Installer 孤儿安装包、事件日志、NuGet / Gradle / Maven / JetBrains 缓存这类项目。</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="外观和语言"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>浅色、深色或跟随系统（照 Windows 设置里「选择应用模式」来），中文或 English。换了以后本工具会关闭，再自动打开。左下角的「外观」和「切换语言」也能改。</Run></TextBlock>
                 </StackPanel>
@@ -3053,6 +3077,12 @@
           <Border Style="{StaticResource Card}" Padding="22,2,22,4">
             <StackPanel x:Name="HelpFaq">
               <Expander Style="{StaticResource HelpQ}" BorderThickness="0">
+                <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="为什么有些功能找不到？"/></Expander.Header>
+                <StackPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>多半是使用模式的关系：普通用户模式只显示基础功能，工程师模式多一些，开发者和 IT 模式才是全部。到「设置」最上面换一下模式就有了；另外「界面上显示什么」里手动隐藏过的也要在那里打开。清理列表是扫描时按模式决定列什么的，换了模式再扫描一次。</Run></TextBlock>
+                </StackPanel>
+              </Expander>
+              <Expander Style="{StaticResource HelpQ}">
                 <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="为什么要管理员权限？"/></Expander.Header>
                 <StackPanel>
                   <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>清理系统临时文件、Windows 更新缓存等位置，需要管理员权限。</Run></TextBlock>
@@ -3160,7 +3190,7 @@
                   </StackPanel>
                 </DockPanel>
               </Border>
-              <StackPanel Margin="0,18,0,0">
+              <StackPanel x:Name="FbCopyDiag" Margin="0,18,0,0">
                 <TextBlock Style="{StaticResource HelpLead}" Text="附上诊断信息"/>
                 <TextBlock Style="{StaticResource HelpBody}" Text="提交问题时附上截图和诊断信息，能更快找到原因。诊断信息包括软件版本、Windows 版本、C 盘空间和最近的运行记录（里面有文件夹路径），贴出去之前可以先看一下。"/>
                 <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
@@ -3169,16 +3199,16 @@
                   <TextBlock x:Name="CopyHint" Style="{StaticResource Caption}" Foreground="#248A3D" Margin="14,0,0,0"/>
                 </StackPanel>
               </StackPanel>
-              <Border Height="1" Background="#EDEDF0" Margin="0,18,0,0"/>
-              <StackPanel Margin="0,18,0,0">
+              <StackPanel x:Name="FbSelfTest" Margin="0,18,0,0">
+                <Border Height="1" Background="#EDEDF0" Margin="0,0,0,18"/>
                 <TextBlock Style="{StaticResource HelpLead}" Text="检查扫描功能"/>
                 <TextBlock Style="{StaticResource HelpBody}" Text="在这台电脑上核对快速扫描：比较直接读文件表和逐个文件夹扫描的结果，再在本工具自己的文件夹里建几个文件、改一改、删掉，看按变更日志更新对不对。只读 C 盘，不动你的文件，大约要一两分钟；结果会复制下来，可以贴到 GitHub 的问题里。"/>
                 <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
                   <Button x:Name="BtnSelfTest" Content="检查扫描功能"/>
                 </StackPanel>
               </StackPanel>
-              <Border Height="1" Background="#EDEDF0" Margin="0,18,0,0"/>
-              <StackPanel Margin="0,18,0,0">
+              <StackPanel x:Name="FbCheckUpdate" Margin="0,18,0,0">
+                <Border Height="1" Background="#EDEDF0" Margin="0,0,0,18"/>
                 <TextBlock Style="{StaticResource HelpLead}" Text="检查新版本"/>
                 <TextBlock Style="{StaticResource HelpBody}" Text="有新版本会打开下载页面，下载新的 exe 换掉旧的就行。只在你点这个按钮时连一次 GitHub。"/>
                 <StackPanel Orientation="Horizontal" Margin="0,10,0,0">

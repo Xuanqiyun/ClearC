@@ -630,6 +630,13 @@
               </Expander.Header>
               <StackPanel>
                 <StackPanel Margin="0,14,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Mode"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Three modes decide how much the window shows. ClearC asks once on first start; after that, change it at the top of Settings at any time. Switching never loses settings or records. The current mode is written under the version number at the bottom left; click it to go to Settings.</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Home user</Run><Run>: Clean C:, Save space, Space map, Apps and Help. The cleanup list only has common caches and temporary files that apps rebuild; items with a cost are still skipped by default.</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Engineer</Run><Run>: adds Duplicates, Moves, Reminders and the operation log; find files, compare with last time, export and compress in the space map; page file, restore points, compressed folders, virtual disks and merge duplicates in Save space; startup, leftover folders, update check and move in Apps; developer tool caches and driver leftovers in the cleanup list.</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Developer and IT</Run><Run>: everything. Adds scheduled tasks, context menu, reserved storage, component store analysis, crash dumps, temp folder location, custom cleanup list and exclusions, the fast scan switch, space breakdown, scan check, the run log, and items such as orphaned Installer packages, event logs and NuGet / Gradle / Maven / JetBrains caches.</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Appearance and language"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>Light, Dark or Follow Windows (the "Choose your app mode" setting), and 中文 or English. ClearC closes and reopens after you change them. "Appearance" and "Switch language" at the bottom left change them too.</Run></TextBlock>
                 </StackPanel>
@@ -657,6 +664,12 @@
           <Border Style="{StaticResource Card}" Padding="22,2,22,4">
             <StackPanel x:Name="HelpFaq">
               <Expander Style="{StaticResource HelpQ}" BorderThickness="0">
+                <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="Why can't I find some features?"/></Expander.Header>
+                <StackPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Usually the mode: Home user shows only the basics, Engineer adds more, and Developer and IT shows everything. Change it at the top of Settings. Anything hidden by hand under "What the window shows" is turned back on there too. The cleanup list is built by mode when scanning, so scan again after switching.</Run></TextBlock>
+                </StackPanel>
+              </Expander>
+              <Expander Style="{StaticResource HelpQ}">
                 <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="Why does ClearC need administrator rights?"/></Expander.Header>
                 <StackPanel>
                   <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Cleaning locations such as system temporary files and the Windows Update cache requires administrator rights.</Run></TextBlock>
@@ -764,7 +777,7 @@
                   </StackPanel>
                 </DockPanel>
               </Border>
-              <StackPanel Margin="0,18,0,0">
+              <StackPanel x:Name="FbCopyDiag" Margin="0,18,0,0">
                 <TextBlock Style="{StaticResource HelpLead}" Text="Include diagnostic info"/>
                 <TextBlock Style="{StaticResource HelpBody}" Text="A screenshot of the problem and the diagnostic info help find the cause faster. Diagnostic info includes the app version, Windows version, space on C: and the recent run log (which contains folder paths), so you may want to review it before sending."/>
                 <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
@@ -773,16 +786,16 @@
                   <TextBlock x:Name="CopyHint" Style="{StaticResource Caption}" Foreground="#248A3D" Margin="14,0,0,0"/>
                 </StackPanel>
               </StackPanel>
-              <Border Height="1" Background="#EDEDF0" Margin="0,18,0,0"/>
-              <StackPanel Margin="0,18,0,0">
+              <StackPanel x:Name="FbSelfTest" Margin="0,18,0,0">
+                <Border Height="1" Background="#EDEDF0" Margin="0,0,0,18"/>
                 <TextBlock Style="{StaticResource HelpLead}" Text="Check scanning"/>
                 <TextBlock Style="{StaticResource HelpBody}" Text="Verifies the fast scan on this PC: it compares reading the file table with a folder-by-folder scan, then creates a few files in ClearC's own folder, changes and deletes them to check updates from the change journal. It only reads drive C:, leaves your files alone and takes a minute or two; the result is copied so you can paste it into a GitHub issue."/>
                 <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
                   <Button x:Name="BtnSelfTest" Content="Check scanning"/>
                 </StackPanel>
               </StackPanel>
-              <Border Height="1" Background="#EDEDF0" Margin="0,18,0,0"/>
-              <StackPanel Margin="0,18,0,0">
+              <StackPanel x:Name="FbCheckUpdate" Margin="0,18,0,0">
+                <Border Height="1" Background="#EDEDF0" Margin="0,0,0,18"/>
                 <TextBlock Style="{StaticResource HelpLead}" Text="Check for updates"/>
                 <TextBlock Style="{StaticResource HelpBody}" Text="If there is a new version, the download page opens; replace the old exe with the new one. ClearC contacts GitHub only when you click this button."/>
                 <StackPanel Orientation="Horizontal" Margin="0,10,0,0">

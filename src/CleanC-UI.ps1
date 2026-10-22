@@ -2915,6 +2915,7 @@ function PathHasAny([string]$path, $frags) {
 #   路径：多个用 ; 隔开；可以用 %LOCALAPPDATA%、%APPDATA%、%PROGRAMDATA%、%TEMP%、%USERPROFILE%、%SYSTEMROOT%、%SYSTEMDRIVE% 这类变量，
 #         以及 %STEAM%（Steam 的安装目录，从注册表查）；可以用 * 通配一层文件夹；@chromium:<User Data 目录> 展开成 Chromium 系浏览器的各个缓存目录
 #   选项：filter=*.log（只删匹配的文件）  whole（整个文件夹删掉，不只是里面的东西）  confirm（放进「需确认」，默认跳过）  svc=服务,服务（删之前停掉、删完再启动）
+#         pro / expert（只在「工程师」/「开发者和 IT」模式下显示；不写的普通用户也看得到）
 # 只删缓存：不碰 Cookie、历史记录、密码、设置和用户保存的数据。每一条的名称和说明都在翻译表里有英文
 $script:cacheLib = @(
     '用户临时文件 | %TEMP% | 各软件运行时的临时文件，关掉软件就没用了'
@@ -2944,35 +2945,35 @@ $script:cacheLib = @(
     'QQ 浏览器缓存 | @chromium:%LOCALAPPDATA%\Tencent\QQBrowser\User Data | 网页缓存。请先关闭浏览器。不影响密码、书签、历史记录'
     'Steam 着色器与网页缓存 | %STEAM%\steamapps\shadercache;%STEAM%\appcache\httpcache;%STEAM%\dumps;%STEAM%\logs | 游戏的着色器缓存（首次启动会重建）、Steam 商店页面的缓存、崩溃转储和日志。请先退出 Steam。游戏本身不动'
     'Epic Games 启动器缓存 | %LOCALAPPDATA%\EpicGamesLauncher\Saved\webcache*;%LOCALAPPDATA%\EpicGamesLauncher\Saved\Logs | 启动器的网页缓存和日志。请先退出 Epic Games 启动器。游戏本身不动'
-    'Unity 缓存 | %LOCALAPPDATA%\Unity\cache | Unity 编辑器的资源商店下载和全局光照缓存，需要时会重新下载或生成'
+    'Unity 缓存 | %LOCALAPPDATA%\Unity\cache | Unity 编辑器的资源商店下载和全局光照缓存，需要时会重新下载或生成 | pro'
     'Adobe 媒体缓存 | %APPDATA%\Adobe\Common\Media Cache Files;%APPDATA%\Adobe\Common\Media Cache;%APPDATA%\Adobe\Common\Peak Files | Premiere、After Effects、Audition 导入素材时生成的缓存，打开项目会重新生成。请先关闭 Adobe 软件'
     'Microsoft Teams (旧版) 缓存 | %APPDATA%\Microsoft\Teams\Cache;%APPDATA%\Microsoft\Teams\Code Cache;%APPDATA%\Microsoft\Teams\GPUCache;%APPDATA%\Microsoft\Teams\Service Worker\CacheStorage;%APPDATA%\Microsoft\Teams\tmp | 旧版 Teams 的网页缓存。请先退出 Teams。不影响登录和聊天记录'
     'Discord 缓存 | %APPDATA%\discord\Cache;%APPDATA%\discord\Code Cache;%APPDATA%\discord\GPUCache | 看过的图片和视频的缓存。请先退出 Discord（包括托盘图标）。不影响登录'
     'Slack 缓存 | %APPDATA%\Slack\Cache;%APPDATA%\Slack\Code Cache;%APPDATA%\Slack\GPUCache;%APPDATA%\Slack\Service Worker\CacheStorage | 网页缓存和文件预览。请先退出 Slack。不影响登录'
-    'VS Code 缓存 | %APPDATA%\Code\Cache;%APPDATA%\Code\CachedData;%APPDATA%\Code\Code Cache;%APPDATA%\Code\GPUCache;%APPDATA%\Code\CachedExtensionVSIXs;%APPDATA%\Code\logs | 编辑器的缓存、下载过的扩展安装包和日志。请先关闭 VS Code。不影响设置和扩展'
-    'Cursor 缓存 | %APPDATA%\Cursor\Cache;%APPDATA%\Cursor\CachedData;%APPDATA%\Cursor\Code Cache;%APPDATA%\Cursor\GPUCache;%APPDATA%\Cursor\logs | 编辑器的缓存和日志。请先关闭 Cursor。不影响设置和扩展'
-    'Cursor 状态库备份 | %APPDATA%\Cursor\User\globalStorage\state.vscdb.backup | Cursor 编辑器状态库的备份副本，主文件保留'
+    'VS Code 缓存 | %APPDATA%\Code\Cache;%APPDATA%\Code\CachedData;%APPDATA%\Code\Code Cache;%APPDATA%\Code\GPUCache;%APPDATA%\Code\CachedExtensionVSIXs;%APPDATA%\Code\logs | 编辑器的缓存、下载过的扩展安装包和日志。请先关闭 VS Code。不影响设置和扩展 | pro'
+    'Cursor 缓存 | %APPDATA%\Cursor\Cache;%APPDATA%\Cursor\CachedData;%APPDATA%\Cursor\Code Cache;%APPDATA%\Cursor\GPUCache;%APPDATA%\Cursor\logs | 编辑器的缓存和日志。请先关闭 Cursor。不影响设置和扩展 | pro'
+    'Cursor 状态库备份 | %APPDATA%\Cursor\User\globalStorage\state.vscdb.backup | Cursor 编辑器状态库的备份副本，主文件保留 | pro'
     'Spotify 缓存 | %LOCALAPPDATA%\Spotify\Data;%LOCALAPPDATA%\Spotify\Browser\Cache | 播放过的歌曲的缓存。下载供离线听的歌不在这里。请先退出 Spotify'
     '网易云音乐缓存 | %LOCALAPPDATA%\NetEase\CloudMusic\Cache | 听过的歌的缓存。下载的歌不在这里。请先退出网易云音乐'
-    'pip 缓存 | %LOCALAPPDATA%\pip\cache | Python 装包时下载的安装包副本，再装时会重新下载'
-    'uv 缓存 | %LOCALAPPDATA%\uv\cache | uv 装 Python 包时的下载缓存，再装时会重新下载'
-    'npm 缓存 | %LOCALAPPDATA%\npm-cache | Node.js 装包时的下载缓存'
-    'Yarn 缓存 | %LOCALAPPDATA%\Yarn\Cache | Yarn 装包时的下载缓存'
-    'NuGet 下载缓存 | %LOCALAPPDATA%\NuGet\v3-cache;%LOCALAPPDATA%\NuGet\http-cache;%LOCALAPPDATA%\NuGet\plugins-cache | .NET 装包时的下载缓存。项目用的包在全局包目录里，不在这里'
-    'Go 编译缓存 | %LOCALAPPDATA%\go-build | Go 的编译结果缓存，下次编译会重新生成'
-    'Rust crate 下载缓存 | %USERPROFILE%\.cargo\registry\cache | cargo 下载过的 crate 压缩包，需要时会重新下载'
-    'Clash Verge 代理日志 | %APPDATA%\io.github.clash-verge-rev.clash-verge-rev\logs;%APPDATA%\clash-verge\logs;%LOCALAPPDATA%\io.github.clash-verge-rev.clash-verge-rev\logs | 代理软件的运行日志，会无限增长。建议在它设置里把日志等级改成 warn'
-    'Intel XTU 超频日志 | %PROGRAMDATA%\Intel\Intel Extreme Tuning Utility\Logs | Intel 超频组件的日志，会无限增长'
+    'pip 缓存 | %LOCALAPPDATA%\pip\cache | Python 装包时下载的安装包副本，再装时会重新下载 | pro'
+    'uv 缓存 | %LOCALAPPDATA%\uv\cache | uv 装 Python 包时的下载缓存，再装时会重新下载 | pro'
+    'npm 缓存 | %LOCALAPPDATA%\npm-cache | Node.js 装包时的下载缓存 | pro'
+    'Yarn 缓存 | %LOCALAPPDATA%\Yarn\Cache | Yarn 装包时的下载缓存 | pro'
+    'NuGet 下载缓存 | %LOCALAPPDATA%\NuGet\v3-cache;%LOCALAPPDATA%\NuGet\http-cache;%LOCALAPPDATA%\NuGet\plugins-cache | .NET 装包时的下载缓存。项目用的包在全局包目录里，不在这里 | pro'
+    'Go 编译缓存 | %LOCALAPPDATA%\go-build | Go 的编译结果缓存，下次编译会重新生成 | pro'
+    'Rust crate 下载缓存 | %USERPROFILE%\.cargo\registry\cache | cargo 下载过的 crate 压缩包，需要时会重新下载 | pro'
+    'Clash Verge 代理日志 | %APPDATA%\io.github.clash-verge-rev.clash-verge-rev\logs;%APPDATA%\clash-verge\logs;%LOCALAPPDATA%\io.github.clash-verge-rev.clash-verge-rev\logs | 代理软件的运行日志，会无限增长。建议在它设置里把日志等级改成 warn | pro'
+    'Intel XTU 超频日志 | %PROGRAMDATA%\Intel\Intel Extreme Tuning Utility\Logs | Intel 超频组件的日志，会无限增长 | pro'
     'Apple 设备系统更新包 | %PROGRAMDATA%\Apple\AMPDevicesAgent\*-Temporary-Files;%APPDATA%\Apple Computer\iTunes\*Software Updates | 给 iPhone/iPad 升级时下载的固件，装完就没用了'
     'Dell 更新程序缓存 | %PROGRAMDATA%\Dell\DTP;%PROGRAMDATA%\Dell\SupportAssist | 戴尔驱动更新工具下载的安装包'
     '罗技 Options+ 缓存 | %PROGRAMDATA%\LogiOptionsPlus\cache;%PROGRAMDATA%\LogiOptionsPlus\depots | 罗技驱动的更新包缓存'
-    '驱动安装包解压残留 | %SYSTEMDRIVE%\NVIDIA;%SYSTEMDRIVE%\AMD;%SYSTEMDRIVE%\Intel;%SYSTEMDRIVE%\SWSetup;%SYSTEMDRIVE%\Drivers;%SYSTEMDRIVE%\Dell\Drivers | 显卡驱动和品牌机驱动安装时解压到 C 盘根目录的文件，装完就没用了。以后要重装驱动再下载一次即可 | confirm'
-    'NI 安装包缓存 | %PROGRAMDATA%\National Instruments\MDF\ProductCache;%PROGRAMDATA%\National Instruments\NI Package Manager\packages | LabVIEW 等 NI 软件的安装媒体缓存。软件本身不受影响；以后修复或重装时需重新下载 | confirm'
-    'NuGet 全局包目录 | %USERPROFILE%\.nuget\packages | .NET 项目引用的包都放在这里。删了以后打开项目要联网重新还原（Visual Studio 会自动做，但要等一会儿） | confirm'
-    'Gradle 依赖缓存 | %USERPROFILE%\.gradle\caches | Android Studio 和 Gradle 项目下载的依赖。删了下次构建要重新下载，国内网络可能很慢 | confirm'
-    'Maven 本地仓库 | %USERPROFILE%\.m2\repository | Maven 项目下载的依赖。删了下次构建要重新下载 | confirm'
-    'JetBrains IDE 缓存和索引 | %LOCALAPPDATA%\JetBrains\*\caches;%LOCALAPPDATA%\JetBrains\*\index | IntelliJ IDEA、PyCharm 等的缓存和代码索引。删了打开项目要重新索引（几分钟）。请先关闭这些 IDE | confirm'
-    '虚幻引擎派生数据缓存 | %LOCALAPPDATA%\UnrealEngine\Common\DerivedDataCache | Unreal Engine 给项目生成的派生数据，常有几十 GB。删了打开项目要重新生成，很慢 | confirm'
+    '驱动安装包解压残留 | %SYSTEMDRIVE%\NVIDIA;%SYSTEMDRIVE%\AMD;%SYSTEMDRIVE%\Intel;%SYSTEMDRIVE%\SWSetup;%SYSTEMDRIVE%\Drivers;%SYSTEMDRIVE%\Dell\Drivers | 显卡驱动和品牌机驱动安装时解压到 C 盘根目录的文件，装完就没用了。以后要重装驱动再下载一次即可 | confirm pro'
+    'NI 安装包缓存 | %PROGRAMDATA%\National Instruments\MDF\ProductCache;%PROGRAMDATA%\National Instruments\NI Package Manager\packages | LabVIEW 等 NI 软件的安装媒体缓存。软件本身不受影响；以后修复或重装时需重新下载 | confirm expert'
+    'NuGet 全局包目录 | %USERPROFILE%\.nuget\packages | .NET 项目引用的包都放在这里。删了以后打开项目要联网重新还原（Visual Studio 会自动做，但要等一会儿） | confirm expert'
+    'Gradle 依赖缓存 | %USERPROFILE%\.gradle\caches | Android Studio 和 Gradle 项目下载的依赖。删了下次构建要重新下载，国内网络可能很慢 | confirm expert'
+    'Maven 本地仓库 | %USERPROFILE%\.m2\repository | Maven 项目下载的依赖。删了下次构建要重新下载 | confirm expert'
+    'JetBrains IDE 缓存和索引 | %LOCALAPPDATA%\JetBrains\*\caches;%LOCALAPPDATA%\JetBrains\*\index | IntelliJ IDEA、PyCharm 等的缓存和代码索引。删了打开项目要重新索引（几分钟）。请先关闭这些 IDE | confirm expert'
+    '虚幻引擎派生数据缓存 | %LOCALAPPDATA%\UnrealEngine\Common\DerivedDataCache | Unreal Engine 给项目生成的派生数据，常有几十 GB。删了打开项目要重新生成，很慢 | confirm expert'
 )
 function Get-SteamPath {
     try { $p = [string](Get-ItemProperty 'HKCU:\Software\Valve\Steam' -EA SilentlyContinue).SteamPath; if ($p) { return $p.Replace('/', '\').TrimEnd('\') } } catch {}
@@ -3000,7 +3001,7 @@ function Get-CacheLibrary {
         if ($f.Count -lt 3) { continue }
         $paths = @()
         foreach ($p in $f[1].Split(';')) { if ($p.Trim()) { $paths += Expand-LibPath $p } }
-        $x = @{ N = (T $f[0].Trim()); Note = (T $f[2].Trim()); Paths = $paths; Confirm = $false; Whole = $false; Filter = ''; Svc = $null }
+        $x = @{ N = (T $f[0].Trim()); Note = (T $f[2].Trim()); Paths = $paths; Confirm = $false; Whole = $false; Filter = ''; Svc = $null; Lvl = 0 }
         if ($f.Count -gt 3) {
             foreach ($o in $f[3].Trim().Split(' ')) {
                 $o = $o.Trim(); if (-not $o) { continue }
@@ -3008,6 +3009,8 @@ function Get-CacheLibrary {
                 elseif ($o -eq 'confirm') { $x.Confirm = $true }
                 elseif ($o.StartsWith('filter=')) { $x.Filter = $o.Substring(7) }
                 elseif ($o.StartsWith('svc=')) { $x.Svc = @($o.Substring(4).Split(',') | Where-Object { $_ }) }
+                elseif ($o -eq 'pro') { $x.Lvl = 1 }
+                elseif ($o -eq 'expert') { $x.Lvl = 2 }
             }
         }
         $out += $x
@@ -3271,6 +3274,8 @@ function Get-OrphanFolders($apps) {
     return $out
 }
 
+# 使用模式：0 普通用户  1 工程师  2 开发者和 IT。目录项的 Lvl 比当前模式高就不在清理页列出（自动清理不受影响）
+function Get-Mode { switch ((Get-Setting 'Mode' 'expert')) { 'basic' { 0 } 'pro' { 1 } default { 2 } } }
 # Kind: cache = 缓存类(删除/跳过)   action = 操作类(执行/跳过)   move = 只能搬(搬到其他盘/跳过)   flex = 可搬可删
 function Get-Catalog {
     $docs = [Environment]::GetFolderPath('MyDocuments')
@@ -3287,7 +3292,7 @@ function Get-Catalog {
     # ---- 安全清理：缓存 / 临时文件 / 日志，删了程序自动重建（目录库里的）----
     foreach ($x in $lib) {
         if ($x.Confirm) { continue }
-        $list += @{ G=$safeG; Kind='cache'; Def=(T '删除'); N=$x.N; Paths=$x.Paths; Note=$x.Note; Filter=$x.Filter; Whole=$x.Whole; Svc=$x.Svc }
+        $list += @{ G=$safeG; Kind='cache'; Def=(T '删除'); N=$x.N; Paths=$x.Paths; Note=$x.Note; Filter=$x.Filter; Whole=$x.Whole; Svc=$x.Svc; Lvl=$x.Lvl }
     }
     $list += @(
         @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); N=(T '清空回收站');            Note=(T '回收站里是你以前删掉、但还能找回的文件。清空后就永远找不回了，请先打开回收站确认里面没有要的东西')
@@ -3300,24 +3305,24 @@ function Get-Catalog {
         # ---- 需确认：有代价 ----
         @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache';  Def=(T '跳过'); One=(T '删除'); N='Windows.old';        Paths=@('C:\Windows.old'); Whole=$true; Note=(T '上一版 Windows 的完整副本。删后不能回退到上一版系统（系统升级 10 天后会自动删）')
            Act ={ & "$env:SystemRoot\System32\takeown.exe" /F 'C:\Windows.old' /R /A /D Y | Out-Null; & "$env:SystemRoot\System32\icacls.exe" 'C:\Windows.old' /grant Administrators:F /T /C /Q | Out-Null; Remove-Item 'C:\Windows.old' -Recurse -Force -ErrorAction SilentlyContinue } }
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def=(T '跳过'); One=(T '执行'); N=(T '重建 Windows 搜索索引'); Note=(T '搜索索引膨胀时可重建，重建后通常只剩 1 到 2 GB。重建期间（约 1 小时）搜文件会变慢')
+        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def=(T '跳过'); One=(T '执行'); N=(T '重建 Windows 搜索索引'); Lvl=1; Note=(T '搜索索引膨胀时可重建，重建后通常只剩 1 到 2 GB。重建期间（约 1 小时）搜文件会变慢')
            Size={ $s = 0; foreach ($f in 'C:\ProgramData\Microsoft\Search\Data\Applications\Windows\Windows.edb','C:\ProgramData\Microsoft\Search\Data\Applications\Windows\Windows.db') { $i = Get-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue; if ($i) { $s += $i.Length } }; if ($s -gt 2GB) { $s } else { 0 } }
            Act ={ Stop-Service WSearch -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 3; Remove-Item 'C:\ProgramData\Microsoft\Search\Data\Applications\Windows\Windows.edb','C:\ProgramData\Microsoft\Search\Data\Applications\Windows\Windows.db' -Force -ErrorAction SilentlyContinue; Set-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows Search' -Name SetupCompletedSuccessfully -Value 0 -ErrorAction SilentlyContinue; Start-Service WSearch -ErrorAction SilentlyContinue } }
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def=(T '跳过'); N=(T '关闭休眠 (hiberfil.sys)'); Paths=@('C:\hiberfil.sys'); Note=(T '休眠文件约等于内存大小。关闭后睡眠不受影响，只是没有「休眠」和「快速启动」')
+        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def=(T '跳过'); N=(T '关闭休眠 (hiberfil.sys)'); Lvl=1; Paths=@('C:\hiberfil.sys'); Note=(T '休眠文件约等于内存大小。关闭后睡眠不受影响，只是没有「休眠」和「快速启动」')
            Act ={ & "$env:SystemRoot\System32\powercfg.exe" /h off } }
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def=(T '跳过'); One=(T '执行'); N=(T '禁用 XTU 超频日志服务'); Note=(T '外星人 Command Center 的 CPU 超频组件，会持续写几 GB 日志。不超频可禁用，AWCC 的风扇和性能档位不受影响')
+        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def=(T '跳过'); One=(T '执行'); N=(T '禁用 XTU 超频日志服务'); Lvl=2; Note=(T '外星人 Command Center 的 CPU 超频组件，会持续写几 GB 日志。不超频可禁用，AWCC 的风扇和性能档位不受影响')
            Size={ $s = Get-Service XTU3SERVICE -ErrorAction SilentlyContinue; if ($s -and $s.Status -eq 'Running') { -1 } else { 0 } }
            Act ={ Stop-Service XTU3SERVICE -Force -ErrorAction SilentlyContinue; Set-Service XTU3SERVICE -StartupType Disabled -ErrorAction SilentlyContinue } }
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T 'Windows Installer 孤儿安装包'); Note=(T 'C:\Windows\Installer 里没有任何已装软件和补丁再引用的安装包（.msi / .msp），多半是软件升级、卸载后留下的。判断方法和 PatchCleaner 一样。删了以后，万一哪个软件修复或卸载时提示找不到安装包，重新下载安装一次即可')
+        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T 'Windows Installer 孤儿安装包'); Lvl=2; Note=(T 'C:\Windows\Installer 里没有任何已装软件和补丁再引用的安装包（.msi / .msp），多半是软件升级、卸载后留下的。判断方法和 PatchCleaner 一样。删了以后，万一哪个软件修复或卸载时提示找不到安装包，重新下载安装一次即可')
            Size={ $s = [double]0; foreach ($f in (Get-InstallerOrphans)) { $s += $f.Length }; $s }
            Act ={ $n = 0; $b = [double]0; foreach ($f in (Get-InstallerOrphans)) { try { Remove-Item -LiteralPath $f.FullName -Force -ErrorAction Stop; $n++; $b += $f.Length } catch { Log ((T "  没删掉：{0}（{1}）") -f $f.FullName, $_.Exception.Message) } }; Log ((T "  Windows Installer 孤儿安装包：删了 {0} 个，{1}") -f $n, (GB $b)) } }
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T '开始菜单里失效的快捷方式'); Note=(T '指向的程序已经不在了的快捷方式（只看开始菜单，不碰桌面）。目标在没插着的硬盘上的不算。不占什么空间，只是清爽')
+        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T '开始菜单里失效的快捷方式'); Lvl=1; Note=(T '指向的程序已经不在了的快捷方式（只看开始菜单，不碰桌面）。目标在没插着的硬盘上的不算。不占什么空间，只是清爽')
            Size={ $s = [double]0; foreach ($f in (Get-BrokenShortcuts)) { $s += $f.Length }; $s }
            Act ={ $n = 0; foreach ($f in (Get-BrokenShortcuts)) { try { Remove-Item -LiteralPath $f.FullName -Force -ErrorAction Stop; $n++; OpLog '删除' (T '失效的快捷方式') $f.FullName '' } catch {} }; Log ((T "  删了 {0} 个失效的快捷方式") -f $n) } }
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T 'Windows 事件日志'); Note=(T '系统、应用程序、安全等日志，排查问题的工程师会看。清空后就查不到以前的记录了，不确定就跳过')
+        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T 'Windows 事件日志'); Lvl=2; Note=(T '系统、应用程序、安全等日志，排查问题的工程师会看。清空后就查不到以前的记录了，不确定就跳过')
            Size={ $s = [double]0; foreach ($f in @(Get-ChildItem -LiteralPath "$env:SystemRoot\System32\winevt\Logs" -Filter '*.evtx' -File -Force -ErrorAction SilentlyContinue)) { $s += $f.Length }; $s }
            Act ={ $n = 0; foreach ($l in @(& "$sys32\wevtutil.exe" el 2>$null)) { if (Stopping) { break }; & "$sys32\wevtutil.exe" cl "$l" 2>$null | Out-Null; if ($LASTEXITCODE -eq 0) { $n++ } }; Log ((T "  清空了 {0} 个事件日志") -f $n) } }
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def=(T '跳过'); One=(T '执行'); N=(T 'WinSxS 组件清理 (DISM)'); Note=(T '清掉系统更新替换下来的旧组件，通常能省 2 到 10 GB。耗时 10 到 20 分钟，完成后建议重启'); Last=$true
+        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def=(T '跳过'); One=(T '执行'); N=(T 'WinSxS 组件清理 (DISM)'); Lvl=1; Note=(T '清掉系统更新替换下来的旧组件，通常能省 2 到 10 GB。耗时 10 到 20 分钟，完成后建议重启'); Last=$true
            Size={ -1 }
            Act ={ & "$env:SystemRoot\System32\Dism.exe" /Online /Cleanup-Image /StartComponentCleanup /ResetBase | Out-Null }; Slow=$true }
 
@@ -3341,19 +3346,19 @@ function Get-Catalog {
         @{ G=$chatG; Kind='move'; Def=(T '搬到其他盘'); N=(T 'Zoom 程序和数据');         Paths=@("$env:APPDATA\Zoom");                                  Apps=@('Zoom'); Note=(T 'Zoom 装在这里的程序和本地数据。会议录像默认存在「文档」里的 Zoom 文件夹，那里属于个人文件夹，不动') }
 
         # ---- 其他可搬的文件夹 ----
-        @{ G=$otherG; Kind='move'; Def=(T '跳过');    N=(T '桌面');                   Paths=@($desk); NoOneDrive=$true; Note=(T '桌面上的所有文件。搬后桌面照常显示，文件实际在 D 盘') }
-        @{ G=$otherG; Kind='move'; Def=(T '跳过');    N=(T '下载');                   Paths=@($down); NoOneDrive=$true; Note=(T '下载文件夹。搬后浏览器照常下载到这里，文件实际在 D 盘') }
-        @{ G=$otherG; Kind='flex'; Def=(T '跳过');    N=(T '用户目录 .cache');        Paths=@("$env:USERPROFILE\.cache"); Note=(T '各类开发工具的缓存（HuggingFace 模型、uv、playwright 等）。删了会重新下载；也可搬走') }
-        @{ G=$otherG; Kind='flex'; Def=(T '跳过');    N=(T 'conda 环境 (.conda)');    Paths=@("$env:USERPROFILE\.conda"); Note=(T 'conda 创建的 Python 环境。搬走后照常使用；删了要重建环境') }
-        @{ G=$otherG; Kind='flex'; Def=(T '跳过');    N=(T 'pip --user 安装的包');    Paths=@("$env:APPDATA\Python"); Note=(T '用 pip install --user 装的 Python 包。有 conda 的话多半已不用，可删；不确定就搬走') }
+        @{ G=$otherG; Kind='move'; Def=(T '跳过');    N=(T '桌面'); Lvl=1;                   Paths=@($desk); NoOneDrive=$true; Note=(T '桌面上的所有文件。搬后桌面照常显示，文件实际在 D 盘') }
+        @{ G=$otherG; Kind='move'; Def=(T '跳过');    N=(T '下载'); Lvl=1;                   Paths=@($down); NoOneDrive=$true; Note=(T '下载文件夹。搬后浏览器照常下载到这里，文件实际在 D 盘') }
+        @{ G=$otherG; Kind='flex'; Def=(T '跳过');    N=(T '用户目录 .cache'); Lvl=2;        Paths=@("$env:USERPROFILE\.cache"); Note=(T '各类开发工具的缓存（HuggingFace 模型、uv、playwright 等）。删了会重新下载；也可搬走') }
+        @{ G=$otherG; Kind='flex'; Def=(T '跳过');    N=(T 'conda 环境 (.conda)'); Lvl=2;    Paths=@("$env:USERPROFILE\.conda"); Note=(T 'conda 创建的 Python 环境。搬走后照常使用；删了要重建环境') }
+        @{ G=$otherG; Kind='flex'; Def=(T '跳过');    N=(T 'pip --user 安装的包'); Lvl=2;    Paths=@("$env:APPDATA\Python"); Note=(T '用 pip install --user 装的 Python 包。有 conda 的话多半已不用，可删；不确定就搬走') }
     )
     foreach ($x in $lib) {
         if (-not $x.Confirm) { continue }
-        $list += @{ G=$confG; Kind='cache'; Def=(T '跳过'); One=(T '删除'); N=$x.N; Paths=$x.Paths; Note=$x.Note; Filter=$x.Filter; Whole=$x.Whole; Svc=$x.Svc }
+        $list += @{ G=$confG; Kind='cache'; Def=(T '跳过'); One=(T '删除'); N=$x.N; Paths=$x.Paths; Note=$x.Note; Filter=$x.Filter; Whole=$x.Whole; Svc=$x.Svc; Lvl=$x.Lvl }
     }
     # ---- 自定义：用户在设置里加的文件夹，删里面的东西 ----
     foreach ($p in (Get-CustomClean)) {
-        $list += @{ G=$customG; Kind='cache'; Def=(T '删除'); N=(Split-Path $p -Leaf); Paths=@($p); Note=$p; Custom=$true }
+        $list += @{ G=$customG; Kind='cache'; Def=(T '删除'); N=(Split-Path $p -Leaf); Paths=@($p); Note=$p; Custom=$true; Lvl=2 }
     }
     $apps = Get-ChatApps
     $i = 0
@@ -4828,6 +4833,19 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+普通用户	Home user
+工程师	Engineer
+开发者和 IT	Developer and IT
+模式	 mode
+使用模式	Mode
+使用模式：{0}	Mode: {0}
+你是哪类用户？	Which kind of user are you?
+普通用户：清理 C 盘、省空间、空间地图、软件管理、帮助。清理列表里只有常见的缓存和临时文件，删了都会自动重建；有代价的项目仍然默认跳过。	Home user: Clean C:, Save space, Space map, Apps and Help. The cleanup list only has common caches and temporary files that apps rebuild; items with a cost are still skipped by default.
+工程师：再加上重复文件、搬家管理、自动提醒、操作日志；空间地图的找文件、和上次比、导出；省空间的页面文件、还原点、压缩文件夹、虚拟磁盘；软件管理的开机启动、残留文件夹、检查新版本和搬到其他盘；清理列表里多出开发工具的缓存。	Engineer: adds Duplicates, Moves, Reminders and the operation log; find files, compare with last time and export in the space map; page file, restore points, compressed folders and virtual disks in Save space; startup, leftover folders, update check and move in Apps; developer tool caches in the cleanup list.
+开发者和 IT：全部功能。再加上计划任务、右键菜单、保留的存储、组件存储分析、蓝屏转储、临时文件夹位置、自定义清理列表和排除、快速扫描开关、空间明细、检查扫描功能、运行记录，以及 Installer 孤儿安装包、事件日志、NuGet / Gradle / Maven / JetBrains 缓存这类项目。	Developer and IT: everything. Adds scheduled tasks, context menu, reserved storage, component store analysis, crash dumps, temp folder location, custom cleanup list and exclusions, the fast scan switch, space breakdown, scan check, the run log, and items such as orphaned Installer packages, event logs and NuGet / Gradle / Maven / JetBrains caches.
+按你的需要决定界面上有多少东西，随时可以在「设置」里换。\n\n普通用户：清理缓存、省空间、看哪里占地方、卸载软件，够用也不复杂。\n工程师：再加上重复文件、搬家管理、自动提醒、操作日志，以及各页的进阶功能。\n开发者和 IT：全部功能，包括计划任务、右键菜单、保留的存储、组件存储分析、自定义清理列表、空间明细和自检。	Decides how much the window shows. You can change it in Settings at any time.\n\nHome user: clean caches, save space, see what takes up room and uninstall apps. Enough, without the clutter.\nEngineer: adds Duplicates, Moves, Reminders, the operation log and the advanced features on each page.\nDeveloper and IT: everything, including scheduled tasks, context menu, reserved storage, component store analysis, custom cleanup list, space breakdown and self-check.
+按你的需要决定界面上有多少东西。换模式不会丢任何设置和记录，随时可以换回来。	Decides how much the window shows. Switching never loses settings or records, and you can switch back at any time.
+点一下到设置里换模式	Click to change the mode in Settings
 正在读取各块盘的健康信息…	Reading the health of each drive…
 读不到型号和健康信息	Model and health could not be read
 已用 {0} / 共 {1}（{2:N0}%），剩 {3}	{0} used of {1} ({2:N0}%), {3} free
@@ -6897,6 +6915,13 @@ $script:helpEnXaml = @'
               </Expander.Header>
               <StackPanel>
                 <StackPanel Margin="0,14,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Mode"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Three modes decide how much the window shows. ClearC asks once on first start; after that, change it at the top of Settings at any time. Switching never loses settings or records. The current mode is written under the version number at the bottom left; click it to go to Settings.</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Home user</Run><Run>: Clean C:, Save space, Space map, Apps and Help. The cleanup list only has common caches and temporary files that apps rebuild; items with a cost are still skipped by default.</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Engineer</Run><Run>: adds Duplicates, Moves, Reminders and the operation log; find files, compare with last time, export and compress in the space map; page file, restore points, compressed folders, virtual disks and merge duplicates in Save space; startup, leftover folders, update check and move in Apps; developer tool caches and driver leftovers in the cleanup list.</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Developer and IT</Run><Run>: everything. Adds scheduled tasks, context menu, reserved storage, component store analysis, crash dumps, temp folder location, custom cleanup list and exclusions, the fast scan switch, space breakdown, scan check, the run log, and items such as orphaned Installer packages, event logs and NuGet / Gradle / Maven / JetBrains caches.</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Appearance and language"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>Light, Dark or Follow Windows (the "Choose your app mode" setting), and 中文 or English. ClearC closes and reopens after you change them. "Appearance" and "Switch language" at the bottom left change them too.</Run></TextBlock>
                 </StackPanel>
@@ -6924,6 +6949,12 @@ $script:helpEnXaml = @'
           <Border Style="{StaticResource Card}" Padding="22,2,22,4">
             <StackPanel x:Name="HelpFaq">
               <Expander Style="{StaticResource HelpQ}" BorderThickness="0">
+                <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="Why can't I find some features?"/></Expander.Header>
+                <StackPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Usually the mode: Home user shows only the basics, Engineer adds more, and Developer and IT shows everything. Change it at the top of Settings. Anything hidden by hand under "What the window shows" is turned back on there too. The cleanup list is built by mode when scanning, so scan again after switching.</Run></TextBlock>
+                </StackPanel>
+              </Expander>
+              <Expander Style="{StaticResource HelpQ}">
                 <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="Why does ClearC need administrator rights?"/></Expander.Header>
                 <StackPanel>
                   <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Cleaning locations such as system temporary files and the Windows Update cache requires administrator rights.</Run></TextBlock>
@@ -7031,7 +7062,7 @@ $script:helpEnXaml = @'
                   </StackPanel>
                 </DockPanel>
               </Border>
-              <StackPanel Margin="0,18,0,0">
+              <StackPanel x:Name="FbCopyDiag" Margin="0,18,0,0">
                 <TextBlock Style="{StaticResource HelpLead}" Text="Include diagnostic info"/>
                 <TextBlock Style="{StaticResource HelpBody}" Text="A screenshot of the problem and the diagnostic info help find the cause faster. Diagnostic info includes the app version, Windows version, space on C: and the recent run log (which contains folder paths), so you may want to review it before sending."/>
                 <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
@@ -7040,16 +7071,16 @@ $script:helpEnXaml = @'
                   <TextBlock x:Name="CopyHint" Style="{StaticResource Caption}" Foreground="#248A3D" Margin="14,0,0,0"/>
                 </StackPanel>
               </StackPanel>
-              <Border Height="1" Background="#EDEDF0" Margin="0,18,0,0"/>
-              <StackPanel Margin="0,18,0,0">
+              <StackPanel x:Name="FbSelfTest" Margin="0,18,0,0">
+                <Border Height="1" Background="#EDEDF0" Margin="0,0,0,18"/>
                 <TextBlock Style="{StaticResource HelpLead}" Text="Check scanning"/>
                 <TextBlock Style="{StaticResource HelpBody}" Text="Verifies the fast scan on this PC: it compares reading the file table with a folder-by-folder scan, then creates a few files in ClearC's own folder, changes and deletes them to check updates from the change journal. It only reads drive C:, leaves your files alone and takes a minute or two; the result is copied so you can paste it into a GitHub issue."/>
                 <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
                   <Button x:Name="BtnSelfTest" Content="Check scanning"/>
                 </StackPanel>
               </StackPanel>
-              <Border Height="1" Background="#EDEDF0" Margin="0,18,0,0"/>
-              <StackPanel Margin="0,18,0,0">
+              <StackPanel x:Name="FbCheckUpdate" Margin="0,18,0,0">
+                <Border Height="1" Background="#EDEDF0" Margin="0,0,0,18"/>
                 <TextBlock Style="{StaticResource HelpLead}" Text="Check for updates"/>
                 <TextBlock Style="{StaticResource HelpBody}" Text="If there is a new version, the download page opens; replace the old exe with the new one. ClearC contacts GitHub only when you click this button."/>
                 <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
@@ -7233,6 +7264,7 @@ if ($script:mode -match '(?i)/autoclean') {
     <Visibility x:Key="MapPctVis">Visible</Visibility>
     <Visibility x:Key="MapMetaVis">Visible</Visibility>
     <Visibility x:Key="MapHealthVis">Visible</Visibility>
+    <Visibility x:Key="AppMoveVis">Visible</Visibility>
     <Visibility x:Key="SubVis">Visible</Visibility>
     <!-- 配色：浅灰底 #F5F5F7、白色卡片、正文 #1D1D1F、次要文字 #6E6E73、分隔线 #E5E5EA、唯一的强调色是蓝 #0071E3，红色只给删除 -->
     <FontFamily x:Key="Icons">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
@@ -8269,6 +8301,7 @@ if ($script:mode -match '(?i)/autoclean') {
           <StackPanel Margin="11,0,0,0" VerticalAlignment="Center">
             <TextBlock Text="腾挪 ClearC" FontSize="15" FontWeight="SemiBold" TextOptions.TextFormattingMode="Ideal"/>
             <TextBlock x:Name="AppVer" Text="" FontSize="11.5" Foreground="#86868B" Margin="0,1,0,0"/>
+            <TextBlock x:Name="ModeTag" Text="" FontSize="11" Foreground="#0066CC" Margin="0,1,0,0" Cursor="Hand" ToolTip="点一下到设置里换模式"/>
           </StackPanel>
         </StackPanel>
         <StackPanel DockPanel.Dock="Bottom">
@@ -8726,7 +8759,7 @@ if ($script:mode -match '(?i)/autoclean') {
         </StackPanel>
       </Border>
       <DockPanel Grid.Row="2" Margin="0,0,0,10">
-        <Border DockPanel.Dock="Right" Style="{StaticResource SegBox}" VerticalAlignment="Center">
+        <Border x:Name="MapViewBox" DockPanel.Dock="Right" Style="{StaticResource SegBox}" VerticalAlignment="Center">
           <StackPanel Orientation="Horizontal">
             <RadioButton x:Name="MapViewDirs" GroupName="mapview" Content="文件夹" IsChecked="True" Style="{StaticResource Seg}"/>
             <RadioButton x:Name="MapViewTree" GroupName="mapview" Content="方块图" Style="{StaticResource Seg}" ToolTip="每个方块的大小就是它占的空间。单击选中，双击文件夹往里点"/>
@@ -8859,7 +8892,7 @@ if ($script:mode -match '(?i)/autoclean') {
             </StackPanel>
           </DockPanel>
 
-          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,20,0,0">
+          <Border x:Name="SaveCardCos" Style="{StaticResource Card}" Padding="24,20" Margin="0,20,0,0">
             <DockPanel>
               <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="20,0,0,0">
                 <Button x:Name="BtnCosOff" Content="关闭" Margin="0,0,8,0"/>
@@ -8874,7 +8907,7 @@ if ($script:mode -match '(?i)/autoclean') {
             </DockPanel>
           </Border>
 
-          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+          <Border x:Name="SaveCardPf" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
             <StackPanel>
               <TextBlock Text="页面文件（pagefile.sys）" Style="{StaticResource CardHead}"/>
               <TextBlock x:Name="SavePfState" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
@@ -8888,7 +8921,7 @@ if ($script:mode -match '(?i)/autoclean') {
             </StackPanel>
           </Border>
 
-          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+          <Border x:Name="SaveCardHib" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
             <StackPanel>
               <TextBlock Text="休眠文件（hiberfil.sys）" Style="{StaticResource CardHead}"/>
               <TextBlock x:Name="SaveHibState" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
@@ -8902,7 +8935,7 @@ if ($script:mode -match '(?i)/autoclean') {
             </StackPanel>
           </Border>
 
-          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+          <Border x:Name="SaveCardRp" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
             <DockPanel>
               <Button x:Name="BtnRestoreOpen" DockPanel.Dock="Right" Content="打开系统保护设置" VerticalAlignment="Center" Margin="20,0,0,0"/>
               <StackPanel>
@@ -8914,7 +8947,7 @@ if ($script:mode -match '(?i)/autoclean') {
             </DockPanel>
           </Border>
 
-          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+          <Border x:Name="SaveCardFc" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
             <DockPanel>
               <Button x:Name="BtnFolderCompress" DockPanel.Dock="Right" Content="选择文件夹…" Style="{StaticResource Primary}" VerticalAlignment="Center" Margin="20,0,0,0"/>
               <StackPanel>
@@ -8926,7 +8959,7 @@ if ($script:mode -match '(?i)/autoclean') {
             </DockPanel>
           </Border>
 
-          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+          <Border x:Name="SaveCardOd" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
             <DockPanel>
               <Button x:Name="BtnOdFree" DockPanel.Dock="Right" Content="改成仅在线" Style="{StaticResource Primary}" VerticalAlignment="Center" Margin="20,0,0,0" IsEnabled="False"/>
               <StackPanel>
@@ -8938,7 +8971,7 @@ if ($script:mode -match '(?i)/autoclean') {
             </DockPanel>
           </Border>
 
-          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+          <Border x:Name="SaveCardRs" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
             <DockPanel>
               <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="20,0,0,0">
                 <Button x:Name="BtnRsOn" Content="重新开启" Margin="0,0,8,0" IsEnabled="False"/>
@@ -8953,7 +8986,7 @@ if ($script:mode -match '(?i)/autoclean') {
             </DockPanel>
           </Border>
 
-          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+          <Border x:Name="SaveCardCs" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
             <DockPanel>
               <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="20,0,0,0">
                 <Button x:Name="BtnCsAnalyze" Content="分析" Style="{StaticResource Primary}" Margin="0,0,8,0"/>
@@ -8968,7 +9001,7 @@ if ($script:mode -match '(?i)/autoclean') {
             </DockPanel>
           </Border>
 
-          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+          <Border x:Name="SaveCardDump" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
             <DockPanel>
               <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="20,0,0,0">
                 <Button x:Name="BtnDumpSmall" Content="改成小转储" Style="{StaticResource Primary}" Margin="0,0,8,0"/>
@@ -8983,7 +9016,7 @@ if ($script:mode -match '(?i)/autoclean') {
             </DockPanel>
           </Border>
 
-          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+          <Border x:Name="SaveCardTmp" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
             <StackPanel>
               <TextBlock Text="临时文件夹的位置" Style="{StaticResource CardHead}"/>
               <TextBlock x:Name="SaveTmpState" Style="{StaticResource Caption}" Margin="0,4,0,0" TextTrimming="CharacterEllipsis"/>
@@ -8997,7 +9030,7 @@ if ($script:mode -match '(?i)/autoclean') {
             </StackPanel>
           </Border>
 
-          <Border Style="{StaticResource Card}" Padding="24,20,24,14" Margin="0,14,0,0">
+          <Border x:Name="SaveCardVd" Style="{StaticResource Card}" Padding="24,20,24,14" Margin="0,14,0,0">
             <StackPanel>
               <TextBlock Text="虚拟磁盘、模拟器和虚拟机" Style="{StaticResource CardHead}"/>
               <TextBlock Style="{StaticResource Body}" Margin="0,8,0,4"
@@ -9031,7 +9064,7 @@ if ($script:mode -match '(?i)/autoclean') {
             </StackPanel>
           </Border>
 
-          <Border Style="{StaticResource Card}" Padding="24,18" Margin="0,14,0,0">
+          <Border x:Name="SaveCardMerge" Style="{StaticResource Card}" Padding="24,18" Margin="0,14,0,0">
             <DockPanel>
               <Button x:Name="BtnGoDup" DockPanel.Dock="Right" Content="去找重复文件" VerticalAlignment="Center" Margin="20,0,0,0"/>
               <StackPanel>
@@ -9064,7 +9097,7 @@ if ($script:mode -match '(?i)/autoclean') {
         </StackPanel>
       </DockPanel>
       <DockPanel Grid.Row="1" Margin="0,0,0,10">
-        <Border DockPanel.Dock="Left" Style="{StaticResource SegBox}" VerticalAlignment="Center" Margin="0,0,14,0">
+        <Border x:Name="AppsViewBox" DockPanel.Dock="Left" Style="{StaticResource SegBox}" VerticalAlignment="Center" Margin="0,0,14,0">
           <StackPanel Orientation="Horizontal">
             <RadioButton x:Name="AppsViewApps" GroupName="appsv" Content="软件" IsChecked="True" Style="{StaticResource Seg}"/>
             <RadioButton x:Name="AppsViewStartup" GroupName="appsv" Content="开机启动" Style="{StaticResource Seg}"/>
@@ -9118,7 +9151,7 @@ if ($script:mode -match '(?i)/autoclean') {
                     <Button x:Name="AppUpgrade" Content="升级" Tag="{Binding}" Style="{StaticResource Small}" Foreground="#0066CC" Margin="0,0,6,0" Visibility="Collapsed"
                             ToolTip="在终端窗口里用 winget 升级这个软件，过程和提示都看得见"/>
                     <Button x:Name="AppOpen" Content="打开位置" Tag="{Binding}" Style="{StaticResource Small}" Margin="0,0,6,0"/>
-                    <Button x:Name="AppMove" Content="搬到其他盘" Tag="{Binding}" Style="{StaticResource Small}" Margin="0,0,6,0"
+                    <Button x:Name="AppMove" Content="搬到其他盘" Tag="{Binding}" Style="{StaticResource Small}" Margin="0,0,6,0" Visibility="{DynamicResource AppMoveVis}"
                             ToolTip="把整个安装文件夹搬到其他盘，C 盘原位置留一个链接，软件照常使用，不用重装"/>
                     <Button x:Name="AppUninstall" Content="卸载" Tag="{Binding}" Style="{StaticResource Small}"/>
                   </StackPanel>
@@ -9284,7 +9317,7 @@ if ($script:mode -match '(?i)/autoclean') {
                 </ComboBox>
                 <TextBlock Text="时，在屏幕右下角弹出提醒（每天最多一次）" VerticalAlignment="Center" Margin="10,0,0,0"/>
               </StackPanel>
-              <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+              <StackPanel x:Name="AutoJunkRow" Orientation="Horizontal" Margin="0,10,0,0">
                 <TextBlock Text="可以清理的临时文件、缓存和日志超过" VerticalAlignment="Center" Margin="0,0,10,0"/>
                 <ComboBox x:Name="AutoJunkGB" Width="100">
                   <ComboBoxItem Content="不提醒"/><ComboBoxItem Content="1 GB"/><ComboBoxItem Content="2 GB"/><ComboBoxItem Content="5 GB"/><ComboBoxItem Content="10 GB"/>
@@ -9443,7 +9476,22 @@ if ($script:mode -match '(?i)/autoclean') {
             </StackPanel>
           </DockPanel>
 
-          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,20,0,0">
+          <Border x:Name="SetCardMode" Style="{StaticResource Card}" Padding="24,20" Margin="0,20,0,0">
+            <StackPanel>
+              <TextBlock Text="使用模式" Style="{StaticResource CardHead}"/>
+              <TextBlock Style="{StaticResource SetNote}" Text="按你的需要决定界面上有多少东西。换模式不会丢任何设置和记录，随时可以换回来。"/>
+              <Border Style="{StaticResource SegBox}" HorizontalAlignment="Left" Margin="0,12,0,0">
+                <StackPanel Orientation="Horizontal">
+                  <RadioButton x:Name="SetModeBasic" GroupName="mode" Content="普通用户" Style="{StaticResource Seg}"/>
+                  <RadioButton x:Name="SetModePro" GroupName="mode" Content="工程师" Style="{StaticResource Seg}"/>
+                  <RadioButton x:Name="SetModeExpert" GroupName="mode" Content="开发者和 IT" Style="{StaticResource Seg}"/>
+                </StackPanel>
+              </Border>
+              <TextBlock x:Name="SetModeNote" Style="{StaticResource SetNote}" Margin="0,10,0,0"/>
+            </StackPanel>
+          </Border>
+
+          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
             <StackPanel>
               <TextBlock Text="外观和语言" Style="{StaticResource CardHead}"/>
               <DockPanel Margin="0,14,0,0">
@@ -9474,7 +9522,7 @@ if ($script:mode -match '(?i)/autoclean') {
             </StackPanel>
           </Border>
 
-          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+          <Border x:Name="SetCardDisplay" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
             <StackPanel>
               <TextBlock Text="界面上显示什么" Style="{StaticResource CardHead}"/>
               <TextBlock Text="左侧显示的页面" Style="{StaticResource SetName}" Margin="0,14,0,0"/>
@@ -9560,7 +9608,7 @@ if ($script:mode -match '(?i)/autoclean') {
             </StackPanel>
           </Border>
 
-          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+          <Border x:Name="SetCardScan" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
             <StackPanel>
               <TextBlock Text="扫描和查重" Style="{StaticResource CardHead}"/>
               <DockPanel Margin="0,14,0,0">
@@ -10249,6 +10297,13 @@ if ($script:mode -match '(?i)/autoclean') {
               </Expander.Header>
               <StackPanel>
                 <StackPanel Margin="0,14,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="使用模式"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>三种，按你的需要决定界面上有多少东西。第一次打开时会问一句，之后在「设置」最上面随时换，换了不丢任何设置和记录。左下角版本号下面写着当前模式，点一下就到设置。</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">普通用户</Run><Run>：清理 C 盘、省空间、空间地图、软件管理、帮助。清理列表里只有常见的缓存和临时文件，删了软件会自动重建；有代价的项目仍然默认跳过。</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">工程师</Run><Run>：再加上重复文件、搬家管理、自动提醒、操作日志；空间地图的找文件、和上次比、导出、压缩；省空间的页面文件、还原点、压缩文件夹、虚拟磁盘、合并重复文件；软件管理的开机启动、残留文件夹、检查新版本、搬到其他盘；清理列表里多出开发工具的缓存和驱动残留。</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">开发者和 IT</Run><Run>：全部功能。再加上计划任务、右键菜单、保留的存储、组件存储分析、蓝屏转储、临时文件夹位置、自定义清理列表和排除、快速扫描开关、空间明细、检查扫描功能、运行记录，以及 Installer 孤儿安装包、事件日志、NuGet / Gradle / Maven / JetBrains 缓存这类项目。</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="外观和语言"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>浅色、深色或跟随系统（照 Windows 设置里「选择应用模式」来），中文或 English。换了以后本工具会关闭，再自动打开。左下角的「外观」和「切换语言」也能改。</Run></TextBlock>
                 </StackPanel>
@@ -10276,6 +10331,12 @@ if ($script:mode -match '(?i)/autoclean') {
           <Border Style="{StaticResource Card}" Padding="22,2,22,4">
             <StackPanel x:Name="HelpFaq">
               <Expander Style="{StaticResource HelpQ}" BorderThickness="0">
+                <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="为什么有些功能找不到？"/></Expander.Header>
+                <StackPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>多半是使用模式的关系：普通用户模式只显示基础功能，工程师模式多一些，开发者和 IT 模式才是全部。到「设置」最上面换一下模式就有了；另外「界面上显示什么」里手动隐藏过的也要在那里打开。清理列表是扫描时按模式决定列什么的，换了模式再扫描一次。</Run></TextBlock>
+                </StackPanel>
+              </Expander>
+              <Expander Style="{StaticResource HelpQ}">
                 <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="为什么要管理员权限？"/></Expander.Header>
                 <StackPanel>
                   <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>清理系统临时文件、Windows 更新缓存等位置，需要管理员权限。</Run></TextBlock>
@@ -10383,7 +10444,7 @@ if ($script:mode -match '(?i)/autoclean') {
                   </StackPanel>
                 </DockPanel>
               </Border>
-              <StackPanel Margin="0,18,0,0">
+              <StackPanel x:Name="FbCopyDiag" Margin="0,18,0,0">
                 <TextBlock Style="{StaticResource HelpLead}" Text="附上诊断信息"/>
                 <TextBlock Style="{StaticResource HelpBody}" Text="提交问题时附上截图和诊断信息，能更快找到原因。诊断信息包括软件版本、Windows 版本、C 盘空间和最近的运行记录（里面有文件夹路径），贴出去之前可以先看一下。"/>
                 <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
@@ -10392,16 +10453,16 @@ if ($script:mode -match '(?i)/autoclean') {
                   <TextBlock x:Name="CopyHint" Style="{StaticResource Caption}" Foreground="#248A3D" Margin="14,0,0,0"/>
                 </StackPanel>
               </StackPanel>
-              <Border Height="1" Background="#EDEDF0" Margin="0,18,0,0"/>
-              <StackPanel Margin="0,18,0,0">
+              <StackPanel x:Name="FbSelfTest" Margin="0,18,0,0">
+                <Border Height="1" Background="#EDEDF0" Margin="0,0,0,18"/>
                 <TextBlock Style="{StaticResource HelpLead}" Text="检查扫描功能"/>
                 <TextBlock Style="{StaticResource HelpBody}" Text="在这台电脑上核对快速扫描：比较直接读文件表和逐个文件夹扫描的结果，再在本工具自己的文件夹里建几个文件、改一改、删掉，看按变更日志更新对不对。只读 C 盘，不动你的文件，大约要一两分钟；结果会复制下来，可以贴到 GitHub 的问题里。"/>
                 <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
                   <Button x:Name="BtnSelfTest" Content="检查扫描功能"/>
                 </StackPanel>
               </StackPanel>
-              <Border Height="1" Background="#EDEDF0" Margin="0,18,0,0"/>
-              <StackPanel Margin="0,18,0,0">
+              <StackPanel x:Name="FbCheckUpdate" Margin="0,18,0,0">
+                <Border Height="1" Background="#EDEDF0" Margin="0,0,0,18"/>
                 <TextBlock Style="{StaticResource HelpLead}" Text="检查新版本"/>
                 <TextBlock Style="{StaticResource HelpBody}" Text="有新版本会打开下载页面，下载新的 exe 换掉旧的就行。只在你点这个按钮时连一次 GitHub。"/>
                 <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
@@ -10554,7 +10615,8 @@ foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageM
                'MapDrive','BtnMapStop','BtnMapScan','MapViewDirs','MapViewFiles','MapViewGrow','BtnMapUp','MapPath','MapInfo','MapList','MapGrow','EmptyMap','EmptyMapText','BtnMapOpen','BtnMapCompress','BtnMapDelete','MapSel',
                'SaveScroll','BtnSaveRefresh','BtnCosOff','BtnCosOn','SaveCosState','SavePfState','SavePfDrive','BtnPfMove','BtnPfAuto','SaveHibState','BtnHibReduced','BtnHibOff','BtnHibFull','BtnFolderCompress','SaveFcState','VdList','VdEmpty','BtnGoDup',
                'BtnAppsRefresh','AppsAll','AppsC','AppsStore','AppsInfo','AppsSearch','AppsLeftBox','BtnAppsLeftClose','BtnAppsLeft','AppsLeftText','AppsList','EmptyApps','EmptyAppsText',
-               'BtnAppsUpdates','AppsViewApps','AppsViewStartup','AppsViewTasks','AppsViewMenu','AppsViewLeft','AppsFilterBox','StartList','MapHealthBox','MapHealth','MapHealthNote','SetMapHealth',
+               'BtnAppsUpdates','AppsViewApps','AppsViewStartup','AppsViewTasks','AppsViewMenu','AppsViewLeft','AppsViewBox','AppsFilterBox','StartList','MapHealthBox','MapHealth','MapHealthNote','SetMapHealth',
+               'SaveCardCos','SaveCardPf','SaveCardHib','SaveCardRp','SaveCardFc','SaveCardOd','SaveCardRs','SaveCardCs','SaveCardDump','SaveCardTmp','SaveCardVd','SaveCardMerge','SetCardMode','SetCardDisplay','SetCardScan','SetModeBasic','SetModePro','SetModeExpert','SetModeNote','ModeTag','AutoJunkRow','FbCopyDiag','FbSelfTest','FbCheckUpdate','MapViewBox',
                'BtnOdFree','SaveOdState','BtnRsOn','BtnRsOff','SaveRsState','BtnCsAnalyze','BtnCsClean','SaveCsState','BtnDumpSmall','BtnDumpAuto','SaveDumpState','SaveTmpState','SaveTmpDrive','BtnTmpMove','BtnTmpAuto','BtnCleanCustom','AutoJunkGB','AutoCleanWhen','SetCleanCard','SetCustomList','SetCustomEmpty','BtnSetCustomAdd','SetExcludeList','SetExcludeEmpty','BtnSetExcludeAdd',
                'BtnMovesRefresh','MovesInfo','MovesList','EmptyMoves','EmptyMovesText',
                'AutoRemindOn','AutoRemindGB','AutoRemindNote','AutoCleanOn','AutoCleanNote','HistInfo','HistChart','HistLast','HistFirst',
@@ -11235,9 +11297,11 @@ function Build-Rows($sizes) {
     $col = New-Object 'System.Collections.ObjectModel.ObservableCollection[RowItem]'
     $total = [double]0
     $seen = @{}
+    $mode = Get-Mode
     foreach ($it in $catalog) {
         $b = $sizes[$it.Idx]
         if (-not $b) { continue }
+        if ($it.Lvl -and [int]$it.Lvl -gt $mode) { continue }   # 这个模式下不列（换到更高的模式再扫描就有）
         $r = New-Object RowItem
         $r.Idx = $it.Idx; $r.Group = $it.G; $r.Name = $it.N; $r.Note = $it.Note; $r.Actions = $it.Actions; $r.Action = $it.Def
         # 组名「安全清理（缓存、临时文件……）」拆成标题和说明两行显示
@@ -12332,7 +12396,7 @@ function Show-MapLevel($node) {
     Restore-MapKeep $keep
     $ctl.MapPath.Text = $path
     $ctl.MapInfo.Text = (T "这一层共 {0}，{1:N0} 个文件{2}") -f (Fmt $node.Size), $node.Files, $(if ($script:mapScanAt) { (T " · 扫描于 {0:HH:mm}（{1}）") -f $script:mapScanAt, $script:mapHow } else { '' })
-    $ctl.BtnMapAcct.Visibility = if ($script:mapRoot -and $script:mapRoot.HasDisk) { 'Visible' } else { 'Collapsed' }
+    $ctl.BtnMapAcct.Visibility = if ($script:mapRoot -and $script:mapRoot.HasDisk -and (Get-Mode) -ge 2) { 'Visible' } else { 'Collapsed' }
     $ctl.BtnMapUp.IsEnabled = ($null -ne $node.Parent)
     $ctl.EmptyMap.Visibility = if ($rows.Count -gt 0) { 'Collapsed' } else { 'Visible' }
     if ($rows.Count -eq 0) { $ctl.EmptyMapText.Text = (T '这个文件夹是空的') }
@@ -14177,7 +14241,7 @@ function Show-AppsView {
     $ctl.AppsList.Visibility = if ($isApps) { 'Visible' } else { 'Collapsed' }
     $ctl.StartList.Visibility = if ($isApps) { 'Collapsed' } else { 'Visible' }
     $ctl.AppsFilterBox.Visibility = if ($isApps) { 'Visible' } else { 'Collapsed' }
-    $ctl.BtnAppsUpdates.Visibility = if ($isApps) { 'Visible' } else { 'Collapsed' }
+    $ctl.BtnAppsUpdates.Visibility = if ($isApps -and $script:appsUpdatesAllowed) { 'Visible' } else { 'Collapsed' }
     if ($isApps) { Filter-Apps; return }
     if (-not $script:startRows.ContainsKey($v)) { Load-StartRows $v } else { Filter-StartRows }
 }
@@ -14717,7 +14781,61 @@ $script:optLinks = [ordered]@{ theme = @('SetLinkTheme', 'BtnTheme'); lang = @('
 $script:optSwitches = [ordered]@{ PageSub = 'SetPageSub'; MapCheck = 'SetMapCheck'; MapBar = 'SetMapBar'; MapPct = 'SetMapPct'; MapMeta = 'SetMapMeta'; MapDisk = 'SetMapDisk'; MapFastBtn = 'SetMapFastBtn'; MapHealth = 'SetMapHealth' }
 function Get-Flag([string]$k) { (Get-Setting $k '1') -ne '0' }
 function Get-HiddenSet([string]$k) { $h = @{}; foreach ($x in ((Get-Setting $k '') -split ',')) { $x = $x.Trim(); if ($x) { $h[$x] = $true } }; return $h }
+# 三种模式各显示什么：页面、左下角按钮、各页里的高级功能。换模式只改显示，不丢设置
+$script:pageLvl = @{ dup = 1; moves = 1; auto = 1; log = 1 }
+$script:linkLvl = @{ log = 2 }
+$script:appsUpdatesAllowed = $true
+function Get-ModeName([int]$m = (Get-Mode)) { switch ($m) { 0 { (T '普通用户') } 1 { (T '工程师') } default { (T '开发者和 IT') } } }
+function Apply-Mode {
+    $m = Get-Mode
+    $v = { param([int]$need) if ($m -ge $need) { [System.Windows.Visibility]::Visible } else { [System.Windows.Visibility]::Collapsed } }
+    # 空间地图：找文件、和上次比、导出、压缩是工程师的；快速扫描开关、空间明细是开发者的
+    foreach ($n in 'MapViewFiles', 'MapViewGrow', 'BtnMapExport', 'BtnMapReport', 'BtnMapCompress') { $ctl[$n].Visibility = & $v 1 }
+    if ($m -lt 1 -and -not $ctl.MapViewDirs.IsChecked -and -not $ctl.MapViewTree.IsChecked) { $ctl.MapViewDirs.IsChecked = $true }
+    # 省空间
+    foreach ($n in 'SaveCardPf', 'SaveCardRp', 'SaveCardFc', 'SaveCardVd', 'SaveCardMerge') { $ctl[$n].Visibility = & $v 1 }
+    foreach ($n in 'SaveCardRs', 'SaveCardCs', 'SaveCardDump', 'SaveCardTmp') { $ctl[$n].Visibility = & $v 2 }
+    # 软件管理
+    $ctl.AppsViewBox.Visibility = & $v 1
+    foreach ($n in 'AppsViewStartup', 'AppsViewLeft') { $ctl[$n].Visibility = & $v 1 }
+    foreach ($n in 'AppsViewTasks', 'AppsViewMenu') { $ctl[$n].Visibility = & $v 2 }
+    if (($m -lt 1 -and -not $ctl.AppsViewApps.IsChecked) -or ($m -lt 2 -and ($ctl.AppsViewTasks.IsChecked -or $ctl.AppsViewMenu.IsChecked))) { $ctl.AppsViewApps.IsChecked = $true }
+    $win.Resources['AppMoveVis'] = & $v 1
+    $script:appsUpdatesAllowed = ($m -ge 1)
+    if ($ctl.BtnAppsUpdates.Visibility -eq 'Visible' -and $m -lt 1) { $ctl.BtnAppsUpdates.Visibility = 'Collapsed' }
+    # 清理页、自动提醒、帮助、设置
+    $ctl.BtnCleanCustom.Visibility = & $v 2
+    $ctl.AutoJunkRow.Visibility = & $v 1
+    $ctl.FbCopyDiag.Visibility = & $v 1; $ctl.FbSelfTest.Visibility = & $v 2
+    $ctl.SetCardDisplay.Visibility = & $v 1; $ctl.SetCardScan.Visibility = & $v 2; $ctl.SetCleanCard.Visibility = & $v 2
+    $ctl.ModeTag.Text = (Get-ModeName $m) + (T '模式')
+    $ctl.SetModeNote.Text = switch ($m) {
+        0 { (T '普通用户：清理 C 盘、省空间、空间地图、软件管理、帮助。清理列表里只有常见的缓存和临时文件，删了都会自动重建；有代价的项目仍然默认跳过。') }
+        1 { (T '工程师：再加上重复文件、搬家管理、自动提醒、操作日志；空间地图的找文件、和上次比、导出；省空间的页面文件、还原点、压缩文件夹、虚拟磁盘；软件管理的开机启动、残留文件夹、检查新版本和搬到其他盘；清理列表里多出开发工具的缓存。') }
+        default { (T '开发者和 IT：全部功能。再加上计划任务、右键菜单、保留的存储、组件存储分析、蓝屏转储、临时文件夹位置、自定义清理列表和排除、快速扫描开关、空间明细、检查扫描功能、运行记录，以及 Installer 孤儿安装包、事件日志、NuGet / Gradle / Maven / JetBrains 缓存这类项目。') }
+    }
+    $script:setLoading = $true
+    try { $ctl.SetModeBasic.IsChecked = ($m -eq 0); $ctl.SetModePro.IsChecked = ($m -eq 1); $ctl.SetModeExpert.IsChecked = ($m -eq 2) } finally { $script:setLoading = $false }
+    Apply-Display
+    # 正在看的页面在这个模式下没有了：回到清理页
+    if ($script:curPage -and $script:pageLvl.ContainsKey($script:curPage) -and $script:pageLvl[$script:curPage] -gt $m) { Show-Page 'clean' }
+    if ($script:mapRoot) { try { $ctl.BtnMapAcct.Visibility = if ($script:mapRoot.HasDisk -and $m -ge 2) { 'Visible' } else { 'Collapsed' } } catch {} }
+}
+function Set-Mode([string]$mode) {
+    Set-Setting 'Mode' $mode
+    Apply-Mode
+    OpLog '系统设置' (T '使用模式') (Get-ModeName) ''
+    UI-Log ((T "使用模式：{0}") -f (Get-ModeName))
+}
+foreach ($rb in @($ctl.SetModeBasic, $ctl.SetModePro, $ctl.SetModeExpert)) {
+    $rb.Add_Checked({
+        if ($script:setLoading) { return }
+        Set-Mode $(if ([object]::ReferenceEquals($this, $ctl.SetModeBasic)) { 'basic' } elseif ([object]::ReferenceEquals($this, $ctl.SetModePro)) { 'pro' } else { 'expert' })
+    })
+}
+$ctl.ModeTag.Add_MouseLeftButtonUp({ Show-Page 'settings'; $ctl.SetScroll.ScrollToTop() })
 function Apply-Display {
+    $m = Get-Mode
     $vis = { param([bool]$on) if ($on) { [System.Windows.Visibility]::Visible } else { [System.Windows.Visibility]::Collapsed } }
     $win.Resources['SubVis'] = & $vis (Get-Flag 'PageSub')
     $win.Resources['MapCkVis'] = & $vis (Get-Flag 'MapCheck')
@@ -14725,12 +14843,13 @@ function Apply-Display {
     $win.Resources['MapPctVis'] = & $vis (Get-Flag 'MapPct')
     $win.Resources['MapMetaVis'] = & $vis (Get-Flag 'MapMeta')
     $win.Resources['MapHealthVis'] = & $vis (Get-Flag 'MapHealth')
-    $ctl.MapFast.Visibility = & $vis (Get-Flag 'MapFastBtn')
+    $ctl.MapFast.Visibility = & $vis ((Get-Flag 'MapFastBtn') -and $m -ge 2)
     $hp = Get-HiddenSet 'HidePages'
-    foreach ($k in $script:optPages.Keys) { $ctl[$script:pageList[$k][1]].Visibility = & $vis (-not $hp.ContainsKey($k)) }
-    $ctl.NavHeadManage.Visibility = & $vis (-not ($hp.ContainsKey('moves') -and $hp.ContainsKey('auto') -and $hp.ContainsKey('log')))
+    $show = @{}
+    foreach ($k in $script:optPages.Keys) { $show[$k] = (-not $hp.ContainsKey($k)) -and (-not $script:pageLvl.ContainsKey($k) -or $script:pageLvl[$k] -le $m); $ctl[$script:pageList[$k][1]].Visibility = & $vis $show[$k] }
+    $ctl.NavHeadManage.Visibility = & $vis ($show['moves'] -or $show['auto'] -or $show['log'])
     $hl = Get-HiddenSet 'HideLinks'
-    foreach ($k in $script:optLinks.Keys) { $ctl[$script:optLinks[$k][1]].Visibility = & $vis (-not $hl.ContainsKey($k)) }
+    foreach ($k in $script:optLinks.Keys) { $ctl[$script:optLinks[$k][1]].Visibility = & $vis ((-not $hl.ContainsKey($k)) -and (-not $script:linkLvl.ContainsKey($k) -or $script:linkLvl[$k] -le $m)) }
 }
 # 换了「实际占用和硬链接」这类要重新生成行的设置：当前这一层重新列一遍
 function Refresh-MapRows {
@@ -14837,7 +14956,7 @@ foreach ($rb in @($ctl.SetLangZh, $ctl.SetLangEn)) {
         if ($to -eq $script:Lang -or -not (Request-Lang)) { Load-Settings }
     })
 }
-Apply-Display
+Apply-Mode
 
 # ------------------------------------------------------------
 # 界面自测（/uitest）：给 GitHub 上的自动测试用，在真的 Windows 上把新加的界面功能点一遍
@@ -14850,6 +14969,7 @@ function Invoke-UiTest {
     # 设置先存一份，测完原样放回去
     $setBak = $null; try { if (Test-Path -LiteralPath $script:settingsFile) { $setBak = [IO.File]::ReadAllBytes($script:settingsFile) } } catch {}
     $fast0 = [bool]$ctl.MapFast.IsChecked
+    Set-Setting 'Mode' 'expert'; Apply-Mode
     $step = {
         param([string]$name, [scriptblock]$body)
         $e0 = $Error.Count; $why = $null
@@ -15071,6 +15191,18 @@ function Invoke-UiTest {
             $hidden = $ctl.MapHealthBox.Visibility -ne 'Visible'
             $ctl.SetMapHealth.IsChecked = $true; & $click $ctl.SetMapHealth; $win.UpdateLayout()
             if (-not $hidden) { throw 'switch did not hide the disk cards' }
+        }
+        & $step 'modes hide and show features' {
+            Set-Mode 'basic'
+            if ($ctl.NavDup.Visibility -ne 'Collapsed' -or $ctl.NavLog.Visibility -ne 'Collapsed' -or $ctl.BtnLog.Visibility -ne 'Collapsed') { throw 'basic mode still shows advanced pages' }
+            if ($ctl.SaveCardRs.Visibility -ne 'Collapsed' -or $ctl.AppsViewBox.Visibility -ne 'Collapsed' -or $ctl.MapViewFiles.Visibility -ne 'Collapsed' -or $ctl.SetCleanCard.Visibility -ne 'Collapsed') { throw 'basic mode still shows advanced cards' }
+            if ($ctl.NavClean.Visibility -ne 'Visible' -or $ctl.SaveCardCos.Visibility -ne 'Visible' -or $ctl.SaveCardOd.Visibility -ne 'Visible') { throw 'basic mode hides basic things' }
+            if ($ctl.ModeTag.Text -ne ((T '普通用户') + (T '模式'))) { throw ('mode tag: ' + $ctl.ModeTag.Text) }
+            Set-Mode 'pro'
+            if ($ctl.NavDup.Visibility -ne 'Visible' -or $ctl.AppsViewStartup.Visibility -ne 'Visible' -or $ctl.AppsViewTasks.Visibility -ne 'Collapsed' -or $ctl.SaveCardPf.Visibility -ne 'Visible' -or $ctl.SaveCardRs.Visibility -ne 'Collapsed') { throw 'pro mode wrong' }
+            Set-Mode 'expert'
+            if ($ctl.AppsViewTasks.Visibility -ne 'Visible' -or $ctl.SaveCardRs.Visibility -ne 'Visible' -or $ctl.BtnLog.Visibility -ne 'Visible' -or $ctl.SetCleanCard.Visibility -ne 'Visible') { throw 'expert mode wrong' }
+            if (@($catalog | Where-Object { [int]$_.Lvl -eq 2 }).Count -lt 5 -or @($catalog | Where-Object { [int]$_.Lvl -eq 1 }).Count -lt 5) { throw 'catalog levels missing' }
         }
         & $step 'restore points card' {
             Show-Page 'save'
@@ -15827,7 +15959,7 @@ $win.Add_ContentRendered({
     }
     if ($script:riskShown) { return }
     $script:riskShown = $true
-    if (Test-Path -LiteralPath $script:riskFile) { return }
+    if (Test-Path -LiteralPath $script:riskFile) { Ask-Mode; return }
     $ans = Show-Sheet -Kind warn -Title (T '使用前请先阅读安全风险提示') `
         -Text (T "本工具会按你的选择删除或搬移电脑上的文件。删除的文件可能无法恢复，存在资料丢失的风险。`n`n每次删除前，请确认这些资料确实不再需要、删除不会给你带来损失；重要资料请先备份。因使用本工具造成的资料丢失或其他损失，责任由使用者自行承担，开发者不承担责任。`n`n完整说明随时可以在左侧「帮助」里查看。") `
         -Confirm (T '我已阅读并了解上述风险，同意自行承担使用本工具的后果。') -Buttons @((T '退出'), (T '同意并继续')) -Primary (T '同意并继续') -Cancel (T '退出')
@@ -15837,7 +15969,16 @@ $win.Add_ContentRendered({
         [IO.File]::WriteAllText($script:riskFile, ((T "{0:yyyy-MM-dd HH:mm:ss}  已同意（版本 {1}）") -f (Get-Date), $script:AppVersion), [Text.Encoding]::UTF8)
     } catch {}
     Write-LogFile (T '用户已同意安全风险提示')
+    Ask-Mode
 })
+# 还没选过模式就问一句（老版本升上来的也会问一次）
+function Ask-Mode {
+    if ((Get-Setting 'Mode' '')) { return }
+    $ans = Show-Sheet -Title (T '你是哪类用户？') -Text (T "按你的需要决定界面上有多少东西，随时可以在「设置」里换。`n`n普通用户：清理缓存、省空间、看哪里占地方、卸载软件，够用也不复杂。`n工程师：再加上重复文件、搬家管理、自动提醒、操作日志，以及各页的进阶功能。`n开发者和 IT：全部功能，包括计划任务、右键菜单、保留的存储、组件存储分析、自定义清理列表、空间明细和自检。") `
+        -Buttons @((T '普通用户'), (T '工程师'), (T '开发者和 IT')) -Primary (T '普通用户') -Cancel (T '普通用户')
+    $mode = switch ($ans) { (T '工程师') { 'pro' } (T '开发者和 IT') { 'expert' } default { 'basic' } }
+    Set-Mode $mode
+}
 $global:CLEANC_UI_SHOWN = $true   # 告诉外层 exe：界面已经正常打开
 if ($script:uiTest) { $win.WindowStartupLocation = 'Manual'; $win.Left = -32000; $win.Top = -32000; $win.ShowActivated = $false; $win.ShowInTaskbar = $false }
 $win.ShowDialog() | Out-Null
