@@ -7,7 +7,7 @@ param()
 
 $ErrorActionPreference = 'SilentlyContinue'
 $script:AppVersion = '2.7'
-$script:AppBuildStamp = ''   # 构建 exe 时由 build 脚本填上构建时间（UTC），反馈问题时好对上是哪一次构建的
+$script:AppBuildStamp = ''   # 构建 exe 时由 build 脚本填上构建时间（UTC）：写进诊断信息和运行记录，反馈问题时好对上是哪一次构建的
 $script:startClock = [Diagnostics.Stopwatch]::StartNew()   # 记下启动各阶段用了多久，写进运行记录
 
 # ---------------- 管理员权限 ----------------
@@ -12879,7 +12879,7 @@ if ($wa.Height -lt 800) { $ctl.LogPanel.Height = 130 }
 $ctl.OvPlanScroll.MaxHeight = [math]::Max([double]80, [math]::Min([double]190, [double]$wa.Height - 560))
 $win.Title = ((T "腾挪 ClearC {0}") -f $script:AppVersion)
 Write-LogFile ((T "腾挪 ClearC {0}") -f $script:AppVersion + $(if ($script:AppBuild) { " ($($script:AppBuild))" } else { '' }))
-$ctl.AppVer.Text = ((T "版本 {0}") -f $script:AppVersion) + $(if ($script:AppBuild) { " · " + $script:AppBuild } else { '' })
+$ctl.AppVer.Text = ((T "版本 {0}") -f $script:AppVersion)
 Write-LogFile ((T "==== 腾挪 ClearC {0} 启动；Windows {1}；屏幕可用区域 {2:N0} x {3:N0}") -f $script:AppVersion, [Environment]::OSVersion.Version, $wa.Width, $wa.Height)
 if ($script:themeFail) { Write-LogFile ((T "深色界面没能打开，这次用浅色：{0}") -f $script:themeFail) }
 

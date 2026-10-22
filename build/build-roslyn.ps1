@@ -30,7 +30,7 @@ $dup = [regex]::Match($src, "(?s)\`$dupCode = @'\r?\n(.*?)\r?\n'@").Groups[1].Va
 if (-not $row -or -not $dup) { throw 'could not extract C# from script' }
 Set-Content -Path "$obj/types_row.cs" -Value $row -Encoding utf8
 Set-Content -Path "$obj/types_dup.cs" -Value $dup -Encoding utf8
-# 内嵌的脚本里写上构建时间（UTC），程序左下角的版本号旁会显示
+# 内嵌的脚本里写上构建时间（UTC），写进诊断信息和运行记录
 [IO.File]::WriteAllText("$obj/cleanc.ps1", ($src -replace "`r?`n", "`r`n").Replace("`$script:AppBuildStamp = ''", ("`$script:AppBuildStamp = '{0}'" -f [DateTime]::UtcNow.ToString("yyyy-MM-dd'T'HH':'mm'Z'", [Globalization.CultureInfo]::InvariantCulture))), (New-Object Text.UTF8Encoding $false))
 
 $roslyn = @("$pw/Microsoft.CodeAnalysis.dll", "$pw/Microsoft.CodeAnalysis.CSharp.dll")
