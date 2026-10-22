@@ -1086,6 +1086,7 @@
           <TextBlock Text="分析" Style="{StaticResource NavHead}"/>
           <RadioButton x:Name="NavMap" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE9D9;" Content="空间地图"/>
           <RadioButton x:Name="NavApps" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE71D;" Content="软件管理"/>
+          <RadioButton x:Name="NavHealth" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE95E;" Content="系统健康"/>
           <TextBlock x:Name="NavHeadManage" Text="管理" Style="{StaticResource NavHead}"/>
           <RadioButton x:Name="NavMoves" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE8AB;" Content="搬家管理"/>
           <RadioButton x:Name="NavAuto" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE823;" Content="自动提醒"/>
@@ -1889,6 +1890,197 @@
     </Grid>
 
     <!-- ==================== 软件管理 ==================== -->
+    <!-- ===== 系统健康：硬件、启动、蓝屏、活动监控、事件。读不到的明说读不到 ===== -->
+    <Grid x:Name="PageHealth" Grid.Column="1" Grid.Row="0" Visibility="Collapsed">
+      <ScrollViewer x:Name="HealthScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+        <StackPanel Margin="30,24,30,28" MaxWidth="960" HorizontalAlignment="Left">
+          <DockPanel>
+            <Button x:Name="BtnHealthRefresh" DockPanel.Dock="Right" Content="刷新" VerticalAlignment="Top" Margin="16,4,0,0"/>
+            <StackPanel>
+              <TextBlock Text="系统健康" Style="{StaticResource PageTitle}"/>
+              <TextBlock Style="{StaticResource PageSub}" Text="硬件状态、开机用时、蓝屏原因、谁在吃资源。只看不改；读不到的数据直接写明读不到，不用估算冒充。"/>
+            </StackPanel>
+          </DockPanel>
+          <TextBlock x:Name="HealthNote" Style="{StaticResource Caption}" Margin="0,10,0,0" Text="正在读取…"/>
+
+          <!-- 硬件：每一项一张小卡片 -->
+          <Border x:Name="HealthCardHw" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+            <StackPanel>
+              <TextBlock Text="硬件" Style="{StaticResource CardHead}"/>
+              <ItemsControl x:Name="HealthCards" Margin="0,12,0,0">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <Border Width="290" Margin="0,0,12,12" Padding="0" Background="#F7F7F9" CornerRadius="10" ToolTip="{Binding Tip}">
+                      <DockPanel>
+                        <Border DockPanel.Dock="Left" Width="5" Background="{Binding Stripe}" CornerRadius="10,0,0,10"/>
+                        <StackPanel Margin="14,10,14,12">
+                          <TextBlock Text="{Binding Title}" FontSize="14" FontWeight="SemiBold"/>
+                          <TextBlock Text="{Binding Sub}" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                          <Grid x:Name="HcBar" Margin="0,8,0,0" Height="6">
+                            <Border Background="#EBEBF0" CornerRadius="3"/>
+                            <Border Background="{Binding BarBrush}" CornerRadius="3" HorizontalAlignment="Left" Width="{Binding BarW}"/>
+                          </Grid>
+                          <ItemsControl ItemsSource="{Binding Chips}" Margin="0,8,0,0">
+                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                              <DataTemplate>
+                                <Border Background="{Binding Bg}" CornerRadius="6" Padding="7,2" Margin="0,0,6,4"><TextBlock Text="{Binding Text}" FontSize="11.5" FontWeight="SemiBold" Foreground="{Binding Fg}"/></Border>
+                              </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                          </ItemsControl>
+                          <ItemsControl ItemsSource="{Binding Lines}">
+                            <ItemsControl.ItemTemplate><DataTemplate><TextBlock Text="{Binding}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,3,0,0"/></DataTemplate></ItemsControl.ItemTemplate>
+                          </ItemsControl>
+                        </StackPanel>
+                      </DockPanel>
+                    </Border>
+                    <DataTemplate.Triggers>
+                      <DataTrigger Binding="{Binding HasBar}" Value="False"><Setter TargetName="HcBar" Property="Visibility" Value="Collapsed"/></DataTrigger>
+                    </DataTemplate.Triggers>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Text="温度、磨损来自 SMART 和 ACPI；CPU 内核温度和显卡温度 Windows 不提供，要厂商工具。所有数字都是读取那一刻的。"/>
+            </StackPanel>
+          </Border>
+
+          <!-- 开机 -->
+          <Border x:Name="HealthCardBoot" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+            <StackPanel>
+              <TextBlock Text="开机用时" Style="{StaticResource CardHead}"/>
+              <TextBlock x:Name="HealthBootText" Style="{StaticResource Body}" Margin="0,8,0,0" TextWrapping="Wrap" Text=""/>
+              <ItemsControl x:Name="HealthSlow" Margin="0,8,0,0">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <DockPanel Margin="0,4,0,0">
+                      <TextBlock DockPanel.Dock="Right" Text="{Binding Body}" Style="{StaticResource Caption}" Margin="12,0,0,0" VerticalAlignment="Center"/>
+                      <TextBlock Text="{Binding Head}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}" VerticalAlignment="Center"/>
+                    </DockPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap" Text="数据来自 Windows 自己的「诊断-性能」日志（事件 100 和 101）。拖慢开机的程序可以到「软件管理 → 开机启动」里关掉。"/>
+            </StackPanel>
+          </Border>
+
+          <!-- 蓝屏和崩溃 -->
+          <Border x:Name="HealthCardCrash" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+            <StackPanel>
+              <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top" Margin="20,0,0,0">
+                  <Button x:Name="BtnSfcCheck" Content="检查系统文件（只看）" Margin="0,0,8,0" ToolTip="在终端窗口里运行 sfc /verifyonly 和 DISM /ScanHealth：只检查，不改任何东西。要几分钟"/>
+                  <Button x:Name="BtnSfcRepair" Content="修复系统文件…" ToolTip="在终端窗口里运行 sfc /scannow 和 DISM /RestoreHealth：会把损坏的系统文件换成正常的副本（会改系统文件，可能要联网下载）。点了会先确认"/>
+                </StackPanel>
+                <TextBlock Text="蓝屏和崩溃" Style="{StaticResource CardHead}"/>
+              </DockPanel>
+              <TextBlock x:Name="HealthCrashText" Style="{StaticResource Body}" Margin="0,8,0,0" TextWrapping="Wrap" Text=""/>
+              <ItemsControl x:Name="HealthDumps" Margin="0,8,0,0">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <Border Background="#F7F7F9" CornerRadius="8" Padding="12,8" Margin="0,6,0,0">
+                      <DockPanel>
+                        <Button DockPanel.Dock="Right" x:Name="DumpOpen" Content="打开位置" Tag="{Binding}" Style="{StaticResource Small}" VerticalAlignment="Top" Margin="12,0,0,0"/>
+                        <StackPanel>
+                          <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding When}" FontWeight="SemiBold"/>
+                            <TextBlock Text="{Binding Code}" Margin="10,0,0,0" FontFamily="Consolas"/>
+                            <TextBlock Text="{Binding Suspect}" Margin="10,0,0,0" FontWeight="SemiBold" Foreground="{Binding SuspectBrush}"/>
+                          </StackPanel>
+                          <TextBlock Text="{Binding Detail}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                        </StackPanel>
+                      </DockPanel>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock x:Name="HealthEventsHead" Text="最近 30 天的相关事件" Style="{StaticResource SetName}" Margin="0,14,0,0"/>
+              <ItemsControl x:Name="HealthEvents">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <DockPanel Margin="0,5,0,0">
+                      <TextBlock DockPanel.Dock="Right" Text="{Binding Body}" Style="{StaticResource Caption}" Margin="12,0,0,0" VerticalAlignment="Top"/>
+                      <TextBlock Text="{Binding Head}" TextWrapping="Wrap" ToolTip="{Binding Path}"/>
+                    </DockPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock x:Name="HealthDriversHead" Text="最近 30 天装的驱动" Style="{StaticResource SetName}" Margin="0,14,0,0"/>
+              <ItemsControl x:Name="HealthDrivers">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <DockPanel Margin="0,4,0,0">
+                      <TextBlock DockPanel.Dock="Right" Text="{Binding Body}" Style="{StaticResource Caption}" Margin="12,0,0,0" VerticalAlignment="Center"/>
+                      <TextBlock Text="{Binding Head}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}"/>
+                    </DockPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap" Text="转储文件是本工具自己解析的（错误码、参数、出事时加载的驱动、栈上出现的驱动），不如 WinDbg 准确；「可能的驱动」只是提示，不是定论。蓝屏时间和最近装的驱动对得上的，优先怀疑那个驱动。"/>
+            </StackPanel>
+          </Border>
+
+          <!-- 活动监控 -->
+          <Border x:Name="HealthCardMon" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+            <StackPanel>
+              <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top" Margin="20,0,0,0">
+                  <Border Style="{StaticResource SegBox}" VerticalAlignment="Center" Margin="0,0,10,0">
+                    <StackPanel Orientation="Horizontal">
+                      <RadioButton x:Name="MonSortWrite" GroupName="monsort" Content="写入最多" IsChecked="True" Style="{StaticResource Seg}"/>
+                      <RadioButton x:Name="MonSortCpu" GroupName="monsort" Content="CPU 最高" Style="{StaticResource Seg}"/>
+                      <RadioButton x:Name="MonSortMem" GroupName="monsort" Content="内存最多" Style="{StaticResource Seg}"/>
+                    </StackPanel>
+                  </Border>
+                  <Button x:Name="BtnMonStart" Content="开始监控" Style="{StaticResource Primary}"/>
+                  <Button x:Name="BtnMonStop" Content="停止" Margin="8,0,0,0" IsEnabled="False"/>
+                </StackPanel>
+                <StackPanel>
+                  <TextBlock Text="谁在让电脑变慢" Style="{StaticResource CardHead}"/>
+                  <TextBlock x:Name="HealthMonText" Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap" Text="点「开始监控」，每 3 秒采一次样：各个程序这段时间用了多少 CPU、占多少内存、往磁盘写了多少。不装常驻服务，关掉本工具就停。"/>
+                </StackPanel>
+              </DockPanel>
+              <ListView x:Name="MonList" Margin="0,12,0,0" MaxHeight="420" Background="White" BorderThickness="0" ItemContainerStyle="{StaticResource GridRow}">
+                <ListView.View>
+                  <GridView>
+                    <GridViewColumn Header="程序" Width="250">
+                      <GridViewColumn.CellTemplate><DataTemplate><StackPanel><TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Meta}" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis"/></StackPanel></DataTemplate></GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+                    <GridViewColumn Header="CPU" Width="70"><GridViewColumn.CellTemplate><DataTemplate><TextBlock Text="{Binding CpuText}" TextAlignment="Right"/></DataTemplate></GridViewColumn.CellTemplate></GridViewColumn>
+                    <GridViewColumn Header="内存" Width="90"><GridViewColumn.CellTemplate><DataTemplate><TextBlock Text="{Binding WsText}" TextAlignment="Right"/></DataTemplate></GridViewColumn.CellTemplate></GridViewColumn>
+                    <GridViewColumn Header="写入速度" Width="100"><GridViewColumn.CellTemplate><DataTemplate><TextBlock Text="{Binding RateText}" TextAlignment="Right"/></DataTemplate></GridViewColumn.CellTemplate></GridViewColumn>
+                    <GridViewColumn Header="本次监控写入" Width="200">
+                      <GridViewColumn.CellTemplate><DataTemplate><StackPanel Orientation="Horizontal"><Border Width="{Binding Bar}" Height="8" Background="#3B82F6" CornerRadius="4" VerticalAlignment="Center"/><TextBlock Text="{Binding SinceText}" Margin="8,0,0,0" VerticalAlignment="Center"/></StackPanel></DataTemplate></GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+                    <GridViewColumn Header="启动以来写入" Width="110"><GridViewColumn.CellTemplate><DataTemplate><TextBlock Text="{Binding TotalText}" TextAlignment="Right"/></DataTemplate></GridViewColumn.CellTemplate></GridViewColumn>
+                  </GridView>
+                </ListView.View>
+              </ListView>
+              <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap" Text="「启动以来写入」是 Windows 从进程启动起累计的，重启过的进程从头算；写入量不等于磁盘净占用增长（临时文件写了又删）。哪个进程写了哪个文件，只有监控开着的时候能对上：把「空间地图 → 最近改动」里变大的文件夹和这里写入多的程序放在一起看。"/>
+            </StackPanel>
+          </Border>
+
+          <!-- Windows 事件 -->
+          <Border x:Name="HealthCardEvents" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+            <StackPanel>
+              <TextBlock Text="Windows 事件：最近 7 天的严重错误" Style="{StaticResource CardHead}"/>
+              <TextBlock x:Name="HealthWinText" Style="{StaticResource Body}" Margin="0,8,0,0" TextWrapping="Wrap" Text=""/>
+              <ItemsControl x:Name="HealthErrors" Margin="0,8,0,0">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <DockPanel Margin="0,5,0,0">
+                      <TextBlock DockPanel.Dock="Right" Text="{Binding Body}" Style="{StaticResource Caption}" Margin="12,0,0,0" VerticalAlignment="Top"/>
+                      <TextBlock Text="{Binding Head}" TextWrapping="Wrap" ToolTip="{Binding Path}"/>
+                    </DockPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap" Text="系统日志里「严重」和「错误」两级，按来源归并。很多错误是无害的（比如某个服务启动慢了一次）；同一个来源反复出现、时间又和故障对得上的才值得查。详细内容在 Windows 的「事件查看器」里。"/>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+    </Grid>
     <Grid x:Name="PageApps" Grid.Column="1" Grid.Row="0" Margin="30,24,30,14" Visibility="Collapsed">
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto"/>
@@ -2341,6 +2533,7 @@
                 <CheckBox x:Name="SetPageDup" Content="重复文件" Width="170" Margin="0,10,0,0"/>
                 <CheckBox x:Name="SetPageSave" Content="省空间" Width="170" Margin="0,10,0,0"/>
                 <CheckBox x:Name="SetPageApps" Content="软件管理" Width="170" Margin="0,10,0,0"/>
+                <CheckBox x:Name="SetPageHealth" Content="系统健康" Width="170" Margin="0,10,0,0"/>
                 <CheckBox x:Name="SetPageMoves" Content="搬家管理" Width="170" Margin="0,10,0,0"/>
                 <CheckBox x:Name="SetPageAuto" Content="自动提醒" Width="170" Margin="0,10,0,0"/>
                 <CheckBox x:Name="SetPageLog" Content="操作日志" Width="170" Margin="0,10,0,0"/>
