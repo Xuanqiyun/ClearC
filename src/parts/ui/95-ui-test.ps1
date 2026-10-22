@@ -113,26 +113,37 @@ function Invoke-UiTest {
             $ctl.SetMapCheck.IsChecked = $true; & $click $ctl.SetMapCheck; $win.UpdateLayout()
             if (-not $hidden) { throw 'switch did not hide the check boxes' }
         }
-        & $step 'ticked rows are kept when clicking another row' {
+        & $step 'with check boxes only the box selects' {
             $lv = $ctl.MapList; $lv.UnselectAll(); $win.UpdateLayout()
             if ($lv.Items.Count -lt 8) { throw 'too few rows' }
+            if (-not (Test-CheckMode)) { throw 'check box mode is off' }
+            $p = Invoke-RowPress 3 'Left' $false $false
+            if (-not $p.Handled -or $lv.SelectedItems.Count -ne 0) { throw 'a click on a row (not the box) would select it' }
             foreach ($q in 0, 2) {
                 $k = Find-Visual ($lv.ItemContainerGenerator.ContainerFromIndex($q)) ([System.Windows.Controls.CheckBox])
                 $k.IsChecked = $true; $k.RaiseEvent((New-Object System.Windows.RoutedEventArgs ([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent)))
             }
-            if (-not (Test-TickMode)) { throw 'ticking did not start tick mode' }
-            Invoke-TickClick 4 $false
-            if ($lv.SelectedItems.Count -ne 3) { throw ("clicking a row after ticking: {0} selected, expected 3" -f $lv.SelectedItems.Count) }
-            Invoke-TickClick 6 $true
-            if ($lv.SelectedItems.Count -ne 5) { throw ("shift-click after ticking: {0} selected, expected 5" -f $lv.SelectedItems.Count) }
+            $p = Invoke-RowPress 4 'Left' $false $false
+            if (-not $p.Handled -or $lv.SelectedItems.Count -ne 2) { throw ("clicking a row after ticking: {0} selected, expected the 2 ticked" -f $lv.SelectedItems.Count) }
+            $p = Invoke-RowPress 5 'Right' $false $false
+            if (-not $p.Handled -or $lv.SelectedItems.Count -ne 2) { throw 'a right click selected the row' }
+            $script:menuRow = $lv.Items[5]
+            if (-not (Update-MapMenu) -or @($script:menuRows).Count -ne 1 -or -not [object]::ReferenceEquals(@($script:menuRows)[0], $lv.Items[5])) { throw 'the menu is not for the right-clicked row only' }
+            $script:menuRow = $lv.Items[2]; [void](Update-MapMenu)
+            if (@($script:menuRows).Count -ne 2) { throw 'the menu on a ticked row is not for all ticked rows' }
+            $script:menuRow = $null
+            $p = Invoke-RowPress 6 'Left' $true $false
+            if ($lv.SelectedItems.Count -ne 6) { throw ("shift-click: {0} selected, expected 6" -f $lv.SelectedItems.Count) }
+            $p = Invoke-RowPress 7 'Left' $false $false
+            if (-not $p.Add -or $p.NoDrag) { throw 'dragging from a row would not add to the ticks' }
             Refresh-MapRows; $win.UpdateLayout()
-            if ($lv.SelectedItems.Count -ne 5) { throw ("refreshing the list kept {0} of 5" -f $lv.SelectedItems.Count) }
+            if ($lv.SelectedItems.Count -ne 6) { throw ("refreshing the list kept {0} of 6" -f $lv.SelectedItems.Count) }
             $src = [System.Windows.PresentationSource]::FromVisual($lv)
             if ($src) {
                 $ka = New-Object System.Windows.Input.KeyEventArgs ([System.Windows.Input.Keyboard]::PrimaryDevice), $src, 0, ([System.Windows.Input.Key]::Escape)
                 $ka.RoutedEvent = [System.Windows.Input.Keyboard]::PreviewKeyDownEvent
                 $lv.RaiseEvent($ka)
-                if ($lv.SelectedItems.Count -ne 0 -or (Test-TickMode)) { throw 'Esc did not clear the ticks' }
+                if ($lv.SelectedItems.Count -ne 0) { throw 'Esc did not clear the ticks' }
             }
         }
         & $step 'select all' {
@@ -164,7 +175,7 @@ function Invoke-UiTest {
             if ($t0 -and (Test-InCheckBox $lv $t0)) { throw 'a press on the name is taken for the check box' }
         }
         & $step 'right-click menu' {
-            $lv = $ctl.MapList; $lv.UnselectAll()
+            $lv = $ctl.MapList; $lv.UnselectAll(); $script:menuRow = $null
             if (Update-MapMenu) { throw 'menu would open with nothing selected' }
             $lv.SelectAll()
             if (-not (Update-MapMenu)) { throw 'menu would not open' }
