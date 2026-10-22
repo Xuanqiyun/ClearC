@@ -5273,7 +5273,7 @@ Zoom 装在这里的程序和本地数据。会议录像默认存在「文档」
 和「按文件大小相加」的差别：	Compared with adding up file sizes:
 按 {0:HH:mm} 扫描的结果。	Based on the scan at {0:HH:mm}.
 空间明细	Space breakdown
-选中一行可以打开位置、压缩或删除；勾选前面的方框，或按住 Ctrl、Shift，可以选多项一起删；按住右键上下拖可以一次选中连着的几行。系统文件夹、软件安装文件夹、C 盘个人文件夹和搬家后的数据带小锁，不能在这里删。	Select a row to open its location, compress or delete it. Tick the boxes in front, or hold Ctrl or Shift, to select several and delete them together; hold the right mouse button and drag up or down to select a run of rows. System folders, app installation folders, personal folders on C: and moved data have a lock and can't be deleted here.
+选中一行可以打开位置、压缩或删除；勾选前面的方框，或按住 Ctrl、Shift，可以选多项一起删；按住鼠标（左键或右键）上下拖可以一次选中连着的几行。系统文件夹、软件安装文件夹、C 盘个人文件夹和搬家后的数据带小锁，不能在这里删。	Select a row to open its location, compress or delete it. Tick the boxes in front, or hold Ctrl or Shift, to select several and delete them together; hold the left or right mouse button and drag up or down to select a run of rows. System folders, app installation folders, personal folders on C: and moved data have a lock and can't be deleted here.
 删除选中的 {0} 项…	Delete {0} selected items…
 已复制 {0} 个路径	Copied {0} paths
 \n\n按快速扫描的结果，实际能腾出 {0} 到 {1}：其中 {2} 是硬链接，同一份文件在别处还有名字，那些名字还在就不会腾出空间。	\n\nAccording to the fast scan, this frees between {0} and {1}: {2} of it is hard links, files that still have names elsewhere, and their space is freed only once all their names are gone.
@@ -5320,7 +5320,7 @@ Zoom 装在这里的程序和本地数据。会议录像默认存在「文档」
 换了以后本工具会关闭，再用新的语言打开。	ClearC closes and reopens in the new language after you change it.
 文件个数、最近修改时间、比上次扫描变了多少、链接指向哪里。	Number of files, last modified date, change since the last scan, and where a link points.
 查重复文件时让着其他程序	Give way to other programs when finding duplicates
-每一行前面显示一个复选框，点一下就能多选，不用按住 Ctrl（和资源管理器「查看」里的「项目复选框」一样）。开不开都可以按住右键上下拖，一次选中连着的几行。	Show a check box at the start of each row, so one click adds a row to the selection without holding Ctrl (like "Item check boxes" under "View" in File Explorer). Either way, you can hold the right mouse button and drag up or down to select a run of rows.
+每一行前面显示一个复选框，点一下就能多选，不用按住 Ctrl（和资源管理器「查看」里的「项目复选框」一样）。开不开都可以按住鼠标（左键或右键）上下拖，一次选中连着的几行。	Show a check box at the start of each row, so one click adds a row to the selection without holding Ctrl (like "Item check boxes" under "View" in File Explorer). Either way, you can hold the left or right mouse button and drag up or down to select a run of rows.
 每一页标题下面那行灰色的说明文字。用熟了可以关掉，列表能多显示几行。	The grey line of description under each page title. Once you know your way around, turn it off to fit a few more rows in the lists.
 界面上显示什么	What the window shows
 界面语言	Language
@@ -5547,7 +5547,7 @@ $script:helpEnXaml = @'
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>Select a row to </Run><Run FontWeight="SemiBold">Open location</Run><Run>, </Run><Run FontWeight="SemiBold">Compress (keeps files)</Run><Run> or </Run><Run FontWeight="SemiBold">Delete</Run><Run>. Tick the box at the start of each row (like "Item check boxes" in File Explorer), or hold Ctrl or Shift, to select several rows and delete them together; </Run><Run FontWeight="SemiBold">hold the right mouse button and drag up or down</Run><Run> to select a run of rows at once, and the right-click menu opens when you let go. When deleting, you can choose "Move to Recycle Bin" (can be restored) or "Delete permanently" (frees space immediately); either way, you must tick the confirmation box first.</Run></TextBlock>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>Select a row to </Run><Run FontWeight="SemiBold">Open location</Run><Run>, </Run><Run FontWeight="SemiBold">Compress (keeps files)</Run><Run> or </Run><Run FontWeight="SemiBold">Delete</Run><Run>. Tick the box at the start of each row (like "Item check boxes" in File Explorer), or hold Ctrl or Shift, to select several rows and delete them together; </Run><Run FontWeight="SemiBold">hold the left or right mouse button and drag up or down</Run><Run> to select a run of rows at once; after a right-button drag, the right-click menu opens when you let go. When deleting, you can choose "Move to Recycle Bin" (can be restored) or "Delete permanently" (frees space immediately); either way, you must tick the confirmation box first.</Run></TextBlock>
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
@@ -7298,7 +7298,7 @@ if ($script:mode -match '(?i)/autoclean') {
         </StackPanel>
         <CheckBox x:Name="MapAll" DockPanel.Dock="Left" Content="全选" Visibility="{DynamicResource MapCkVis}" VerticalAlignment="Center" Margin="18,0,12,0" ToolTip="选中这一层列出的全部项目；再点一下全部取消"/>
         <TextBlock x:Name="MapSel" VerticalAlignment="Center" TextWrapping="Wrap" Foreground="#6E6E73" Margin="2,0,16,0"
-                   Text="选中一行可以打开位置、压缩或删除；勾选前面的方框，或按住 Ctrl、Shift，可以选多项一起删；按住右键上下拖可以一次选中连着的几行。系统文件夹、软件安装文件夹、C 盘个人文件夹和搬家后的数据带小锁，不能在这里删。"/>
+                   Text="选中一行可以打开位置、压缩或删除；勾选前面的方框，或按住 Ctrl、Shift，可以选多项一起删；按住鼠标（左键或右键）上下拖可以一次选中连着的几行。系统文件夹、软件安装文件夹、C 盘个人文件夹和搬家后的数据带小锁，不能在这里删。"/>
       </DockPanel>
     </Grid>
 
@@ -7838,7 +7838,7 @@ if ($script:mode -match '(?i)/autoclean') {
                 <CheckBox x:Name="SetMapCheck" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
                 <StackPanel>
                   <TextBlock Text="项目复选框" Style="{StaticResource SetName}"/>
-                  <TextBlock Style="{StaticResource SetNote}" Text="每一行前面显示一个复选框，点一下就能多选，不用按住 Ctrl（和资源管理器「查看」里的「项目复选框」一样）。开不开都可以按住右键上下拖，一次选中连着的几行。"/>
+                  <TextBlock Style="{StaticResource SetNote}" Text="每一行前面显示一个复选框，点一下就能多选，不用按住 Ctrl（和资源管理器「查看」里的「项目复选框」一样）。开不开都可以按住鼠标（左键或右键）上下拖，一次选中连着的几行。"/>
                 </StackPanel>
               </DockPanel>
               <DockPanel Margin="0,16,0,0">
@@ -8114,7 +8114,7 @@ if ($script:mode -match '(?i)/autoclean') {
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>选中一行可以</Run><Run FontWeight="SemiBold">打开位置</Run><Run>、</Run><Run FontWeight="SemiBold">压缩（不删文件）</Run><Run>或</Run><Run FontWeight="SemiBold">删除</Run><Run>。勾选每一行前面的方框（和资源管理器的「项目复选框」一样），或按住 Ctrl、Shift，可以选多项一起删；</Run><Run FontWeight="SemiBold">按住右键上下拖</Run><Run>可以一次选中连着的几行，松开后弹出右键菜单。删除时可以选「移到回收站」（能恢复）或「永久删除」（立刻腾出空间），都要先勾选确认。</Run></TextBlock>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>选中一行可以</Run><Run FontWeight="SemiBold">打开位置</Run><Run>、</Run><Run FontWeight="SemiBold">压缩（不删文件）</Run><Run>或</Run><Run FontWeight="SemiBold">删除</Run><Run>。勾选每一行前面的方框（和资源管理器的「项目复选框」一样），或按住 Ctrl、Shift，可以选多项一起删；</Run><Run FontWeight="SemiBold">按住鼠标左键或右键上下拖</Run><Run>可以一次选中连着的几行，用右键拖的话松开后弹出右键菜单。删除时可以选「移到回收站」（能恢复）或「永久删除」（立刻腾出空间），都要先勾选确认。</Run></TextBlock>
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
@@ -10378,7 +10378,7 @@ function Update-MapSel {
     $ctl.BtnMapOpen.IsEnabled = [bool]$r -and -not $busy
     $ctl.BtnMapDelete.IsEnabled = ($del.Count -gt 0) -and -not $busy
     $ctl.BtnMapCompress.IsEnabled = [bool]$r -and $r.IsDir -and -not $busy -and -not (Get-CompressBlock $r.Path)
-    if ($sel.Count -eq 0) { $ctl.MapSel.Text = (T '选中一行可以打开位置、压缩或删除；勾选前面的方框，或按住 Ctrl、Shift，可以选多项一起删；按住右键上下拖可以一次选中连着的几行。系统文件夹、软件安装文件夹、C 盘个人文件夹和搬家后的数据带小锁，不能在这里删。'); return }
+    if ($sel.Count -eq 0) { $ctl.MapSel.Text = (T '选中一行可以打开位置、压缩或删除；勾选前面的方框，或按住 Ctrl、Shift，可以选多项一起删；按住鼠标（左键或右键）上下拖可以一次选中连着的几行。系统文件夹、软件安装文件夹、C 盘个人文件夹和搬家后的数据带小锁，不能在这里删。'); return }
     if ($sel.Count -gt 1) {
         $tot = [double]0; foreach ($x in $sel) { $tot += [double]$x.Size }
         $t = (T "已选 {0} 项，共 {1}") -f $sel.Count, (Fmt $tot)
@@ -10419,7 +10419,7 @@ $ctl.MmCopy.Add_Click({
     $ps = @($ctl.MapList.SelectedItems | Where-Object { $_.Path } | ForEach-Object { [string]$_.Path })
     if ($ps.Count -gt 0) { try { [System.Windows.Clipboard]::SetText(($ps -join "`r`n")); $ctl.MapSel.Text = (T "已复制 {0} 个路径") -f $ps.Count } catch {} }
 })
-# ---------- 按住右键上下拖：选中连着的几行（像在资源管理器里拉框）；松开后弹出右键菜单 ----------
+# ---------- 按住鼠标（左键或右键）上下拖：选中连着的几行（像在资源管理器里拉框）；右键拖的话松开后弹出右键菜单 ----------
 # 按住 Ctrl 再拖：在原来选中的基础上加上这一段
 function Find-Visual($root, [type]$t) {
     $q = New-Object System.Collections.Queue; $q.Enqueue($root)
@@ -10471,10 +10471,10 @@ function Set-DragRange($d, [int]$to) {
     $d.Cur = $to
     Update-MapSel
 }
-function Start-RightDrag($d) {
+function Start-RowDrag($d) {
     $lv = $d.Lv
     if (-not $script:mapScroller) { $script:mapScroller = Find-Visual $lv ([System.Windows.Controls.ScrollViewer]) }
-    # 鼠标交给列表里的滚动区（不是列表本身：列表自己拿着鼠标、左键又没按着时会把鼠标放掉）
+    # 鼠标交给列表里的滚动区，不交给列表本身：列表自己拿着鼠标时，右键拖会被它放掉，左键拖它会把选中改成鼠标下面的那一行
     $d.Cap = if ($script:mapScroller) { $script:mapScroller } else { $lv }
     $d.Moved = $true
     [void]$d.Cap.CaptureMouse()
@@ -10485,38 +10485,58 @@ function Start-RightDrag($d) {
     }
     $script:rdragTimer.Start()
 }
-function Stop-RightDrag {
+function Stop-RowDrag {
     $d = $script:rdrag; $script:rdrag = $null
     $script:rdragTimer.Stop()
     if ($d -and $d.Moved -and $d.Cap -and $d.Cap.IsMouseCaptured) { $d.Cap.ReleaseMouseCapture() }
 }
-$ctl.MapList.Add_PreviewMouseRightButtonDown({
-    param($s, $e)
-    Stop-RightDrag
+function Get-DragButton($d) { if ($d.Button -eq 'Left') { [System.Windows.Input.Mouse]::LeftButton } else { [System.Windows.Input.Mouse]::RightButton } }
+# 按下的地方在不在行前面的复选框上（在的话交给复选框，不拖选）
+function Test-InCheckBox($lv, $el) {
+    try {
+        for ($v = $el; $v -and -not [object]::ReferenceEquals($v, $lv); $v = [System.Windows.Media.VisualTreeHelper]::GetParent($v)) {
+            if ($v -is [System.Windows.Controls.CheckBox]) { return $true }
+            if ($v -is [System.Windows.Controls.ListViewItem]) { return $false }
+        }
+    } catch {}
+    return $false
+}
+# 按下：记下从哪一行开始；真正拖到别的行才算拖选（只是点一下照常）
+function Begin-RowDrag($s, $e, [string]$button) {
+    Stop-RowDrag
     if (-not ($e.OriginalSource -is [System.Windows.DependencyObject])) { return }
+    $mods = [System.Windows.Input.Keyboard]::Modifiers
+    # 左键按着 Shift：Windows 列表自己就会从上次点的那一行选到这里，不用管
+    if ($button -eq 'Left' -and ($mods -band [System.Windows.Input.ModifierKeys]::Shift)) { return }
+    if ($button -eq 'Left' -and (Test-InCheckBox $s $e.OriginalSource)) { return }
     $c = $null; try { $c = [System.Windows.Controls.ItemsControl]::ContainerFromElement($s, $e.OriginalSource) } catch {}
     if (-not $c) { return }
     $i = $s.ItemContainerGenerator.IndexFromContainer($c)
     if ($i -lt 0) { return }
-    $ctrl = ([System.Windows.Input.Keyboard]::Modifiers -band [System.Windows.Input.ModifierKeys]::Control) -ne 0
-    $script:rdrag = @{ Lv = $s; Anchor = $i; Cur = $i; Moved = $false; Ctrl = $ctrl; Base = $null; Cap = $null }
-})
+    $ctrl = ($mods -band [System.Windows.Input.ModifierKeys]::Control) -ne 0
+    $script:rdrag = @{ Lv = $s; Anchor = $i; Cur = $i; Moved = $false; Ctrl = $ctrl; Base = $null; Cap = $null; Button = $button }
+}
+$ctl.MapList.Add_PreviewMouseLeftButtonDown({ param($s, $e) Begin-RowDrag $s $e 'Left' })
+$ctl.MapList.Add_PreviewMouseRightButtonDown({ param($s, $e) Begin-RowDrag $s $e 'Right' })
 $ctl.MapList.Add_PreviewMouseMove({
     param($s, $e)
     $d = $script:rdrag
     if (-not $d) { return }
-    if ($e.RightButton -ne [System.Windows.Input.MouseButtonState]::Pressed) { Stop-RightDrag; return }
+    $st = if ($d.Button -eq 'Left') { $e.LeftButton } else { $e.RightButton }
+    if ($st -ne [System.Windows.Input.MouseButtonState]::Pressed) { Stop-RowDrag; return }
     $i = Get-RowAt $s ($e.GetPosition($s).Y)
-    if (-not $d.Moved) { if ($i -lt 0 -or $i -eq $d.Anchor) { return }; Start-RightDrag $d }
+    if (-not $d.Moved) { if ($i -lt 0 -or $i -eq $d.Anchor) { return }; Start-RowDrag $d }
     Set-DragRange $d $i
 })
-$ctl.MapList.Add_PreviewMouseRightButtonUp({ Stop-RightDrag })
-$ctl.MapList.Add_LostMouseCapture({ $d = $script:rdrag; if ($d -and $d.Moved -and $d.Cap -and -not $d.Cap.IsMouseCaptured) { $script:rdrag = $null; $script:rdragTimer.Stop() } })
+$ctl.MapList.Add_PreviewMouseLeftButtonUp({ if ($script:rdrag -and $script:rdrag.Button -eq 'Left') { Stop-RowDrag } })
+$ctl.MapList.Add_PreviewMouseRightButtonUp({ if ($script:rdrag -and $script:rdrag.Button -eq 'Right') { Stop-RowDrag } })
+# 拖选中鼠标被别处拿走了（比如切到别的窗口）：停下。列表把鼠标交出来时也会收到这个，那时不算
+$ctl.MapList.Add_LostMouseCapture({ param($s, $e) $d = $script:rdrag; if ($d -and $d.Moved -and $d.Cap -and [object]::ReferenceEquals($e.OriginalSource, $d.Cap)) { $script:rdrag = $null; $script:rdragTimer.Stop() } })
 # 拖到列表上面或下面：自动滚动，边滚边选
 $script:rdragTimer.Add_Tick({
     $d = $script:rdrag
     if (-not $d -or -not $d.Moved) { $script:rdragTimer.Stop(); return }
-    if ([System.Windows.Input.Mouse]::RightButton -ne [System.Windows.Input.MouseButtonState]::Pressed) { Stop-RightDrag; return }
+    if ((Get-DragButton $d) -ne [System.Windows.Input.MouseButtonState]::Pressed) { Stop-RowDrag; return }
     $lv = $d.Lv; $y = [System.Windows.Input.Mouse]::GetPosition($lv).Y; $h = [double]$lv.ActualHeight
     if ($y -ge 0 -and $y -le $h) { return }
     $sv = $script:mapScroller; if (-not $sv) { return }
@@ -12189,22 +12209,28 @@ function Invoke-UiTest {
             & $click $ctl.MapAll; if ($lv.SelectedItems.Count -ne $lv.Items.Count -or $ctl.MapAll.IsChecked -ne $true) { throw 'not all selected' }
             & $click $ctl.MapAll; if ($lv.SelectedItems.Count -ne 0 -or $ctl.MapAll.IsChecked -ne $false) { throw 'not all cleared' }
         }
-        & $step 'right-drag selects a run of rows' {
+        & $step 'left and right drag select a run of rows' {
             $lv = $ctl.MapList; $n = $lv.Items.Count
             if ($n -lt 3) { throw 'too few rows' }
             if ((Get-RowAt $lv 6) -ne 0) { throw ("row at the top is {0}" -f (Get-RowAt $lv 6)) }
             $lv.UnselectAll()
-            $d = @{ Lv = $lv; Anchor = 0; Cur = 0; Moved = $false; Ctrl = $false; Base = $null; Cap = $null }; $script:rdrag = $d
-            Start-RightDrag $d; Set-DragRange $d 2
-            if ($lv.SelectedItems.Count -ne 3) { throw ("{0} selected for rows 0-2" -f $lv.SelectedItems.Count) }
-            Set-DragRange $d 1
-            if ($lv.SelectedItems.Count -ne 2) { throw 'dragging back did not shrink the selection' }
-            Stop-RightDrag
-            if ($script:rdrag) { throw 'drag not stopped' }
-            $lv.UnselectAll(); [void]$lv.SelectedItems.Add($lv.Items[$n - 1])
-            $d = @{ Lv = $lv; Anchor = 0; Cur = 0; Moved = $false; Ctrl = $true; Base = $null; Cap = $null }; $script:rdrag = $d
-            Start-RightDrag $d; Set-DragRange $d 1; Stop-RightDrag
-            if ($lv.SelectedItems.Count -ne 3) { throw ("with Ctrl {0} selected, expected 3" -f $lv.SelectedItems.Count) }
+            foreach ($btn in 'Right', 'Left') {
+                $lv.UnselectAll()
+                $d = @{ Lv = $lv; Anchor = 0; Cur = 0; Moved = $false; Ctrl = $false; Base = $null; Cap = $null; Button = $btn }; $script:rdrag = $d
+                Start-RowDrag $d; Set-DragRange $d 2
+                if ($lv.SelectedItems.Count -ne 3) { throw ("{0}: {1} selected for rows 0-2" -f $btn, $lv.SelectedItems.Count) }
+                Set-DragRange $d 1
+                if ($lv.SelectedItems.Count -ne 2) { throw "${btn}: dragging back did not shrink the selection" }
+                Stop-RowDrag
+                if ($script:rdrag) { throw "${btn}: drag not stopped" }
+                $lv.UnselectAll(); [void]$lv.SelectedItems.Add($lv.Items[$n - 1])
+                $d = @{ Lv = $lv; Anchor = 0; Cur = 0; Moved = $false; Ctrl = $true; Base = $null; Cap = $null; Button = $btn }; $script:rdrag = $d
+                Start-RowDrag $d; Set-DragRange $d 1; Stop-RowDrag
+                if ($lv.SelectedItems.Count -ne 3) { throw ("{0} with Ctrl: {1} selected, expected 3" -f $btn, $lv.SelectedItems.Count) }
+            }
+            $c0 = $lv.ItemContainerGenerator.ContainerFromIndex(0); $k0 = Find-Visual $c0 ([System.Windows.Controls.CheckBox]); $t0 = Find-Visual $c0 ([System.Windows.Controls.TextBlock])
+            if (-not (Test-InCheckBox $lv (Find-Visual $k0 ([System.Windows.Controls.Border])))) { throw 'a press on the check box would start a drag' }
+            if ($t0 -and (Test-InCheckBox $lv $t0)) { throw 'a press on the name is taken for the check box' }
         }
         & $step 'right-click menu' {
             $lv = $ctl.MapList; $lv.UnselectAll()

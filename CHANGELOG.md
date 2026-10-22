@@ -2,7 +2,7 @@
 
 ## 2.7
 - **空间地图的项目复选框**：每一行前面有复选框（和资源管理器「查看」里的「项目复选框」一样），点一下就能多选，不用按住 Ctrl；左下角「全选」。
-- **按住右键上下拖，一次选中连着的几行**，拖到列表上下边会自动滚动；按住 Ctrl 再拖是在原来的基础上加。松开后弹出右键菜单：打开文件夹、在资源管理器里显示、复制路径、压缩、删除。
+- **按住鼠标（左键或右键）上下拖，一次选中连着的几行**，拖到列表上下边会自动滚动；按住 Ctrl 再拖是在原来的基础上加。用右键拖的话，松开后弹出右键菜单：打开文件夹、在资源管理器里显示、复制路径、压缩、删除。
 - **设置页**：外观、语言，以及界面上显示什么。用不上的页面、左下角的按钮、页面标题下的说明、空间地图的复选框、占比条、百分比、详细信息和「快速扫描」开关都可以关掉，随时能打开，「恢复默认显示」一下全回来。
 - **实际占用和硬链接**：快速扫描时，从文件表里读出每个文件真正分配了多少簇，压缩、稀疏和只在云端（OneDrive 等）的文件按实际占用算；WinSxS 这类文件夹里和 System32 共用的硬链接单独标出，删了不腾空间。删除前写明实际能腾出多少。
 - **空间明细**：已用空间分成文件实际占用（每个文件只算一次）、文件表（MFT）和其他几块，并说明为什么和按文件大小相加对不上。
@@ -13,7 +13,7 @@
 - 「使用反馈」只留 GitHub：项目主页和提交问题的按钮，不再显示开发者微信号；诊断信息和检查扫描功能的结果都可以贴到 GitHub 的问题里。
 - 修正：点「使用反馈」后再点「帮助」，回不到帮助的开头。
 - 测试：自检也核对实际占用和硬链接；新增 `ClearC.exe /uitest`，在真的 Windows 上把界面功能点一遍；NTFS 镜像测试也比实际占用、硬链接和压缩文件夹。
-- Item check boxes, right-button drag selection and a right-click menu in the space map; a Settings page that hides pages, buttons, descriptions and columns you don't use; size on disk and hard links from the file table, with a "Space breakdown" of the used space; restore point usage on "Save space"; low-priority duplicate search; LiveKernelReports cleanup; Feedback now points only to GitHub (the WeChat ID was removed); fixed Help not returning to the top after Feedback; `/uitest` for automated UI tests.
+- Item check boxes, left- or right-button drag selection and a right-click menu in the space map; a Settings page that hides pages, buttons, descriptions and columns you don't use; size on disk and hard links from the file table, with a "Space breakdown" of the used space; restore point usage on "Save space"; low-priority duplicate search; LiveKernelReports cleanup; Feedback now points only to GitHub (the WeChat ID was removed); fixed Help not returning to the top after Feedback; `/uitest` for automated UI tests.
 
 ## 2.6
 - **深色模式**：左下角「外观」可以选浅色、深色或跟随系统（照 Windows 的「选择应用模式」）。
