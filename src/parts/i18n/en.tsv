@@ -7,14 +7,12 @@ C 盘只剩 {0} 了	Only {0} left on C:
 C 盘多出 {0}；{1}	Freed {0} on C:; {1}
 ；	; 
 C 盘多出 {0}。只清了临时文件、缓存和日志，没有碰任何个人文件。每一项都记在「操作日志」里。	Freed {0} on C:. Only temporary files, caches and logs were cleaned; no personal files were touched. Every item is recorded in the "Activity log".
-已复制	Copied
-复制失败，请手动输入	Couldn't copy. Please type it in manually.
 腾挪 ClearC {0}	ClearC {0}
 Windows {0}，{1} 位	Windows {0}, {1}-bit
 C 盘剩余 {0} / 共 {1}	Free on C: {0} / {1} total
 屏幕可用区域 {0:N0} x {1:N0}	Screen work area {0:N0} x {1:N0}
 ---- 最近的运行记录 ----	---- Recent run log ----
-已复制，可以直接粘贴到微信里发给开发者	Copied. You can paste it straight into WeChat and send it to the developer.
+已复制，可以粘贴到 GitHub 的问题（Issue）里	Copied. You can paste it into a GitHub issue.
 复制失败，可以点「打开运行记录文件」再手动复制	Couldn't copy. Click "Open run log file" and copy it manually.
 还没有运行记录	No run log yet
 收起运行记录	Hide run log
@@ -1170,9 +1168,9 @@ Zoom 装在这里的程序和本地数据。会议录像默认存在「文档」
 已中途停止	Stopped partway
 检查扫描功能：{0}；结果存在 {1}	Scanning check: {0}; result saved to {1}
 。	. 
-结果已经复制，可以直接粘贴到微信里发给开发者。	The result has been copied; you can paste it straight into a message to the developer.
+结果已经复制，可以粘贴到 GitHub 的问题（Issue）里。	The result has been copied; you can paste it into a GitHub issue.
 完整结果存在 {0}	Full result saved to {0}
-有问题的项目，扫描时会自动改用逐个文件夹扫描，不影响使用；把结果发给开发者可以帮助修好它。	Where there are problems, scanning automatically falls back to the folder-by-folder method, so ClearC keeps working; sending the result to the developer helps get it fixed.
+有问题的项目，扫描时会自动改用逐个文件夹扫描，不影响使用；把结果贴到 GitHub 的问题里可以帮助修好它。	Where there are problems, scanning automatically falls back to the folder-by-folder method, so ClearC keeps working; posting the result in a GitHub issue helps get it fixed.
 没能检查新版本	Could not check for updates
 连不上 GitHub：{0}\n\n可以直接打开下载页面看看。	Could not reach GitHub: {0}\n\nYou can open the download page directly.
 打开下载页面	Open download page

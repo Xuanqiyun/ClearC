@@ -2037,7 +2037,7 @@
       <ScrollViewer x:Name="HelpScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
         <StackPanel Margin="30,24,30,28" MaxWidth="880" HorizontalAlignment="Left">
           <TextBlock Text="帮助" Style="{StaticResource PageTitle}"/>
-          <TextBlock Style="{StaticResource PageSub}" Text="使用说明、安全风险提示，以及怎么联系开发者。"/>
+          <TextBlock Style="{StaticResource PageSub}" Text="使用说明、安全风险提示，以及怎么反馈问题。"/>
           <Border x:Name="RiskCard" Background="#FFF6F6" BorderBrush="#F3C4C8" BorderThickness="1" CornerRadius="12" Padding="24,20,24,20" Margin="0,20,0,0">
             <DockPanel>
               <TextBlock DockPanel.Dock="Left" Text="&#xE7BA;" FontFamily="{StaticResource Icons}" FontSize="20" Foreground="#D70015" VerticalAlignment="Top" Margin="0,1,14,0"/>
@@ -2393,25 +2393,11 @@
                 <TextBlock Text="&#xE8BD;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
                 <TextBlock Text="使用反馈" Style="{StaticResource HelpHead}"/>
               </StackPanel>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,8,0,0" Text="遇到问题、发现错误或有改进建议，欢迎加开发者微信，或在 GitHub 上提交问题（Issues）。"/>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,8,0,0" Text="遇到问题、发现错误或有改进建议，欢迎在 GitHub 上提交问题（Issues）。"/>
               <Border Background="#F5F5F7" CornerRadius="10" Padding="18,14" Margin="0,14,0,0">
                 <DockPanel>
-                  <Button x:Name="BtnCopyWx" DockPanel.Dock="Right" Style="{StaticResource Primary}" Content="复制微信号" Padding="18,7" VerticalAlignment="Center"/>
-                  <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <Border Width="40" Height="40" CornerRadius="20" Background="#E6F4EA">
-                      <TextBlock Text="&#xE8BD;" FontFamily="{StaticResource Icons}" FontSize="18" Foreground="#248A3D" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    </Border>
-                    <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
-                      <TextBlock Text="开发者微信" Style="{StaticResource Caption}"/>
-                      <TextBlock x:Name="DevWx" Text="45915504" FontSize="20" FontWeight="SemiBold" Margin="0,1,0,0" TextOptions.TextFormattingMode="Ideal"/>
-                    </StackPanel>
-                  </StackPanel>
-                </DockPanel>
-              </Border>
-              <Border Background="#F5F5F7" CornerRadius="10" Padding="18,14" Margin="0,10,0,0">
-                <DockPanel>
                   <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button x:Name="BtnIssue" Content="提交问题" Padding="14,7" Margin="0,0,8,0"/>
+                    <Button x:Name="BtnIssue" Content="提交问题" Style="{StaticResource Primary}" Padding="14,7" Margin="0,0,8,0"/>
                     <Button x:Name="BtnGitHub" Content="打开主页" Padding="14,7"/>
                   </StackPanel>
                   <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -2425,13 +2411,13 @@
                   </StackPanel>
                 </DockPanel>
               </Border>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,14,0,0" Text="反馈时附上问题截图和诊断信息，能更快找到原因。诊断信息包括软件版本、Windows 版本、C 盘空间和最近的运行记录（里面有文件夹路径），发送前可以先看一下。"/>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,14,0,0" Text="提交问题时附上截图和诊断信息，能更快找到原因。诊断信息包括软件版本、Windows 版本、C 盘空间和最近的运行记录（里面有文件夹路径），贴出去之前可以先看一下。"/>
               <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
                 <Button x:Name="BtnCopyDiag" Content="复制诊断信息" Margin="0,0,8,0"/>
                 <Button x:Name="BtnOpenLog" Content="打开运行记录文件"/>
                 <TextBlock x:Name="CopyHint" Style="{StaticResource Caption}" Foreground="#248A3D" Margin="14,0,0,0"/>
               </StackPanel>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,18,0,0" Text="「检查扫描功能」在这台电脑上核对快速扫描：比较直接读文件表和逐个文件夹扫描的结果，再在本工具自己的文件夹里建几个文件、改一改、删掉，看按变更日志更新对不对。只读 C 盘，不动你的文件，大约要一两分钟；结果会复制下来，可以直接发给开发者。「检查新版本」只在你点的时候连一次 GitHub。"/>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,18,0,0" Text="「检查扫描功能」在这台电脑上核对快速扫描：比较直接读文件表和逐个文件夹扫描的结果，再在本工具自己的文件夹里建几个文件、改一改、删掉，看按变更日志更新对不对。只读 C 盘，不动你的文件，大约要一两分钟；结果会复制下来，可以贴到 GitHub 的问题里。「检查新版本」只在你点的时候连一次 GitHub。"/>
               <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
                 <Button x:Name="BtnSelfTest" Content="检查扫描功能" Margin="0,0,8,0"/>
                 <Button x:Name="BtnCheckUpdate" Content="检查新版本"/>

@@ -166,8 +166,8 @@ $timer.Add_Tick({
                 $sum = (T "{0} 项正常，{1} 项提醒，{2} 项有问题") -f $x.Pass, $x.Warn, $x.Fail
                 End-Op $(if ($r.Stopped) { (T '已中途停止') } else { $sum })
                 UI-Log ((T "检查扫描功能：{0}；结果存在 {1}") -f $sum, $file)
-                $msg = $sum + (T '。') + $(if ($copied) { (T '结果已经复制，可以直接粘贴到微信里发给开发者。') } else { '' }) + "`n`n" + ((T "完整结果存在 {0}") -f $file)
-                if ($x.Fail -gt 0) { $msg += "`n`n" + (T '有问题的项目，扫描时会自动改用逐个文件夹扫描，不影响使用；把结果发给开发者可以帮助修好它。') }
+                $msg = $sum + (T '。') + $(if ($copied) { (T '结果已经复制，可以粘贴到 GitHub 的问题（Issue）里。') } else { '' }) + "`n`n" + ((T "完整结果存在 {0}") -f $file)
+                if ($x.Fail -gt 0) { $msg += "`n`n" + (T '有问题的项目，扫描时会自动改用逐个文件夹扫描，不影响使用；把结果贴到 GitHub 的问题里可以帮助修好它。') }
                 $script:pendingDialog = @{ Title = (T '扫描功能检查完了'); Kind = $(if ($x.Fail -gt 0) { 'warn' } else { 'done' }); Text = $msg
                     Buttons = @((T '好'), (T '打开结果')); Primary = (T '打开结果'); Cancel = (T '好'); Then = { Start-Process -FilePath "$env:SystemRoot\System32\notepad.exe" -ArgumentList ('"{0}"' -f $file) }.GetNewClosure() }
             }
