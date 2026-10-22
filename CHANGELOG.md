@@ -1,5 +1,20 @@
 # 更新记录
 
+## 2.7
+- **空间地图的项目复选框**：每一行前面有复选框（和资源管理器「查看」里的「项目复选框」一样），点一下就能多选，不用按住 Ctrl；左下角「全选」。
+- **按住右键上下拖，一次选中连着的几行**，拖到列表上下边会自动滚动；按住 Ctrl 再拖是在原来的基础上加。松开后弹出右键菜单：打开文件夹、在资源管理器里显示、复制路径、压缩、删除。
+- **设置页**：外观、语言，以及界面上显示什么。用不上的页面、左下角的按钮、页面标题下的说明、空间地图的复选框、占比条、百分比、详细信息和「快速扫描」开关都可以关掉，随时能打开，「恢复默认显示」一下全回来。
+- **实际占用和硬链接**：快速扫描时，从文件表里读出每个文件真正分配了多少簇，压缩、稀疏和只在云端（OneDrive 等）的文件按实际占用算；WinSxS 这类文件夹里和 System32 共用的硬链接单独标出，删了不腾空间。删除前写明实际能腾出多少。
+- **空间明细**：已用空间分成文件实际占用（每个文件只算一次）、文件表（MFT）和其他几块，并说明为什么和按文件大小相加对不上。
+- **省空间**里能看系统还原点（卷影副本）有几个、占了多少、上限多少；要调整打开 Windows 的「系统保护」，本工具不直接删还原点。
+- **查重复文件时让着其他程序**（设置里打开）：用 Windows 的后台模式读文件，磁盘和内存都用低优先级，不拖慢正在用的程序，也不把它们缓存的数据挤出内存。
+- 「崩溃转储与错误报告」也清 `C:\Windows\LiveKernelReports`（显卡驱动重置等留下的诊断转储）。
+- 帮助里新增几条常见问题：扫描合计和已用空间为什么对不上、WinSxS 能不能删、为什么不清 Prefetch 也没有「内存加速」。
+- 「使用反馈」加了 GitHub 项目主页和提交问题的按钮。
+- 修正：点「使用反馈」后再点「帮助」，回不到帮助的开头。
+- 测试：自检也核对实际占用和硬链接；新增 `ClearC.exe /uitest`，在真的 Windows 上把界面功能点一遍；NTFS 镜像测试也比实际占用、硬链接和压缩文件夹。
+- Item check boxes, right-button drag selection and a right-click menu in the space map; a Settings page that hides pages, buttons, descriptions and columns you don't use; size on disk and hard links from the file table, with a "Space breakdown" of the used space; restore point usage on "Save space"; low-priority duplicate search; LiveKernelReports cleanup; GitHub links under Feedback; fixed Help not returning to the top after Feedback; `/uitest` for automated UI tests.
+
 ## 2.6
 - **深色模式**：左下角「外观」可以选浅色、深色或跟随系统（照 Windows 的「选择应用模式」）。
 - **检查扫描功能**：「帮助」页里的新按钮，在你的电脑上核对快速扫描：比较直接读文件表和逐个文件夹扫描的结果，再在本工具自己的文件夹里建几个文件、改一改、删掉，看按变更日志更新对不对。只读 C 盘，结果自动复制，可以直接发给开发者。也可以用 `ClearC.exe /selftest` 运行。

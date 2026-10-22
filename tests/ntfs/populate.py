@@ -47,4 +47,10 @@ w(os.path.join(R, 'Tmp', 'old.txt'), 77); os.rename(os.path.join(R, 'Tmp', 'old.
 os.makedirs(os.path.join(R, 'Tmp', 'dirA', 'sub'), exist_ok=True); w(os.path.join(R, 'Tmp', 'dirA', 'sub', 'm.bin'), 3000)
 os.rename(os.path.join(R, 'Tmp', 'dirA'), os.path.join(R, 'Moved'))
 os.makedirs(os.path.join(R, 'Empty'), exist_ok=True)
+# NTFS 压缩的文件夹（挂载时要带 compression）：里面新建的文件压缩存放，实际占用比文件大小小
+cz = os.path.join(R, 'Compressed'); os.makedirs(cz, exist_ok=True)
+try:
+    os.setxattr(cz, 'system.ntfs_attrib_be', (0x800).to_bytes(4, 'big'))
+    for k in range(5): w(os.path.join(cz, 'text%d.log' % k), 300000 + k * 70000)
+except OSError as e: print('compression not available:', e)
 print('populated')

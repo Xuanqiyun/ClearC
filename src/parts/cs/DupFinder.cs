@@ -406,6 +406,9 @@ public static class DupFinder {
         return "/";
     }
 
+    public static volatile bool LowPriority;          // 设置里的「查重复文件时让着其他程序」
+    [DllImport("kernel32.dll")] static extern IntPtr GetCurrentThread();
+    [DllImport("kernel32.dll")] static extern bool SetThreadPriority(IntPtr thread, int priority);
     // 按磁盘分组并行：每块盘各自的线程数；同一块盘内按路径排序，机械硬盘少跳磁头
     static void RunPerVolume(List<DupFile> files, Dictionary<string, int> threads, Action<DupFile, IoWorker> work) {
         Dictionary<string, List<DupFile>> byVol = new Dictionary<string, List<DupFile>>(StringComparer.OrdinalIgnoreCase);
@@ -425,11 +428,16 @@ public static class DupFinder {
             n = Math.Max(1, Math.Min(n, lst.Count));
             for (int i = 0; i < n; i++) {
                 Thread t = new Thread(new ThreadStart(delegate () {
-                    IoWorker w = new IoWorker();
-                    DupFile f;
-                    while (!Cancel && q.TryDequeue(out f)) {
-                        try { work(f, w); } catch { f.Bad = true; }
-                    }
+                    // 让着其他程序：Windows 的后台模式，磁盘和内存都用低优先级（读过的文件不把别的程序缓存的数据挤出内存）
+                    bool bg = false;
+                    if (LowPriority && System.IO.Path.DirectorySeparatorChar == '\\') { try { bg = SetThreadPriority(GetCurrentThread(), 0x00010000 /*THREAD_MODE_BACKGROUND_BEGIN*/); } catch { } }
+                    try {
+                        IoWorker w = new IoWorker();
+                        DupFile f;
+                        while (!Cancel && q.TryDequeue(out f)) {
+                            try { work(f, w); } catch { f.Bad = true; }
+                        }
+                    } finally { if (bg) { try { SetThreadPriority(GetCurrentThread(), 0x00020000 /*THREAD_MODE_BACKGROUND_END*/); } catch { } } }
                 }));
                 t.IsBackground = true;
                 t.Start();

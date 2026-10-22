@@ -154,6 +154,10 @@
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Restore points</Run><Run>: shows how many restore points there are, how much space they take and the most they may use. To lower the limit or delete restore points, click "Open System Protection" and change it in Windows' own settings; ClearC never deletes restore points itself.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
                 <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Compress folders</Run><Run>: uses NTFS compression. Files open and edit as usual; they just take up less space. Good for documents, code and old projects.</Run></TextBlock>
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
@@ -206,7 +210,11 @@
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>Select a row to </Run><Run FontWeight="SemiBold">Open location</Run><Run>, </Run><Run FontWeight="SemiBold">Compress (keeps files)</Run><Run> or </Run><Run FontWeight="SemiBold">Delete</Run><Run>; hold Ctrl or Shift to select several rows and delete them together. When deleting, you can choose "Move to Recycle Bin" (can be restored) or "Delete permanently" (frees space immediately); either way, you must tick the confirmation box first.</Run></TextBlock>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>Select a row to </Run><Run FontWeight="SemiBold">Open location</Run><Run>, </Run><Run FontWeight="SemiBold">Compress (keeps files)</Run><Run> or </Run><Run FontWeight="SemiBold">Delete</Run><Run>. Tick the box at the start of each row (like "Item check boxes" in File Explorer), or hold Ctrl or Shift, to select several rows and delete them together; </Run><Run FontWeight="SemiBold">hold the right mouse button and drag up or down</Run><Run> to select a run of rows at once, and the right-click menu opens when you let go. When deleting, you can choose "Move to Recycle Bin" (can be restored) or "Delete permanently" (frees space immediately); either way, you must tick the confirmation box first.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Size on disk and hard links</Run><Run>: with the fast scan, the line under each name notes how little compressed, sparse and cloud-only (OneDrive and the like) files really take, and how much of folders such as WinSxS is hard links (the same file also has a name elsewhere, so deleting this name frees nothing). Click "</Run><Run FontWeight="SemiBold">Space breakdown</Run><Run>" to see how the used space splits into file data, the file table (MFT) and the rest, and why it differs from adding up file sizes. Deleting also tells you how much space you will really get back.</Run></TextBlock>
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
@@ -337,7 +345,11 @@
               <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Can I close the window while it's running?</Run><LineBreak/><Run>Please don't close the window until the work is done; to stop, click "Cancel". You can click "Continue in background" to collapse the progress card; progress is still shown at the bottom of the window and on the taskbar icon.</Run></TextBlock>
               <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Where can I see the details?</Run><LineBreak/><Run>For the deletions and moves that were made, see "Activity log" on the left. For technical details of what the program did, see "Run log" at the bottom left; the full file is at %TEMP%\CleanC-run.log.</Run></TextBlock>
               <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Less space freed than expected?</Run><LineBreak/><Run>Files moved to the Recycle Bin only free up space after you empty the Recycle Bin, and files in use by other programs are skipped.</Run></TextBlock>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Is there a dark mode?</Run><LineBreak/><Run>Yes. Click "Appearance" at the bottom left and choose Light, Dark or Follow Windows (the "Choose your app mode" setting). ClearC closes and reopens after you change it.</Run></TextBlock>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Is there a dark mode?</Run><LineBreak/><Run>Yes. On the "Settings" page on the left (or with "Appearance" at the bottom left), choose Light, Dark or Follow Windows (the "Choose your app mode" setting). ClearC closes and reopens after you change it.</Run></TextBlock>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Can I hide pages and buttons I don't use?</Run><LineBreak/><Run>Yes. On the "Settings" page, untick the pages you don't use, the buttons at the bottom left, the description under page titles, and the check boxes, bars, percentages, details and "Fast scan" switch of the space map. Anything hidden can be turned back on there at any time, and its settings and records are kept; "Restore default display" brings everything back at once.</Run></TextBlock>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Why doesn't the scanned total match the used space?</Run><LineBreak/><Run>Adding up file sizes counts hard links (one file with several names, common in WinSxS and System32) more than once; compressed, sparse and cloud-only files take less space than their size; and the file table (MFT), the NTFS logs and the space Windows reserves for updates (reserved storage) take space without being ordinary files. After a fast scan, click "Space breakdown" in the space map to see how big each part is.</Run></TextBlock>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">WinSxS looks huge. Can I delete it?</Run><LineBreak/><Run>Not by hand; that can break Windows. Many of its files are the same files as in System32 and other places (hard links), so File Explorer counts them twice and WinSxS looks bigger than it is; with the fast scan, the space map notes how much of it is hard links. What can really go is the old components left behind by updates: use "WinSxS component cleanup (DISM)" on the "Clean up C:" page.</Run></TextBlock>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Why doesn't ClearC clean the Prefetch folder or "boost memory"?</Run><LineBreak/><Run>Prefetch records which files programs read when they start, so Windows can open your usual programs faster. It is only a few dozen MB, deleting it makes the next starts slower, and it grows back within days. Memory is similar: Windows uses free memory to cache files you use often ("Cached" in Task Manager) and hands it over the moment another program needs it, so forcing it empty only slows the PC down. That is why ClearC does neither.</Run></TextBlock>
               <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">How do I know about new versions?</Run><LineBreak/><Run>Click "Check for updates" under "Feedback" below. If there is a new version, the download page opens; replace the old exe with the new one and your settings, logs and reminders are kept. ClearC does not go online otherwise; it contacts GitHub only when you click that button.</Run></TextBlock>
             </StackPanel>
           </Border>
@@ -347,7 +359,7 @@
                 <TextBlock Text="&#xE8BD;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
                 <TextBlock Text="Feedback" Style="{StaticResource HelpHead}"/>
               </StackPanel>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,8,0,0" Text="If you run into a problem, find a bug or have a suggestion, feel free to contact the developer directly."/>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,8,0,0" Text="If you run into a problem, find a bug or have a suggestion, add the developer on WeChat or open an issue on GitHub."/>
               <Border Background="#F5F5F7" CornerRadius="10" Padding="18,14" Margin="0,14,0,0">
                 <DockPanel>
                   <Button x:Name="BtnCopyWx" DockPanel.Dock="Right" Style="{StaticResource Primary}" Content="Copy WeChat ID" Padding="18,7" VerticalAlignment="Center"/>
@@ -358,6 +370,23 @@
                     <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
                       <TextBlock Text="Developer's WeChat" Style="{StaticResource Caption}"/>
                       <TextBlock x:Name="DevWx" Text="45915504" FontSize="20" FontWeight="SemiBold" Margin="0,1,0,0" TextOptions.TextFormattingMode="Ideal"/>
+                    </StackPanel>
+                  </StackPanel>
+                </DockPanel>
+              </Border>
+              <Border Background="#F5F5F7" CornerRadius="10" Padding="18,14" Margin="0,10,0,0">
+                <DockPanel>
+                  <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="BtnIssue" Content="Report an issue" Padding="14,7" Margin="0,0,8,0"/>
+                    <Button x:Name="BtnGitHub" Content="Open page" Padding="14,7"/>
+                  </StackPanel>
+                  <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Width="40" Height="40" CornerRadius="20" Background="#E8F0FE">
+                      <TextBlock Text="&#xE943;" FontFamily="{StaticResource Icons}" FontSize="18" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
+                      <TextBlock Text="GitHub project page: downloads, source code, issues" Style="{StaticResource Caption}"/>
+                      <TextBlock x:Name="GitHubUrl" Text="github.com/Xuanqiyun/ClearC" FontSize="16" FontWeight="SemiBold" Margin="0,1,0,0" TextOptions.TextFormattingMode="Ideal"/>
                     </StackPanel>
                   </StackPanel>
                 </DockPanel>

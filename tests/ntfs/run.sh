@@ -16,7 +16,7 @@ check() { # 期望值 实际值 说明
 mk() { rm -f "$1"; truncate -s "$2" "$1"; mkntfs -F -Q -q $3 "$1" >/dev/null 2>&1; }
 # 1. 各种文件：硬链接（含 300 个名字的）、稀疏、碎片、备用数据流、很深的路径、中文和表情名字、链接
 mk img1.ntfs 2G ""
-ntfs-3g img1.ntfs mnt -o rw,streams_interface=xattr; python3 "$HERE/populate.py" mnt; python3 "$HERE/truth.py" mnt truth1.json; fusermount -u mnt
+ntfs-3g img1.ntfs mnt -o rw,compression,streams_interface=xattr; python3 "$HERE/populate.py" mnt; python3 "$HERE/truth.py" mnt truth1.json; fusermount -u mnt
 "$PWSH" -NoProfile -File "$HERE/scan.ps1" img1.ntfs mft1.json
 check truth1.json mft1.json 5 "full read"
 # 2. 改动以后：增量更新要和整份重读一样

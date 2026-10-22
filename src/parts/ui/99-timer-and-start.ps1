@@ -140,7 +140,7 @@ $timer.Add_Tick({
                 if ($r.Node) { [DiskMap]::Detach($r.Node) }
                 else {
                     $pn = [DiskMap]::Find($script:mapRoot, (Split-Path $r.Path -Parent))
-                    if ($pn) { [DiskMap]::DropFile($pn, $r.Size) }
+                    if ($pn) { [DiskMap]::DropFile($pn, $r.Size, $r.Disk) }
                     [DiskMap]::ForgetFile($r.Path)
                 }
             }
@@ -432,18 +432,30 @@ $ctl.BtnTheme.Add_Click({
         -Buttons @((T '取消'), (T '跟随系统'), (T '深色'), (T '浅色')) -Primary (T '浅色') -Cancel (T '取消')
     $to = if ($ans -eq (T '浅色')) { 'light' } elseif ($ans -eq (T '深色')) { 'dark' } elseif ($ans -eq (T '跟随系统')) { 'system' } else { '' }
     if (-not $to -or $to -eq $script:themePref) { return }
+    Set-ThemePref $to
+})
+function Set-ThemePref([string]$to) {
     Set-Setting 'Theme' $to
     OpLog '系统设置' (T '切换外观') $to ''
     Restart-App
-})
-# 界面语言切换：存到设置里，关掉本窗口，用新语言重新打开
+}
+# 设置页上点了外观：问一下再换（返回 $false：没换）
+function Request-Theme([string]$to) {
+    if ($to -eq $script:themePref) { return $false }
+    if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return $false }
+    $ok = (T '换')
+    if ((Show-Sheet -Title ((T "换成「{0}」外观？") -f $script:themeNames[$to]) -Text (T '本工具会关闭，然后用新的外观重新打开。') -Buttons @((T '取消'), $ok) -Primary $ok -Cancel (T '取消')) -ne $ok) { return $false }
+    Set-ThemePref $to
+    return $true
+}
+# 界面语言切换：存到设置里，关掉本窗口，用新语言重新打开（返回 $false：没换）
 $ctl.BtnLangText.Text = if ($script:Lang -eq 'en') { '中文' } else { 'English' }
-$ctl.BtnLang.Add_Click({
-    if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return }
+function Request-Lang {
+    if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return $false }
     $to = if ($script:Lang -eq 'en') { 'zh' } else { 'en' }
     if ($to -eq 'en') { $t = '切换为英文界面？'; $x = "本工具会关闭，然后以英文界面重新打开。`n`nClearC will close and reopen in English."; $ok = '切换'; $no = '取消' }
     else { $t = 'Switch to Chinese?'; $x = "ClearC will close and reopen in Chinese.`n`n本工具会关闭，然后以中文界面重新打开。"; $ok = 'Switch'; $no = 'Cancel' }
-    if ((Show-Sheet -Title $t -Text $x -Buttons @($no, $ok) -Primary $ok -Cancel $no) -ne $ok) { return }
+    if ((Show-Sheet -Title $t -Text $x -Buttons @($no, $ok) -Primary $ok -Cancel $no) -ne $ok) { return $false }
     Set-Setting 'Lang' $to
     OpLog '系统设置' (T '切换界面语言') $to ''
     try {
@@ -451,7 +463,9 @@ $ctl.BtnLang.Add_Click({
         elseif ($script:selfScript) { Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList ('-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}"' -f $script:selfScript) }
     } catch {}
     $win.Close()
-})
+    return $true
+}
+$ctl.BtnLang.Add_Click({ [void](Request-Lang) })
 $ctl.CleanScroll.Add_ScrollChanged({ Update-CleanMore })
 $ctl.CleanMore.Add_Click({ $ctl.CleanScroll.PageDown() })
 # 第一次打开时先给出安全风险提示，勾选同意后才能使用；同意过就不再弹
@@ -463,6 +477,17 @@ $win.Add_ContentRendered({
         $shown = $script:startClock.Elapsed.TotalSeconds
         $proc = 0.0; try { $proc = ((Get-Date) - (Get-Process -Id $PID).StartTime).TotalSeconds } catch {}
         Write-LogFile ((T "启动用时 {0:N1} 秒：准备 {1:N1} 秒，加载界面 {2:N1} 秒，显示 {3:N1} 秒") -f [math]::Max($proc, $shown), $script:tPrep, ($script:tUi - $script:tPrep), ($shown - $script:tUi))
+    }
+    if ($script:uiTest) {
+        if (-not $script:uiStarted) {
+            $script:uiStarted = $true
+            # 万一卡住：两分钟后自己关掉
+            $script:uiWatch = New-Object System.Windows.Threading.DispatcherTimer; $script:uiWatch.Interval = [TimeSpan]::FromMinutes(2)
+            $script:uiWatch.Add_Tick({ $script:uiWatch.Stop(); $global:CLEANC_EXIT = 99; $win.Close() })
+            $script:uiWatch.Start()
+            [void]$win.Dispatcher.BeginInvoke([Action]{ Invoke-UiTest }, [System.Windows.Threading.DispatcherPriority]::ApplicationIdle)
+        }
+        return
     }
     if ($script:riskShown) { return }
     $script:riskShown = $true
@@ -478,4 +503,5 @@ $win.Add_ContentRendered({
     Write-LogFile (T '用户已同意安全风险提示')
 })
 $global:CLEANC_UI_SHOWN = $true   # 告诉外层 exe：界面已经正常打开
+if ($script:uiTest) { $win.WindowStartupLocation = 'Manual'; $win.Left = -32000; $win.Top = -32000; $win.ShowActivated = $false; $win.ShowInTaskbar = $false }
 $win.ShowDialog() | Out-Null

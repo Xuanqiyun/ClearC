@@ -37,7 +37,8 @@ m = here('[xml]$xaml = @"', 'ui/main.xaml', 'ui/10-window.ps1', '"')
 for title, name in [('# 第一页：清理 C 盘', 'ui/20-clean.ps1'), ('# 第二页：重复文件', 'ui/30-duplicates.ps1'), ('# 公用：打开位置、选磁盘', 'ui/40-common.ps1'),
                     ('# 空间地图', 'ui/50-space-map.ps1'), ('# 搬家管理', 'ui/60-moves.ps1'), ('# 省空间', 'ui/70-save-space.ps1'),
                     ('# 软件管理', 'ui/80-apps.ps1'), ('# 自动提醒', 'ui/90-reminders.ps1'), ('# 操作日志', 'ui/91-activity-log.ps1'),
-                    ('# 重复文件：合并为一份', 'ui/92-merge.ps1'), ('# 定时器', 'ui/99-timer-and-start.ps1')]:
+                    ('# 重复文件：合并为一份', 'ui/92-merge.ps1'), ('# 设置：外观、语言', 'ui/93-settings.ps1'), ('# 界面自测', 'ui/95-ui-test.ps1'),
+                    ('# 定时器', 'ui/99-timer-and-start.ps1')]:
     i = m
     while True:                                           # 标题行：上面一行是横线
         i = find(lambda t, s=title: t.startswith(s), i + 1, title)

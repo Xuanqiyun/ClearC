@@ -22,6 +22,7 @@ public class MapRow {
     public string When { get; set; }    // 导出用：最近修改时间
     public long FileCount { get; set; } // 导出用：文件夹里的文件个数
     public bool IsSummary { get; set; } // 「其余 N 项」那一行：不是真的文件或文件夹
+    public long Disk { get; set; }      // 实际占用（-1 不知道）
 }
 public class AppRow : INotifyPropertyChanged {
     public string Name { get; set; }

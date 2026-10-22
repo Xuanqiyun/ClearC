@@ -4,6 +4,10 @@ public class DmNode {
     public string Name;
     public DmNode Parent;
     public long Size, Own, Files, OwnFiles, LastWrite;
+    // 读文件表时才有：实际占的盘、其中有不止一个名字的文件（硬链接，盘上只有一份，删掉这一个名字不腾空间）
+    public long Disk, OwnDisk, Shared, OwnShared;
+    public bool HasDisk;                              // 只在根上：这棵树是读文件表得来的，上面几项有数
+    public long UniqueSize, UniqueDisk, Linked, MftBytes;   // 只在根上：每个文件只算一次的合计、有硬链接的文件、文件表（$MFT）本身多大
     public bool IsLink, Denied, Gone;
     public bool Cloud;                                // 带重解析点但不是链接的文件夹（OneDrive 等云端文件夹）
     public List<DmNode> Kids = new List<DmNode>();
@@ -21,10 +25,11 @@ public class DmNode {
 // 扫描时记下的文件（1 MB 以上）。只存所在文件夹和文件名，完整路径用到时再拼，省内存
 public class DmFile {
     public DmNode Dir; public string Name; public long Size; public DateTime Modified;
+    public long Disk = -1; public bool Shared;        // 实际占用（-1 不知道）；有不止一个名字（硬链接）
     public string Path { get { string d = Dir.FullPath(); return (d.EndsWith("\\") || d.EndsWith("/")) ? d + Name : d + System.IO.Path.DirectorySeparatorChar + Name; } }
 }
 public class DmFind { public List<DmFile> Files = new List<DmFile>(); public long Count, Bytes; }
-public class DmEntry { public string Name, Path; public long Size; public DateTime Modified; }
+public class DmEntry { public string Name, Path; public long Size; public DateTime Modified; public long Disk = -1; }
 
 public static class DiskMap {
     public static volatile bool Cancel;
@@ -325,9 +330,9 @@ public static class DiskMap {
         while (st.Count > 0) { DmNode n = st.Pop(); order.Add(n); foreach (DmNode k in n.Kids) st.Push(k); }
         for (int i = order.Count - 1; i >= 0; i--) {
             DmNode n = order[i];
-            long s = n.Own, f = n.OwnFiles, w = n.LastWrite;
-            foreach (DmNode k in n.Kids) { s += k.Size; f += k.Files; if (k.LastWrite > w) w = k.LastWrite; }
-            n.Size = s; n.Files = f; n.LastWrite = w;
+            long s = n.Own, f = n.OwnFiles, w = n.LastWrite, dk = n.OwnDisk, sh = n.OwnShared;
+            foreach (DmNode k in n.Kids) { s += k.Size; f += k.Files; dk += k.Disk; sh += k.Shared; if (k.LastWrite > w) w = k.LastWrite; }
+            n.Size = s; n.Files = f; n.LastWrite = w; n.Disk = dk; n.Shared = sh;
             n.Kids.Sort((a, b) => b.Size.CompareTo(a.Size));
         }
         big.Sort((a, b) => b.Size.CompareTo(a.Size));
@@ -338,13 +343,15 @@ public static class DiskMap {
     public static void Detach(DmNode n) {
         DmNode p = n.Parent; if (p == null) return;
         p.Kids.Remove(n); n.Gone = true;
-        for (DmNode a = p; a != null; a = a.Parent) { a.Size -= n.Size; a.Files -= n.Files; }
+        for (DmNode a = p; a != null; a = a.Parent) { a.Size -= n.Size; a.Files -= n.Files; a.Disk -= n.Disk; a.Shared -= n.Shared; }
     }
-    // 删掉某一层里的一个文件
-    public static void DropFile(DmNode dir, long bytes) {
+    // 删掉某一层里的一个文件（disk：实际占用，-1 不知道时按文件大小算）
+    public static void DropFile(DmNode dir, long bytes) { DropFile(dir, bytes, -1); }
+    public static void DropFile(DmNode dir, long bytes, long disk) {
         if (dir == null) return;
-        dir.Own -= bytes; dir.OwnFiles--;
-        for (DmNode a = dir; a != null; a = a.Parent) { a.Size -= bytes; a.Files--; }
+        long dk = Math.Max(0, Math.Min(disk >= 0 ? disk : bytes, dir.OwnDisk));
+        dir.Own -= bytes; dir.OwnFiles--; dir.OwnDisk -= dk;
+        for (DmNode a = dir; a != null; a = a.Parent) { a.Size -= bytes; a.Files--; a.Disk -= dk; }
     }
     // 按路径找节点（大小写不敏感）
     public static DmNode Find(DmNode root, string path) {
@@ -438,7 +445,7 @@ public static class DiskMap {
             string sep = (dir.EndsWith("\\") || dir.EndsWith("/")) ? "" : System.IO.Path.DirectorySeparatorChar.ToString();
             while (r.Next()) {
                 if (r.IsDir) continue;
-                DmEntry x = new DmEntry(); x.Name = r.Name; x.Path = dir + sep + r.Name; x.Size = r.Size;
+                DmEntry x = new DmEntry(); x.Name = r.Name; x.Path = dir + sep + r.Name; x.Size = r.Size; x.Disk = r.Alloc;
                 try { x.Modified = DateTime.FromFileTime(r.Write); } catch { }
                 all.Add(x);
             }
