@@ -107,7 +107,10 @@ if ($script:mode -match '(?i)/check') {
 $script:uiTest = [bool]($script:mode -match '(?i)/uitest')
 # 这个 exe 是什么时候构建的（同一个版本号可能构建过好几次，反馈问题时好对上）
 $script:AppBuild = ''
-try { $bf = if ($env:CLEANC_SELF -and (Test-Path -LiteralPath $env:CLEANC_SELF)) { $env:CLEANC_SELF } elseif ($script:selfScript) { $script:selfScript } else { '' }; if ($bf) { $script:AppBuild = '{0:yyyy-MM-dd HH:mm}' -f (Get-Item -LiteralPath $bf).LastWriteTime } } catch {}
+try {
+    if ($script:AppBuildStamp) { $script:AppBuild = '{0:yyyy-MM-dd HH:mm}' -f ([DateTime]::Parse($script:AppBuildStamp, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal -bor [Globalization.DateTimeStyles]::AssumeUniversal)).ToLocalTime() }
+    elseif ($script:selfScript -and (Test-Path -LiteralPath $script:selfScript)) { $script:AppBuild = '{0:yyyy-MM-dd HH:mm}' -f (Get-Item -LiteralPath $script:selfScript).LastWriteTime }   # 直接运行脚本：用脚本的修改时间
+} catch {}
 $script:uiSheets = New-Object System.Collections.Generic.List[string]
 if ($script:mode -match '(?i)/selftest') {
     Init-DriveThreads

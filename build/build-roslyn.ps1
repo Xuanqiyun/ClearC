@@ -30,7 +30,8 @@ $dup = [regex]::Match($src, "(?s)\`$dupCode = @'\r?\n(.*?)\r?\n'@").Groups[1].Va
 if (-not $row -or -not $dup) { throw 'could not extract C# from script' }
 Set-Content -Path "$obj/types_row.cs" -Value $row -Encoding utf8
 Set-Content -Path "$obj/types_dup.cs" -Value $dup -Encoding utf8
-[IO.File]::WriteAllText("$obj/cleanc.ps1", ($src -replace "`r?`n", "`r`n"), (New-Object Text.UTF8Encoding $false))
+# 内嵌的脚本里写上构建时间（UTC），程序左下角的版本号旁会显示
+[IO.File]::WriteAllText("$obj/cleanc.ps1", ($src -replace "`r?`n", "`r`n").Replace("`$script:AppBuildStamp = ''", ("`$script:AppBuildStamp = '{0}'" -f [DateTime]::UtcNow.ToString("yyyy-MM-dd'T'HH':'mm'Z'", [Globalization.CultureInfo]::InvariantCulture))), (New-Object Text.UTF8Encoding $false))
 
 $roslyn = @("$pw/Microsoft.CodeAnalysis.dll", "$pw/Microsoft.CodeAnalysis.CSharp.dll")
 Add-Type -IgnoreWarnings -Path "$B/ExeBuilder.cs" -ReferencedAssemblies ($roslyn + @('System.Collections.Immutable', 'System.Linq', 'System.Collections', 'System.Runtime', 'System.IO', 'netstandard')) 3>$null
