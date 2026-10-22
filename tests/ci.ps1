@@ -21,9 +21,9 @@ Step 'engine tests (PS 5.1)' { powershell -NoProfile -ExecutionPolicy Bypass -Fi
 Step 'build exe' { powershell -NoProfile -ExecutionPolicy Bypass -File build\build.ps1 }
 if (Test-Path out\ClearC.exe) {
     # 界面自测：照常打开窗口（放在屏幕外），把界面功能点一遍，对话框都当作点了取消，做完自己关掉。
-    # 跑两遍：先照这台测试机的显示语言（英文）、浅色，再在设置里写上中文、深色跑一遍（测完设置原样放回）
+    # 跑两遍：先照这台测试机的显示语言（英文）、浅色，再在设置里写上中文、深色跑一遍（测完设置原样放回）。注释标题里不能有逗号
     $setFile = Join-Path $env:LOCALAPPDATA 'CleanC\settings.txt'
-    foreach ($run in @(@{ Title = 'UI test'; Set = ''; Report = 'uitest.txt' }, @{ Title = 'UI test (zh, dark)'; Set = "Lang=zh`r`nTheme=dark`r`n"; Report = 'uitest-zh-dark.txt' })) {
+    foreach ($run in @(@{ Title = 'UI test'; Set = ''; Report = 'uitest.txt' }, @{ Title = 'UI test (zh dark)'; Set = "Lang=zh`r`nTheme=dark`r`n"; Report = 'uitest-zh-dark.txt' })) {
         $setBak = $null; if (Test-Path $setFile) { $setBak = [IO.File]::ReadAllBytes($setFile) }
         if ($run.Set) { New-Item -ItemType Directory -Force (Split-Path $setFile) | Out-Null; [IO.File]::WriteAllText($setFile, $run.Set) }
         $env:CLEANC_REPORT = Join-Path $PWD ('out\' + $run.Report)   # 不设 CLEANC_TEST：那会让启动器不用 STA 线程，WPF 窗口打不开
