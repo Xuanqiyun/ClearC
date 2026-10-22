@@ -435,17 +435,14 @@ $ctl.MapGrow.Add_MouseDoubleClick({
     $ctl.MapViewDirs.IsChecked = $true
     Show-MapLevel $node
 })
-$ctl.MapList.Add_MouseDoubleClick({
-    param($s, $e)
-    # 双击的是鼠标下面那一行（多选时 SelectedItem 不一定是它）；在复选框上连点两下只是勾两次，不进文件夹；右键双击、双击滚动条都不算
-    if ($e.ChangedButton -ne [System.Windows.Input.MouseButton]::Left -or (Test-InCheckBox $s $e.OriginalSource)) { return }
-    $c = $null; try { $c = [System.Windows.Controls.ItemsControl]::ContainerFromElement($s, $e.OriginalSource) } catch {}
-    $r = if ($c) { $c.Content } else { $null }
-    if ($r -and $r.IsDir -and $r.Node) {
-        if ($script:mapView -ne 'dirs') { $ctl.MapViewDirs.IsChecked = $true }
-        Show-MapLevel $r.Node
-    }
-})
+# 双击文件夹往里点。在按下左键（第二下）时处理，不等 MouseDoubleClick：复选框模式下按下已经被拦住不让列表选中，
+# 那样列表就收不到 MouseDoubleClick 了。双击的是鼠标下面那一行；在复选框上连点两下只是勾两次，右键双击、双击滚动条都不算
+function Enter-MapRow($r) {
+    if (-not ($r -and $r.IsDir -and $r.Node)) { return $false }
+    if ($script:mapView -ne 'dirs') { $ctl.MapViewDirs.IsChecked = $true }
+    Show-MapLevel $r.Node
+    return $true
+}
 function Update-MapSel {
     $nAll = $ctl.MapList.Items.Count; $nSel = $ctl.MapList.SelectedItems.Count
     $ctl.MapAll.IsEnabled = ($script:mapView -eq 'dirs' -or $script:mapView -eq 'files') -and $nAll -gt 0
@@ -501,7 +498,7 @@ function Update-MapMenu {
     return $true
 }
 $ctl.MapList.Add_ContextMenuOpening({ param($s, $e) if (-not (Update-MapMenu)) { $e.Handled = $true } })
-$ctl.MmEnter.Add_Click({ $r = @($script:menuRows)[0]; if ($r -and $r.IsDir -and $r.Node) { if ($script:mapView -ne 'dirs') { $ctl.MapViewDirs.IsChecked = $true }; Show-MapLevel $r.Node } })
+$ctl.MmEnter.Add_Click({ [void](Enter-MapRow @($script:menuRows)[0]) })
 $ctl.MmOpen.Add_Click({ $r = @($script:menuRows)[0]; if ($r) { Open-MapRow $r } })
 $ctl.MmCompress.Add_Click({ $r = @($script:menuRows)[0]; if ($r -and $r.IsDir) { Start-FolderCompress $r.Path } })
 $ctl.MmDelete.Add_Click({ Start-MapDelete @($script:menuRows) })
@@ -656,6 +653,7 @@ function Begin-RowDrag($s, $e, [string]$button) {
     $c = $null; try { $c = [System.Windows.Controls.ItemsControl]::ContainerFromElement($s, $e.OriginalSource) } catch {}
     if ($button -eq 'Right') { $script:menuRow = if ($c) { $c.Content } else { $null } }
     if (-not $c) { return }
+    if ($button -eq 'Left' -and $e.ClickCount -ge 2) { if (Enter-MapRow $c.Content) { $e.Handled = $true }; return }   # 双击
     $i = $s.ItemContainerGenerator.IndexFromContainer($c)
     if ($i -lt 0) { return }
     $p = Invoke-RowPress $i $button $shift $ctrl
