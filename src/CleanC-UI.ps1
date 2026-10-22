@@ -12010,8 +12010,10 @@ function Start-DiskHealth {
         if (-not $script:dhPs) { $this.Stop(); return }
         if (-not $script:dhAr.IsCompleted) { return }
         $this.Stop()
-        $lines = @()
-        try { $out = $script:dhPs.EndInvoke($script:dhAr); if ($out.Count -gt 0) { $lines = @($out[$out.Count - 1]) } } catch {}
+        $lines = @(); $script:dhErr = ''
+        try { $out = $script:dhPs.EndInvoke($script:dhAr); if ($out.Count -gt 0) { $lines = @($out[$out.Count - 1]) } } catch { $script:dhErr = [string]$_.Exception.Message }
+        try { foreach ($er in @($script:dhPs.Streams.Error | Select-Object -First 3)) { $script:dhErr += ' | ' + [string]$er } } catch {}
+        if ($script:dhErr) { Write-LogFile ('disk health: ' + $script:dhErr) }
         try { $script:dhPs.Dispose() } catch {}
         $script:dhPs = $null
         $ctl.MapDiskHealth.Text = ($lines -join (T '；'))
@@ -14883,6 +14885,14 @@ function Invoke-UiTest {
                 if (-not $row -or $row.ToggleText -ne (T '移到回收站') -or -not $row.Size) { throw 'leftover row not built' }
                 $script:startRows.Clear()
             } finally { Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue }
+        }
+        & $step 'disk health line fills in' {
+            $script:pageLoaded.map = $true; Fill-MapDrives
+            Show-Page 'map'; $win.UpdateLayout()
+            Start-DiskHealth
+            if (-not (& $waitUi { -not $script:dhPs } 60000)) { throw 'disk health did not finish' }
+            if (-not [string]$ctl.MapDiskHealth.Text) { throw ('disk health line is empty; ' + [string]$script:dhErr + ' / direct: ' + (Get-DiskHealth $env:SystemDrive)) }
+            [string]$ctl.MapDiskHealth.Text
         }
         & $step 'restore points card' {
             Show-Page 'save'
