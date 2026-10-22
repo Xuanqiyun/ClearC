@@ -31,7 +31,7 @@ if (Test-Path out\ClearC.exe) {
         $ufails = @($ulines | Where-Object { $_ -like 'FAIL*' })
         if (-not $ulines -or -not ($ulines | Where-Object { $_ -like 'summary:*' })) { Write-Host ("::error title=UI test::no complete report was written (exit {0})" -f $u.ExitCode); $fail = 1 }
         elseif ($u.ExitCode -or $ufails) { Write-Host ("::error title=UI test (exit {0})::{1}" -f $u.ExitCode, (Esc ((@($ulines) | Where-Object { $_ -like 'FAIL*' } | Select-Object -First 20) -join "`n"))); $fail = 1 }
-        else { Write-Host ("::notice title=UI test::{0}" -f (Esc (($ulines | Select-Object -Last 3) -join "`n"))) }
+        else { Write-Host ("::notice title=UI test::{0}" -f (Esc (($ulines | Select-Object -First 40) -join "`n"))) }   # 整份报告（含跳过的说明）
     }
     $env:CLEANC_QUIET = '1'; $env:CLEANC_REPORT = Join-Path $PWD 'out\selftest.txt'
     $p = Start-Process -FilePath .\out\ClearC.exe -ArgumentList '/selftest' -Wait -PassThru
