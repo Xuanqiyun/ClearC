@@ -407,13 +407,7 @@ public static class Mft {
                     if (nonRes) { if (len >= 0x40 && I64(b, a + 0x10) == 0) { size = I64(b, a + 0x30); hasData = true; } }
                     else { size = U32(b, a + 0x10); hasData = true; }
                 }
-                // 实际占用：没有名字的数据流，加上系统压缩（CompactOS）放压缩后数据的 WofCompressedData 流。
-                // 大小只记在第一段（起始 VCN 为 0）里；压缩或稀疏的按真正分配了的簇算，其他按分配的大小算
-                if (nonRes && len >= 0x40 && I64(b, a + 0x10) == 0 && (attrNameLen == 0 || IsWof(b, a, attrNameLen, len))) {
-                    int af = U16(b, a + 0x0C);
-                    long d = ((af & 0x8001) != 0 && len >= 0x48) ? I64(b, a + 0x40) : I64(b, a + 0x28);
-                    if (d > 0) disk += d;
-                }
+                disk += AttrDisk(b, a, len, attrNameLen, nonRes);
             } else if (type == 0xC0) {
                 // 只有目录联接、符号链接这类「代替名字」的重解析点才是链接；OneDrive 等云端文件夹也带重解析点，但里面的东西在这块盘上，要算
                 uint tag = 0; bool known = false;
@@ -439,6 +433,28 @@ public static class Mft {
         }
     }
 
+    // 一个数据属性实际占的盘：没有名字的数据流，加上系统压缩（CompactOS）放压缩后数据的 WofCompressedData 流。
+    // 大小只记在第一段（起始 VCN 为 0）里；压缩或稀疏的按真正分配了的簇算，其他按分配的大小算；放在记录里的（很小的文件）不另占
+    static long AttrDisk(byte[] b, int a, int len, int attrNameLen, bool nonRes) {
+        if (!nonRes || len < 0x40 || I64(b, a + 0x10) != 0 || (attrNameLen != 0 && !IsWof(b, a, attrNameLen, len))) return 0;
+        int af = U16(b, a + 0x0C);
+        long d = ((af & 0x8001) != 0 && len >= 0x48) ? I64(b, a + 0x40) : I64(b, a + 0x28);
+        return d > 0 ? d : 0;
+    }
+    // 一条记录里所有数据属性实际占的盘（只看这一条记录，不动别的）
+    static long RecordDisk(byte[] b, int off, int rs) {
+        long disk = 0;
+        int a = off + U16(b, off + 0x14), end = off + Math.Min(rs, (int)U32(b, off + 0x18));
+        while (a + 16 <= end) {
+            uint type = U32(b, a);
+            if (type == 0xFFFFFFFF) break;
+            int len = (int)U32(b, a + 4);
+            if (len < 16 || a + len > end) break;
+            if (type == 0x80) disk += AttrDisk(b, a, len, b[a + 9], b[a + 8] != 0);
+            a += len;
+        }
+        return disk;
+    }
     static readonly string Wof = "WofCompressedData";
     static bool IsWof(byte[] b, int a, int nl, int len) {
         if (nl != Wof.Length) return false;
@@ -485,7 +501,15 @@ public static class Mft {
         int rs = ix.RecordSize;
         int r = ReadOne(v, wv, ix, f, rec);
         if (r < 0) return false;
-        if (r == 0 || (U64(rec, 0x20) & 0xFFFFFFFFFFFF) != 0) { ix.Clear(f); return true; }   // 删掉了，或者这个号现在是别的文件的续页
+        if (r == 0) { ix.Clear(f); return true; }                                                // 删掉了
+        ulong bref = U64(rec, 0x20);
+        if ((bref & 0xFFFFFFFFFFFF) != 0) {
+            // 这个号现在是别的文件的续页：它原来作为主记录的内容清掉，只留它自己那份实际占用（名字和大小记在主记录上，主记录改了会整条重读）
+            ix.Clear(f);
+            ix.ExtClaim[f] = (ushort)(bref >> 48);
+            ix.Disk[f] = RecordDisk(rec, 0, rs);
+            return true;
+        }
         List<int> segs; bool fromDisk;
         if (!ExtSegs(v, ix, rec, f, out segs, out fromDisk)) return false;
         // 属性列表列出的续页，加上以前读到过的续页（属性列表是从盘上读的话可能没写进最新的）

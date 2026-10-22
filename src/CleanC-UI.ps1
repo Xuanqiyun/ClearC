@@ -1379,13 +1379,7 @@ public static class Mft {
                     if (nonRes) { if (len >= 0x40 && I64(b, a + 0x10) == 0) { size = I64(b, a + 0x30); hasData = true; } }
                     else { size = U32(b, a + 0x10); hasData = true; }
                 }
-                // 实际占用：没有名字的数据流，加上系统压缩（CompactOS）放压缩后数据的 WofCompressedData 流。
-                // 大小只记在第一段（起始 VCN 为 0）里；压缩或稀疏的按真正分配了的簇算，其他按分配的大小算
-                if (nonRes && len >= 0x40 && I64(b, a + 0x10) == 0 && (attrNameLen == 0 || IsWof(b, a, attrNameLen, len))) {
-                    int af = U16(b, a + 0x0C);
-                    long d = ((af & 0x8001) != 0 && len >= 0x48) ? I64(b, a + 0x40) : I64(b, a + 0x28);
-                    if (d > 0) disk += d;
-                }
+                disk += AttrDisk(b, a, len, attrNameLen, nonRes);
             } else if (type == 0xC0) {
                 // 只有目录联接、符号链接这类「代替名字」的重解析点才是链接；OneDrive 等云端文件夹也带重解析点，但里面的东西在这块盘上，要算
                 uint tag = 0; bool known = false;
@@ -1411,6 +1405,28 @@ public static class Mft {
         }
     }
 
+    // 一个数据属性实际占的盘：没有名字的数据流，加上系统压缩（CompactOS）放压缩后数据的 WofCompressedData 流。
+    // 大小只记在第一段（起始 VCN 为 0）里；压缩或稀疏的按真正分配了的簇算，其他按分配的大小算；放在记录里的（很小的文件）不另占
+    static long AttrDisk(byte[] b, int a, int len, int attrNameLen, bool nonRes) {
+        if (!nonRes || len < 0x40 || I64(b, a + 0x10) != 0 || (attrNameLen != 0 && !IsWof(b, a, attrNameLen, len))) return 0;
+        int af = U16(b, a + 0x0C);
+        long d = ((af & 0x8001) != 0 && len >= 0x48) ? I64(b, a + 0x40) : I64(b, a + 0x28);
+        return d > 0 ? d : 0;
+    }
+    // 一条记录里所有数据属性实际占的盘（只看这一条记录，不动别的）
+    static long RecordDisk(byte[] b, int off, int rs) {
+        long disk = 0;
+        int a = off + U16(b, off + 0x14), end = off + Math.Min(rs, (int)U32(b, off + 0x18));
+        while (a + 16 <= end) {
+            uint type = U32(b, a);
+            if (type == 0xFFFFFFFF) break;
+            int len = (int)U32(b, a + 4);
+            if (len < 16 || a + len > end) break;
+            if (type == 0x80) disk += AttrDisk(b, a, len, b[a + 9], b[a + 8] != 0);
+            a += len;
+        }
+        return disk;
+    }
     static readonly string Wof = "WofCompressedData";
     static bool IsWof(byte[] b, int a, int nl, int len) {
         if (nl != Wof.Length) return false;
@@ -1457,7 +1473,15 @@ public static class Mft {
         int rs = ix.RecordSize;
         int r = ReadOne(v, wv, ix, f, rec);
         if (r < 0) return false;
-        if (r == 0 || (U64(rec, 0x20) & 0xFFFFFFFFFFFF) != 0) { ix.Clear(f); return true; }   // 删掉了，或者这个号现在是别的文件的续页
+        if (r == 0) { ix.Clear(f); return true; }                                                // 删掉了
+        ulong bref = U64(rec, 0x20);
+        if ((bref & 0xFFFFFFFFFFFF) != 0) {
+            // 这个号现在是别的文件的续页：它原来作为主记录的内容清掉，只留它自己那份实际占用（名字和大小记在主记录上，主记录改了会整条重读）
+            ix.Clear(f);
+            ix.ExtClaim[f] = (ushort)(bref >> 48);
+            ix.Disk[f] = RecordDisk(rec, 0, rs);
+            return true;
+        }
         List<int> segs; bool fromDisk;
         if (!ExtSegs(v, ix, rec, f, out segs, out fromDisk)) return false;
         // 属性列表列出的续页，加上以前读到过的续页（属性列表是从盘上读的话可能没写进最新的）
@@ -2035,12 +2059,15 @@ public static class DiskMap {
         for (DmNode a = p; a != null; a = a.Parent) { a.Size -= n.Size; a.Files -= n.Files; a.Disk -= n.Disk; a.Shared -= n.Shared; }
     }
     // 删掉某一层里的一个文件（disk：实际占用，-1 不知道时按文件大小算）
-    public static void DropFile(DmNode dir, long bytes) { DropFile(dir, bytes, -1); }
-    public static void DropFile(DmNode dir, long bytes, long disk) {
+    public static void DropFile(DmNode dir, long bytes) { DropFile(dir, bytes, -1, false); }
+    public static void DropFile(DmNode dir, long bytes, long disk) { DropFile(dir, bytes, disk, false); }
+    // shared：这个文件有不止一个名字（硬链接）
+    public static void DropFile(DmNode dir, long bytes, long disk, bool shared) {
         if (dir == null) return;
         long dk = Math.Max(0, Math.Min(disk >= 0 ? disk : bytes, dir.OwnDisk));
-        dir.Own -= bytes; dir.OwnFiles--; dir.OwnDisk -= dk;
-        for (DmNode a = dir; a != null; a = a.Parent) { a.Size -= bytes; a.Files--; a.Disk -= dk; }
+        long sh = shared ? Math.Max(0, Math.Min(bytes, dir.OwnShared)) : 0;
+        dir.Own -= bytes; dir.OwnFiles--; dir.OwnDisk -= dk; dir.OwnShared -= sh;
+        for (DmNode a = dir; a != null; a = a.Parent) { a.Size -= bytes; a.Files--; a.Disk -= dk; a.Shared -= sh; }
     }
     // 按路径找节点（大小写不敏感）
     public static DmNode Find(DmNode root, string path) {
@@ -2474,6 +2501,7 @@ public class MapRow {
     public long FileCount { get; set; } // 导出用：文件夹里的文件个数
     public bool IsSummary { get; set; } // 「其余 N 项」那一行：不是真的文件或文件夹
     public long Disk { get; set; }      // 实际占用（-1 不知道）
+    public bool Shared { get; set; }    // 有不止一个名字（硬链接）：删了这个名字不腾空间
 }
 public class AppRow : INotifyPropertyChanged {
     public string Name { get; set; }
@@ -5253,8 +5281,9 @@ Zoom 装在这里的程序和本地数据。会议录像默认存在「文档」
 \n\n按快速扫描的结果，实际能腾出 {0} 到 {1}：其中 {2} 是硬链接，同一份文件在别处还有名字，那些名字还在就不会腾出空间。	\n\nAccording to the fast scan, this frees between {0} and {1}: {2} of it is hard links, files that still have names elsewhere, and their space is freed only once all their names are gone.
 \n\n按快速扫描的结果，这些实际只占 {0}（压缩、稀疏或只在云端的文件比文件大小占得少），删掉腾出的是这么多。	\n\nAccording to the fast scan, these take only {0} on disk (compressed, sparse or cloud-only files take less than their size), so that is how much deleting them frees.
 当前：读不到还原点的信息	Current: restore point information is not available
-当前：这块盘没有开系统保护，也没有还原点	Current: System Protection is off for this drive and there are no restore points
-当前：{0} 个还原点，占 {1}，最多可以用到 {2}	Current: {0} restore points using {1}; the limit is {2}
+当前：这块盘没有还原点（可能没有开系统保护）	Current: no restore points on this drive (System Protection may be off)
+当前：{0} 个还原点和卷影副本，占 {1}，最多可以用到 {2}	Current: {0} restore points and shadow copies using {1}; the limit is {2}
+当前：正在读取…	Current: reading…
 没有上限	no limit
 打不开系统保护设置	Couldn't open System Protection
 查重复文件时让着其他程序：已打开	Give way to other programs when finding duplicates: on
@@ -10255,7 +10284,7 @@ function Show-MapFiles {
         if ($dn) { $fm += Get-DiskNote ([double]$x.Size) ([double]$x.Disk) $(if ($x.Shared) { [double]$x.Size } else { 0 }) $true }
         $row = New-MapRow $x.Name $p $x.Size $max $tot $false $null $fm 'file'
         $row.When = '{0:yyyy-MM-dd HH:mm}' -f $x.Modified
-        $row.Disk = [long]$x.Disk
+        $row.Disk = [long]$x.Disk; $row.Shared = [bool]$x.Shared
         # 聊天记录里的文件只看不删：要腾地方就整体搬家
         if ($f.Chat) { $row.Locked = $true; $row.LockTip = (T '聊天记录里的文件只能查看和打开位置；要腾地方，到「搬家管理」把整个聊天记录搬到其他盘') }
         [void]$rows.Add($row)
@@ -10374,7 +10403,7 @@ $ctl.MapList.Add_MouseDoubleClick({
 })
 function Update-MapSel {
     $nAll = $ctl.MapList.Items.Count; $nSel = $ctl.MapList.SelectedItems.Count
-    $ctl.MapAll.IsEnabled = ($script:mapView -ne 'grow') -and $nAll -gt 0
+    $ctl.MapAll.IsEnabled = ($script:mapView -eq 'dirs' -or $script:mapView -eq 'files') -and $nAll -gt 0
     $ctl.MapAll.IsChecked = if ($script:mapView -eq 'grow' -or $nSel -eq 0) { $false } elseif ($nSel -ge $nAll) { $true } else { $null }
     $sel = if ($script:mapView -ne 'grow') { @($ctl.MapList.SelectedItems) } else { @() }
     $r = if ($sel.Count -eq 1) { $sel[0] } else { $null }
@@ -10784,12 +10813,13 @@ $ctl.BtnMapDelete.Add_Click({
     $bytes = [double]0; foreach ($r in $rows) { $bytes += [double]$r.Size }
     # 快速扫描时知道实际占用和硬链接：说清楚真正能腾出多少
     $real = ''
-    if ($script:mapRoot -and $script:mapRoot.HasDisk) {
+    if ($script:mapRoot -and $script:mapRoot.HasDisk -and (Get-Flag 'MapDisk')) {
         $dk = [double]0; $sh = [double]0; $known = $true
         foreach ($r in $rows) {
             if ($r.Disk -lt 0) { $known = $false; break }
             $dk += [double]$r.Disk
             if ($r.Node) { $sh += [math]::Min([double]$r.Node.Shared, [double]$r.Node.Disk) }
+            elseif ($r.Shared) { $sh += [double]$r.Disk }
         }
         if ($known) {
             if ($sh -ge 32MB) { $real += ((T "`n`n按快速扫描的结果，实际能腾出 {0} 到 {1}：其中 {2} 是硬链接，同一份文件在别处还有名字，那些名字还在就不会腾出空间。") -f (Fmt ([math]::Max([double]0, $dk - $sh))), (Fmt $dk), (Fmt $sh)) }
@@ -11271,10 +11301,7 @@ function Load-Save {
     }
     if ($ctl.SavePfDrive.Items.Count -gt 0) { $ctl.SavePfDrive.SelectedIndex = 0 }
     $ctl.BtnPfMove.IsEnabled = $ctl.SavePfDrive.Items.Count -gt 0
-    $rp = Get-RestoreInfo
-    $ctl.SaveRpState.Text = if (-not $rp.Ok) { (T '当前：读不到还原点的信息') }
-        elseif (-not $rp.On -and $rp.Count -eq 0) { (T '当前：这块盘没有开系统保护，也没有还原点') }
-        else { (T "当前：{0} 个还原点，占 {1}，最多可以用到 {2}") -f $rp.Count, (Fmt $rp.Used), $(if ($rp.Max -le 0 -or $rp.Max -ge 1e18) { (T '没有上限') } else { Fmt $rp.Max }) }
+    Start-RestoreInfo
     $h = Get-HiberInfo
     $ctl.SaveHibState.Text = if (-not $h.Exists) { (T '当前：已关闭休眠，没有 hiberfil.sys') } elseif ($h.Reduced) { ((T "当前：精简（只留快速启动），占 {0}") -f $(Fmt $h.Bytes)) } else { ((T "当前：完整休眠，占 {0}") -f $(Fmt $h.Bytes)) }
     $col = New-Object 'System.Collections.ObjectModel.ObservableCollection[VdiskRow]'
@@ -11290,19 +11317,52 @@ function Load-Save {
     $ctl.VdEmpty.Visibility = if ($col.Count -gt 0) { 'Collapsed' } else { 'Visible' }
 }
 $ctl.BtnSaveRefresh.Add_Click({ Load-Save })
-# 系统还原点（卷影副本）：只看，不删；要调整打开 Windows 自己的「系统保护」
-function Get-RestoreInfo {
-    $r = @{ Ok = $false; On = $false; Count = 0; Used = [double]0; Max = [double]0 }
+# 系统还原点（卷影副本）：只看，不删；要调整打开 Windows 自己的「系统保护」。
+# 在另一个线程里读（查卷影副本可能要先启动卷影复制服务，要几秒），读好了再填到页面上
+$script:rpQuery = {
+    param([string]$drive)
+    $r = @{ Ok = $false; Storage = $false; Count = 0; Used = [double]0; Max = [double]0; Unbounded = $false }
     try {
-        $vol = @(Get-CimInstance -ClassName Win32_Volume -Filter ("DriveLetter='{0}'" -f $env:SystemDrive) -ErrorAction Stop)[0]
+        $vol = @(Get-CimInstance -ClassName Win32_Volume -Filter ("DriveLetter='{0}'" -f $drive) -ErrorAction Stop)[0]
         if (-not $vol) { return $r }
         $r.Ok = $true
         foreach ($s in @(Get-CimInstance -ClassName Win32_ShadowStorage -ErrorAction Stop)) {
-            if ($s.Volume -and [string]$s.Volume.DeviceID -eq [string]$vol.DeviceID) { $r.On = $true; $r.Used += [double]$s.UsedSpace; $r.Max = [double]$s.MaxSpace }
+            if ($s.Volume -and [string]$s.Volume.DeviceID -eq [string]$vol.DeviceID) {
+                $r.Storage = $true; $r.Used += [double]$s.UsedSpace
+                if ([double]$s.MaxSpace -le 0 -or [double]$s.MaxSpace -ge 1e18) { $r.Unbounded = $true } else { $r.Max += [double]$s.MaxSpace }
+            }
         }
         $r.Count = @(Get-CimInstance -ClassName Win32_ShadowCopy -ErrorAction Stop | Where-Object { [string]$_.VolumeName -eq [string]$vol.DeviceID }).Count
     } catch {}
     return $r
+}
+$script:rpPs = $null
+function Start-RestoreInfo {
+    if ($script:rpPs) { return }            # 上一次还没读完
+    $ctl.SaveRpState.Text = (T '当前：正在读取…')
+    try {
+        $ps = [powershell]::Create()
+        [void]$ps.AddScript($script:rpQuery.ToString()).AddArgument([string]$env:SystemDrive)
+        $script:rpPs = $ps; $script:rpAr = $ps.BeginInvoke()
+    } catch { $script:rpPs = $null; $ctl.SaveRpState.Text = (T '当前：读不到还原点的信息'); return }
+    $t = New-Object System.Windows.Threading.DispatcherTimer
+    $t.Interval = [TimeSpan]::FromMilliseconds(300)
+    $t.Add_Tick({
+        if (-not $script:rpPs) { $this.Stop(); return }
+        if (-not $script:rpAr.IsCompleted) { return }
+        $this.Stop()
+        $r = $null
+        try { $out = $script:rpPs.EndInvoke($script:rpAr); if ($out.Count -gt 0) { $r = $out[$out.Count - 1] } } catch {}
+        try { $script:rpPs.Dispose() } catch {}
+        $script:rpPs = $null
+        Show-RestoreInfo $r
+    })
+    $t.Start()
+}
+function Show-RestoreInfo($r) {
+    $ctl.SaveRpState.Text = if (-not $r -or -not $r.Ok) { (T '当前：读不到还原点的信息') }
+        elseif ($r.Count -eq 0 -and -not $r.Storage) { (T '当前：这块盘没有还原点（可能没有开系统保护）') }
+        else { (T "当前：{0} 个还原点和卷影副本，占 {1}，最多可以用到 {2}") -f $r.Count, (Fmt $r.Used), $(if ($r.Unbounded -or $r.Max -le 0) { (T '没有上限') } else { Fmt $r.Max }) }
 }
 $ctl.BtnRestoreOpen.Add_Click({
     try { Start-Process -FilePath "$env:SystemRoot\System32\SystemPropertiesProtection.exe" } catch { Show-Sheet -Kind warn -Title (T '打不开系统保护设置') -Text $_.Exception.Message | Out-Null }
@@ -12059,10 +12119,10 @@ function Invoke-UiTest {
         $e0 = $Error.Count; $why = $null
         # 检查不通过时 throw 一句说明；代码出了异常也会到这里
         try { $null = & $body } catch { $why = [string]$_.Exception.Message; if ($_.InvocationInfo -and $_.FullyQualifiedErrorId -ne $why) { $why += ' @ ' + ([string]$_.InvocationInfo.PositionMessage).Split([char]10)[0] } }
-        # 新增的错误里，找不到文件这类（代码里本来就允许的）不算
+        # 新增的错误里，找不到文件、外部命令往错误输出写的提示、剪贴板打不开这类（代码里本来就允许的）不算
         $bad = @(); for ($q = 0; $q -lt [math]::Min($Error.Count - $e0, 50); $q++) {
             $x = $Error[$q]; $id = if ($x -is [System.Management.Automation.ErrorRecord]) { [string]$x.FullyQualifiedErrorId + ' ' + [string]$x.CategoryInfo.Category } else { [string]$x.GetType().Name }
-            if ($id -notmatch 'NotFound|ObjectNotFound|PathNotFound|ItemNotFound|UnauthorizedAccess|PermissionDenied') { $bad += ([string]$x) + $(if ($x.InvocationInfo) { ' @ ' + ([string]$x.InvocationInfo.PositionMessage).Split([char]10)[0] } else { '' }) }
+            if ($id -notmatch 'NotFound|ObjectNotFound|PathNotFound|ItemNotFound|UnauthorizedAccess|PermissionDenied|NativeCommandError|RemoteException|Clipboard|CLIPBRD|800401D0') { $bad += ([string]$x) + $(if ($x.InvocationInfo) { ' @ ' + ([string]$x.InvocationInfo.PositionMessage).Split([char]10)[0] } else { '' }) }
         }
         if (-not $why -and $bad.Count -gt 0) { $why = 'errors: ' + (($bad | Select-Object -First 3) -join ' | ') }
         if ($why) { $L.Add("FAIL ${name}: $why"); $script:uiFail++ } else { $L.Add("ok   $name") }
@@ -12070,7 +12130,8 @@ function Invoke-UiTest {
     $click = { param($b) $b.RaiseEvent((New-Object System.Windows.RoutedEventArgs ([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))) }
     try {
         & $step 'every page opens' {
-            foreach ($k in @('clean', 'dup', 'save', 'map', 'moves', 'auto', 'log', 'help', 'settings')) {
+            # 「搬家管理」和「软件管理」一打开就在后台开始统计，不在这里点
+            foreach ($k in @('clean', 'dup', 'save', 'map', 'auto', 'log', 'help', 'settings')) {
                 Show-Page $k; $win.UpdateLayout()
                 if ($ctl[$script:pageList[$k][0]].Visibility -ne 'Visible') { throw "page $k not visible" }
             }
@@ -12122,9 +12183,16 @@ function Invoke-UiTest {
             if (Request-Theme $(if ($script:themePref -eq 'dark') { 'light' } else { 'dark' })) { throw 'theme changed without confirmation' }
             if ($script:uiSheets.Count -le $n0) { throw 'no confirmation asked' }
         }
-        & $step 'restore points card' { Show-Page 'save'; if (-not [string]$ctl.SaveRpState.Text) { throw 'no state text' } }
+        & $step 'restore points card' {
+            Show-Page 'save'
+            $sw = [Diagnostics.Stopwatch]::StartNew()
+            # 在另一个线程里读：等它读完（界面照常响应）
+            while ($script:rpPs -and $sw.ElapsedMilliseconds -lt 30000) { $f = New-Object System.Windows.Threading.DispatcherFrame; [void]$win.Dispatcher.BeginInvoke([Action]{ $f.Continue = $false }, [System.Windows.Threading.DispatcherPriority]::Background); [System.Windows.Threading.Dispatcher]::PushFrame($f); Start-Sleep -Milliseconds 50 }
+            $t = [string]$ctl.SaveRpState.Text
+            if (-not $t -or $t -eq (T '当前：正在读取…')) { throw ("not filled in: {0}" -f $t) }
+        }
         # 空间地图：用一个小文件夹扫出来的树
-        $tree = [DiskMap]::Scan("$env:SystemRoot\Web", 2)
+        $tree = [DiskMap]::Scan("$env:SystemRoot\INF", 2)      # 每台 Windows 都有，文件和子文件夹都不少
         & $step 'space map rows' {
             [DiskMap]::Use($tree); $script:mapRoot = $tree; $script:mapCur = $tree; $script:mapScanAt = Get-Date; $script:mapHow = 'test'
             Show-Page 'map'; $ctl.MapViewDirs.IsChecked = $true; Show-MapLevel $tree; $win.UpdateLayout()
@@ -12178,9 +12246,13 @@ function Invoke-UiTest {
             $lv.SelectAll()
             if (-not (Update-MapMenu)) { throw 'menu would not open' }
             $lv.ContextMenu.PlacementTarget = $lv; $lv.ContextMenu.IsOpen = $true; $win.UpdateLayout(); $lv.ContextMenu.IsOpen = $false
-            $lv.SelectedItem = $lv.Items[0]; [void](Update-MapMenu)
-            & $click $ctl.MmCopy
-            if ([string]$ctl.MapSel.Text -notmatch '1') { throw ("copy path: {0}" -f $ctl.MapSel.Text) }
+            $lv.UnselectAll(); $lv.SelectedItem = $lv.Items[0]; [void](Update-MapMenu)
+            if ($ctl.MmEnter.Visibility -ne 'Visible' -and $lv.Items[0].IsDir) { throw 'Open folder missing for a folder' }
+            $want = [string]$lv.Items[0].Path
+            $ctl.MmCopy.RaiseEvent((New-Object System.Windows.RoutedEventArgs ([System.Windows.Controls.MenuItem]::ClickEvent)))
+            # 剪贴板偶尔被别的程序占着打不开：读不到就不算这一项
+            $got = ''; try { $got = [string][System.Windows.Clipboard]::GetText() } catch {}
+            if ($got -and $got -ne $want) { throw ("copy path: clipboard has {0}, expected {1}" -f $got, $want) }
         }
         & $step 'size on disk notes' {
             $t = Get-DiskNote 2GB 200MB 1GB $false
@@ -12197,6 +12269,8 @@ function Invoke-UiTest {
             $ctl.MapViewFiles.IsChecked = $true; $win.UpdateLayout()
             $ctl.MapViewGrow.IsChecked = $true; $win.UpdateLayout()
             if ($ctl.MapAll.IsEnabled) { throw 'select all enabled in the comparison view' }
+            $ctl.MapViewTree.IsChecked = $true
+            if ($ctl.MapAll.IsEnabled) { throw 'select all enabled in the treemap' }
             $ctl.MapViewDirs.IsChecked = $true
         }
     } catch { $L.Add('FAIL test run: ' + $_.Exception.Message); $script:uiFail++ }
@@ -12209,6 +12283,8 @@ function Invoke-UiTest {
     $file = if ($env:CLEANC_REPORT) { [IO.Path]::GetFullPath($env:CLEANC_REPORT) } else { Join-Path $script:appDir 'uitest.txt' }
     try { [IO.File]::WriteAllText($file, (@($L) -join "`r`n"), (New-Object Text.UTF8Encoding $true)) } catch {}
     $global:CLEANC_EXIT = [int]$script:uiFail
+    $script:uiDone = $true
+    if ($script:worker) { Set-CancelFlags; $script:closeWhenDone = $true }   # 还有后台在做：停在安全的地方再关
     $win.Close()
 }
 
@@ -12354,7 +12430,7 @@ $timer.Add_Tick({
                 if ($r.Node) { [DiskMap]::Detach($r.Node) }
                 else {
                     $pn = [DiskMap]::Find($script:mapRoot, (Split-Path $r.Path -Parent))
-                    if ($pn) { [DiskMap]::DropFile($pn, $r.Size, $r.Disk) }
+                    if ($pn) { [DiskMap]::DropFile($pn, $r.Size, $r.Disk, [bool]$r.Shared) }
                     [DiskMap]::ForgetFile($r.Path)
                 }
             }
@@ -12697,7 +12773,11 @@ $win.Add_ContentRendered({
             $script:uiStarted = $true
             # 万一卡住：两分钟后自己关掉
             $script:uiWatch = New-Object System.Windows.Threading.DispatcherTimer; $script:uiWatch.Interval = [TimeSpan]::FromMinutes(2)
-            $script:uiWatch.Add_Tick({ $script:uiWatch.Stop(); $global:CLEANC_EXIT = 99; $win.Close() })
+            $script:uiWatch.Add_Tick({
+                $script:uiWatch.Stop(); if (-not $script:uiDone) { $global:CLEANC_EXIT = 99 }
+                $win.Close()
+                if ($win.IsVisible) { [Environment]::Exit(99) }   # 关不掉（比如后台还在做）：直接结束这次测试
+            })
             $script:uiWatch.Start()
             [void]$win.Dispatcher.BeginInvoke([Action]{ Invoke-UiTest }, [System.Windows.Threading.DispatcherPriority]::ApplicationIdle)
         }

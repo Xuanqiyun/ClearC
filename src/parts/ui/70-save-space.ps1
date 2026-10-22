@@ -17,10 +17,7 @@ function Load-Save {
     }
     if ($ctl.SavePfDrive.Items.Count -gt 0) { $ctl.SavePfDrive.SelectedIndex = 0 }
     $ctl.BtnPfMove.IsEnabled = $ctl.SavePfDrive.Items.Count -gt 0
-    $rp = Get-RestoreInfo
-    $ctl.SaveRpState.Text = if (-not $rp.Ok) { (T '当前：读不到还原点的信息') }
-        elseif (-not $rp.On -and $rp.Count -eq 0) { (T '当前：这块盘没有开系统保护，也没有还原点') }
-        else { (T "当前：{0} 个还原点，占 {1}，最多可以用到 {2}") -f $rp.Count, (Fmt $rp.Used), $(if ($rp.Max -le 0 -or $rp.Max -ge 1e18) { (T '没有上限') } else { Fmt $rp.Max }) }
+    Start-RestoreInfo
     $h = Get-HiberInfo
     $ctl.SaveHibState.Text = if (-not $h.Exists) { (T '当前：已关闭休眠，没有 hiberfil.sys') } elseif ($h.Reduced) { ((T "当前：精简（只留快速启动），占 {0}") -f $(Fmt $h.Bytes)) } else { ((T "当前：完整休眠，占 {0}") -f $(Fmt $h.Bytes)) }
     $col = New-Object 'System.Collections.ObjectModel.ObservableCollection[VdiskRow]'
@@ -36,19 +33,52 @@ function Load-Save {
     $ctl.VdEmpty.Visibility = if ($col.Count -gt 0) { 'Collapsed' } else { 'Visible' }
 }
 $ctl.BtnSaveRefresh.Add_Click({ Load-Save })
-# 系统还原点（卷影副本）：只看，不删；要调整打开 Windows 自己的「系统保护」
-function Get-RestoreInfo {
-    $r = @{ Ok = $false; On = $false; Count = 0; Used = [double]0; Max = [double]0 }
+# 系统还原点（卷影副本）：只看，不删；要调整打开 Windows 自己的「系统保护」。
+# 在另一个线程里读（查卷影副本可能要先启动卷影复制服务，要几秒），读好了再填到页面上
+$script:rpQuery = {
+    param([string]$drive)
+    $r = @{ Ok = $false; Storage = $false; Count = 0; Used = [double]0; Max = [double]0; Unbounded = $false }
     try {
-        $vol = @(Get-CimInstance -ClassName Win32_Volume -Filter ("DriveLetter='{0}'" -f $env:SystemDrive) -ErrorAction Stop)[0]
+        $vol = @(Get-CimInstance -ClassName Win32_Volume -Filter ("DriveLetter='{0}'" -f $drive) -ErrorAction Stop)[0]
         if (-not $vol) { return $r }
         $r.Ok = $true
         foreach ($s in @(Get-CimInstance -ClassName Win32_ShadowStorage -ErrorAction Stop)) {
-            if ($s.Volume -and [string]$s.Volume.DeviceID -eq [string]$vol.DeviceID) { $r.On = $true; $r.Used += [double]$s.UsedSpace; $r.Max = [double]$s.MaxSpace }
+            if ($s.Volume -and [string]$s.Volume.DeviceID -eq [string]$vol.DeviceID) {
+                $r.Storage = $true; $r.Used += [double]$s.UsedSpace
+                if ([double]$s.MaxSpace -le 0 -or [double]$s.MaxSpace -ge 1e18) { $r.Unbounded = $true } else { $r.Max += [double]$s.MaxSpace }
+            }
         }
         $r.Count = @(Get-CimInstance -ClassName Win32_ShadowCopy -ErrorAction Stop | Where-Object { [string]$_.VolumeName -eq [string]$vol.DeviceID }).Count
     } catch {}
     return $r
+}
+$script:rpPs = $null
+function Start-RestoreInfo {
+    if ($script:rpPs) { return }            # 上一次还没读完
+    $ctl.SaveRpState.Text = (T '当前：正在读取…')
+    try {
+        $ps = [powershell]::Create()
+        [void]$ps.AddScript($script:rpQuery.ToString()).AddArgument([string]$env:SystemDrive)
+        $script:rpPs = $ps; $script:rpAr = $ps.BeginInvoke()
+    } catch { $script:rpPs = $null; $ctl.SaveRpState.Text = (T '当前：读不到还原点的信息'); return }
+    $t = New-Object System.Windows.Threading.DispatcherTimer
+    $t.Interval = [TimeSpan]::FromMilliseconds(300)
+    $t.Add_Tick({
+        if (-not $script:rpPs) { $this.Stop(); return }
+        if (-not $script:rpAr.IsCompleted) { return }
+        $this.Stop()
+        $r = $null
+        try { $out = $script:rpPs.EndInvoke($script:rpAr); if ($out.Count -gt 0) { $r = $out[$out.Count - 1] } } catch {}
+        try { $script:rpPs.Dispose() } catch {}
+        $script:rpPs = $null
+        Show-RestoreInfo $r
+    })
+    $t.Start()
+}
+function Show-RestoreInfo($r) {
+    $ctl.SaveRpState.Text = if (-not $r -or -not $r.Ok) { (T '当前：读不到还原点的信息') }
+        elseif ($r.Count -eq 0 -and -not $r.Storage) { (T '当前：这块盘没有还原点（可能没有开系统保护）') }
+        else { (T "当前：{0} 个还原点和卷影副本，占 {1}，最多可以用到 {2}") -f $r.Count, (Fmt $r.Used), $(if ($r.Unbounded -or $r.Max -le 0) { (T '没有上限') } else { Fmt $r.Max }) }
 }
 $ctl.BtnRestoreOpen.Add_Click({
     try { Start-Process -FilePath "$env:SystemRoot\System32\SystemPropertiesProtection.exe" } catch { Show-Sheet -Kind warn -Title (T '打不开系统保护设置') -Text $_.Exception.Message | Out-Null }
