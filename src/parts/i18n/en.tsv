@@ -1221,8 +1221,9 @@ Zoom 装在这里的程序和本地数据。会议录像默认存在「文档」
 \n\n按快速扫描的结果，实际能腾出 {0} 到 {1}：其中 {2} 是硬链接，同一份文件在别处还有名字，那些名字还在就不会腾出空间。	\n\nAccording to the fast scan, this frees between {0} and {1}: {2} of it is hard links, files that still have names elsewhere, and their space is freed only once all their names are gone.
 \n\n按快速扫描的结果，这些实际只占 {0}（压缩、稀疏或只在云端的文件比文件大小占得少），删掉腾出的是这么多。	\n\nAccording to the fast scan, these take only {0} on disk (compressed, sparse or cloud-only files take less than their size), so that is how much deleting them frees.
 当前：读不到还原点的信息	Current: restore point information is not available
-当前：这块盘没有开系统保护，也没有还原点	Current: System Protection is off for this drive and there are no restore points
-当前：{0} 个还原点，占 {1}，最多可以用到 {2}	Current: {0} restore points using {1}; the limit is {2}
+当前：这块盘没有还原点（可能没有开系统保护）	Current: no restore points on this drive (System Protection may be off)
+当前：{0} 个还原点和卷影副本，占 {1}，最多可以用到 {2}	Current: {0} restore points and shadow copies using {1}; the limit is {2}
+当前：正在读取…	Current: reading…
 没有上限	no limit
 打不开系统保护设置	Couldn't open System Protection
 查重复文件时让着其他程序：已打开	Give way to other programs when finding duplicates: on

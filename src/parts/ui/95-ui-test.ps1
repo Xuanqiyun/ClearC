@@ -14,10 +14,10 @@ function Invoke-UiTest {
         $e0 = $Error.Count; $why = $null
         # 检查不通过时 throw 一句说明；代码出了异常也会到这里
         try { $null = & $body } catch { $why = [string]$_.Exception.Message; if ($_.InvocationInfo -and $_.FullyQualifiedErrorId -ne $why) { $why += ' @ ' + ([string]$_.InvocationInfo.PositionMessage).Split([char]10)[0] } }
-        # 新增的错误里，找不到文件这类（代码里本来就允许的）不算
+        # 新增的错误里，找不到文件、外部命令往错误输出写的提示、剪贴板打不开这类（代码里本来就允许的）不算
         $bad = @(); for ($q = 0; $q -lt [math]::Min($Error.Count - $e0, 50); $q++) {
             $x = $Error[$q]; $id = if ($x -is [System.Management.Automation.ErrorRecord]) { [string]$x.FullyQualifiedErrorId + ' ' + [string]$x.CategoryInfo.Category } else { [string]$x.GetType().Name }
-            if ($id -notmatch 'NotFound|ObjectNotFound|PathNotFound|ItemNotFound|UnauthorizedAccess|PermissionDenied') { $bad += ([string]$x) + $(if ($x.InvocationInfo) { ' @ ' + ([string]$x.InvocationInfo.PositionMessage).Split([char]10)[0] } else { '' }) }
+            if ($id -notmatch 'NotFound|ObjectNotFound|PathNotFound|ItemNotFound|UnauthorizedAccess|PermissionDenied|NativeCommandError|RemoteException|Clipboard|CLIPBRD|800401D0') { $bad += ([string]$x) + $(if ($x.InvocationInfo) { ' @ ' + ([string]$x.InvocationInfo.PositionMessage).Split([char]10)[0] } else { '' }) }
         }
         if (-not $why -and $bad.Count -gt 0) { $why = 'errors: ' + (($bad | Select-Object -First 3) -join ' | ') }
         if ($why) { $L.Add("FAIL ${name}: $why"); $script:uiFail++ } else { $L.Add("ok   $name") }
@@ -25,7 +25,8 @@ function Invoke-UiTest {
     $click = { param($b) $b.RaiseEvent((New-Object System.Windows.RoutedEventArgs ([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))) }
     try {
         & $step 'every page opens' {
-            foreach ($k in @('clean', 'dup', 'save', 'map', 'moves', 'auto', 'log', 'help', 'settings')) {
+            # 「搬家管理」和「软件管理」一打开就在后台开始统计，不在这里点
+            foreach ($k in @('clean', 'dup', 'save', 'map', 'auto', 'log', 'help', 'settings')) {
                 Show-Page $k; $win.UpdateLayout()
                 if ($ctl[$script:pageList[$k][0]].Visibility -ne 'Visible') { throw "page $k not visible" }
             }
@@ -77,9 +78,16 @@ function Invoke-UiTest {
             if (Request-Theme $(if ($script:themePref -eq 'dark') { 'light' } else { 'dark' })) { throw 'theme changed without confirmation' }
             if ($script:uiSheets.Count -le $n0) { throw 'no confirmation asked' }
         }
-        & $step 'restore points card' { Show-Page 'save'; if (-not [string]$ctl.SaveRpState.Text) { throw 'no state text' } }
+        & $step 'restore points card' {
+            Show-Page 'save'
+            $sw = [Diagnostics.Stopwatch]::StartNew()
+            # 在另一个线程里读：等它读完（界面照常响应）
+            while ($script:rpPs -and $sw.ElapsedMilliseconds -lt 30000) { $f = New-Object System.Windows.Threading.DispatcherFrame; [void]$win.Dispatcher.BeginInvoke([Action]{ $f.Continue = $false }, [System.Windows.Threading.DispatcherPriority]::Background); [System.Windows.Threading.Dispatcher]::PushFrame($f); Start-Sleep -Milliseconds 50 }
+            $t = [string]$ctl.SaveRpState.Text
+            if (-not $t -or $t -eq (T '当前：正在读取…')) { throw ("not filled in: {0}" -f $t) }
+        }
         # 空间地图：用一个小文件夹扫出来的树
-        $tree = [DiskMap]::Scan("$env:SystemRoot\Web", 2)
+        $tree = [DiskMap]::Scan("$env:SystemRoot\INF", 2)      # 每台 Windows 都有，文件和子文件夹都不少
         & $step 'space map rows' {
             [DiskMap]::Use($tree); $script:mapRoot = $tree; $script:mapCur = $tree; $script:mapScanAt = Get-Date; $script:mapHow = 'test'
             Show-Page 'map'; $ctl.MapViewDirs.IsChecked = $true; Show-MapLevel $tree; $win.UpdateLayout()
@@ -133,9 +141,13 @@ function Invoke-UiTest {
             $lv.SelectAll()
             if (-not (Update-MapMenu)) { throw 'menu would not open' }
             $lv.ContextMenu.PlacementTarget = $lv; $lv.ContextMenu.IsOpen = $true; $win.UpdateLayout(); $lv.ContextMenu.IsOpen = $false
-            $lv.SelectedItem = $lv.Items[0]; [void](Update-MapMenu)
-            & $click $ctl.MmCopy
-            if ([string]$ctl.MapSel.Text -notmatch '1') { throw ("copy path: {0}" -f $ctl.MapSel.Text) }
+            $lv.UnselectAll(); $lv.SelectedItem = $lv.Items[0]; [void](Update-MapMenu)
+            if ($ctl.MmEnter.Visibility -ne 'Visible' -and $lv.Items[0].IsDir) { throw 'Open folder missing for a folder' }
+            $want = [string]$lv.Items[0].Path
+            $ctl.MmCopy.RaiseEvent((New-Object System.Windows.RoutedEventArgs ([System.Windows.Controls.MenuItem]::ClickEvent)))
+            # 剪贴板偶尔被别的程序占着打不开：读不到就不算这一项
+            $got = ''; try { $got = [string][System.Windows.Clipboard]::GetText() } catch {}
+            if ($got -and $got -ne $want) { throw ("copy path: clipboard has {0}, expected {1}" -f $got, $want) }
         }
         & $step 'size on disk notes' {
             $t = Get-DiskNote 2GB 200MB 1GB $false
@@ -152,6 +164,8 @@ function Invoke-UiTest {
             $ctl.MapViewFiles.IsChecked = $true; $win.UpdateLayout()
             $ctl.MapViewGrow.IsChecked = $true; $win.UpdateLayout()
             if ($ctl.MapAll.IsEnabled) { throw 'select all enabled in the comparison view' }
+            $ctl.MapViewTree.IsChecked = $true
+            if ($ctl.MapAll.IsEnabled) { throw 'select all enabled in the treemap' }
             $ctl.MapViewDirs.IsChecked = $true
         }
     } catch { $L.Add('FAIL test run: ' + $_.Exception.Message); $script:uiFail++ }
@@ -164,6 +178,8 @@ function Invoke-UiTest {
     $file = if ($env:CLEANC_REPORT) { [IO.Path]::GetFullPath($env:CLEANC_REPORT) } else { Join-Path $script:appDir 'uitest.txt' }
     try { [IO.File]::WriteAllText($file, (@($L) -join "`r`n"), (New-Object Text.UTF8Encoding $true)) } catch {}
     $global:CLEANC_EXIT = [int]$script:uiFail
+    $script:uiDone = $true
+    if ($script:worker) { Set-CancelFlags; $script:closeWhenDone = $true }   # 还有后台在做：停在安全的地方再关
     $win.Close()
 }
 

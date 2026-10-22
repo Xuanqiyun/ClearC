@@ -308,7 +308,7 @@ function Show-MapFiles {
         if ($dn) { $fm += Get-DiskNote ([double]$x.Size) ([double]$x.Disk) $(if ($x.Shared) { [double]$x.Size } else { 0 }) $true }
         $row = New-MapRow $x.Name $p $x.Size $max $tot $false $null $fm 'file'
         $row.When = '{0:yyyy-MM-dd HH:mm}' -f $x.Modified
-        $row.Disk = [long]$x.Disk
+        $row.Disk = [long]$x.Disk; $row.Shared = [bool]$x.Shared
         # 聊天记录里的文件只看不删：要腾地方就整体搬家
         if ($f.Chat) { $row.Locked = $true; $row.LockTip = (T '聊天记录里的文件只能查看和打开位置；要腾地方，到「搬家管理」把整个聊天记录搬到其他盘') }
         [void]$rows.Add($row)
@@ -427,7 +427,7 @@ $ctl.MapList.Add_MouseDoubleClick({
 })
 function Update-MapSel {
     $nAll = $ctl.MapList.Items.Count; $nSel = $ctl.MapList.SelectedItems.Count
-    $ctl.MapAll.IsEnabled = ($script:mapView -ne 'grow') -and $nAll -gt 0
+    $ctl.MapAll.IsEnabled = ($script:mapView -eq 'dirs' -or $script:mapView -eq 'files') -and $nAll -gt 0
     $ctl.MapAll.IsChecked = if ($script:mapView -eq 'grow' -or $nSel -eq 0) { $false } elseif ($nSel -ge $nAll) { $true } else { $null }
     $sel = if ($script:mapView -ne 'grow') { @($ctl.MapList.SelectedItems) } else { @() }
     $r = if ($sel.Count -eq 1) { $sel[0] } else { $null }
@@ -837,12 +837,13 @@ $ctl.BtnMapDelete.Add_Click({
     $bytes = [double]0; foreach ($r in $rows) { $bytes += [double]$r.Size }
     # 快速扫描时知道实际占用和硬链接：说清楚真正能腾出多少
     $real = ''
-    if ($script:mapRoot -and $script:mapRoot.HasDisk) {
+    if ($script:mapRoot -and $script:mapRoot.HasDisk -and (Get-Flag 'MapDisk')) {
         $dk = [double]0; $sh = [double]0; $known = $true
         foreach ($r in $rows) {
             if ($r.Disk -lt 0) { $known = $false; break }
             $dk += [double]$r.Disk
             if ($r.Node) { $sh += [math]::Min([double]$r.Node.Shared, [double]$r.Node.Disk) }
+            elseif ($r.Shared) { $sh += [double]$r.Disk }
         }
         if ($known) {
             if ($sh -ge 32MB) { $real += ((T "`n`n按快速扫描的结果，实际能腾出 {0} 到 {1}：其中 {2} 是硬链接，同一份文件在别处还有名字，那些名字还在就不会腾出空间。") -f (Fmt ([math]::Max([double]0, $dk - $sh))), (Fmt $dk), (Fmt $sh)) }

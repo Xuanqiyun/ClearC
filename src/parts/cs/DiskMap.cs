@@ -346,12 +346,15 @@ public static class DiskMap {
         for (DmNode a = p; a != null; a = a.Parent) { a.Size -= n.Size; a.Files -= n.Files; a.Disk -= n.Disk; a.Shared -= n.Shared; }
     }
     // 删掉某一层里的一个文件（disk：实际占用，-1 不知道时按文件大小算）
-    public static void DropFile(DmNode dir, long bytes) { DropFile(dir, bytes, -1); }
-    public static void DropFile(DmNode dir, long bytes, long disk) {
+    public static void DropFile(DmNode dir, long bytes) { DropFile(dir, bytes, -1, false); }
+    public static void DropFile(DmNode dir, long bytes, long disk) { DropFile(dir, bytes, disk, false); }
+    // shared：这个文件有不止一个名字（硬链接）
+    public static void DropFile(DmNode dir, long bytes, long disk, bool shared) {
         if (dir == null) return;
         long dk = Math.Max(0, Math.Min(disk >= 0 ? disk : bytes, dir.OwnDisk));
-        dir.Own -= bytes; dir.OwnFiles--; dir.OwnDisk -= dk;
-        for (DmNode a = dir; a != null; a = a.Parent) { a.Size -= bytes; a.Files--; a.Disk -= dk; }
+        long sh = shared ? Math.Max(0, Math.Min(bytes, dir.OwnShared)) : 0;
+        dir.Own -= bytes; dir.OwnFiles--; dir.OwnDisk -= dk; dir.OwnShared -= sh;
+        for (DmNode a = dir; a != null; a = a.Parent) { a.Size -= bytes; a.Files--; a.Disk -= dk; a.Shared -= sh; }
     }
     // 按路径找节点（大小写不敏感）
     public static DmNode Find(DmNode root, string path) {

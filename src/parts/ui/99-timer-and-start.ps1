@@ -140,7 +140,7 @@ $timer.Add_Tick({
                 if ($r.Node) { [DiskMap]::Detach($r.Node) }
                 else {
                     $pn = [DiskMap]::Find($script:mapRoot, (Split-Path $r.Path -Parent))
-                    if ($pn) { [DiskMap]::DropFile($pn, $r.Size, $r.Disk) }
+                    if ($pn) { [DiskMap]::DropFile($pn, $r.Size, $r.Disk, [bool]$r.Shared) }
                     [DiskMap]::ForgetFile($r.Path)
                 }
             }
@@ -483,7 +483,11 @@ $win.Add_ContentRendered({
             $script:uiStarted = $true
             # 万一卡住：两分钟后自己关掉
             $script:uiWatch = New-Object System.Windows.Threading.DispatcherTimer; $script:uiWatch.Interval = [TimeSpan]::FromMinutes(2)
-            $script:uiWatch.Add_Tick({ $script:uiWatch.Stop(); $global:CLEANC_EXIT = 99; $win.Close() })
+            $script:uiWatch.Add_Tick({
+                $script:uiWatch.Stop(); if (-not $script:uiDone) { $global:CLEANC_EXIT = 99 }
+                $win.Close()
+                if ($win.IsVisible) { [Environment]::Exit(99) }   # 关不掉（比如后台还在做）：直接结束这次测试
+            })
             $script:uiWatch.Start()
             [void]$win.Dispatcher.BeginInvoke([Action]{ Invoke-UiTest }, [System.Windows.Threading.DispatcherPriority]::ApplicationIdle)
         }
