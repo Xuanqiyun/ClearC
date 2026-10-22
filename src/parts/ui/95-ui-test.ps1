@@ -217,13 +217,19 @@ function Invoke-UiTest {
                 $script:startRows.Clear()
             } finally { Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue }
         }
-        & $step 'disk health line fills in' {
+        & $step 'disk health cards fill in' {
             $script:pageLoaded.map = $true; Fill-MapDrives
             Show-Page 'map'; $win.UpdateLayout()
             Start-DiskHealth
             if (-not (& $waitUi { -not $script:dhPs } 60000)) { throw 'disk health did not finish' }
-            if (-not [string]$ctl.MapDiskHealth.Text) { throw ('disk health line is empty; ' + [string]$script:dhErr + ' / direct: ' + (Get-DiskHealth $env:SystemDrive)) }
-            [string]$ctl.MapDiskHealth.Text
+            $cards = @($ctl.MapHealth.ItemsSource)
+            if ($cards.Count -eq 0) { throw ('no disk cards; ' + [string]$script:dhErr + ' / direct: ' + (Get-DiskHealth $env:SystemDrive)) }
+            if (-not $cards[0].HealthText -or -not $cards[0].UsedText -or $cards[0].Model -eq (T '读不到型号和健康信息')) { throw ('card not filled: ' + $cards[0].Model + ' / ' + $cards[0].HealthText) }
+            & $snap $ctl.MapHealthBox 'disk-cards' 2
+            $ctl.SetMapHealth.IsChecked = $false; & $click $ctl.SetMapHealth; $win.UpdateLayout()
+            $hidden = $ctl.MapHealthBox.Visibility -ne 'Visible'
+            $ctl.SetMapHealth.IsChecked = $true; & $click $ctl.SetMapHealth; $win.UpdateLayout()
+            if (-not $hidden) { throw 'switch did not hide the disk cards' }
         }
         & $step 'restore points card' {
             Show-Page 'save'

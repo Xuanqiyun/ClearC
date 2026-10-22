@@ -18,10 +18,10 @@ function Fill-MapDrives {
 $script:dhPs = $null
 function Start-DiskHealth {
     if ($script:dhPs) { return }
-    $ctl.MapDiskHealth.Text = ''
+    $ctl.MapHealthNote.Text = (T '正在读取各块盘的健康信息…'); $ctl.MapHealthNote.Visibility = 'Visible'
     $drives = @(Fixed-Drives | ForEach-Object { $_.Name.TrimEnd('\') })
     if ($drives.Count -eq 0) { return }
-    $code = 'param($drives, $engine) Invoke-Expression $engine; $o = @(); foreach ($d in $drives) { $h = Get-DiskHealth $d; if ($h) { $o += ($d + [char]32 + $h) } }; ,$o'
+    $code = 'param($drives, $engine) Invoke-Expression $engine; $o = @(); foreach ($d in $drives) { $h = Get-DiskHealthInfo $d; $h.Drive = $d; $o += $h }; ,$o'
     try {
         $ps = [powershell]::Create()
         [void]$ps.AddScript($code).AddArgument($drives).AddArgument($engine)
@@ -39,10 +39,69 @@ function Start-DiskHealth {
         if ($script:dhErr) { Write-LogFile ('disk health: ' + $script:dhErr) }
         try { $script:dhPs.Dispose() } catch {}
         $script:dhPs = $null
-        $ctl.MapDiskHealth.Text = if ($lines.Count -gt 0) { ($lines -join (T '；')) } else { (T '读不到磁盘的健康信息（型号、磨损、温度）') }
+        Show-DiskHealth $lines
     })
     $t.Start()
 }
+# 每块盘一张卡片。档位：温度 45 度以下绿、60 以下橙、再高红；磨损 10% 以下绿、50% 以下橙；用量 85% 以上橙、95% 以上红
+function Show-DiskHealth($list) {
+    $col = New-Object 'System.Collections.ObjectModel.ObservableCollection[DiskCard]'
+    $green = @('#1D7A35', '#E5F4E9'); $amber = @('#995700', '#FFF1DB'); $red = @('#C0101C', '#FDEBEC'); $grey = @('#6E6E73', '#F0F0F3')
+    foreach ($h in @($list)) {
+        if (-not $h -or -not $h.Drive) { continue }
+        $c = New-Object DiskCard
+        $c.Letter = [string]$h.Drive
+        $c.Model = if ($h.Ok -and $h.Model) { $h.Model + $(if ($h.Media) { ' · ' + $h.Media } else { '' }) } else { (T '读不到型号和健康信息') }
+        $used = [double]0; $total = [double]0
+        try { $di = New-Object System.IO.DriveInfo ([string]$h.Drive + '\'); $total = [double]$di.TotalSize; $used = $total - [double]$di.AvailableFreeSpace } catch {}
+        $pct = if ($total -gt 0) { 100.0 * $used / $total } else { 0 }
+        $c.UsedPct = $pct; $c.BarW = [math]::Round(266.0 * $pct / 100.0)
+        $c.UsedText = (T "已用 {0} / 共 {1}（{2:N0}%），剩 {3}") -f (Fmt $used), (Fmt $total), $pct, (Fmt ($total - $used))
+        $c.BarBrush = if ($pct -ge 95) { '#FF3B30' } elseif ($pct -ge 85) { '#FF9F0A' } else { '#0071E3' }
+        $worst = 0   # 0 绿 1 橙 2 红
+        if ($h.Ok -and $h.Health) {
+            $okh = ($h.Health -eq 'Healthy')
+            $c.HealthText = if ($okh) { (T '健康') } else { ((T "健康状态：{0}") -f $h.Health) }
+            $tone = if ($okh) { $green } else { $red }; if (-not $okh) { $worst = 2 }
+        } else { $c.HealthText = (T '健康状态未知'); $tone = $grey }
+        $c.HealthFg = $tone[0]; $c.HealthBg = $tone[1]
+        if ($h.Ok -and $h.Temp -gt 0) {
+            $c.TempText = (T "{0} °C") -f $h.Temp
+            $tone = if ($h.Temp -gt 60) { $red } elseif ($h.Temp -gt 45) { $amber } else { $green }
+            if ($h.Temp -gt 60) { $worst = [math]::Max($worst, 2) } elseif ($h.Temp -gt 45) { $worst = [math]::Max($worst, 1) }
+            $c.TempFg = $tone[0]; $c.TempBg = $tone[1]
+        }
+        if ($h.Ok -and $h.Wear -ge 0) {
+            $c.WearText = (T "磨损 {0}%") -f $h.Wear
+            $tone = if ($h.Wear -gt 50) { $red } elseif ($h.Wear -gt 10) { $amber } else { $green }
+            if ($h.Wear -gt 50) { $worst = [math]::Max($worst, 2) } elseif ($h.Wear -gt 10) { $worst = [math]::Max($worst, 1) }
+            $c.WearFg = $tone[0]; $c.WearBg = $tone[1]
+        }
+        if ($h.Ok -and $h.Hours -gt 0) { $c.HoursText = (T "通电 {0:N0} 小时") -f $h.Hours }
+        $c.Stripe = if (-not $h.Ok) { '#C7C7CC' } elseif ($worst -eq 2) { '#FF3B30' } elseif ($worst -eq 1) { '#FF9F0A' } else { '#34C759' }
+        $tip = @((T '点一下选这块盘。'))
+        if ($h.Ok) {
+            $tip += (T '温度：45 °C 以下正常，60 °C 以上偏高，长期高温会缩短固态硬盘寿命。')
+            $tip += (T '磨损：固态硬盘已用掉的写入寿命，到 100% 厂商就不保了；10% 以下很新，50% 以上要开始考虑备份。')
+            if ($h.ReadErrors -gt 0) { $tip += ((T "读错误 {0:N0} 次，有读错误请尽快备份。") -f $h.ReadErrors) }
+            $tip += (T '这些数据从 Windows 的存储可靠性计数器读，只读不改；有的硬盘不报温度或磨损。')
+        } else { $tip += (T '这台电脑的存储模块读不到这块盘的信息。') }
+        $c.Tip = ($tip -join "`n")
+        $col.Add($c)
+    }
+    $ctl.MapHealth.ItemsSource = $col
+    $ctl.MapHealthNote.Visibility = if ($col.Count -gt 0) { 'Collapsed' } else { 'Visible' }
+    if ($col.Count -eq 0) { $ctl.MapHealthNote.Text = (T '读不到磁盘的健康信息（型号、磨损、温度）') }
+}
+# 点卡片 = 选这块盘
+$ctl.MapHealth.AddHandler([System.Windows.UIElement]::MouseLeftButtonUpEvent, [System.Windows.Input.MouseButtonEventHandler]{
+    param($s, $e)
+    $el = $e.OriginalSource
+    while ($el -and -not ($el -is [System.Windows.Controls.Border] -and $el.Tag -is [DiskCard])) { $el = [System.Windows.Media.VisualTreeHelper]::GetParent($el) }
+    if (-not $el) { return }
+    $letter = [string]$el.Tag.Letter
+    foreach ($it in $ctl.MapDrive.Items) { if (([string]$it.Tag).StartsWith($letter, [StringComparison]::OrdinalIgnoreCase)) { $ctl.MapDrive.SelectedItem = $it } }
+})
 function Start-MapScan([string]$root) {
     if ($script:worker -or -not $root) { return }
     $di = $null; try { $di = New-Object System.IO.DriveInfo $root } catch {}

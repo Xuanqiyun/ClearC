@@ -9,6 +9,7 @@
     <Visibility x:Key="MapBarVis">Visible</Visibility>
     <Visibility x:Key="MapPctVis">Visible</Visibility>
     <Visibility x:Key="MapMetaVis">Visible</Visibility>
+    <Visibility x:Key="MapHealthVis">Visible</Visibility>
     <Visibility x:Key="SubVis">Visible</Visibility>
     <!-- 配色：浅灰底 #F5F5F7、白色卡片、正文 #1D1D1F、次要文字 #6E6E73、分隔线 #E5E5EA、唯一的强调色是蓝 #0071E3，红色只给删除 -->
     <FontFamily x:Key="Icons">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
@@ -1444,6 +1445,7 @@
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
         <RowDefinition Height="*"/>
         <RowDefinition Height="Auto"/>
       </Grid.RowDefinitions>
@@ -1458,10 +1460,49 @@
         <StackPanel>
           <TextBlock Text="空间地图" Style="{StaticResource PageTitle}"/>
           <TextBlock Style="{StaticResource PageSub}" Text="扫描整块盘，看清每个文件夹占了多少。双击文件夹往里点，一层层找到真正的大户。"/>
-          <TextBlock x:Name="MapDiskHealth" Style="{StaticResource Caption}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
         </StackPanel>
       </DockPanel>
-      <DockPanel Grid.Row="1" Margin="0,0,0,10">
+      <!-- 每块盘一张卡片：用量条、温度、磨损、健康状态。颜色按档位：绿正常、橙要留意、红有问题 -->
+      <Border x:Name="MapHealthBox" Grid.Row="1" Margin="0,0,0,12" Visibility="{DynamicResource MapHealthVis}">
+        <StackPanel>
+          <ItemsControl x:Name="MapHealth">
+            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Border Style="{StaticResource Card}" Width="300" Margin="0,0,12,8" Padding="0" Cursor="Hand" ToolTip="{Binding Tip}" Tag="{Binding}">
+                  <DockPanel>
+                    <Border DockPanel.Dock="Left" Width="5" Background="{Binding Stripe}" CornerRadius="12,0,0,12"/>
+                    <StackPanel Margin="14,10,14,10">
+                      <DockPanel>
+                        <TextBlock DockPanel.Dock="Left" Text="{Binding Letter}" FontSize="17" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBlock Text="{Binding Model}" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                      </DockPanel>
+                      <Grid Margin="0,8,0,0" Height="6">
+                        <Border Background="#EBEBF0" CornerRadius="3"/>
+                        <Border Background="{Binding BarBrush}" CornerRadius="3" HorizontalAlignment="Left" Width="{Binding BarW}"/>
+                      </Grid>
+                      <TextBlock Text="{Binding UsedText}" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
+                      <WrapPanel Margin="0,8,0,0">
+                        <Border Background="{Binding HealthBg}" CornerRadius="6" Padding="7,2" Margin="0,0,6,4"><TextBlock Text="{Binding HealthText}" FontSize="11.5" FontWeight="SemiBold" Foreground="{Binding HealthFg}"/></Border>
+                        <Border x:Name="TempChip" Background="{Binding TempBg}" CornerRadius="6" Padding="7,2" Margin="0,0,6,4"><TextBlock Text="{Binding TempText}" FontSize="11.5" FontWeight="SemiBold" Foreground="{Binding TempFg}"/></Border>
+                        <Border x:Name="WearChip" Background="{Binding WearBg}" CornerRadius="6" Padding="7,2" Margin="0,0,6,4"><TextBlock Text="{Binding WearText}" FontSize="11.5" FontWeight="SemiBold" Foreground="{Binding WearFg}"/></Border>
+                        <TextBlock x:Name="HoursText" Text="{Binding HoursText}" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="2,0,0,4"/>
+                      </WrapPanel>
+                    </StackPanel>
+                  </DockPanel>
+                </Border>
+                <DataTemplate.Triggers>
+                  <DataTrigger Binding="{Binding HasTemp}" Value="False"><Setter TargetName="TempChip" Property="Visibility" Value="Collapsed"/></DataTrigger>
+                  <DataTrigger Binding="{Binding HasWear}" Value="False"><Setter TargetName="WearChip" Property="Visibility" Value="Collapsed"/></DataTrigger>
+                  <DataTrigger Binding="{Binding HasHours}" Value="False"><Setter TargetName="HoursText" Property="Visibility" Value="Collapsed"/></DataTrigger>
+                </DataTemplate.Triggers>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <TextBlock x:Name="MapHealthNote" Style="{StaticResource Caption}" Text="正在读取各块盘的健康信息…"/>
+        </StackPanel>
+      </Border>
+      <DockPanel Grid.Row="2" Margin="0,0,0,10">
         <Border DockPanel.Dock="Right" Style="{StaticResource SegBox}" VerticalAlignment="Center">
           <StackPanel Orientation="Horizontal">
             <RadioButton x:Name="MapViewDirs" GroupName="mapview" Content="文件夹" IsChecked="True" Style="{StaticResource Seg}"/>
@@ -1493,7 +1534,7 @@
         </DockPanel>
       </DockPanel>
       <!-- 找文件的条件：只在「找文件」时显示 -->
-      <WrapPanel x:Name="MapFilter" Grid.Row="2" Margin="0,0,0,10" Visibility="Collapsed">
+      <WrapPanel x:Name="MapFilter" Grid.Row="3" Margin="0,0,0,10" Visibility="Collapsed">
         <StackPanel Orientation="Horizontal" Margin="0,2,18,2">
           <TextBlock Text="大小至少" VerticalAlignment="Center" Foreground="#6E6E73" Margin="0,0,8,0"/>
           <ComboBox x:Name="MapMinSize" Width="96" SelectedIndex="2">
@@ -1530,7 +1571,7 @@
         <CheckBox x:Name="MapChat" Content="只找聊天软件里的" VerticalAlignment="Center" Margin="0,2,0,2"
                   ToolTip="微信、QQ、企业微信、飞书、钉钉、Telegram 等聊天记录文件夹里的大文件。这些文件只能查看、打开位置；要腾地方，可以到「搬家管理」把整个聊天记录搬到其他盘。"/>
       </WrapPanel>
-      <Border Grid.Row="3" Style="{StaticResource Card}" Padding="0,6,0,6">
+      <Border Grid.Row="4" Style="{StaticResource Card}" Padding="0,6,0,6">
         <Grid>
           <Canvas x:Name="MapTree" Margin="10,4,10,4" ClipToBounds="True" Background="White" Visibility="Collapsed"/>
           <ListView x:Name="MapList" Background="Transparent" BorderThickness="0" ItemTemplate="{StaticResource MapRowTpl}" ItemContainerStyle="{StaticResource SelRow}" SelectionMode="Extended"
@@ -1570,7 +1611,7 @@
           </StackPanel>
         </Grid>
       </Border>
-      <DockPanel Grid.Row="4" Margin="0,14,0,0">
+      <DockPanel Grid.Row="5" Margin="0,14,0,0">
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
           <Button x:Name="BtnMapOpen" Content="打开位置" Margin="0,0,8,0" IsEnabled="False"/>
           <Button x:Name="BtnMapCompress" Content="压缩（不删文件）" Margin="0,0,8,0" IsEnabled="False"
@@ -2280,6 +2321,13 @@
                 </StackPanel>
               </DockPanel>
               <DockPanel Margin="0,16,0,0">
+                <CheckBox x:Name="SetMapHealth" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                <StackPanel>
+                  <TextBlock Text="磁盘健康卡片" Style="{StaticResource SetName}"/>
+                  <TextBlock Style="{StaticResource SetNote}" Text="页面上方每块盘一张卡片：用了多少、健康状态，固态硬盘还有温度、磨损和通电时间。只读，不改任何东西。"/>
+                </StackPanel>
+              </DockPanel>
+              <DockPanel Margin="0,16,0,0">
                 <CheckBox x:Name="SetMapFastBtn" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
                 <StackPanel>
                   <TextBlock Text="右上角的「快速扫描」开关" Style="{StaticResource SetName}"/>
@@ -2782,8 +2830,8 @@
                   <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>硬链接是同一份文件在别处也有名字，删了这个名字不腾空间。</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
-                  <TextBlock Style="{StaticResource HelpLead}" Text="磁盘健康"/>
-                  <TextBlock Style="{StaticResource HelpBody}"><Run>页面标题下面一行小字：每块盘的型号、健康状态，固态硬盘还有磨损百分比、温度和通电时间（从 Windows 的存储可靠性计数器读，只读不改）。</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpLead}" Text="磁盘健康卡片"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>页面上方每块盘一张卡片：用量条、健康状态，固态硬盘还有温度、磨损和通电时间，按档位标色（绿正常、橙要留意、红有问题）。点卡片就选中这块盘。数据从 Windows 的存储可靠性计数器读，只读不改；在「设置」里可以关掉。</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="空间明细"/>

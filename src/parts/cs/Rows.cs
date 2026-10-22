@@ -133,6 +133,27 @@ public class VdiskRow : INotifyPropertyChanged {
     void Raise(string n) { PropertyChangedEventHandler h = PropertyChanged; if (h != null) h(this, new PropertyChangedEventArgs(n)); }
     public event PropertyChangedEventHandler PropertyChanged;
 }
+// 空间地图顶部的磁盘卡片：用量条、温度、磨损、健康状态，颜色按档位
+public class DiskCard {
+    public string Letter { get; set; }
+    public string Model { get; set; }
+    public string UsedText { get; set; }
+    public double UsedPct { get; set; }
+    public double BarW { get; set; }        // 用量条已用部分的宽度（像素）
+    public string TempText { get; set; }
+    public string WearText { get; set; }
+    public string HealthText { get; set; }
+    public string HoursText { get; set; }
+    public string Tip { get; set; }
+    public bool HasTemp { get { return !string.IsNullOrEmpty(TempText); } }
+    public bool HasWear { get { return !string.IsNullOrEmpty(WearText); } }
+    public bool HasHours { get { return !string.IsNullOrEmpty(HoursText); } }
+    string _bar = "#0071E3"; public string BarBrush { get { return Theme.B(_bar); } set { _bar = value; } }
+    string _tf = "#248A3D", _tb = "#E5F4E9"; public string TempFg { get { return Theme.F(_tf); } set { _tf = value; } } public string TempBg { get { return Theme.B(_tb); } set { _tb = value; } }
+    string _wf = "#248A3D", _wb = "#E5F4E9"; public string WearFg { get { return Theme.F(_wf); } set { _wf = value; } } public string WearBg { get { return Theme.B(_wb); } set { _wb = value; } }
+    string _hf = "#248A3D", _hb = "#E5F4E9"; public string HealthFg { get { return Theme.F(_hf); } set { _hf = value; } } public string HealthBg { get { return Theme.B(_hb); } set { _hb = value; } }
+    string _stripe = "#248A3D"; public string Stripe { get { return Theme.B(_stripe); } set { _stripe = value; } }
+}
 public class HistBar {
     public double H { get; set; }
     public string Label { get; set; }
