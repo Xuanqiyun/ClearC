@@ -74,7 +74,7 @@ foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageM
                'BtnMovesRefresh','MovesInfo','MovesList','EmptyMoves','EmptyMovesText',
                'AutoRemindOn','AutoRemindGB','AutoRemindNote','AutoCleanOn','AutoCleanNote','HistInfo','HistChart','HistLast','HistFirst',
                'BtnLogOpenDir','BtnLogRefresh','LogKeep','LogKeepNote','LogCats','LogRange','LogSearch','LogCount','LogList','EmptyLog','EmptyLogText',
-               'BtnLang','BtnLangText','BtnTheme','BtnThemeText','NavHelp','PageHelp','HelpScroll','FeedbackCard','RiskCard','BtnFeedback','BtnGitHub','BtnIssue','BtnCopyDiag','BtnOpenLog','CopyHint','BtnSelfTest','BtnCheckUpdate','MapFast','MapChat',
+               'BtnLang','BtnLangText','BtnTheme','BtnThemeText','NavHelp','PageHelp','HelpScroll','HelpSections','HelpFaq','BtnHelpExpand','FeedbackCard','RiskCard','BtnFeedback','BtnGitHub','BtnIssue','BtnCopyDiag','BtnOpenLog','CopyHint','BtnSelfTest','BtnCheckUpdate','MapFast','MapChat',
                'NavClean','NavDup','PageClean','PageDup','AppVer','BtnLog','BtnLogText','BtnLogHide','LogPanel','Dim',
                'CapFree','CapTotal','CapBar','CapReclaim','EmptyClean','EmptyCleanText','EmptyDup','EmptyDupText','SizeCustomRow',
                'DestPick','BtnDestBrowse','DestHint','BtnOneClick','BtnScan','BtnRun','BtnHogs','Hint','List','Summary','Log',
@@ -134,6 +134,34 @@ $ctl.BtnFeedback.Add_Click({
 })
 # 点左侧「帮助」总是回到帮助的开头（先点「使用反馈」滚到下面后，帮助已是选中状态，Checked 不会再触发）
 $ctl.NavHelp.Add_Click({ $ctl.HelpScroll.ScrollToTop() })
+# 帮助的各节默认收起，点标题展开；「全部展开」一下展开或收起全部
+function Get-HelpSections { @($ctl.HelpSections.Children | Where-Object { $_ -is [System.Windows.Controls.Expander] }) }
+function Update-HelpExpand {
+    $all = Get-HelpSections
+    $open = @($all | Where-Object { $_.IsExpanded }).Count
+    $ctl.BtnHelpExpand.Content = if ($all.Count -and $open -eq $all.Count) { T '全部收起' } else { T '全部展开' }
+}
+$script:helpBulk = $false
+$ctl.BtnHelpExpand.Add_Click({
+    $all = Get-HelpSections
+    $open = @($all | Where-Object { -not $_.IsExpanded }).Count -gt 0
+    $script:helpBulk = $true
+    try { foreach ($x in $all) { $x.IsExpanded = $open } } finally { $script:helpBulk = $false }
+    Update-HelpExpand
+})
+# 单独点开的一节（或一个问题）在页面下方时，往上滚到能看见它的内容
+$helpOpened = {
+    param($s, $e)
+    if (-not [object]::ReferenceEquals($e.OriginalSource, $s)) { return }
+    Update-HelpExpand
+    if ($script:helpBulk) { return }
+    $x = $s
+    [void]$win.Dispatcher.BeginInvoke([Action]{ try { $x.BringIntoView() } catch {} }.GetNewClosure(), [System.Windows.Threading.DispatcherPriority]::Loaded)
+}
+foreach ($x in @(Get-HelpSections) + @($ctl.HelpFaq.Children)) {
+    $x.Add_Expanded($helpOpened)
+    $x.Add_Collapsed({ param($s, $e) if ([object]::ReferenceEquals($e.OriginalSource, $s)) { Update-HelpExpand } })
+}
 $script:projectPage = 'https://github.com/Xuanqiyun/ClearC'
 function Open-Web([string]$url) {
     # 用资源管理器打开网址：浏览器不会以管理员身份运行

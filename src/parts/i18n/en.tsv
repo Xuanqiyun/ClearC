@@ -156,6 +156,12 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+全部展开	Expand all
+全部收起	Collapse all
+安全清理（缓存、临时文件、日志，删了程序会自动重建）	Safe to clean (caches, temporary files and logs, which apps rebuild automatically)
+需确认（有代价，默认跳过，看清说明再选）	Needs confirmation (comes at a cost; skipped by default, read the description before selecting)
+聊天软件的聊天记录（搬到其他盘：聊天记录和文件原样保留，原位置留链接，软件照常使用）	Chat history (moved to another drive: chats and files are kept as they are, a link is left in the original location and the apps keep working)
+其他可搬的文件夹（数据原样保留，原位置留链接，软件照常使用）	Other movable folders (data is kept as it is, a link is left in the original location and the apps keep working)
 不限文件类型	Any file type
 不限	Any
 1 MB 以上	1 MB or larger
@@ -890,7 +896,7 @@ C 盘空间不足时提醒我	Remind me when C: is low on space
 剩余空间低于	When free space is below
 时，在屏幕右下角弹出提醒（每天最多一次）	show a reminder in the lower-right corner of the screen (at most once a day)
 每周自动清理一次	Clean up automatically once a week
-不用开着本工具。每周日中午 12:30（错过了就在下次开机后）由 Windows 任务计划在后台自动做一遍「可以放心删」里的项目：临时文件、各类缓存和日志。不搬家、不清空回收站、不碰任何个人文件夹，也不会关闭正在运行的软件（被占用的文件直接跳过）。做完在右下角告诉你释放了多少，每一项都记在「操作日志」里。	This tool doesn't need to be open. Every Sunday at 12:30 PM (or after the next startup if that time is missed), Windows Task Scheduler runs the items under "Safe to delete" in the background: temporary files, caches and logs. It doesn't move anything, doesn't empty the Recycle Bin, never touches personal folders, and doesn't close running apps (files in use are simply skipped). When it's done, a notification in the lower-right corner tells you how much was freed, and every item is recorded in the "Activity log".
+不用开着本工具。每周日中午 12:30（错过了就在下次开机后）由 Windows 任务计划在后台自动做一遍「安全清理」里的项目：临时文件、各类缓存和日志。不搬家、不清空回收站、不碰任何个人文件夹，也不会关闭正在运行的软件（被占用的文件直接跳过）。做完在右下角告诉你释放了多少，每一项都记在「操作日志」里。	This tool doesn't need to be open. Every Sunday at 12:30 PM (or after the next startup if that time is missed), Windows Task Scheduler runs the items under "Safe to clean" in the background: temporary files, caches and logs. It doesn't move anything, doesn't empty the Recycle Bin, never touches personal folders, and doesn't close running apps (files in use are simply skipped). When it's done, a notification in the lower-right corner tells you how much was freed, and every item is recorded in the "Activity log".
 C 盘空间变化	Space on C: over time
 柱子越高表示 C 盘已经用掉的越多（每天取最后一次记录）。每次打开本工具、每次定时检查都会记一笔。想知道是哪些文件夹变大了，到「空间地图」扫一遍，再选「和上次比」。	The taller the bar, the more of C: is used (the last record of each day). A record is added every time you open this tool and at every scheduled check. To find out which folders grew, scan in "Space map", then choose "Since last scan".
 打开日志文件夹	Open log folder

@@ -11,9 +11,11 @@
 - 「崩溃转储与错误报告」也清 `C:\Windows\LiveKernelReports`（显卡驱动重置等留下的诊断转储）。
 - 帮助里新增几条常见问题：扫描合计和已用空间为什么对不上、WinSxS 能不能删、为什么不清 Prefetch 也没有「内存加速」。
 - 「使用反馈」只留 GitHub：项目主页和提交问题的按钮，不再显示开发者微信号；诊断信息和检查扫描功能的结果都可以贴到 GitHub 的问题里。
+- **帮助页重新排版**：每个功能一张卡片，默认收起，标题下一行写着这一节讲什么，点开再看；右上角「全部展开」。条目改成粗体小标题加一两行说明，长段落拆成小点；操作方式、搬家状态做成对照表，搬家过程画成步骤条，要特别留意的（不删个人文件夹、别动 CDriveMoved）单独框出来。常见问题一行一个，点开看答案。新增「设置」一节。
 - 修正：点「使用反馈」后再点「帮助」，回不到帮助的开头。
-- 测试：自检也核对实际占用和硬链接；新增 `ClearC.exe /uitest`，在真的 Windows 上把界面功能点一遍；NTFS 镜像测试也比实际占用、硬链接和压缩文件夹。
-- Item check boxes, left- or right-button drag selection and a right-click menu in the space map; a Settings page that hides pages, buttons, descriptions and columns you don't use; size on disk and hard links from the file table, with a "Space breakdown" of the used space; restore point usage on "Save space"; low-priority duplicate search; LiveKernelReports cleanup; Feedback now points only to GitHub (the WeChat ID was removed); fixed Help not returning to the top after Feedback; `/uitest` for automated UI tests.
+- 修正：英文界面里，清理列表的分组标题显示成了中文。自动清理的说明里组名写成了「可以放心删」，改成和列表一致的「安全清理」。
+- 测试：自检也核对实际占用和硬链接；新增 `ClearC.exe /uitest`，在真的 Windows 上把界面功能点一遍（英文浅色、中文深色各跑一遍，帮助页存一张截图）；NTFS 镜像测试也比实际占用、硬链接和压缩文件夹。
+- Item check boxes, left- or right-button drag selection and a right-click menu in the space map; a Settings page that hides pages, buttons, descriptions and columns you don't use; size on disk and hard links from the file table, with a "Space breakdown" of the used space; restore point usage on "Save space"; low-priority duplicate search; LiveKernelReports cleanup; Feedback now points only to GitHub (the WeChat ID was removed); fixed Help not returning to the top after Feedback; a redesigned Help page with collapsible sections, short headed items, tables and callouts; clean-up group titles now translated in English; `/uitest` for automated UI tests (English light and Chinese dark).
 
 ## 2.6
 - **深色模式**：左下角「外观」可以选浅色、深色或跟随系统（照 Windows 的「选择应用模式」）。
