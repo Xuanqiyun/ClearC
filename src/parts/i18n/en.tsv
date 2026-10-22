@@ -1217,6 +1217,7 @@ Zoom 装在这里的程序和本地数据。会议录像默认存在「文档」
 删除选中的 {0} 项…	Delete {0} selected items…
 已复制 {0} 个路径	Copied {0} paths
 。点行前面的方框取消某一项，按 Esc 全部取消	. Click a row's box to clear it, or press Esc to clear all
+勾选行前面的方框来选中，可以勾一项或多项，再打开位置、压缩或删除；单击行的其他地方不会选中，双击文件夹往里点；按住鼠标上下拖可以一次勾上连着的几行。系统文件夹、软件安装文件夹、C 盘个人文件夹和搬家后的数据带小锁，不能在这里删。	Tick the box at the start of a row to select it, one row or several, then open its location, compress or delete. Clicking elsewhere on a row doesn't select it; double-click a folder to open it; hold the mouse button and drag up or down to tick a run of rows. System folders, app installation folders, personal folders on C: and moved data have a lock and can't be deleted here.
 \n\n按快速扫描的结果，实际能腾出 {0} 到 {1}：其中 {2} 是硬链接，同一份文件在别处还有名字，那些名字还在就不会腾出空间。	\n\nAccording to the fast scan, this frees between {0} and {1}: {2} of it is hard links, files that still have names elsewhere, and their space is freed only once all their names are gone.
 \n\n按快速扫描的结果，这些实际只占 {0}（压缩、稀疏或只在云端的文件比文件大小占得少），删掉腾出的是这么多。	\n\nAccording to the fast scan, these take only {0} on disk (compressed, sparse or cloud-only files take less than their size), so that is how much deleting them frees.
 当前：读不到还原点的信息	Current: restore point information is not available
@@ -1261,7 +1262,7 @@ Zoom 装在这里的程序和本地数据。会议录像默认存在「文档」
 换了以后本工具会关闭，再用新的语言打开。	ClearC closes and reopens in the new language after you change it.
 文件个数、最近修改时间、比上次扫描变了多少、链接指向哪里。	Number of files, last modified date, change since the last scan, and where a link points.
 查重复文件时让着其他程序	Give way to other programs when finding duplicates
-每一行前面显示一个复选框，点一下就能多选，不用按住 Ctrl（和资源管理器「查看」里的「项目复选框」一样）；勾过以后点行的其他地方是加上这一行，不会清掉已经勾的，按 Esc 全部取消。开不开都可以按住鼠标（左键或右键）上下拖，一次选中连着的几行。	Show a check box at the start of each row, so one click adds a row to the selection without holding Ctrl (like "Item check boxes" under "View" in File Explorer); once you have ticked boxes, clicking elsewhere on a row adds it instead of clearing your ticks, and Esc clears them all. Either way, you can hold the left or right mouse button and drag up or down to select a run of rows.
+每一行前面显示一个复选框（和资源管理器「查看」里的「项目复选框」一样）：只有点方框才选中或取消，单击行的其他地方不会选中，按 Esc 全部取消。关掉就照 Windows 列表原来的做法：单击选中一行，按住 Ctrl、Shift 多选。开不开都可以按住鼠标（左键或右键）上下拖，一次选中连着的几行。	Show a check box at the start of each row (like "Item check boxes" under "View" in File Explorer): only clicking the box selects or clears a row, clicking elsewhere on the row doesn't select it, and Esc clears them all. Turned off, the list works the usual Windows way: a click selects one row, Ctrl or Shift selects several. Either way, you can hold the left or right mouse button and drag up or down to select a run of rows.
 每一页标题下面那行灰色的说明文字。用熟了可以关掉，列表能多显示几行。	The grey line of description under each page title. Once you know your way around, turn it off to fit a few more rows in the lists.
 界面上显示什么	What the window shows
 界面语言	Language
