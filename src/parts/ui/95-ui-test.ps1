@@ -303,6 +303,7 @@ function Invoke-UiTest {
         if ($env:CLEANC_SHOTS -eq '1') {
             & $step 'screenshots for the README' {
                 $root = $win.Content
+                $win.Width = 1240; $win.Height = 860
                 $shot = { param([string]$n) $win.UpdateLayout(); [void](& $waitUi { $false } 300); & $snap $root ('shot-' + $n) 2 }
                 # 清理 C 盘：真的扫一遍（只统计大小，不删东西）
                 Show-Page 'clean'; & $click $ctl.BtnScan

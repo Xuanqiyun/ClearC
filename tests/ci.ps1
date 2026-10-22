@@ -24,6 +24,34 @@ if (Test-Path out\ClearC.exe) {
     # 跑三遍：先照这台测试机的显示语言（英文）、浅色，再在设置里写上中文浅色、中文深色各跑一遍（测完设置原样放回）。注释标题里不能有逗号
     # 每一遍都给 README 拍几张截图（CLEANC_SHOTS=1：真的扫一遍这台测试机的 C 盘，只统计不删），和报告一起上传
     $env:CLEANC_SHOTS = '1'
+    # 测试机的屏幕默认 1024x768，窗口会缩得很小：先调成 1920x1080，截图和普通电脑上差不多（调不了就照原样）
+    try {
+        Add-Type -TypeDefinition @'
+using System; using System.Runtime.InteropServices;
+public static class CiDisplay {
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+    public struct DEVMODE {
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmDeviceName;
+        public short dmSpecVersion, dmDriverVersion, dmSize, dmDriverExtra; public int dmFields;
+        public int dmPositionX, dmPositionY, dmDisplayOrientation, dmDisplayFixedOutput;
+        public short dmColor, dmDuplex, dmYResolution, dmTTOption, dmCollate;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmFormName;
+        public short dmLogPixels; public int dmBitsPerPel, dmPelsWidth, dmPelsHeight, dmDisplayFlags, dmDisplayFrequency;
+        public int dmICMMethod, dmICMIntent, dmMediaType, dmDitherType, dmReserved1, dmReserved2, dmPanningWidth, dmPanningHeight;
+    }
+    [DllImport("user32.dll", CharSet = CharSet.Ansi)] static extern bool EnumDisplaySettings(string dev, int mode, ref DEVMODE dm);
+    [DllImport("user32.dll", CharSet = CharSet.Ansi)] static extern int ChangeDisplaySettings(ref DEVMODE dm, int flags);
+    public static string Set(int w, int h) {
+        DEVMODE d = new DEVMODE(); d.dmSize = (short)Marshal.SizeOf(typeof(DEVMODE));
+        if (!EnumDisplaySettings(null, -1, ref d)) return "could not read the current mode";
+        string was = d.dmPelsWidth + "x" + d.dmPelsHeight;
+        d.dmPelsWidth = w; d.dmPelsHeight = h; d.dmFields = 0x80000 | 0x100000;
+        return was + " -> " + w + "x" + h + ": " + ChangeDisplaySettings(ref d, 0);
+    }
+}
+'@
+        Write-Host ("::notice title=display::{0}" -f [CiDisplay]::Set(1920, 1080))
+    } catch { Write-Host ("::notice title=display::{0}" -f $_.Exception.Message) }
     $setFile = Join-Path $env:LOCALAPPDATA 'CleanC\settings.txt'
     foreach ($run in @(@{ Title = 'UI test'; Set = ''; Report = 'uitest.txt' }, @{ Title = 'UI test (zh)'; Set = "Lang=zh`r`nTheme=light`r`n"; Report = 'uitest-zh.txt' }, @{ Title = 'UI test (zh dark)'; Set = "Lang=zh`r`nTheme=dark`r`n"; Report = 'uitest-zh-dark.txt' })) {
         $setBak = $null; if (Test-Path $setFile) { $setBak = [IO.File]::ReadAllBytes($setFile) }

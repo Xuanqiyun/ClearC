@@ -7263,6 +7263,8 @@ if ($script:mode -match '(?i)/autoclean') {
             </StackPanel>
           </Button>
         </StackPanel>
+        <!-- 窗口矮的时候（比如笔记本 150% 缩放）放不下全部页面：这一栏可以上下滚动，「设置」不会被挤掉 -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
         <StackPanel>
           <TextBlock Text="清理" Style="{StaticResource NavHead}" Margin="11,0,0,5"/>
           <RadioButton x:Name="NavClean" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xEDA2;" Content="清理 C 盘" IsChecked="True"/>
@@ -7278,6 +7280,7 @@ if ($script:mode -match '(?i)/autoclean') {
           <RadioButton x:Name="NavHelp" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE897;" Content="帮助" Margin="0,12,0,3"/>
           <RadioButton x:Name="NavSettings" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE713;" Content="设置"/>
         </StackPanel>
+        </ScrollViewer>
       </DockPanel>
     </Border>
 
@@ -13296,6 +13299,7 @@ function Invoke-UiTest {
         if ($env:CLEANC_SHOTS -eq '1') {
             & $step 'screenshots for the README' {
                 $root = $win.Content
+                $win.Width = 1240; $win.Height = 860
                 $shot = { param([string]$n) $win.UpdateLayout(); [void](& $waitUi { $false } 300); & $snap $root ('shot-' + $n) 2 }
                 # 清理 C 盘：真的扫一遍（只统计大小，不删东西）
                 Show-Page 'clean'; & $click $ctl.BtnScan
