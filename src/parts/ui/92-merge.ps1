@@ -1,8 +1,65 @@
 # ------------------------------------------------------------
 # 重复文件：合并为一份（硬链接）
 # ------------------------------------------------------------
+# 归档：不删，把勾选的搬到选定的文件夹（<文件夹>\<盘符>\<原路径>），每组照样至少留一份不动
+$ctl.BtnDupMove.Add_Click({
+    if ($script:worker) { return }
+    $plan = New-Object System.Collections.ArrayList
+    $allChecked = 0; $bytes = [double]0
+    foreach ($gid in @($script:dupByGroup.Keys)) {
+        $rows = @($script:dupByGroup[$gid])
+        $del = @($rows | Where-Object { $_.ToDelete -and $_.CanDelete })
+        if ($del.Count -eq 0) { continue }
+        if ($del.Count -ge $rows.Count) { $allChecked++; continue }
+        foreach ($r in $del) { [void]$plan.Add(@{ Path = $r.Path; Size = $r.Size }); $bytes += $r.Size }
+    }
+    if ($plan.Count -eq 0) { if ($allChecked) { Show-Sheet -Kind warn -Title (T '每组至少要留一份') -Text ((T "有 {0} 组把所有副本都勾上了，这些组不会动。") -f $allChecked) | Out-Null }; return }
+    $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
+    $dlg.Description = (T '把勾选的文件搬到哪个文件夹（里面会按盘符和原路径建子文件夹）')
+    if ($dlg.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { return }
+    $dest = $dlg.SelectedPath.TrimEnd('\')
+    $why = Get-DeleteBlock $dest
+    if ($why) { Show-Sheet -Kind warn -Title (T '这个文件夹不能用来归档') -Text $why | Out-Null; return }
+    $free = DriveFree ($dest.Substring(0, 2))
+    if ($free -lt $bytes * 1.02) { Show-Sheet -Kind warn -Title ((T "{0} 盘放不下") -f $dest.Substring(0, 1)) -Text ((T "{0} 只剩 {1}，要搬的文件有 {2}。") -f $dest.Substring(0, 2), (GB $free), (GB $bytes)) | Out-Null; return }
+    $text = (T "把 {0} 个勾选的文件搬到 {1}，共 {2}。不删任何东西：每个文件放到「{1}\盘符\原来的路径」，保留的那份留在原地。跨盘的会复制再删原件。`n`n归档以后这些文件就不在原来的位置了，用到它们的程序要重新指路径。") -f $plan.Count, $dest, (Fmt $bytes)
+    if ($allChecked) { $text += ((T "`n`n另有 {0} 组所有副本都被勾选，这些组会跳过。") -f $allChecked) }
+    if ((Show-Sheet -Title ((T "归档 {0} 个文件？") -f $plan.Count) -Text $text -Buttons @((T '取消'), (T '归档')) -Primary (T '归档') -Cancel (T '取消')) -ne (T '归档')) { return }
+    $sync.Mode = 'dupmove'; $sync.DupDeleted = $null; $sync.DupMoveDest = $dest
+    Start-Op ((T "归档 {0} 个文件") -f $plan.Count)
+    UI-Busy $true
+    UI-Log ((T "开始归档 {0} 个文件到 {1}") -f $plan.Count, $dest)
+    Start-Worker @'
+$done = New-Object System.Collections.ArrayList
+$i = 0; $total = $arg.Plan.Count; $moved = [double]0; $fails = 0
+foreach ($p in $arg.Plan) {
+    if (Stopping) { break }
+    $i++
+    SetP @{ Steps = $total; Step = $i; StepName = [IO.Path]::GetFileName($p.Path); SubKind = 'none' }
+    if ($arg.Protect -and (Test-Personal $p.Path)) { Log ((T "  跳过（C 盘个人文件夹，受保护）：{0}") -f $($p.Path)); continue }
+    $fi = Get-Item -LiteralPath $p.Path -Force -ErrorAction SilentlyContinue
+    if (-not $fi) { continue }
+    if ($fi.Length -ne $p.Size) { Log ((T "  跳过（文件在扫描后被修改过）：{0}") -f $($p.Path)); continue }
+    $rel = $p.Path.Substring(0, 1).ToUpper() + '\' + $p.Path.Substring(3)
+    $to = Join-Path $arg.Dest $rel
+    if ($to.StartsWith($p.Path + '\', [StringComparison]::OrdinalIgnoreCase) -or $to -ieq $p.Path) { Log ((T "  跳过（目标在原文件里面）：{0}") -f $($p.Path)); continue }
+    try {
+        New-Item -ItemType Directory -Path (Split-Path $to -Parent) -Force | Out-Null
+        if (Test-Path -LiteralPath $to) { $to = Join-Path (Split-Path $to -Parent) (([IO.Path]::GetFileNameWithoutExtension($to)) + ' (' + (Get-Date -Format 'yyyyMMdd-HHmmss') + ')' + [IO.Path]::GetExtension($to)) }
+        [IO.File]::Move($p.Path, $to)
+        if (-not (Test-Path -LiteralPath $to) -or (Get-Item -LiteralPath $to).Length -ne $p.Size) { throw (T '搬过去的文件大小对不上') }
+        [void]$done.Add($p.Path); $moved += $p.Size
+        OpLog '搬运' (T '归档重复文件') $p.Path $to
+        if ($total -le 200 -or $i % 100 -eq 0) { Log ((T "  [{0}/{1}] 已归档  {2}") -f $i, $total, $p.Path) }
+    } catch { $fails++; Log ((T "  归档失败  {0}：{1}") -f $($p.Path), $($_.Exception.Message)) }
+}
+Log ((T "归档完成：{0} 个文件，{1}；失败 {2} 个。") -f $done.Count, (Fmt $moved), $fails)
+$sync.DupDeleted = $done
+'@ @{ Plan = $plan; Dest = $dest; Protect = [bool]$ctl.DupProtect.IsChecked }
+})
 $ctl.BtnDupMerge.Add_Click({
     if ($script:worker) { return }
+    if ($script:dupSimilar) { Show-Sheet -Kind warn -Title (T '相似照片不能合并') -Text (T '合并是把内容完全相同的文件换成硬链接；相似照片内容不同，合并会丢掉其中一张。') | Out-Null; return }
     $plan = New-Object System.Collections.ArrayList
     $skip = 0; $bytes = [double]0
     foreach ($gid in @($script:dupByGroup.Keys)) {

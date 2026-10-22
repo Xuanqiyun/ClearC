@@ -2991,6 +2991,111 @@ public class GrowRow {
 }
 '@
 if (-not ('DupFinder' -as [type])) { Add-Type -TypeDefinition $dupCode }
+# 相似照片：把每张图缩成 9×8 灰度，相邻像素谁亮谁暗记成 64 位（dHash）；两张图的 64 位相差几位就是相似度。
+# 不同分辨率、重新压缩、轻微裁剪的照片也认得出来；用 WPF 的解码器，只在 Windows 上编译
+$script:photoCode = @'
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+public class PhotoItem { public string Path; public long Size; public DateTime Modified; public ulong Hash; public int W, H; public bool Bad; public int Group = -1; public int Dist; }
+public static class PhotoHash {
+    public static volatile bool Cancel;
+    public static long Seen, Hashed, Failed;
+    public static volatile string Current = "";
+    static readonly HashSet<string> skip = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
+        "$Recycle.Bin", "System Volume Information", "Program Files", "Program Files (x86)", "ProgramData", "Windows", "AppData", "WindowsApps", "Windows.old",
+        "$WINDOWS.~BT", "$WINDOWS.~WS", "Recovery", "node_modules", ".git", ".svn", "site-packages", "__pycache__", ".venv", "venv", ".conda", "anaconda3", "miniconda3",
+        ".cache", ".cargo", ".gradle", ".m2", ".nuget", ".npm", "steamapps", "SteamLibrary", "Thumbnails", ".thumbnails" };
+    public static readonly HashSet<string> Exts = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tif", ".tiff", ".webp", ".heic", ".heif", ".jfif" };
+    // 列出要看的照片（跳过系统和程序目录、链接）
+    public static List<PhotoItem> Scan(string[] roots, long min, long max, int limit) {
+        List<PhotoItem> list = new List<PhotoItem>();
+        Seen = 0; Hashed = 0; Failed = 0; Cancel = false;
+        Stack<string> st = new Stack<string>();
+        foreach (string r in roots) st.Push(r);
+        while (st.Count > 0 && !Cancel) {
+            string d = st.Pop(); Current = d;
+            IEnumerable<string> dirs = null, files = null;
+            try { dirs = Directory.EnumerateDirectories(d); files = Directory.EnumerateFiles(d); } catch { continue; }
+            try { foreach (string s in dirs) { string n = Path.GetFileName(s); if (skip.Contains(n)) continue; try { if ((File.GetAttributes(s) & FileAttributes.ReparsePoint) != 0) continue; } catch { continue; } st.Push(s); } } catch { }
+            try {
+                foreach (string f in files) {
+                    if (!Exts.Contains(Path.GetExtension(f))) continue;
+                    FileInfo fi; try { fi = new FileInfo(f); } catch { continue; }
+                    if (fi.Length < min || (max > 0 && fi.Length > max)) continue;
+                    Seen++;
+                    PhotoItem p = new PhotoItem(); p.Path = f; p.Size = fi.Length; p.Modified = fi.LastWriteTime; list.Add(p);
+                    if (list.Count >= limit) { Cancel = true; break; }
+                }
+            } catch { }
+        }
+        return list;
+    }
+    public static void HashAll(List<PhotoItem> list) {
+        foreach (PhotoItem p in list) {
+            if (Cancel) break;
+            Current = p.Path;
+            try { int w, h; p.Hash = Hash(p.Path, out w, out h); p.W = w; p.H = h; Hashed++; } catch { p.Bad = true; Failed++; }
+        }
+    }
+    public static ulong Hash(string path, out int w, out int h) {
+        w = 0; h = 0;
+        using (FileStream fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) {
+            BitmapDecoder dec = BitmapDecoder.Create(fs, BitmapCreateOptions.IgnoreColorProfile | BitmapCreateOptions.DelayCreation, BitmapCacheOption.None);
+            BitmapFrame fr = dec.Frames[0]; w = fr.PixelWidth; h = fr.PixelHeight;
+        }
+        // JPEG 解码时就按 1/8 缩小，大照片快很多；再缩到 9×8 取灰度
+        BitmapImage bi = new BitmapImage();
+        bi.BeginInit(); bi.UriSource = new Uri(path); bi.DecodePixelWidth = 36; bi.CacheOption = BitmapCacheOption.OnLoad; bi.CreateOptions = BitmapCreateOptions.IgnoreColorProfile; bi.EndInit(); bi.Freeze();
+        TransformedBitmap tb = new TransformedBitmap(bi, new ScaleTransform(9.0 / bi.PixelWidth, 8.0 / bi.PixelHeight)); tb.Freeze();
+        FormatConvertedBitmap g = new FormatConvertedBitmap(tb, PixelFormats.Gray8, null, 0); g.Freeze();
+        int gw = g.PixelWidth, gh = g.PixelHeight;
+        byte[] px = new byte[gw * gh]; g.CopyPixels(px, gw, 0);
+        ulong hash = 0;
+        for (int y = 0; y < 8; y++) {
+            int yy = Math.Min(gh - 1, y * gh / 8);
+            for (int x = 0; x < 8; x++) {
+                int x0 = Math.Min(gw - 1, x * gw / 9), x1 = Math.Min(gw - 1, (x + 1) * gw / 9);
+                hash = (hash << 1) | (px[yy * gw + x0] < px[yy * gw + x1] ? 1UL : 0UL);
+            }
+        }
+        return hash;
+    }
+    public static int Dist(ulong a, ulong b) { ulong x = a ^ b; int n = 0; while (x != 0) { x &= x - 1; n++; } return n; }
+    // 分组：相差不超过 maxDist 位的放一组。先按哈希的 k 段分桶（相差 d 位的两个哈希，k > d 时至少有一段完全相同），只比同桶的
+    public static int Group(List<PhotoItem> list, int maxDist) {
+        int n = list.Count; int[] parent = new int[n]; for (int i = 0; i < n; i++) parent[i] = i;
+        int k = maxDist + 1; if (k > 16) k = 16;
+        int bits = 64 / k;
+        for (int c = 0; c < k; c++) {
+            Dictionary<ulong, List<int>> bucket = new Dictionary<ulong, List<int>>();
+            int shift = c * bits; int width = (c == k - 1) ? 64 - shift : bits;
+            ulong mask = width >= 64 ? ulong.MaxValue : ((1UL << width) - 1);
+            for (int i = 0; i < n; i++) {
+                if (list[i].Bad) continue;
+                ulong key = (list[i].Hash >> shift) & mask;
+                List<int> l; if (!bucket.TryGetValue(key, out l)) { l = new List<int>(); bucket[key] = l; }
+                l.Add(i);
+            }
+            foreach (List<int> l in bucket.Values) {
+                if (l.Count < 2 || l.Count > 5000) continue;
+                for (int a = 0; a < l.Count; a++) for (int b = a + 1; b < l.Count; b++) {
+                    if (Dist(list[l[a]].Hash, list[l[b]].Hash) <= maxDist) Union(parent, l[a], l[b]);
+                }
+            }
+        }
+        Dictionary<int, int> id = new Dictionary<int, int>(); int groups = 0;
+        for (int i = 0; i < n; i++) { if (list[i].Bad) continue; int r = Find(parent, i); int g; if (!id.TryGetValue(r, out g)) { g = groups++; id[r] = g; } list[i].Group = g; }
+        return groups;
+    }
+    static int Find(int[] p, int i) { while (p[i] != i) { p[i] = p[p[i]]; i = p[i]; } return i; }
+    static void Union(int[] p, int a, int b) { a = Find(p, a); b = Find(p, b); if (a != b) p[b] = a; }
+}
+'@
+if (-not ('PhotoHash' -as [type])) { try { Add-Type -TypeDefinition $script:photoCode -ReferencedAssemblies PresentationCore, WindowsBase, System.Xaml -ErrorAction Stop } catch { Write-LogFile ('photo hash: ' + $_.Exception.Message) } }
+
 $script:tPrep = $script:startClock.Elapsed.TotalSeconds
 
 # ============================================================
@@ -5512,6 +5617,61 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+相似照片	Similar photos
+每组优先保留这个文件夹（含子文件夹）里的那份	Prefer to keep the copy inside this folder (and its subfolders) in each group
+每组优先保留 {0} 里的那份	Keeping the copy inside {0} in each group
+这台电脑上用不了相似照片	Similar photos is not available on this PC
+图片解码组件没有加载成功（运行记录里有原因）。	The image decoding component did not load (the run log has the reason).
+正在找照片…	Looking for photos…
+查找相似照片	Find similar photos
+开始查找相似照片（相差 {0} 位以内）。位置：{1}	Finding similar photos (within {0} bits). Locations: {1}
+相似照片只能放进回收站	Similar photos can only go to the Recycle Bin
+相似照片不是同一个文件（分辨率、裁剪、压缩都可能不同），删错了没法从另一份恢复，所以只允许放进回收站。已经帮你勾上「放入回收站」。	Similar photos are not the same file (resolution, cropping and compression may differ), so a mistake cannot be undone from the other copy. Only the Recycle Bin is allowed; "Recycle Bin" has been checked for you.
+这些是相似照片，不是同一个文件：每组至少保留一份没勾选的，勾选的放进回收站。	These are similar photos, not identical files: at least one unchecked copy stays in each group; checked ones go to the Recycle Bin.
+有 {0} 组把所有副本都勾上了，这些组不会动。	{0} groups have every copy checked; those groups are left alone.
+把勾选的文件搬到哪个文件夹（里面会按盘符和原路径建子文件夹）	Folder to move the checked files into (subfolders are created by drive letter and original path)
+这个文件夹不能用来归档	This folder cannot be used as the archive
+{0} 只剩 {1}，要搬的文件有 {2}。	{0} has only {1} free; the files to move total {2}.
+把 {0} 个勾选的文件搬到 {1}，共 {2}。不删任何东西：每个文件放到「{1}\\盘符\\原来的路径」，保留的那份留在原地。跨盘的会复制再删原件。\n\n归档以后这些文件就不在原来的位置了，用到它们的程序要重新指路径。	Move {0} checked files, {2} in total, to {1}. Nothing is deleted: each file goes to "{1}\\<drive>\\<original path>" and the kept copy stays where it is. Across drives the file is copied, then the original removed.\n\nAfter archiving these files are no longer at their original location; programs that use them need the new path.
+归档 {0} 个文件？	Archive {0} files?
+归档	Archive
+归档 {0} 个文件	Archive {0} files
+开始归档 {0} 个文件到 {1}	Archiving {0} files to {1}
+相似照片不能合并	Similar photos cannot be merged
+合并是把内容完全相同的文件换成硬链接；相似照片内容不同，合并会丢掉其中一张。	Merging replaces identical files with hard links; similar photos differ, so merging would lose one of them.
+完成，{0} 组相似照片	Done, {0} groups of similar photos
+相似照片不是同一个文件：没有自动勾选。每组第一张是分辨率最高的，看过以后自己勾要处理的；只能放进回收站或归档，不能永久删除，也不能合并。	Similar photos are not identical files, so nothing is checked automatically. The first in each group has the highest resolution; look, then check the ones to handle. They can only go to the Recycle Bin or be archived, never deleted permanently or merged.
+没有找到相似的照片	No similar photos found
+已中途取消，归档了 {0} 个文件	Cancelled, archived {0} files
+完成，归档了 {0} 个文件	Done, archived {0} files
+归档完成：{0} 个文件已搬到 {1}	Archive finished: {0} files moved to {1}
+列出照片	Listing photos
+照片太多，只看前 200000 张	Too many photos; only the first 200,000 are checked
+算 {0:N0} 张照片的指纹	Fingerprinting {0:N0} photos
+相似照片：{0}	Similar photos: {0}
+{0}×{1}，相差 {2} 位。相似不等于相同：先看一眼再决定	{0}×{1}, {2} bits apart. Similar is not identical: look before deciding
+看了 {0:N0} 张照片，{1:N0} 张读不了，{2} 组相似{3}	Checked {0:N0} photos, {1:N0} unreadable, {2} similar groups{3}
+（中途停止）	 (stopped early)
+  跳过（目标在原文件里面）：{0}	  skipped (target inside the source): {0}
+搬过去的文件大小对不上	the moved file has a different size
+归档重复文件	Archive duplicate
+  [{0}/{1}] 已归档  {2}	  [{0}/{1}] archived  {2}
+  归档失败  {0}：{1}	  archive failed  {0}: {1}
+归档完成：{0} 个文件，{1}；失败 {2} 个。	Archive finished: {0} files, {1}; {2} failed.
+归档勾选的…	Archive checked…
+留某个文件夹里的…	Keep the one in a folder…
+留路径最短的	Keep shortest path
+不删，把勾选的文件搬到你选的一个文件夹里（按原来的盘符和路径放，不会重名覆盖），想清楚了再删	Deletes nothing: moves the checked files into a folder you choose (laid out by drive letter and original path, never overwriting), so you can delete later
+每组保留路径最短（层级最浅）的那份	Keep the copy with the shortest (shallowest) path in each group
+选一个文件夹：每组优先保留在这个文件夹（含子文件夹）里的那份，其余勾上；这一组里没有的就留最新的	Pick a folder: in each group the copy inside it (or its subfolders) is kept and the others checked; groups with none there keep the newest
+几乎一样	Almost identical
+大致相似	Roughly similar
+相似	Similar
+64 位指纹相差 4 位以内：同一张照片的不同尺寸、不同压缩	Fingerprints within 4 of 64 bits: the same photo at different sizes or compression
+找看起来一样的照片：不同分辨率、重新压缩过、轻微裁剪过的也算。只看 jpg、png、bmp、gif、tif、webp、heic。不是同一个文件，删之前自己看一眼	Finds photos that look the same, including different resolutions, recompressed and lightly cropped ones. Only jpg, png, bmp, gif, tif, webp and heic. They are not the same file, so look before deleting
+相差 12 位以内：连拍、构图相近的也会归到一起，误判会多	Within 12 bits: bursts and similar compositions get grouped too, with more false matches
+相差 8 位以内：加上轻微裁剪、调色	Within 8 bits: also light cropping and color edits
+相似程度	Similarity
 正在读取硬件、事件日志和转储文件，要十几秒…	Reading hardware, event logs and dump files, this takes ten seconds or so…
 没能读取：	Could not read: 
 读取于 {0:HH:mm}，用了 {1:N0} 秒。只看不改。	Read at {0:HH:mm} in {1:N0} s. Read-only.
@@ -9501,8 +9661,20 @@ if ($script:mode -match '(?i)/autoclean') {
                     <StackPanel Orientation="Horizontal">
                       <RadioButton x:Name="ModeName" GroupName="dupmode" Content="名字和内容都相同" IsChecked="True" Style="{StaticResource Seg}"/>
                       <RadioButton x:Name="ModeContent" GroupName="dupmode" Content="只看内容，名字不同也算" Style="{StaticResource Seg}"/>
+                      <RadioButton x:Name="ModeSimilar" GroupName="dupmode" Content="相似照片" Style="{StaticResource Seg}"
+                                   ToolTip="找看起来一样的照片：不同分辨率、重新压缩过、轻微裁剪过的也算。只看 jpg、png、bmp、gif、tif、webp、heic。不是同一个文件，删之前自己看一眼"/>
                     </StackPanel>
                   </Border>
+                  <StackPanel x:Name="SimilarRow" Orientation="Horizontal" Margin="0,0,28,0" Visibility="Collapsed">
+                    <TextBlock Text="相似程度" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                    <Border Style="{StaticResource SegBox}">
+                      <StackPanel Orientation="Horizontal">
+                        <RadioButton x:Name="SimStrict" GroupName="simlvl" Content="几乎一样" Style="{StaticResource Seg}" ToolTip="64 位指纹相差 4 位以内：同一张照片的不同尺寸、不同压缩"/>
+                        <RadioButton x:Name="SimNormal" GroupName="simlvl" Content="相似" IsChecked="True" Style="{StaticResource Seg}" ToolTip="相差 8 位以内：加上轻微裁剪、调色"/>
+                        <RadioButton x:Name="SimLoose" GroupName="simlvl" Content="大致相似" Style="{StaticResource Seg}" ToolTip="相差 12 位以内：连拍、构图相近的也会归到一起，误判会多"/>
+                      </StackPanel>
+                    </Border>
+                  </StackPanel>
                   <StackPanel Orientation="Horizontal">
                     <TextBlock Text="比对方式" VerticalAlignment="Center" Margin="0,0,12,0"/>
                     <Border Style="{StaticResource SegBox}">
@@ -9532,6 +9704,8 @@ if ($script:mode -match '(?i)/autoclean') {
               <Button x:Name="BtnKeepNew"  Style="{StaticResource Small}" Content="留最新的" Margin="0,0,6,0" IsEnabled="False"/>
               <Button x:Name="BtnKeepOld"  Style="{StaticResource Small}" Content="留最早的" Margin="0,0,6,0" IsEnabled="False"/>
               <Button x:Name="BtnPickC"    Style="{StaticResource Small}" Content="优先留 C 盘以外的" Margin="0,0,6,0" IsEnabled="False"/>
+              <Button x:Name="BtnKeepIn"   Style="{StaticResource Small}" Content="留某个文件夹里的…" Margin="0,0,6,0" IsEnabled="False" ToolTip="选一个文件夹：每组优先保留在这个文件夹（含子文件夹）里的那份，其余勾上；这一组里没有的就留最新的"/>
+              <Button x:Name="BtnKeepShort" Style="{StaticResource Small}" Content="留路径最短的" Margin="0,0,6,0" IsEnabled="False" ToolTip="每组保留路径最短（层级最浅）的那份"/>
               <Button x:Name="BtnPickNone" Style="{StaticResource Small}" Content="全部取消" IsEnabled="False"/>
             </StackPanel>
             <TextBlock x:Name="DupProgressText" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="#6E6E73"
@@ -9613,6 +9787,8 @@ if ($script:mode -match '(?i)/autoclean') {
           <CheckBox x:Name="DupProtect" Content="不删 C 盘个人文件夹里的文件" IsChecked="True" VerticalAlignment="Center" Margin="0,0,16,0"
                     ToolTip="桌面、文档、下载、图片、视频、音乐等 C 盘个人文件夹里的副本一律保留，只删其他位置的副本"/>
           <CheckBox x:Name="DupRecycle" Content="放入回收站，可以恢复" IsChecked="True" VerticalAlignment="Center" Margin="0,0,16,0"/>
+          <Button x:Name="BtnDupMove" Content="归档勾选的…" Margin="0,0,8,0" Padding="16,8" IsEnabled="False"
+                  ToolTip="不删，把勾选的文件搬到你选的一个文件夹里（按原来的盘符和路径放，不会重名覆盖），想清楚了再删"/>
           <Button x:Name="BtnDupMerge" Content="合并为一份" Margin="0,0,8,0" Padding="16,8" IsEnabled="False"
                   ToolTip="勾选的副本换成指向保留那份的硬链接：每个位置的文件都还在，只占一份空间。只适用于同一块盘上的副本"/>
           <Button x:Name="BtnDupDelete" Content="删除勾选的文件" Style="{StaticResource Danger}" Padding="20,8" IsEnabled="False"/>
@@ -11820,7 +11996,7 @@ foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageM
                'Roots','BtnAddRoot','BtnDupScan','BtnDupStop',
                'FilterExpander','FilterSummary','TypeChips','TypeReset','ExtraExt','SizeChips',
                'SizeMin','SizeMinUnit','SizeMax','SizeMaxUnit','SizeHint','ModeName','ModeContent','SpeedFast','SpeedExact',
-               'DupProgressText','DupList','DupRecycle','DupProtect','BtnDupDelete',
+               'DupProgressText','DupList','DupRecycle','DupProtect','BtnDupDelete','ModeSimilar','SimilarRow','SimStrict','SimNormal','SimLoose','BtnKeepIn','BtnKeepShort','BtnDupMove',
                'OpPanel','OpTime','OpTitle','OpBar','OpSubTime','OpDetail','OpSubBar','Root',
                'Overlay','OvTitle','OvTime','OvBar','OvStep','OvWhat','OvChecklist','OvDetail','OvSubBar','OvPlanBox','OvPlanScroll','OvPlan','OvHide','OvClose','OvNote',
                'BtnKeepNew','BtnKeepOld','BtnPickC','BtnPickNone','DupSummary',
@@ -12171,7 +12347,7 @@ function End-Op([string]$result, [switch]$KeepCard, [string]$headline = '', $rep
 # 能中途取消的操作。look = 只是查看，不用确认；其余先问一句。
 # 不在这里的（删除单个文件夹、系统压缩、压缩虚拟磁盘、卸载、删除多余副本）要么很快做完，要么停在一半不安全
 $script:cancelModes = @{ scan = 'look'; apps = 'look'; dup = 'look'; map = 'look'
-    run = 'run'; dupdel = 'dupdel'; merge = 'merge'; leftdel = 'leftdel'; fcompress = 'fcompress'; moveback = 'moveback'; vmove = 'move'; appmove = 'move'
+    run = 'run'; dupdel = 'dupdel'; dupmove = 'dupdel'; similar = 'look'; merge = 'merge'; leftdel = 'leftdel'; fcompress = 'fcompress'; moveback = 'moveback'; vmove = 'move'; appmove = 'move'
     movescan = 'look'; movemany = 'movemany'; mapdel = 'dupdel'; selftest = 'look'; odinfo = 'look'; leftovers = 'look'; odfree = 'look'; recent = 'look' }
 $script:cancelUi = ''
 function Update-CancelUi {
@@ -12424,8 +12600,8 @@ function UI-Busy($b) {
     $ctl.BtnDupScan.IsEnabled = -not $b
     $ctl.BtnAddRoot.IsEnabled = -not $b; $ctl.Roots.IsEnabled = -not $b
     $has = (-not $b) -and ($script:dupRows -ne $null) -and ($script:dupRows.Count -gt 0)
-    foreach ($n in 'BtnKeepNew','BtnKeepOld','BtnPickC','BtnPickNone') { $ctl[$n].IsEnabled = $has }
-    $ctl.BtnDupStop.IsEnabled = $b -and ($sync.Mode -eq 'dup')
+    foreach ($n in 'BtnKeepNew','BtnKeepOld','BtnPickC','BtnPickNone','BtnKeepIn','BtnKeepShort') { $ctl[$n].IsEnabled = $has }
+    $ctl.BtnDupStop.IsEnabled = $b -and ($sync.Mode -eq 'dup' -or $sync.Mode -eq 'similar')
     foreach ($n in 'BtnMapScan','BtnAppsRefresh','BtnMovesRefresh','BtnCosOn','BtnCosOff','BtnPfMove','BtnPfAuto','BtnHibReduced','BtnHibOff','BtnHibFull','BtnFolderCompress','BtnSaveRefresh') { $ctl[$n].IsEnabled = -not $b }
     $ctl.BtnMapStop.IsEnabled = $b -and ($sync.Mode -eq 'map')
     if (-not $b -and $script:pageLoaded.save) { $on = Get-CompactOSOn; $ctl.BtnCosOn.IsEnabled = -not $on; $ctl.BtnCosOff.IsEnabled = $on }
@@ -13068,7 +13244,8 @@ foreach ($c in @($ctl.SizeMinUnit, $ctl.SizeMaxUnit)) { $c.Add_SelectionChanged(
 # ---------- 条件摘要：收起面板后也能看到当前条件 ----------
 function Update-FilterSummary {
     if ($null -eq $script:typeAll -or $null -eq $script:sizeCustom) { return }
-    if ($script:typeAll.IsChecked) { $types = (T '全部类型') }
+    if ($ctl.ModeSimilar.IsChecked) { $types = (T '相似照片') }
+    elseif ($script:typeAll.IsChecked) { $types = (T '全部类型') }
     else {
         $names = @($script:chips | Where-Object { $_.Btn.IsChecked } | ForEach-Object { $_.Label })
         $extra = Parse-ExtraExt
@@ -13155,7 +13332,7 @@ function Build-DupRows($groups, [int]$totalGroups) {
 }
 
 function Update-DupSummary {
-    if (-not $script:dupRows) { $ctl.DupSummary.Text = ''; $ctl.BtnDupDelete.IsEnabled = $false; return }
+    if (-not $script:dupRows) { $ctl.DupSummary.Text = ''; $ctl.BtnDupDelete.IsEnabled = $false; $ctl.BtnDupMove.IsEnabled = $false; return }
     $n = 0; $b = [double]0
     foreach ($r in $script:dupRows) { if ($r.ToDelete) { $n++; $b += $r.Size } }
     $locked = 0; foreach ($r in $script:dupRows) { if (-not $r.CanDelete) { $locked++ } }
@@ -13164,7 +13341,7 @@ function Update-DupSummary {
         $ctl.DupSummary.Text = ((T "找到 {0} 组重复文件。已勾选 {1} 个，删除后释放 {2}。") -f $script:dupByGroup.Count, $n, (Fmt $b))
         if ($locked -gt 0) { $ctl.DupSummary.Text += ((T " C 盘个人文件夹里的 {0} 个副本受保护，不会删。") -f $locked) }
     }
-    $ctl.BtnDupDelete.IsEnabled = ($n -gt 0) -and (-not $script:worker)
+    $ctl.BtnDupDelete.IsEnabled = ($n -gt 0) -and (-not $script:worker); $ctl.BtnDupMove.IsEnabled = $ctl.BtnDupDelete.IsEnabled
     $ctl.BtnDupMerge.IsEnabled = ($n -gt 0) -and (-not $script:worker)
 }
 
@@ -13190,7 +13367,11 @@ function Pick-Dup([string]$mode) {
             $notC = @($rows | Where-Object { -not $_.Path.StartsWith("$env:SystemDrive\", [StringComparison]::OrdinalIgnoreCase) })
             if ($notC.Count -gt 0) { $pool = $notC }
         }
-        $keep = @($pool | Sort-Object ModifiedTicks -Descending:($mode -ne 'old'))[0]
+        elseif ($mode -eq 'in' -and $script:keepInDir) {
+            $inside = @($rows | Where-Object { $_.Path.StartsWith($script:keepInDir, [StringComparison]::OrdinalIgnoreCase) })
+            if ($inside.Count -gt 0) { $pool = $inside }
+        }
+        $keep = if ($mode -eq 'short') { @($pool | Sort-Object { $_.Path.Length }, { $_.Path })[0] } else { @($pool | Sort-Object ModifiedTicks -Descending:($mode -ne 'old'))[0] }
         foreach ($r in $rows) { $r.ToDelete = -not [object]::ReferenceEquals($r, $keep) }
     }
     [DupRow]::Dirty = $false
@@ -13223,6 +13404,17 @@ $ctl.DupProtect.Add_Unchecked({
 $ctl.BtnKeepNew.Add_Click({ Pick-Dup 'new' })
 $ctl.BtnKeepOld.Add_Click({ Pick-Dup 'old' })
 $ctl.BtnPickC.Add_Click({ Pick-Dup 'c' })
+$ctl.BtnKeepShort.Add_Click({ Pick-Dup 'short' })
+$script:keepInDir = ''
+$ctl.BtnKeepIn.Add_Click({
+    $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
+    $dlg.Description = (T '每组优先保留这个文件夹（含子文件夹）里的那份')
+    if ($script:keepInDir) { $dlg.SelectedPath = $script:keepInDir }
+    if ($dlg.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { return }
+    $script:keepInDir = $dlg.SelectedPath.TrimEnd('\') + '\'
+    Pick-Dup 'in'
+    UI-Log ((T "每组优先保留 {0} 里的那份") -f $script:keepInDir)
+})
 $ctl.BtnPickNone.Add_Click({ Pick-Dup 'none' })
 
 # 「打开位置」按钮：在资源管理器里选中这个文件
@@ -13234,11 +13426,65 @@ $ctl.DupList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickEv
     }
 })
 
+$ctl.ModeSimilar.Add_Checked({ $ctl.SimilarRow.Visibility = 'Visible'; Update-FilterSummary })
+$ctl.ModeSimilar.Add_Unchecked({ $ctl.SimilarRow.Visibility = 'Collapsed'; Update-FilterSummary })
+$script:dupSimilar = $false
+function Start-SimilarScan([string[]]$paths, $range) {
+    if (-not ('PhotoHash' -as [type])) { Show-Sheet -Kind warn -Title (T '这台电脑上用不了相似照片') -Text (T '图片解码组件没有加载成功（运行记录里有原因）。') | Out-Null; return }
+    $dist = if ($ctl.SimStrict.IsChecked) { 4 } elseif ($ctl.SimLoose.IsChecked) { 12 } else { 8 }
+    $script:dupRows = $null; $script:dupByGroup = @{}; $ctl.DupList.ItemsSource = $null
+    $ctl.EmptyDup.Visibility = 'Visible'; $ctl.EmptyDupText.Text = (T '正在找照片…')
+    $ctl.FilterExpander.IsExpanded = $false
+    $sync.Mode = 'similar'; $sync.DupResult = $null; $sync.SimNote = ''
+    Start-Op (T '查找相似照片')
+    $ctl.DupProgressText.Text = (T '正在找照片…')
+    UI-Busy $true
+    UI-Log ((T "开始查找相似照片（相差 {0} 位以内）。位置：{1}") -f $dist, ($paths -join (T '；')))
+    Start-Worker @'
+[PhotoHash]::Cancel = $false
+SetP @{ SubKind = 'none'; Detail = (T '列出照片') }
+$list = [PhotoHash]::Scan([string[]]$arg.Roots, [long]$arg.Min, [long]$arg.Max, 200000)
+$sync.SimSeen = $list.Count
+if ($list.Count -ge 200000) { Log (T '照片太多，只看前 200000 张') }
+SetP @{ SubKind = 'none'; Detail = ((T "算 {0:N0} 张照片的指纹") -f $list.Count); Steps = $list.Count; Step = 0 }
+# 一边算一边报进度：分批
+$batch = New-Object System.Collections.Generic.List[PhotoItem]
+$k = 0
+foreach ($p in $list) {
+    $batch.Add($p); $k++
+    if ($batch.Count -ge 200) { [PhotoHash]::HashAll($batch); $batch.Clear(); SetP @{ Step = $k }; if (Stopping) { break } }
+}
+if ($batch.Count -gt 0 -and -not (Stopping)) { [PhotoHash]::HashAll($batch) }
+$stopped = [bool](Stopping)
+$n = [PhotoHash]::Group($list, [int]$arg.Dist)
+$by = @{}
+foreach ($p in $list) { if ($p.Bad -or $p.Group -lt 0) { continue }; if (-not $by.ContainsKey($p.Group)) { $by[$p.Group] = New-Object System.Collections.Generic.List[PhotoItem] }; $by[$p.Group].Add($p) }
+$groups = New-Object System.Collections.Generic.List[DupGroup]
+foreach ($g in $by.Values) {
+    if ($g.Count -lt 2) { continue }
+    $dg = New-Object DupGroup
+    $big = $g | Sort-Object { $_.Size } -Descending | Select-Object -First 1
+    $dg.Name = (T "相似照片：{0}") -f [IO.Path]::GetFileName($big.Path); $dg.Size = $big.Size; $dg.Verified = $false
+    foreach ($p in ($g | Sort-Object { $_.W * $_.H } -Descending)) {
+        $f = New-Object DupFile
+        $f.Path = $p.Path; $f.Size = $p.Size; $f.Modified = $p.Modified
+        $f.Risk = (T "{0}×{1}，相差 {2} 位。相似不等于相同：先看一眼再决定") -f $p.W, $p.H, ([PhotoHash]::Dist($p.Hash, $big.Hash))
+        $dg.Files.Add($f)
+    }
+    $groups.Add($dg)
+}
+$sorted = @($groups | Sort-Object { $_.Waste } -Descending)
+$sync.DupResult = New-Object System.Collections.Generic.List[DupGroup]
+foreach ($g in $sorted) { $sync.DupResult.Add($g) }
+$sync.SimNote = (T "看了 {0:N0} 张照片，{1:N0} 张读不了，{2} 组相似{3}") -f $list.Count, [PhotoHash]::Failed, $groups.Count, $(if ($stopped) { (T '（中途停止）') } else { '' })
+'@ @{ Roots = [string[]]$paths; Min = [long][math]::Max([double]1, [double]$range.Min); Max = [long]$range.Max; Dist = $dist }
+}
 $ctl.BtnDupScan.Add_Click({
     $paths = @($script:roots | Where-Object { $_.Enabled } | ForEach-Object { $_.Path })
     if (-not $paths) { Show-Sheet -Title (T '还没选查找位置') -Text (T '请在「查找位置」里至少勾选一个文件夹或磁盘。') | Out-Null; $ctl.FilterExpander.IsExpanded = $true; return }
     $range = Get-SizeRange
     if (-not $range.Ok) { Show-Sheet -Kind warn -Title (T '文件大小填写有误') -Text $range.Err | Out-Null; $ctl.FilterExpander.IsExpanded = $true; return }
+    if ($ctl.ModeSimilar.IsChecked) { Start-SimilarScan $paths $range; return }
     $ext = Get-SelectedExt
     $script:dupRows = $null; $script:dupByGroup = @{}; $ctl.DupList.ItemsSource = $null
     $ctl.EmptyDup.Visibility = 'Visible'; $ctl.EmptyDupText.Text = (T '正在查找…')
@@ -13281,7 +13527,7 @@ if (-not [DupFinder]::UsedFastEnum) { Log (T '提示：快速列举不可用，�
 '@ $arg
 })
 
-$ctl.BtnDupStop.Add_Click({ [DupFinder]::Cancel = $true; UI-Log (T "正在停止...") })
+$ctl.BtnDupStop.Add_Click({ [DupFinder]::Cancel = $true; try { [PhotoHash]::Cancel = $true } catch {}; UI-Log (T "正在停止...") })
 
 $ctl.BtnDupDelete.Add_Click({
     $plan = New-Object System.Collections.ArrayList
@@ -13303,8 +13549,13 @@ $ctl.BtnDupDelete.Add_Click({
         return
     }
     $recycle = [bool]$ctl.DupRecycle.IsChecked
+    if ($script:dupSimilar -and -not $recycle) {
+        Show-Sheet -Kind warn -Title (T '相似照片只能放进回收站') -Text (T '相似照片不是同一个文件（分辨率、裁剪、压缩都可能不同），删错了没法从另一份恢复，所以只允许放进回收站。已经帮你勾上「放入回收站」。') | Out-Null
+        $ctl.DupRecycle.IsChecked = $true; $recycle = $true
+    }
+    if ($script:dupSimilar) { foreach ($p in $plan) { $p.Similar = $true } }
     $script:lastRecycle = $recycle
-    $msg = (T "每组至少保留一份没勾选的。")
+    $msg = if ($script:dupSimilar) { (T "这些是相似照片，不是同一个文件：每组至少保留一份没勾选的，勾选的放进回收站。") } else { (T "每组至少保留一份没勾选的。") }
     $msg += if ($recycle) { (T "文件会放进回收站，可以恢复；清空回收站后才真正释放空间。") } else { (T "文件会被永久删除，不能恢复。") }
     if ($allChecked) { $msg += ((T "`n`n另有 {0} 组所有副本都被勾选，这些组会跳过。") -f $allChecked) }
     if ($risky)      { $msg += ((T "`n`n其中 {0} 个文件带有「注意」提示（程序目录或微信数据），请确认确实要删。") -f $risky) }
@@ -13332,6 +13583,7 @@ foreach ($p in $arg.Plan) {
     $kept = $false
     foreach ($k in $p.Keep) {
         $ki = Get-Item -LiteralPath $k -Force -ErrorAction SilentlyContinue
+        if ($p.Similar) { if ($ki) { $kept = $true; break }; continue }   # 相似照片：保留的那份还在就行（大小本来就不同）
         if (-not $ki -or $ki.Length -ne $p.Size) { continue }
         if ($p.Verified) { $kept = $true; break }
         # 抽样判定的组：和保留的那份逐字节比一遍，完全相同才删
@@ -16504,8 +16756,65 @@ $ctl.LogKeep.Add_SelectionChanged({
 # ------------------------------------------------------------
 # 重复文件：合并为一份（硬链接）
 # ------------------------------------------------------------
+# 归档：不删，把勾选的搬到选定的文件夹（<文件夹>\<盘符>\<原路径>），每组照样至少留一份不动
+$ctl.BtnDupMove.Add_Click({
+    if ($script:worker) { return }
+    $plan = New-Object System.Collections.ArrayList
+    $allChecked = 0; $bytes = [double]0
+    foreach ($gid in @($script:dupByGroup.Keys)) {
+        $rows = @($script:dupByGroup[$gid])
+        $del = @($rows | Where-Object { $_.ToDelete -and $_.CanDelete })
+        if ($del.Count -eq 0) { continue }
+        if ($del.Count -ge $rows.Count) { $allChecked++; continue }
+        foreach ($r in $del) { [void]$plan.Add(@{ Path = $r.Path; Size = $r.Size }); $bytes += $r.Size }
+    }
+    if ($plan.Count -eq 0) { if ($allChecked) { Show-Sheet -Kind warn -Title (T '每组至少要留一份') -Text ((T "有 {0} 组把所有副本都勾上了，这些组不会动。") -f $allChecked) | Out-Null }; return }
+    $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
+    $dlg.Description = (T '把勾选的文件搬到哪个文件夹（里面会按盘符和原路径建子文件夹）')
+    if ($dlg.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { return }
+    $dest = $dlg.SelectedPath.TrimEnd('\')
+    $why = Get-DeleteBlock $dest
+    if ($why) { Show-Sheet -Kind warn -Title (T '这个文件夹不能用来归档') -Text $why | Out-Null; return }
+    $free = DriveFree ($dest.Substring(0, 2))
+    if ($free -lt $bytes * 1.02) { Show-Sheet -Kind warn -Title ((T "{0} 盘放不下") -f $dest.Substring(0, 1)) -Text ((T "{0} 只剩 {1}，要搬的文件有 {2}。") -f $dest.Substring(0, 2), (GB $free), (GB $bytes)) | Out-Null; return }
+    $text = (T "把 {0} 个勾选的文件搬到 {1}，共 {2}。不删任何东西：每个文件放到「{1}\盘符\原来的路径」，保留的那份留在原地。跨盘的会复制再删原件。`n`n归档以后这些文件就不在原来的位置了，用到它们的程序要重新指路径。") -f $plan.Count, $dest, (Fmt $bytes)
+    if ($allChecked) { $text += ((T "`n`n另有 {0} 组所有副本都被勾选，这些组会跳过。") -f $allChecked) }
+    if ((Show-Sheet -Title ((T "归档 {0} 个文件？") -f $plan.Count) -Text $text -Buttons @((T '取消'), (T '归档')) -Primary (T '归档') -Cancel (T '取消')) -ne (T '归档')) { return }
+    $sync.Mode = 'dupmove'; $sync.DupDeleted = $null; $sync.DupMoveDest = $dest
+    Start-Op ((T "归档 {0} 个文件") -f $plan.Count)
+    UI-Busy $true
+    UI-Log ((T "开始归档 {0} 个文件到 {1}") -f $plan.Count, $dest)
+    Start-Worker @'
+$done = New-Object System.Collections.ArrayList
+$i = 0; $total = $arg.Plan.Count; $moved = [double]0; $fails = 0
+foreach ($p in $arg.Plan) {
+    if (Stopping) { break }
+    $i++
+    SetP @{ Steps = $total; Step = $i; StepName = [IO.Path]::GetFileName($p.Path); SubKind = 'none' }
+    if ($arg.Protect -and (Test-Personal $p.Path)) { Log ((T "  跳过（C 盘个人文件夹，受保护）：{0}") -f $($p.Path)); continue }
+    $fi = Get-Item -LiteralPath $p.Path -Force -ErrorAction SilentlyContinue
+    if (-not $fi) { continue }
+    if ($fi.Length -ne $p.Size) { Log ((T "  跳过（文件在扫描后被修改过）：{0}") -f $($p.Path)); continue }
+    $rel = $p.Path.Substring(0, 1).ToUpper() + '\' + $p.Path.Substring(3)
+    $to = Join-Path $arg.Dest $rel
+    if ($to.StartsWith($p.Path + '\', [StringComparison]::OrdinalIgnoreCase) -or $to -ieq $p.Path) { Log ((T "  跳过（目标在原文件里面）：{0}") -f $($p.Path)); continue }
+    try {
+        New-Item -ItemType Directory -Path (Split-Path $to -Parent) -Force | Out-Null
+        if (Test-Path -LiteralPath $to) { $to = Join-Path (Split-Path $to -Parent) (([IO.Path]::GetFileNameWithoutExtension($to)) + ' (' + (Get-Date -Format 'yyyyMMdd-HHmmss') + ')' + [IO.Path]::GetExtension($to)) }
+        [IO.File]::Move($p.Path, $to)
+        if (-not (Test-Path -LiteralPath $to) -or (Get-Item -LiteralPath $to).Length -ne $p.Size) { throw (T '搬过去的文件大小对不上') }
+        [void]$done.Add($p.Path); $moved += $p.Size
+        OpLog '搬运' (T '归档重复文件') $p.Path $to
+        if ($total -le 200 -or $i % 100 -eq 0) { Log ((T "  [{0}/{1}] 已归档  {2}") -f $i, $total, $p.Path) }
+    } catch { $fails++; Log ((T "  归档失败  {0}：{1}") -f $($p.Path), $($_.Exception.Message)) }
+}
+Log ((T "归档完成：{0} 个文件，{1}；失败 {2} 个。") -f $done.Count, (Fmt $moved), $fails)
+$sync.DupDeleted = $done
+'@ @{ Plan = $plan; Dest = $dest; Protect = [bool]$ctl.DupProtect.IsChecked }
+})
 $ctl.BtnDupMerge.Add_Click({
     if ($script:worker) { return }
+    if ($script:dupSimilar) { Show-Sheet -Kind warn -Title (T '相似照片不能合并') -Text (T '合并是把内容完全相同的文件换成硬链接；相似照片内容不同，合并会丢掉其中一张。') | Out-Null; return }
     $plan = New-Object System.Collections.ArrayList
     $skip = 0; $bytes = [double]0
     foreach ($gid in @($script:dupByGroup.Keys)) {
@@ -17045,6 +17354,54 @@ function Invoke-UiTest {
             # 系统文件检查按钮只是起终端：不点，查它在不在
             if ($ctl.BtnSfcCheck.Visibility -ne 'Visible') { throw 'sfc check button hidden' }
         }
+        & $step 'similar photos and keep rules' {
+            if (-not ('PhotoHash' -as [type])) { throw 'PhotoHash did not compile' }
+            $d = Join-Path $script:appDir 'uitest-photos'; New-Item -ItemType Directory -Path "$d\sub" -Force | Out-Null
+            # 画三张图：渐变图、它的缩小版（相似）、另一张方格图（不相似）
+            $draw = { param([string]$file, [int]$w, [int]$h, [bool]$checker)
+                $dv = New-Object System.Windows.Media.DrawingVisual
+                $dc = $dv.RenderOpen()
+                if ($checker) { for ($x = 0; $x -lt 8; $x++) { for ($y = 0; $y -lt 8; $y++) { $c = if (($x + $y) % 2 -eq 0) { [System.Windows.Media.Brushes]::Black } else { [System.Windows.Media.Brushes]::White }; $dc.DrawRectangle($c, $null, (New-Object System.Windows.Rect ($x * $w / 8), ($y * $h / 8), ($w / 8), ($h / 8))) } } }
+                else { $br = New-Object System.Windows.Media.LinearGradientBrush ([System.Windows.Media.Colors]::Black), ([System.Windows.Media.Colors]::White), 0; $dc.DrawRectangle($br, $null, (New-Object System.Windows.Rect 0, 0, $w, $h)); $dc.DrawEllipse([System.Windows.Media.Brushes]::Red, $null, (New-Object System.Windows.Point ($w * 0.3), ($h * 0.6)), ($w * 0.15), ($h * 0.15)) }
+                $dc.Close()
+                $rt = New-Object System.Windows.Media.Imaging.RenderTargetBitmap $w, $h, 96, 96, ([System.Windows.Media.PixelFormats]::Pbgra32); $rt.Render($dv)
+                $enc = New-Object System.Windows.Media.Imaging.PngBitmapEncoder; $enc.Frames.Add([System.Windows.Media.Imaging.BitmapFrame]::Create($rt))
+                $fs = [IO.File]::Create($file); try { $enc.Save($fs) } finally { $fs.Dispose() }
+            }
+            & $draw "$d\a.png" 640 480 $false; & $draw "$d\sub\a-small.png" 160 120 $false; & $draw "$d\other.png" 640 480 $true
+            try {
+                $w1 = 0; $h1 = 0; $ha = [PhotoHash]::Hash("$d\a.png", [ref]$w1, [ref]$h1); $hb = [PhotoHash]::Hash("$d\sub\a-small.png", [ref]$w1, [ref]$h1); $hc = [PhotoHash]::Hash("$d\other.png", [ref]$w1, [ref]$h1)
+                $dab = [PhotoHash]::Dist($ha, $hb); $dac = [PhotoHash]::Dist($ha, $hc)
+                $L.Add(("photo hash: a~small {0} bits, a~other {1} bits" -f $dab, $dac))
+                if ($dab -gt 6 -or $dac -lt 12) { throw ("hash distances a~small {0}, a~other {1}" -f $dab, $dac) }
+                $list = [PhotoHash]::Scan([string[]]@($d), 1, 0, 1000); [PhotoHash]::HashAll($list)
+                if ($list.Count -ne 3) { throw ("scan found {0} photos" -f $list.Count) }
+                $ng = [PhotoHash]::Group($list, 8)
+                $byG = @{}; foreach ($p in $list) { $byG[$p.Group] = [int]$byG[$p.Group] + 1 }
+                if (@($byG.Values | Where-Object { $_ -eq 2 }).Count -ne 1 -or $ng -ne 2) { throw ("groups: {0}" -f (($list | ForEach-Object { $_.Path + '=' + $_.Group }) -join ', ')) }
+                # 走一遍真正的查找（后台线程）
+                Show-Page 'dup'; $ctl.ModeSimilar.IsChecked = $true
+                if ($ctl.SimilarRow.Visibility -ne 'Visible') { throw 'similarity row hidden' }
+                Start-SimilarScan @($d) @{ Ok = $true; Min = 1; Max = 0 }
+                if (-not (& $waitUi { -not $script:worker } 60000)) { throw 'similar scan did not finish' }
+                if (-not $script:dupRows -or $script:dupRows.Count -ne 2 -or -not $script:dupSimilar) { throw ("similar rows: {0}" -f $(if ($script:dupRows) { $script:dupRows.Count } else { 0 })) }
+                if (@($script:dupRows | Where-Object { $_.ToDelete }).Count -ne 0) { throw 'similar photos were auto-checked' }
+                if ($script:dupRows[0].Path -ne "$d\a.png" -or -not $script:dupRows[0].HasRisk) { throw 'largest photo not first, or no note' }
+                # 留法：路径最短的、某个文件夹里的
+                Pick-Dup 'short'
+                if (-not $script:dupRows[1].ToDelete -or $script:dupRows[0].ToDelete) { throw 'keep shortest path wrong' }
+                $script:keepInDir = "$d\sub\"; Pick-Dup 'in'
+                if (-not $script:dupRows[0].ToDelete -or $script:dupRows[1].ToDelete) { throw 'keep in folder wrong' }
+                $script:keepInDir = ''
+                # 相似照片：不能合并，永久删除会被改成回收站
+                $n0 = $script:uiSheets.Count; & $click $ctl.BtnDupMerge
+                if ($script:uiSheets.Count -le $n0) { throw 'merge of similar photos not refused' }
+                $ctl.DupRecycle.IsChecked = $false; $n0 = $script:uiSheets.Count; & $click $ctl.BtnDupDelete
+                if (-not $ctl.DupRecycle.IsChecked -or $script:uiSheets.Count -lt $n0 + 2) { throw 'delete of similar photos did not force the recycle bin' }
+                if ($script:worker) { throw 'delete started although the dialog was cancelled' }
+                $ctl.DupRecycle.IsChecked = $true
+            } finally { $ctl.ModeName.IsChecked = $true; $script:dupRows = $null; $script:dupByGroup = @{}; $script:dupSimilar = $false; $ctl.DupList.ItemsSource = $null; Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue }
+        }
         & $step 'restore points card' {
             Show-Page 'save'
             $sw = [Diagnostics.Stopwatch]::StartNew()
@@ -17399,7 +17756,20 @@ $timer.Add_Tick({
             Fill-DestChoices
         }
         elseif ($sync.Mode -eq 'hogs') { End-Op (T '完成') }
+        elseif ($sync.Mode -eq 'similar') {
+            $res = $sync.DupResult
+            $cnt = if ($res) { $res.Count } else { 0 }
+            $script:dupSimilar = $true
+            $ctl.DupProgressText.Text = [string]$sync.SimNote
+            End-Op ((T "完成，{0} 组相似照片") -f $cnt)
+            if ($res) { Build-DupRows $res $cnt } else { Build-DupRows @() 0 }
+            if ($script:dupRows -and $script:dupRows.Count -gt 0) {
+                Pick-Dup 'none'
+                UI-Log (T '相似照片不是同一个文件：没有自动勾选。每组第一张是分辨率最高的，看过以后自己勾要处理的；只能放进回收站或归档，不能永久删除，也不能合并。')
+            } elseif (-not $sync.WasCancelled) { $ctl.EmptyDupText.Text = (T '没有找到相似的照片') }
+        }
         elseif ($sync.Mode -eq 'dup') {
+            $script:dupSimilar = $false
             $res = $sync.DupResult
             $cnt = if ($res) { $res.Count } else { 0 }
             $stopped = [DupFinder]::Cancel
@@ -17411,7 +17781,8 @@ $timer.Add_Tick({
                 UI-Log (T '已自动勾选：每组留最新的一份，其余删除。可以改勾选，或点上面的按钮换一种留法。')
             }
         }
-        elseif ($sync.Mode -eq 'dupdel') {
+        elseif ($sync.Mode -eq 'dupdel' -or $sync.Mode -eq 'dupmove') {
+            $moveMode = ($sync.Mode -eq 'dupmove')
             $gone = @{}
             if ($sync.DupDeleted) { foreach ($p in $sync.DupDeleted) { $gone[$p.ToLowerInvariant()] = $true } }
             $left = New-Object System.Collections.Generic.List[DupGroup]
@@ -17424,12 +17795,18 @@ $timer.Add_Tick({
             Build-DupRows $left $left.Count
             $nDel = if ($sync.DupDeleted) { $sync.DupDeleted.Count } else { 0 }
             $cardWasOpen = ($ctl.Overlay.Visibility -eq 'Visible')
-            $bin = if ($script:lastRecycle) { (T "`n`n文件在回收站里，清空回收站后才真正释放磁盘空间。") } else { '' }
-            $binShort = if ($script:lastRecycle) { (T '文件在回收站里，清空回收站后才真正释放空间。') } else { '' }
-            $cx = [bool]$sync.WasCancelled
-            End-Op ($(if ($cx) { (T "已中途取消，删除了 {0} 个文件") } else { (T "完成，删除了 {0} 个文件") }) -f $nDel) -KeepCard -headline ($(if ($cx) { (T "已中途取消：删除了 {0} 个重复文件，剩下的没删。{1}") } else { (T "删除了 {0} 个重复文件。{1}") }) -f $nDel, $binShort) -reportLines @(,@((T '没删的（内容和保留的那份不完全相同，或文件被占用）记在左下角的「运行记录」里。'), '#6E6E73', $false))
-            try { [System.Media.SystemSounds]::Asterisk.Play() } catch {}
-            if (-not $cardWasOpen) { $script:pendingDialog = @{ Title = $(if ($cx) { (T '已中途取消') } else { (T '删除完成') }); Kind = 'done'; Text = ((T "删除了 {0} 个重复文件，共用时 {1}。{2}`n`n没删的（内容和保留的那份不完全相同，或文件被占用）记在「运行记录」里。") -f $nDel, (FmtSpan $script:lastElapsed), $bin) } }
+            if ($moveMode) {
+                $cx = [bool]$sync.WasCancelled
+                End-Op ($(if ($cx) { (T "已中途取消，归档了 {0} 个文件") } else { (T "完成，归档了 {0} 个文件") }) -f $nDel)
+                UI-Log ((T "归档完成：{0} 个文件已搬到 {1}") -f $nDel, $sync.DupMoveDest)
+            } else {
+                $bin = if ($script:lastRecycle) { (T "`n`n文件在回收站里，清空回收站后才真正释放磁盘空间。") } else { '' }
+                $binShort = if ($script:lastRecycle) { (T '文件在回收站里，清空回收站后才真正释放空间。') } else { '' }
+                $cx = [bool]$sync.WasCancelled
+                End-Op ($(if ($cx) { (T "已中途取消，删除了 {0} 个文件") } else { (T "完成，删除了 {0} 个文件") }) -f $nDel) -KeepCard -headline ($(if ($cx) { (T "已中途取消：删除了 {0} 个重复文件，剩下的没删。{1}") } else { (T "删除了 {0} 个重复文件。{1}") }) -f $nDel, $binShort) -reportLines @(,@((T '没删的（内容和保留的那份不完全相同，或文件被占用）记在左下角的「运行记录」里。'), '#6E6E73', $false))
+                try { [System.Media.SystemSounds]::Asterisk.Play() } catch {}
+                if (-not $cardWasOpen) { $script:pendingDialog = @{ Title = $(if ($cx) { (T '已中途取消') } else { (T '删除完成') }); Kind = 'done'; Text = ((T "删除了 {0} 个重复文件，共用时 {1}。{2}`n`n没删的（内容和保留的那份不完全相同，或文件被占用）记在「运行记录」里。") -f $nDel, (FmtSpan $script:lastElapsed), $bin) } }
+            }
         }
         elseif ($sync.Mode -eq 'map') {
             $root = $sync.MapResult

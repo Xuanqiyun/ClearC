@@ -156,6 +156,61 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+相似照片	Similar photos
+每组优先保留这个文件夹（含子文件夹）里的那份	Prefer to keep the copy inside this folder (and its subfolders) in each group
+每组优先保留 {0} 里的那份	Keeping the copy inside {0} in each group
+这台电脑上用不了相似照片	Similar photos is not available on this PC
+图片解码组件没有加载成功（运行记录里有原因）。	The image decoding component did not load (the run log has the reason).
+正在找照片…	Looking for photos…
+查找相似照片	Find similar photos
+开始查找相似照片（相差 {0} 位以内）。位置：{1}	Finding similar photos (within {0} bits). Locations: {1}
+相似照片只能放进回收站	Similar photos can only go to the Recycle Bin
+相似照片不是同一个文件（分辨率、裁剪、压缩都可能不同），删错了没法从另一份恢复，所以只允许放进回收站。已经帮你勾上「放入回收站」。	Similar photos are not the same file (resolution, cropping and compression may differ), so a mistake cannot be undone from the other copy. Only the Recycle Bin is allowed; "Recycle Bin" has been checked for you.
+这些是相似照片，不是同一个文件：每组至少保留一份没勾选的，勾选的放进回收站。	These are similar photos, not identical files: at least one unchecked copy stays in each group; checked ones go to the Recycle Bin.
+有 {0} 组把所有副本都勾上了，这些组不会动。	{0} groups have every copy checked; those groups are left alone.
+把勾选的文件搬到哪个文件夹（里面会按盘符和原路径建子文件夹）	Folder to move the checked files into (subfolders are created by drive letter and original path)
+这个文件夹不能用来归档	This folder cannot be used as the archive
+{0} 只剩 {1}，要搬的文件有 {2}。	{0} has only {1} free; the files to move total {2}.
+把 {0} 个勾选的文件搬到 {1}，共 {2}。不删任何东西：每个文件放到「{1}\\盘符\\原来的路径」，保留的那份留在原地。跨盘的会复制再删原件。\n\n归档以后这些文件就不在原来的位置了，用到它们的程序要重新指路径。	Move {0} checked files, {2} in total, to {1}. Nothing is deleted: each file goes to "{1}\\<drive>\\<original path>" and the kept copy stays where it is. Across drives the file is copied, then the original removed.\n\nAfter archiving these files are no longer at their original location; programs that use them need the new path.
+归档 {0} 个文件？	Archive {0} files?
+归档	Archive
+归档 {0} 个文件	Archive {0} files
+开始归档 {0} 个文件到 {1}	Archiving {0} files to {1}
+相似照片不能合并	Similar photos cannot be merged
+合并是把内容完全相同的文件换成硬链接；相似照片内容不同，合并会丢掉其中一张。	Merging replaces identical files with hard links; similar photos differ, so merging would lose one of them.
+完成，{0} 组相似照片	Done, {0} groups of similar photos
+相似照片不是同一个文件：没有自动勾选。每组第一张是分辨率最高的，看过以后自己勾要处理的；只能放进回收站或归档，不能永久删除，也不能合并。	Similar photos are not identical files, so nothing is checked automatically. The first in each group has the highest resolution; look, then check the ones to handle. They can only go to the Recycle Bin or be archived, never deleted permanently or merged.
+没有找到相似的照片	No similar photos found
+已中途取消，归档了 {0} 个文件	Cancelled, archived {0} files
+完成，归档了 {0} 个文件	Done, archived {0} files
+归档完成：{0} 个文件已搬到 {1}	Archive finished: {0} files moved to {1}
+列出照片	Listing photos
+照片太多，只看前 200000 张	Too many photos; only the first 200,000 are checked
+算 {0:N0} 张照片的指纹	Fingerprinting {0:N0} photos
+相似照片：{0}	Similar photos: {0}
+{0}×{1}，相差 {2} 位。相似不等于相同：先看一眼再决定	{0}×{1}, {2} bits apart. Similar is not identical: look before deciding
+看了 {0:N0} 张照片，{1:N0} 张读不了，{2} 组相似{3}	Checked {0:N0} photos, {1:N0} unreadable, {2} similar groups{3}
+（中途停止）	 (stopped early)
+  跳过（目标在原文件里面）：{0}	  skipped (target inside the source): {0}
+搬过去的文件大小对不上	the moved file has a different size
+归档重复文件	Archive duplicate
+  [{0}/{1}] 已归档  {2}	  [{0}/{1}] archived  {2}
+  归档失败  {0}：{1}	  archive failed  {0}: {1}
+归档完成：{0} 个文件，{1}；失败 {2} 个。	Archive finished: {0} files, {1}; {2} failed.
+归档勾选的…	Archive checked…
+留某个文件夹里的…	Keep the one in a folder…
+留路径最短的	Keep shortest path
+不删，把勾选的文件搬到你选的一个文件夹里（按原来的盘符和路径放，不会重名覆盖），想清楚了再删	Deletes nothing: moves the checked files into a folder you choose (laid out by drive letter and original path, never overwriting), so you can delete later
+每组保留路径最短（层级最浅）的那份	Keep the copy with the shortest (shallowest) path in each group
+选一个文件夹：每组优先保留在这个文件夹（含子文件夹）里的那份，其余勾上；这一组里没有的就留最新的	Pick a folder: in each group the copy inside it (or its subfolders) is kept and the others checked; groups with none there keep the newest
+几乎一样	Almost identical
+大致相似	Roughly similar
+相似	Similar
+64 位指纹相差 4 位以内：同一张照片的不同尺寸、不同压缩	Fingerprints within 4 of 64 bits: the same photo at different sizes or compression
+找看起来一样的照片：不同分辨率、重新压缩过、轻微裁剪过的也算。只看 jpg、png、bmp、gif、tif、webp、heic。不是同一个文件，删之前自己看一眼	Finds photos that look the same, including different resolutions, recompressed and lightly cropped ones. Only jpg, png, bmp, gif, tif, webp and heic. They are not the same file, so look before deleting
+相差 12 位以内：连拍、构图相近的也会归到一起，误判会多	Within 12 bits: bursts and similar compositions get grouped too, with more false matches
+相差 8 位以内：加上轻微裁剪、调色	Within 8 bits: also light cropping and color edits
+相似程度	Similarity
 正在读取硬件、事件日志和转储文件，要十几秒…	Reading hardware, event logs and dump files, this takes ten seconds or so…
 没能读取：	Could not read: 
 读取于 {0:HH:mm}，用了 {1:N0} 秒。只看不改。	Read at {0:HH:mm} in {1:N0} s. Read-only.

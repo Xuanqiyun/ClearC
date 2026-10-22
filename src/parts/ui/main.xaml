@@ -1322,8 +1322,20 @@
                     <StackPanel Orientation="Horizontal">
                       <RadioButton x:Name="ModeName" GroupName="dupmode" Content="名字和内容都相同" IsChecked="True" Style="{StaticResource Seg}"/>
                       <RadioButton x:Name="ModeContent" GroupName="dupmode" Content="只看内容，名字不同也算" Style="{StaticResource Seg}"/>
+                      <RadioButton x:Name="ModeSimilar" GroupName="dupmode" Content="相似照片" Style="{StaticResource Seg}"
+                                   ToolTip="找看起来一样的照片：不同分辨率、重新压缩过、轻微裁剪过的也算。只看 jpg、png、bmp、gif、tif、webp、heic。不是同一个文件，删之前自己看一眼"/>
                     </StackPanel>
                   </Border>
+                  <StackPanel x:Name="SimilarRow" Orientation="Horizontal" Margin="0,0,28,0" Visibility="Collapsed">
+                    <TextBlock Text="相似程度" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                    <Border Style="{StaticResource SegBox}">
+                      <StackPanel Orientation="Horizontal">
+                        <RadioButton x:Name="SimStrict" GroupName="simlvl" Content="几乎一样" Style="{StaticResource Seg}" ToolTip="64 位指纹相差 4 位以内：同一张照片的不同尺寸、不同压缩"/>
+                        <RadioButton x:Name="SimNormal" GroupName="simlvl" Content="相似" IsChecked="True" Style="{StaticResource Seg}" ToolTip="相差 8 位以内：加上轻微裁剪、调色"/>
+                        <RadioButton x:Name="SimLoose" GroupName="simlvl" Content="大致相似" Style="{StaticResource Seg}" ToolTip="相差 12 位以内：连拍、构图相近的也会归到一起，误判会多"/>
+                      </StackPanel>
+                    </Border>
+                  </StackPanel>
                   <StackPanel Orientation="Horizontal">
                     <TextBlock Text="比对方式" VerticalAlignment="Center" Margin="0,0,12,0"/>
                     <Border Style="{StaticResource SegBox}">
@@ -1353,6 +1365,8 @@
               <Button x:Name="BtnKeepNew"  Style="{StaticResource Small}" Content="留最新的" Margin="0,0,6,0" IsEnabled="False"/>
               <Button x:Name="BtnKeepOld"  Style="{StaticResource Small}" Content="留最早的" Margin="0,0,6,0" IsEnabled="False"/>
               <Button x:Name="BtnPickC"    Style="{StaticResource Small}" Content="优先留 C 盘以外的" Margin="0,0,6,0" IsEnabled="False"/>
+              <Button x:Name="BtnKeepIn"   Style="{StaticResource Small}" Content="留某个文件夹里的…" Margin="0,0,6,0" IsEnabled="False" ToolTip="选一个文件夹：每组优先保留在这个文件夹（含子文件夹）里的那份，其余勾上；这一组里没有的就留最新的"/>
+              <Button x:Name="BtnKeepShort" Style="{StaticResource Small}" Content="留路径最短的" Margin="0,0,6,0" IsEnabled="False" ToolTip="每组保留路径最短（层级最浅）的那份"/>
               <Button x:Name="BtnPickNone" Style="{StaticResource Small}" Content="全部取消" IsEnabled="False"/>
             </StackPanel>
             <TextBlock x:Name="DupProgressText" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="#6E6E73"
@@ -1434,6 +1448,8 @@
           <CheckBox x:Name="DupProtect" Content="不删 C 盘个人文件夹里的文件" IsChecked="True" VerticalAlignment="Center" Margin="0,0,16,0"
                     ToolTip="桌面、文档、下载、图片、视频、音乐等 C 盘个人文件夹里的副本一律保留，只删其他位置的副本"/>
           <CheckBox x:Name="DupRecycle" Content="放入回收站，可以恢复" IsChecked="True" VerticalAlignment="Center" Margin="0,0,16,0"/>
+          <Button x:Name="BtnDupMove" Content="归档勾选的…" Margin="0,0,8,0" Padding="16,8" IsEnabled="False"
+                  ToolTip="不删，把勾选的文件搬到你选的一个文件夹里（按原来的盘符和路径放，不会重名覆盖），想清楚了再删"/>
           <Button x:Name="BtnDupMerge" Content="合并为一份" Margin="0,0,8,0" Padding="16,8" IsEnabled="False"
                   ToolTip="勾选的副本换成指向保留那份的硬链接：每个位置的文件都还在，只占一份空间。只适用于同一块盘上的副本"/>
           <Button x:Name="BtnDupDelete" Content="删除勾选的文件" Style="{StaticResource Danger}" Padding="20,8" IsEnabled="False"/>

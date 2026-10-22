@@ -287,6 +287,54 @@ function Invoke-UiTest {
             # 系统文件检查按钮只是起终端：不点，查它在不在
             if ($ctl.BtnSfcCheck.Visibility -ne 'Visible') { throw 'sfc check button hidden' }
         }
+        & $step 'similar photos and keep rules' {
+            if (-not ('PhotoHash' -as [type])) { throw 'PhotoHash did not compile' }
+            $d = Join-Path $script:appDir 'uitest-photos'; New-Item -ItemType Directory -Path "$d\sub" -Force | Out-Null
+            # 画三张图：渐变图、它的缩小版（相似）、另一张方格图（不相似）
+            $draw = { param([string]$file, [int]$w, [int]$h, [bool]$checker)
+                $dv = New-Object System.Windows.Media.DrawingVisual
+                $dc = $dv.RenderOpen()
+                if ($checker) { for ($x = 0; $x -lt 8; $x++) { for ($y = 0; $y -lt 8; $y++) { $c = if (($x + $y) % 2 -eq 0) { [System.Windows.Media.Brushes]::Black } else { [System.Windows.Media.Brushes]::White }; $dc.DrawRectangle($c, $null, (New-Object System.Windows.Rect ($x * $w / 8), ($y * $h / 8), ($w / 8), ($h / 8))) } } }
+                else { $br = New-Object System.Windows.Media.LinearGradientBrush ([System.Windows.Media.Colors]::Black), ([System.Windows.Media.Colors]::White), 0; $dc.DrawRectangle($br, $null, (New-Object System.Windows.Rect 0, 0, $w, $h)); $dc.DrawEllipse([System.Windows.Media.Brushes]::Red, $null, (New-Object System.Windows.Point ($w * 0.3), ($h * 0.6)), ($w * 0.15), ($h * 0.15)) }
+                $dc.Close()
+                $rt = New-Object System.Windows.Media.Imaging.RenderTargetBitmap $w, $h, 96, 96, ([System.Windows.Media.PixelFormats]::Pbgra32); $rt.Render($dv)
+                $enc = New-Object System.Windows.Media.Imaging.PngBitmapEncoder; $enc.Frames.Add([System.Windows.Media.Imaging.BitmapFrame]::Create($rt))
+                $fs = [IO.File]::Create($file); try { $enc.Save($fs) } finally { $fs.Dispose() }
+            }
+            & $draw "$d\a.png" 640 480 $false; & $draw "$d\sub\a-small.png" 160 120 $false; & $draw "$d\other.png" 640 480 $true
+            try {
+                $w1 = 0; $h1 = 0; $ha = [PhotoHash]::Hash("$d\a.png", [ref]$w1, [ref]$h1); $hb = [PhotoHash]::Hash("$d\sub\a-small.png", [ref]$w1, [ref]$h1); $hc = [PhotoHash]::Hash("$d\other.png", [ref]$w1, [ref]$h1)
+                $dab = [PhotoHash]::Dist($ha, $hb); $dac = [PhotoHash]::Dist($ha, $hc)
+                $L.Add(("photo hash: a~small {0} bits, a~other {1} bits" -f $dab, $dac))
+                if ($dab -gt 6 -or $dac -lt 12) { throw ("hash distances a~small {0}, a~other {1}" -f $dab, $dac) }
+                $list = [PhotoHash]::Scan([string[]]@($d), 1, 0, 1000); [PhotoHash]::HashAll($list)
+                if ($list.Count -ne 3) { throw ("scan found {0} photos" -f $list.Count) }
+                $ng = [PhotoHash]::Group($list, 8)
+                $byG = @{}; foreach ($p in $list) { $byG[$p.Group] = [int]$byG[$p.Group] + 1 }
+                if (@($byG.Values | Where-Object { $_ -eq 2 }).Count -ne 1 -or $ng -ne 2) { throw ("groups: {0}" -f (($list | ForEach-Object { $_.Path + '=' + $_.Group }) -join ', ')) }
+                # 走一遍真正的查找（后台线程）
+                Show-Page 'dup'; $ctl.ModeSimilar.IsChecked = $true
+                if ($ctl.SimilarRow.Visibility -ne 'Visible') { throw 'similarity row hidden' }
+                Start-SimilarScan @($d) @{ Ok = $true; Min = 1; Max = 0 }
+                if (-not (& $waitUi { -not $script:worker } 60000)) { throw 'similar scan did not finish' }
+                if (-not $script:dupRows -or $script:dupRows.Count -ne 2 -or -not $script:dupSimilar) { throw ("similar rows: {0}" -f $(if ($script:dupRows) { $script:dupRows.Count } else { 0 })) }
+                if (@($script:dupRows | Where-Object { $_.ToDelete }).Count -ne 0) { throw 'similar photos were auto-checked' }
+                if ($script:dupRows[0].Path -ne "$d\a.png" -or -not $script:dupRows[0].HasRisk) { throw 'largest photo not first, or no note' }
+                # 留法：路径最短的、某个文件夹里的
+                Pick-Dup 'short'
+                if (-not $script:dupRows[1].ToDelete -or $script:dupRows[0].ToDelete) { throw 'keep shortest path wrong' }
+                $script:keepInDir = "$d\sub\"; Pick-Dup 'in'
+                if (-not $script:dupRows[0].ToDelete -or $script:dupRows[1].ToDelete) { throw 'keep in folder wrong' }
+                $script:keepInDir = ''
+                # 相似照片：不能合并，永久删除会被改成回收站
+                $n0 = $script:uiSheets.Count; & $click $ctl.BtnDupMerge
+                if ($script:uiSheets.Count -le $n0) { throw 'merge of similar photos not refused' }
+                $ctl.DupRecycle.IsChecked = $false; $n0 = $script:uiSheets.Count; & $click $ctl.BtnDupDelete
+                if (-not $ctl.DupRecycle.IsChecked -or $script:uiSheets.Count -lt $n0 + 2) { throw 'delete of similar photos did not force the recycle bin' }
+                if ($script:worker) { throw 'delete started although the dialog was cancelled' }
+                $ctl.DupRecycle.IsChecked = $true
+            } finally { $ctl.ModeName.IsChecked = $true; $script:dupRows = $null; $script:dupByGroup = @{}; $script:dupSimilar = $false; $ctl.DupList.ItemsSource = $null; Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue }
+        }
         & $step 'restore points card' {
             Show-Page 'save'
             $sw = [Diagnostics.Stopwatch]::StartNew()
