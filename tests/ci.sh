@@ -22,6 +22,7 @@ PW="$(command -v pwsh)"
 if [ -z "$PW" ]; then echo "::error title=pwsh missing::PowerShell 7 is not installed on this runner"; exit 1; fi
 step "checks" "$PW" -NoProfile -File tests/Checks.ps1
 step "engine tests" "$PW" -NoProfile -File tests/Engine.Tests.ps1
+step "safety tests" "$PW" -NoProfile -File tests/Safety.Tests.ps1
 step "dark-mode contrast" env PWSH="$PW" bash tests/theme/run.sh
 step "NTFS image tests" sudo env PWSH="$PW" bash tests/ntfs/run.sh
 exit $fail

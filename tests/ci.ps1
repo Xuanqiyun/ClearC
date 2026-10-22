@@ -1,4 +1,4 @@
-# GitHub 上 Windows 测试机跑的测试（Windows PowerShell 5.1）：检查、核心逻辑测试、构建 exe、在真的系统盘上跑自检。
+﻿# GitHub 上 Windows 测试机跑的测试（Windows PowerShell 5.1）：检查、核心逻辑测试、构建 exe、在真的系统盘上跑自检。
 # 每一步失败时写一条错误注释；自检报告整份写成几条说明注释，不用下载附件也能看到。
 $ErrorActionPreference = 'Continue'
 Set-Location (Split-Path $PSScriptRoot -Parent)
@@ -18,6 +18,7 @@ function Step([string]$name, [scriptblock]$body) {
 }
 Step 'checks (PS 5.1)' { powershell -NoProfile -ExecutionPolicy Bypass -File tests\Checks.ps1 }
 Step 'engine tests (PS 5.1)' { powershell -NoProfile -ExecutionPolicy Bypass -File tests\Engine.Tests.ps1 }
+Step 'safety tests (PS 5.1)' { powershell -NoProfile -ExecutionPolicy Bypass -File tests\Safety.Tests.ps1 }
 Step 'build exe' { powershell -NoProfile -ExecutionPolicy Bypass -File build\build.ps1 }
 if (Test-Path out\ClearC.exe) {
     # 界面自测：照常打开窗口（放在屏幕外），把界面功能点一遍，对话框都当作点了取消，做完自己关掉。

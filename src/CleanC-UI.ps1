@@ -5305,10 +5305,18 @@ function ConvertFrom-WingetTable([string]$txt) {
     return $items
 }
 
+# 定期自动清理只碰这些：安全清理组里的普通缓存目录（不含谨慎清理、需确认、自定义、整个文件夹删掉的、要停服务的、操作类的）
+function Select-AutoCleanItems($catalog) {
+    $out = @()
+    foreach ($it in $catalog) {
+        if ($it.Kind -ne 'cache' -or $it.Def -ne (T '删除') -or $it.Act -or $it.Svc -or $it.Whole -or $it.Custom -or $it.Careful -or $it.Confirm -or -not ([string]$it.G).StartsWith('安全清理')) { continue }
+        $out += $it
+    }
+    return $out
+}
 function Invoke-AutoClean {
     $f0 = [double](FreeC); $done = @()
-    foreach ($it in (Get-Catalog)) {
-        if ($it.Kind -ne 'cache' -or $it.Def -ne (T '删除') -or $it.Act -or $it.Svc -or $it.Whole -or -not ([string]$it.G).StartsWith('安全清理')) { continue }
+    foreach ($it in (Select-AutoCleanItems (Get-Catalog))) {
         $b = Measure-Item $it
         if ($b -le 0) { continue }
         $res = @{}
