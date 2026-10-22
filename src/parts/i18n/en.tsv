@@ -156,6 +156,186 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+C 盘上有约 {0} 可以清理	About {0} on C: can be cleaned up
+临时文件、缓存和日志加起来超过了你设定的 {0} GB。打开腾挪 ClearC 清一清？\n（在工具的「自动提醒」页可以改界限或关掉这个提醒）	Temporary files, caches and logs add up to more than the {0} GB you set. Open ClearC to clean them up?\n(You can change the limit or turn off this reminder on the "Reminders" page.)
+{0} 个开机启动项，{1} 个已启用	{0} startup items, {1} enabled
+{0} 个第三方计划任务，{1} 个已启用（Windows 自己的不列）	{0} third-party scheduled tasks, {1} enabled (Windows' own tasks are not listed)
+{0} 个第三方右键菜单扩展，{1} 个已启用（系统自带的不列）	{0} third-party context menu extensions, {1} enabled (built-in ones are not listed)
+没有开机启动项	No startup items
+没有第三方的计划任务	No third-party scheduled tasks
+没有第三方的右键菜单扩展	No third-party context menu extensions
+正在读取…	Reading…
+读取开机启动项	Reading startup items
+读取计划任务	Reading scheduled tasks
+读取右键菜单扩展	Reading context menu extensions
+注册表 · 当前用户	Registry · current user
+注册表 · 所有用户	Registry · all users
+注册表 · 所有用户 (32 位)	Registry · all users (32-bit)
+「启动」文件夹 · 当前用户	Startup folder · current user
+「启动」文件夹 · 所有用户	Startup folder · all users
+任务 	Task 
+出现在：	Shown for: 
+没启用成	Could not enable
+没禁用成	Could not disable
+启用开机启动项	Enable startup item
+禁用开机启动项	Disable startup item
+启用计划任务	Enable scheduled task
+禁用计划任务	Disable scheduled task
+启用右键菜单扩展	Enable context menu extension
+禁用右键菜单扩展	Disable context menu extension
+右键菜单的改动对新打开的资源管理器窗口生效；还没生效的话注销再登录一次	Context menu changes apply to newly opened File Explorer windows; if nothing changes, sign out and back in
+「{0}」以后开机时不再自动启动。它本身不会被删，随时可以在这里重新启用，也可以在任务管理器的「启动应用」里改。	"{0}" will no longer start automatically with Windows. It is not deleted; you can enable it again here at any time, or under "Startup apps" in Task Manager.
+计划任务「{0}」会被禁用，到时间不再运行。随时可以在这里重新启用，也可以在「任务计划程序」里改。	The scheduled task "{0}" will be disabled and no longer run on schedule. You can enable it again here at any time, or in Task Scheduler.
+「{0}」会从资源管理器的右键菜单里去掉（对新打开的窗口生效）。它所属的软件照常使用，随时可以在这里重新启用。	"{0}" will be removed from the File Explorer right-click menu (for newly opened windows). The app it belongs to keeps working, and you can enable it again here at any time.
+禁用「{0}」？	Disable "{0}"?
+禁用	Disable
+启用	Enable
+已启用	Enabled
+已禁用	Disabled
+这台电脑没有 winget	winget is not available on this PC
+winget 是 Windows 自带的软件包管理器（「应用安装程序」），Windows 10 1809 以后的系统都有。打不开的话，在应用商店里搜「应用安装程序」装一下。	winget is the package manager that comes with Windows ("App Installer"), included since Windows 10 1809. If it is missing, search for "App Installer" in the Microsoft Store.
+用 winget 检查新版本	Checking for updates with winget
+正在用 winget 查，要几十秒…	Checking with winget, this takes a while…
+winget 三分钟都没查完，可能是网络不通	winget did not finish within three minutes; the network may be down
+没查成	Check failed
+可升级到	Update available:
+都是最新的	Everything is up to date
+winget 没有查到有新版本的软件。	winget found no apps with a newer version.
+winget：{0} 个软件有新版本，其中 {1} 个在列表里标出来了	winget: {0} apps have a newer version; {1} of them are marked in the list
+{0}：{1} → {2}	{0}: {1} → {2}
+{0} 个软件有新版本	{0} apps have a newer version
+列表里有的软件旁边多了「升级」按钮。也可以在终端窗口里一次全部升级：winget 会逐个下载安装，有的安装程序会弹出自己的窗口，照提示点就行。	Apps that are in the list now have an "Update" button. You can also update them all at once in a terminal window: winget downloads and installs them one by one, and some installers open their own window; just follow the prompts.
+在终端里全部升级	Update all in a terminal
+用 winget 升级软件	Update apps with winget
+已在终端里开始升级：{0}	Update started in a terminal: {0}
+打不开终端	Could not open a terminal
+腾挪 ClearC：定期自动清理临时文件、缓存和日志（不搬家、不清空回收站、不碰个人文件夹）。在工具的「自动提醒」页关掉开关即可删除本任务。	ClearC: periodically cleans up temporary files, caches and logs (no moving, no emptying the Recycle Bin, no personal folders). Turn off the switch on the "Reminders" page of ClearC to delete this task.
+可清理垃圾提醒的界限	Reclaimable junk reminder limit
+不提醒	Off
+自动清理的时间	Automatic cleanup schedule
+清理列表改了，请重新扫描。	The cleanup list changed; please scan again.
+选一个清理时不要碰的文件夹	Choose a folder that cleanup must leave alone
+选一个要清理的文件夹（删里面的东西，文件夹本身保留）	Choose a folder to clean (its contents are deleted; the folder itself is kept)
+这个路径用不了	This path can't be used
+路径里不能有竖线。	The path must not contain a vertical bar.
+这个文件夹不能加进清理列表	This folder can't be added to the cleanup list
+这个文件夹在排除列表里	This folder is in the exclude list
+它在排除的 {0} 里面，先把排除去掉。	It is inside the excluded folder {0}; remove that exclusion first.
+排除文件夹	Exclude folder
+加入清理列表	Add to cleanup list
+取消排除	Remove exclusion
+移出清理列表	Remove from cleanup list
+{0} 个有新版本	{0} with a newer version
+  跳过（在设置里排除了）：{0}	  Skipped (excluded in Settings): {0}
+跳过：在设置里排除了	Skipped: excluded in Settings
+Windows Installer 孤儿安装包	Orphaned Windows Installer packages
+C:\\Windows\\Installer 里没有任何已装软件和补丁再引用的安装包（.msi / .msp），多半是软件升级、卸载后留下的。判断方法和 PatchCleaner 一样。删了以后，万一哪个软件修复或卸载时提示找不到安装包，重新下载安装一次即可	Installer packages (.msi / .msp) in C:\\Windows\\Installer that no installed app or patch refers to any more, usually left behind by upgrades and uninstalls. Detected the same way PatchCleaner does. If an app later complains about a missing package when repairing or uninstalling, download and install it once more
+  没删掉：{0}（{1}）	  Not deleted: {0} ({1})
+  Windows Installer 孤儿安装包：删了 {0} 个，{1}	  Orphaned Windows Installer packages: deleted {0}, {1}
+文件和文件夹	Files and folders
+文件夹空白处	Folder background
+磁盘	Drives
+自定义清理（你在设置里加的文件夹：删除里面的东西，文件夹本身保留）	Custom cleanup (folders you added in Settings: their contents are deleted, the folders themselves are kept)
+升级	Update
+移除	Remove
+自定义清理项…	Custom items…
+在终端窗口里用 winget 升级这个软件，过程和提示都看得见	Update this app with winget in a terminal window, where you can see the progress and prompts
+用 Windows 自带的 winget 查一下装过的软件有没有新版本。只在你点的时候联网，只查不改	Check with Windows' own winget whether installed apps have newer versions. It goes online only when you click, and only looks
+自己加要清理的文件夹，或者排除不想碰的文件夹（在「设置」里）	Add your own folders to clean, or exclude folders that must be left alone (in Settings)
+每周一	Every Monday
+每周二	Every Tuesday
+每周三	Every Wednesday
+每周四	Every Thursday
+每周五	Every Friday
+每周六	Every Saturday
+每周日	Every Sunday
+每天	Every day
+右键菜单	Context menu
+开机启动	Startup
+计划任务	Scheduled tasks
+软件	Apps
+本工具自己的任务，请在「自动提醒」页开关	ClearC's own task; switch it on the "Reminders" page
+C 盘快满或者垃圾攒多了时提醒你，定期自动清一次缓存，并记下空间的变化。两项都默认关闭，打开开关才生效。开启后由 Windows 自己定时运行，不需要一直开着本工具，也不需要开机启动。	Get reminded when C: is nearly full or junk has piled up, clean caches on a schedule, and keep a record of free space over time. Both are off by default. Once on, Windows runs them on schedule; ClearC doesn't need to stay open or start with Windows.
+不用开着本工具。到时间由 Windows 任务计划在后台自动做一遍「安全清理」里的项目：临时文件、各类缓存和日志。不搬家、不清空回收站、不碰任何个人文件夹、不碰你自己加的文件夹，也不会关闭正在运行的软件（被占用的文件直接跳过）。做完在右下角告诉你释放了多少，每一项都记在「操作日志」里。	ClearC doesn't need to be open. At the scheduled time, Windows Task Scheduler runs the items under "Safe to clean" in the background: temporary files, caches and logs. It doesn't move anything, doesn't empty the Recycle Bin, never touches personal folders or the folders you added yourself, and doesn't close running apps (files in use are simply skipped). When done, a notification in the lower-right corner tells you how much was freed, and every item is recorded in the "Activity log".
+中午 12:30（错过了就在下次开机后）	at 12:30 PM (or after the next startup if missed)
+什么时候清理	When to clean
+可以清理的临时文件、缓存和日志超过	When reclaimable temporary files, caches and logs exceed
+定期自动清理	Scheduled cleanup
+排除的文件夹	Excluded folders
+时也提醒（检查时只统计，不删任何东西）	also remind me (the check only measures; nothing is deleted)
+清理列表	Cleanup list
+清理时一律不碰这些文件夹和里面的东西，估算大小时也不算。比如临时文件夹里某个你要留着的子文件夹。	Cleanup never touches these folders or anything inside them, and they are not counted in the estimates. For example, a subfolder of the temp folder you want to keep.
+清理时删掉这些文件夹里的东西，文件夹本身保留。在「清理 C 盘」页单独列成一组，默认选「删除」，每次执行前照样要确认；定期自动清理不碰它们。个人文件夹、系统文件夹和软件的安装文件夹加不进来。	Cleanup deletes the contents of these folders; the folders themselves are kept. They appear as their own group on the "Clean up C:" page with "Delete" selected by default, and you still confirm before every run; scheduled cleanup leaves them alone. Personal folders, system folders and app installation folders can't be added.
+自己加的文件夹	Your own folders
+装过的软件按占用空间从大到小排。装在 C 盘的可以「搬到其他盘」，软件照常使用、不用重装；不用的可以直接卸载，卸载后再检查有没有残留文件夹。开机启动的程序、第三方的计划任务和右键菜单也在这里管。	Installed apps sorted by size, largest first. Apps on C: can be moved to another drive and keep working without reinstalling; apps you don't need can be uninstalled, and leftovers checked afterwards. Startup programs, third-party scheduled tasks and context menu extensions are managed here too.
+还没有加。	None added yet.
+还没有排除。	None excluded yet.
+磁盘检查残留 (found.000)	Disk check leftovers (found.000)
+磁盘检查（chkdsk）修复时从损坏的文件里抢救出来的碎片，一般都没用	Fragments that Disk Check (chkdsk) salvaged from damaged files; almost never useful
+Windows 更新日志	Windows Update logs
+Windows 更新的跟踪日志（.etl）	Trace logs (.etl) of Windows Update
+系统网页缓存 (INetCache)	System web cache (INetCache)
+Windows 组件和一些软件内嵌的网页浏览留下的缓存	Cache left by web content shown inside Windows components and some apps
+应用商店软件的临时文件	Temp files of Store apps
+从应用商店装的软件的临时文件和网页缓存。不碰它们保存的数据和设置	Temporary files and web cache of apps installed from the Microsoft Store; their data and settings are left alone
+远程桌面位图缓存	Remote Desktop bitmap cache
+远程桌面连接时缓存的画面碎片	Fragments of the screen cached by Remote Desktop connections
+DirectX 着色器缓存	DirectX shader cache
+Windows 给游戏和软件编译好的着色器，下次用到时会重新生成	Shaders compiled by Windows for games and apps; regenerated the next time they are needed
+AMD 显卡着色器缓存	AMD shader cache
+AMD 显卡给游戏编译的着色器缓存，游戏首次启动会重建	Shaders compiled by AMD graphics drivers for games; games rebuild them on first launch
+Firefox 浏览器缓存	Firefox browser cache
+Brave 浏览器缓存	Brave browser cache
+Vivaldi 浏览器缓存	Vivaldi browser cache
+Opera 浏览器缓存	Opera browser cache
+网页缓存（含 Opera GX）。请先关闭浏览器。不影响密码、书签、历史记录	Web cache (including Opera GX). Close the browser first. Passwords, bookmarks and history are not affected
+Chrome 测试版 / Chromium 缓存	Chrome Beta / Chromium cache
+Chrome Beta、Dev、Canary 和 Chromium 的网页缓存。请先关闭浏览器	Web cache of Chrome Beta, Dev, Canary and Chromium. Close the browser first
+360 浏览器缓存	360 Browser cache
+360 安全浏览器和 360 极速浏览器的网页缓存。请先关闭浏览器。不影响密码、书签、历史记录	Web cache of 360 Secure Browser and 360 Speed Browser. Close the browser first. Passwords, bookmarks and history are not affected
+QQ 浏览器缓存	QQ Browser cache
+Steam 着色器与网页缓存	Steam shader and web cache
+游戏的着色器缓存（首次启动会重建）、Steam 商店页面的缓存、崩溃转储和日志。请先退出 Steam。游戏本身不动	Shader caches of games (rebuilt on first launch), the cache of Steam store pages, crash dumps and logs. Quit Steam first. Games themselves are left alone
+Epic Games 启动器缓存	Epic Games Launcher cache
+启动器的网页缓存和日志。请先退出 Epic Games 启动器。游戏本身不动	Web cache and logs of the launcher. Quit the Epic Games Launcher first. Games themselves are left alone
+Unity 缓存	Unity cache
+Unity 编辑器的资源商店下载和全局光照缓存，需要时会重新下载或生成	Asset Store downloads and global illumination cache of the Unity editor; downloaded or generated again when needed
+Adobe 媒体缓存	Adobe media cache
+Premiere、After Effects、Audition 导入素材时生成的缓存，打开项目会重新生成。请先关闭 Adobe 软件	Cache generated by Premiere, After Effects and Audition when importing footage; regenerated when you open the project. Close Adobe apps first
+Microsoft Teams (旧版) 缓存	Microsoft Teams (classic) cache
+旧版 Teams 的网页缓存。请先退出 Teams。不影响登录和聊天记录	Web cache of classic Teams. Quit Teams first. Sign-in and chats are not affected
+Discord 缓存	Discord cache
+看过的图片和视频的缓存。请先退出 Discord（包括托盘图标）。不影响登录	Cache of images and videos you have viewed. Quit Discord first (including the tray icon). Sign-in is not affected
+Slack 缓存	Slack cache
+网页缓存和文件预览。请先退出 Slack。不影响登录	Web cache and file previews. Quit Slack first. Sign-in is not affected
+VS Code 缓存	VS Code cache
+编辑器的缓存、下载过的扩展安装包和日志。请先关闭 VS Code。不影响设置和扩展	Editor caches, downloaded extension installers and logs. Close VS Code first. Settings and extensions are not affected
+Cursor 缓存	Cursor cache
+编辑器的缓存和日志。请先关闭 Cursor。不影响设置和扩展	Editor caches and logs. Close Cursor first. Settings and extensions are not affected
+Spotify 缓存	Spotify cache
+播放过的歌曲的缓存。下载供离线听的歌不在这里。请先退出 Spotify	Cache of songs you have played. Songs downloaded for offline listening are not here. Quit Spotify first
+网易云音乐缓存	NetEase Cloud Music cache
+听过的歌的缓存。下载的歌不在这里。请先退出网易云音乐	Cache of songs you have played. Downloaded songs are not here. Quit NetEase Cloud Music first
+uv 缓存	uv cache
+uv 装 Python 包时的下载缓存，再装时会重新下载	Download cache of uv for Python packages; downloaded again when reinstalling
+Yarn 缓存	Yarn cache
+Yarn 装包时的下载缓存	Download cache of Yarn packages
+NuGet 下载缓存	NuGet download cache
+.NET 装包时的下载缓存。项目用的包在全局包目录里，不在这里	Download cache of .NET packages. The packages projects use are in the global packages folder, not here
+Go 编译缓存	Go build cache
+Go 的编译结果缓存，下次编译会重新生成	Cache of Go build results; regenerated on the next build
+Rust crate 下载缓存	Rust crate download cache
+cargo 下载过的 crate 压缩包，需要时会重新下载	Crate archives downloaded by cargo; downloaded again when needed
+NuGet 全局包目录	NuGet global packages folder
+.NET 项目引用的包都放在这里。删了以后打开项目要联网重新还原（Visual Studio 会自动做，但要等一会儿）	Every package referenced by .NET projects is stored here. After deleting, opening a project restores them from the internet (Visual Studio does it automatically, but it takes a while)
+Gradle 依赖缓存	Gradle dependency cache
+Android Studio 和 Gradle 项目下载的依赖。删了下次构建要重新下载，国内网络可能很慢	Dependencies downloaded by Android Studio and Gradle projects. After deleting, the next build downloads them again, which can be slow
+Maven 本地仓库	Maven local repository
+Maven 项目下载的依赖。删了下次构建要重新下载	Dependencies downloaded by Maven projects. After deleting, the next build downloads them again
+JetBrains IDE 缓存和索引	JetBrains IDE caches and indexes
+IntelliJ IDEA、PyCharm 等的缓存和代码索引。删了打开项目要重新索引（几分钟）。请先关闭这些 IDE	Caches and code indexes of IntelliJ IDEA, PyCharm and the like. After deleting, opening a project re-indexes it (a few minutes). Close these IDEs first
+虚幻引擎派生数据缓存	Unreal Engine derived data cache
+Unreal Engine 给项目生成的派生数据，常有几十 GB。删了打开项目要重新生成，很慢	Derived data Unreal Engine generates for projects, often tens of GB. After deleting, opening a project regenerates it, which is slow
 全部展开	Expand all
 全部收起	Collapse all
 安全清理（缓存、临时文件、日志，删了程序会自动重建）	Safe to clean (caches, temporary files and logs, which apps rebuild automatically)

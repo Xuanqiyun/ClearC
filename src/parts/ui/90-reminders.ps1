@@ -53,7 +53,11 @@ function Enable-AutoTask([bool]$isRemind) {
             ('<LogonTrigger><UserId>{USER}</UserId><Delay>PT2M</Delay></LogonTrigger>' +
              '<CalendarTrigger><StartBoundary>2026-01-01T12:00:00</StartBoundary><ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay></CalendarTrigger>'))
     }
-    return (Register-CleanTask $script:taskClean (T '腾挪 ClearC：每周日自动清理一次临时文件、缓存和日志（不搬家、不清空回收站、不碰个人文件夹）。在工具的「自动提醒」页关掉开关即可删除本任务。') '/autoclean' '<CalendarTrigger><StartBoundary>2026-01-04T12:30:00</StartBoundary><ScheduleByWeek><DaysOfWeek><Sunday/></DaysOfWeek><WeeksInterval>1</WeeksInterval></ScheduleByWeek></CalendarTrigger>')
+    $when = Get-Setting 'CleanWhen' 'sun'
+    $days = @{ sun = 'Sunday'; mon = 'Monday'; tue = 'Tuesday'; wed = 'Wednesday'; thu = 'Thursday'; fri = 'Friday'; sat = 'Saturday' }
+    $trig = if ($when -eq 'daily') { '<CalendarTrigger><StartBoundary>2026-01-04T12:30:00</StartBoundary><ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay></CalendarTrigger>' }
+            else { $d = $days[$when]; if (-not $d) { $d = 'Sunday' }; "<CalendarTrigger><StartBoundary>2026-01-04T12:30:00</StartBoundary><ScheduleByWeek><DaysOfWeek><$d/></DaysOfWeek><WeeksInterval>1</WeeksInterval></ScheduleByWeek></CalendarTrigger>" }
+    return (Register-CleanTask $script:taskClean (T '腾挪 ClearC：定期自动清理临时文件、缓存和日志（不搬家、不清空回收站、不碰个人文件夹）。在工具的「自动提醒」页关掉开关即可删除本任务。') '/autoclean' $trig)
 }
 # 打开工具时检查一次：本工具挪了位置、或者任务是旧版本建的（提醒没有「登录后检查」），就按现在的位置和设置重建
 function Repair-AutoTasks {
@@ -92,6 +96,10 @@ function Load-Auto {
     $gb = Get-Setting 'RemindGB' '20'
     $idx = [array]::IndexOf(@('10', '20', '30', '50'), $gb); if ($idx -lt 0) { $idx = 1 }
     $ctl.AutoRemindGB.SelectedIndex = $idx
+    $idx = [array]::IndexOf(@('0', '1', '2', '5', '10'), (Get-Setting 'JunkGB' '0')); if ($idx -lt 0) { $idx = 0 }
+    $ctl.AutoJunkGB.SelectedIndex = $idx
+    $idx = [array]::IndexOf(@('sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'daily'), (Get-Setting 'CleanWhen' 'sun')); if ($idx -lt 0) { $idx = 0 }
+    $ctl.AutoCleanWhen.SelectedIndex = $idx
     $where = (T "不用开着本工具，也不用设置开机启动。开启后会在 Windows「任务计划程序」里建一个任务（{0}）：每次登录电脑 2 分钟后、以及每天中午 12 点，Windows 会在后台运行一下本工具（{1}）检查 C 盘，空间够就什么都不显示，查完马上退出。关掉开关就删除这个任务。`n请把本工具放在固定的位置，不要删掉；挪了位置后打开一次，任务会自动改用新位置。")
     $ctl.AutoRemindNote.Text = if ($hasExe) { $where -f $script:taskRemind, $exe } else { (T '只有 exe 版本支持自动提醒。') }
     $moved = ''
@@ -132,6 +140,20 @@ $ctl.AutoRemindGB.Add_SelectionChanged({
     $gb = @('10', '20', '30', '50')[[math]::Max(0, $ctl.AutoRemindGB.SelectedIndex)]
     Set-Setting 'RemindGB' $gb
     OpLog '系统设置' (T '空间不足提醒的界限') "$gb GB" ''
+})
+$ctl.AutoJunkGB.Add_SelectionChanged({
+    if ($script:autoSync) { return }
+    $gb = @('0', '1', '2', '5', '10')[[math]::Max(0, $ctl.AutoJunkGB.SelectedIndex)]
+    Set-Setting 'JunkGB' $gb
+    OpLog '系统设置' (T '可清理垃圾提醒的界限') $(if ($gb -eq '0') { (T '不提醒') } else { "$gb GB" }) ''
+})
+# 换了清理的时间：任务开着就按新时间重建
+$ctl.AutoCleanWhen.Add_SelectionChanged({
+    if ($script:autoSync) { return }
+    $w = @('sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'daily')[[math]::Max(0, $ctl.AutoCleanWhen.SelectedIndex)]
+    Set-Setting 'CleanWhen' $w
+    OpLog '系统设置' (T '自动清理的时间') ([string]$ctl.AutoCleanWhen.SelectedItem.Content) ''
+    if (Test-CleanTask $script:taskClean) { $err = Enable-AutoTask $false; if ($err) { Show-Sheet -Kind warn -Title (T '没改成') -Text $err | Out-Null }; Load-Auto }
 })
 foreach ($sw in @($ctl.AutoRemindOn, $ctl.AutoCleanOn)) {
     $sw.Add_Checked({

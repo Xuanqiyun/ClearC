@@ -1,5 +1,17 @@
 # 更新记录
 
+## 2.8
+- **缓存目录库**：清理项改成一张表（`$script:cacheLib`，一行一条：名称、路径、说明、选项），加条目不用改代码。新增几十条：Firefox、Brave、Vivaldi、Opera、Chrome 测试版、360、QQ 浏览器的网页缓存（Chromium 系统一按 `@chromium:` 展开）；DirectX、AMD 显卡着色器缓存；Windows 更新日志、磁盘检查残留、应用商店软件的临时文件、系统网页缓存、远程桌面位图缓存；Steam 着色器与网页缓存（安装目录从注册表查）、Epic 启动器缓存、Unity 缓存；Adobe 媒体缓存、旧版 Teams、Discord、Slack、VS Code、Cursor、Spotify、网易云音乐的缓存；uv、Yarn、NuGet、Go、Rust 的下载缓存。删了要重新下载或重新生成、比较慢的（NuGet 全局包、Gradle、Maven、JetBrains 索引、虚幻引擎缓存）放进「需确认」，默认跳过。只删缓存，不碰 Cookie、历史记录、密码和保存的数据。
+- **Windows Installer 孤儿安装包**（需确认，默认跳过）：`C:\Windows\Installer` 里没有任何已装软件和补丁再引用的 .msi / .msp，判断方法和 PatchCleaner 一样（注册表登记的 LocalPackage 加 Windows Installer 接口）；一个引用都没读到就不判断，一天内改过的文件不算。
+- **自己加文件夹、排除文件夹**：设置里的「清理列表」。加的文件夹在清理页单独成组，删里面的东西、文件夹本身保留；排除的文件夹清理时一律不碰，估算时也不算。清理页右上角「自定义清理项」直达。
+- **垃圾攒多了也提醒**：自动提醒里可以设一个界限，定时检查时顺便统计「安全清理」里的缓存，超过就提醒（每天最多一次，只统计不删）。
+- **自动清理的时间可选**：每周某一天或每天，中午 12:30。
+- **软件管理**新增三个视图：**开机启动**（注册表 Run 项和「启动」文件夹，开关写在 StartupApproved 里，和任务管理器一样）、**计划任务**（只列第三方的）、**右键菜单**（只列第三方的 shellex 扩展，禁用写进 Shell Extensions\Blocked）。都只是禁用，不删任何东西，随时能恢复。
+- **检查新版本（winget）**：用 Windows 自带的 winget 查装过的软件有没有新版本，只在点的时候联网；列表里标出「可升级到」并给「升级」按钮，在终端窗口里升级，过程和提示都看得见。
+- 帮助里加了「为什么没有注册表清理」。
+- 测试：核心逻辑测试覆盖目录库解析、排除、自定义文件夹、winget 表格解析；界面自测覆盖清理列表、提醒设置、三个新视图和孤儿安装包判断；检查里核对目录库每一条都有英文。
+- Cache library as a data table with dozens of new entries (more browsers, shader caches, game launchers, Adobe, Teams, Discord, Slack, VS Code, Spotify, developer tools); orphaned Windows Installer packages (needs confirmation); custom folders and exclusions; a junk-size reminder; a selectable cleanup day; startup items, third-party scheduled tasks and context menu extensions under Apps; "Check for updates" with winget; FAQ on why there is no registry cleaner.
+
 ## 2.7
 - **空间地图的项目复选框**：每一行前面有复选框（和资源管理器「查看」里的「项目复选框」一样），只有点方框才选中或取消（鼠标移到方框上会变成手形、方框变蓝），单击行的其他地方不会选中，双击文件夹照常往里点；Shift 点是从上次勾的那一行勾到这里，Esc 全部取消，左下角「全选」。右键点一行，菜单只对这一行起作用。在设置里关掉复选框，就照 Windows 列表原来的做法。
 - **按住鼠标（左键或右键）上下拖，一次选中连着的几行**，拖到列表上下边会自动滚动；按住 Ctrl 再拖是在原来的基础上加。用右键拖的话，松开后弹出右键菜单：打开文件夹、在资源管理器里显示、复制路径、压缩、删除。

@@ -108,6 +108,20 @@
                   <TextBlock Style="{StaticResource HelpLead}" Text="Analyze usage"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>Opens the "Space map" and scans drive C:, so you can see which folders and files take up the most space.</Run></TextBlock>
                 </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Which caches are cleaned"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Dozens: Windows' own temporary files, update cache, crash dumps and logs; the web cache of Chrome, Edge, Firefox, Brave, 360, QQ and other browsers; graphics shader caches; Steam and Epic caches; Adobe media cache; the caches of Teams, Discord, Slack, VS Code, Spotify, NetEase Cloud Music and more; and the download caches of pip, npm, NuGet, Go, Rust and other developer tools. Whatever is on your PC shows up after a scan.</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Only caches are deleted; cookies, history, passwords, settings and saved data are left alone.</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Items that are slow to download or regenerate (the NuGet global packages folder, Gradle, Maven, JetBrains indexes, Unreal Engine cache and so on) are under "Needs confirmation" and skipped by default.</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Orphaned Windows Installer packages"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Under "Needs confirmation". Packages in C:\Windows\Installer that no installed app or patch refers to any more, often several GB, detected the same way PatchCleaner does. Skipped by default; read the description before selecting it.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Your own folders and exclusions"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>On the "Settings" page under "Cleanup list" ("Custom items" at the top right of the page takes you there). Folders you add form their own group; their contents are deleted and the folders themselves kept. Excluded folders are never touched and not counted in the estimates.</Run></TextBlock>
+                </StackPanel>
                 <Border Background="#EFF8F1" BorderBrush="#CFE9D6" BorderThickness="1" CornerRadius="10" Padding="14,11,16,12" Margin="0,16,0,0">
                   <DockPanel>
                     <TextBlock DockPanel.Dock="Left" Text="&#xEA18;" FontFamily="{StaticResource Icons}" FontSize="15" Foreground="#248A3D" VerticalAlignment="Top" Margin="0,2,12,0"/>
@@ -428,6 +442,23 @@
                   <TextBlock Style="{StaticResource HelpLead}" Text="After moving"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>Moved apps appear in "Moved folders", where you can "Move back to C:" at any time. When an app gets a major upgrade later, a few installers will reinstall it on C:; just move it again then.</Run></TextBlock>
                 </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Check for updates"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Uses Windows' own winget to see which installed apps have a newer version; it goes online only when you click. Apps with an update show "Update available" in the list and get an "Update" button, which runs winget in a terminal window so you can see the progress and prompts. You can also update everything at once.</Run></TextBlock>
+                </StackPanel>
+                <DockPanel Margin="0,26,0,0"><TextBlock DockPanel.Dock="Left" Text="Startup, scheduled tasks, context menu" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
+                <StackPanel Margin="0,10,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Startup"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>The same sources as "Startup apps" in Task Manager: the Run keys in the registry and the two Startup folders. After "Disable", the program no longer starts with Windows; it is not deleted and can be enabled again at any time.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Scheduled tasks"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Lists only third-party tasks (Windows' own tasks live in the Microsoft folder and are not listed). A disabled task no longer runs on schedule and can be enabled again at any time. ClearC's own tasks are switched on the "Reminders" page.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Context menu"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Lists only third-party extensions added to the File Explorer right-click menu; built-in ones are not listed. Disabling writes the entry to Windows' "Shell Extensions\Blocked" list and applies to newly opened windows; the app itself keeps working.</Run></TextBlock>
+                </StackPanel>
               </StackPanel>
             </Expander>
             <Expander Style="{StaticResource HelpSection}">
@@ -482,8 +513,12 @@
                   <TextBlock Style="{StaticResource HelpBody}"><Run>When turned on, ClearC checks drive C: 2 minutes after each sign-in and again at noon every day. If free space falls below the value you set (20 GB by default), a reminder appears at the bottom right of the screen, at most once a day; if there is enough space, nothing is shown.</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
-                  <TextBlock Style="{StaticResource HelpLead}" Text="Weekly cleanup"/>
-                  <TextBlock Style="{StaticResource HelpBody}"><Run>When turned on, temporary files, caches and logs are cleaned up automatically every Sunday. It doesn't move anything, doesn't empty the Recycle Bin and doesn't touch personal folders; files in use are simply skipped.</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Junk reminder"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>You can set a second limit (for example 2 GB): the check also measures the temporary files, caches and logs under "Safe to clean" and reminds you when they exceed it, at most once a day. It only measures; nothing is deleted.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Scheduled cleanup"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>When turned on, temporary files, caches and logs are cleaned up at the time you choose (a day of the week or every day, at 12:30 PM). It doesn't move anything, doesn't empty the Recycle Bin and doesn't touch personal folders or the folders you added yourself; files in use are simply skipped.</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Space on C: over time"/>
@@ -558,6 +593,10 @@
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Give way to other programs when finding duplicates"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>Files are read in Windows' background mode, behind other programs for both disk and memory, so the programs you are using don't slow down; the search is slower while you are doing other things.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Cleanup list"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Add your own folders to clean (their contents are deleted, the folders themselves kept), or exclude folders that cleanup must leave alone. Personal folders, system folders and app installation folders can't be added.</Run></TextBlock>
                 </StackPanel>
               </StackPanel>
             </Expander>
@@ -636,6 +675,12 @@
                   <DockPanel Margin="0,0,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Prefetch</Run><Run> records which files programs read when they start, so Windows can open your usual programs faster. It is only a few dozen MB, deleting it makes the next starts slower, and it grows back within days.</Run></TextBlock></DockPanel>
                   <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Memory</Run><Run> is similar: Windows uses free memory to cache files you use often ("Cached" in Task Manager) and hands it over the moment another program needs it, so forcing it empty only slows the PC down.</Run></TextBlock></DockPanel>
                   <TextBlock Style="{StaticResource HelpBody}" Margin="0,8,0,0"><Run>That is why ClearC does neither.</Run></TextBlock>
+                </StackPanel>
+              </Expander>
+              <Expander Style="{StaticResource HelpQ}">
+                <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="Why is there no registry cleaner?"/></Expander.Header>
+                <StackPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>A few stale entries in the registry take no space and cost no speed; Microsoft itself says cleaning the registry has no benefit, while a wrong deletion can break apps or Windows and is hard to fix. So ClearC doesn't do it, for the same reason it doesn't clean Prefetch or "boost memory".</Run></TextBlock>
                 </StackPanel>
               </Expander>
               <Expander Style="{StaticResource HelpQ}">

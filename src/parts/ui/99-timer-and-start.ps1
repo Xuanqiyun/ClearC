@@ -37,7 +37,7 @@ $timer.Add_Tick({
         [DirStat]::Cancel = $false
         if ($sync.WasCancelled) { UI-Log (T '已中途取消。') }
         # 删过、搬过东西以后，逐个扫描得到的旧树不再拿来用（读文件表的结果靠变更日志更新）
-        if (@('scan', 'movescan', 'apps', 'map', 'movesize', 'dup', 'update') -notcontains [string]$sync.Mode) { [DiskMap]::Invalidate() }
+        if (@('scan', 'movescan', 'apps', 'map', 'movesize', 'dup', 'update', 'startup', 'winget') -notcontains [string]$sync.Mode) { [DiskMap]::Invalidate() }
 
         if ($sync.Mode -eq 'scan') {
             if ($sync.WasCancelled -or -not $sync.Sizes) {
@@ -244,6 +244,14 @@ $timer.Add_Tick({
         elseif ($sync.Mode -eq 'apps') {
             End-Op $(if ($sync.WasCancelled) { (T '已中途取消，没统计到的软件显示安装时登记的大小') } else { (T '完成') })
             if ($sync.AppsResult) { Build-AppRows $sync.AppsResult } else { $ctl.EmptyAppsText.Text = (T '没读到已安装的软件') }
+        }
+        elseif ($sync.Mode -eq 'startup') {
+            End-Op (T '完成')
+            Build-StartRows ([string]$sync.StartKind) $sync.StartResult
+        }
+        elseif ($sync.Mode -eq 'winget') {
+            End-Op $(if ($sync.WingetResult -and -not $sync.WingetResult.Err) { ((T "{0} 个有新版本") -f @($sync.WingetResult.Items).Count) } else { (T '没查成') })
+            Apply-WingetResult $sync.WingetResult
         }
         elseif ($sync.Mode -eq 'uninst') {
             $x = $sync.UninstRes

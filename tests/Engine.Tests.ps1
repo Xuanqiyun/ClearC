@@ -38,6 +38,46 @@ try {
     Check 'Get-Size skips a link' ((Get-Size @($lk) '' $tree) -eq 0)
     Check 'Get-Size with a filter lists files' ((Get-Size @($dirA) '*.bin' $tree) -eq 24096)
     Check 'Measure-Item without a tree is fresh' ((Measure-Item @{ Paths = @($dirA) }) -eq ($real + 4096))
+    # 排除的文件夹：不算、也不删
+    $script:appDir = Join-Path $T 'appdir'; $script:settingsFile = Join-Path $script:appDir 'settings.txt'; $script:opLogDir = Join-Path $script:appDir 'log'
+    $fakeHome = ''
+    if (-not $env:USERPROFILE) { $fakeHome = Join-Path $T 'home'; $env:USERPROFILE = $fakeHome; New-Item -ItemType Directory -Force -Path $fakeHome | Out-Null }   # Linux 上没有：个人文件夹保护要用
+    Set-Setting 'Exclude' (Join-Path $dirA 'x')
+    Check 'excluded subfolder is not counted' ((Measure-Item @{ Paths = @($dirA) }) -eq ($real + 4096 - 3000))
+    Check 'Test-Excluded matches the folder and what is inside' ((Test-Excluded (Join-Path $dirA 'x/two.dat') (Get-ExcludeList)) -and -not (Test-Excluded $dirA (Get-ExcludeList)))
+    Remove-Contents @($dirA) '' $false
+    Check 'Remove-Contents keeps the excluded folder' ((Test-Path (Join-Path $dirA 'x/two.dat')) -and -not (Test-Path (Join-Path $dirA 'one.bin')))
+    [IO.File]::WriteAllBytes((Join-Path $dirA 'one.bin'), (New-Object byte[] 20000)); [IO.File]::WriteAllBytes((Join-Path $dirA 'late.bin'), (New-Object byte[] 4096))   # 后面的测试还要用
+    Set-Setting 'Exclude' ''
+    Set-Setting 'CustomClean' (Join-Path $T 'b')
+    $cat = Get-Catalog
+    $custom = @($cat | Where-Object { $_.Custom })
+    Check 'custom folder shows up in the catalog' ($custom.Count -eq 1 -and $custom[0].Paths[0] -eq (Join-Path $T 'b') -and $custom[0].Kind -eq 'cache')
+    Set-Setting 'CustomClean' ''
+    Remove-Item -LiteralPath $script:appDir -Recurse -Force -ErrorAction SilentlyContinue   # 测试里建的，后面比对两次扫描时不能多出来
+    if ($fakeHome) { Remove-Item -LiteralPath $fakeHome -Recurse -Force -ErrorAction SilentlyContinue }
+    # 缓存目录库
+    $lib = Get-CacheLibrary
+    Check "cache library parses ($($lib.Count) entries)" ($lib.Count -ge 40)
+    $chrome = @($lib | Where-Object { $_.N -eq 'Chrome 浏览器缓存' })[0]
+    Check 'chromium entry expands to the cache folders' ($chrome -and $chrome.Paths.Count -eq 10 -and ($chrome.Paths -like '*\*\Cache').Count -eq 1)
+    Check 'library options: filter, whole, svc, confirm' ((@($lib | Where-Object { $_.Filter -eq '*.log' }).Count -ge 1) -and (@($lib | Where-Object { $_.Whole }).Count -ge 1) -and (@($lib | Where-Object { $_.Svc -contains 'bits' }).Count -eq 1) -and (@($lib | Where-Object { $_.Confirm }).Count -ge 3))
+    Check 'every library entry has a name, a note and at least one path or Steam' (@($lib | Where-Object { -not $_.N -or -not $_.Note }).Count -eq 0)
+    Check 'the catalog has one index per entry' ((@($cat | ForEach-Object { $_.Idx } | Sort-Object -Unique).Count) -eq $cat.Count)
+    # winget 的表格
+    $wg = "Name                         Id                        Version      Available    Source`n" +
+          "-----------------------------------------------------------------------------------------`n" +
+          "Microsoft Edge               Microsoft.Edge            120.0.1      121.0.5      winget`n" +
+          "腾讯 QQ                      Tencent.QQ                9.9.1        9.9.7        winget`n" +
+          "Some Very Long Application … SomePublisher.SomeVeryLo… 1.0          2.0          winget`n" +
+          "Weird Row                    Only.Three                1.0`n" +
+          "3 upgrades available.`n"
+    $w = @(ConvertFrom-WingetTable $wg)
+    Check "winget table parses ($($w.Count) rows)" ($w.Count -eq 3 -and $w[0].Name -eq 'Microsoft Edge' -and $w[0].Id -eq 'Microsoft.Edge' -and $w[0].Available -eq '121.0.5' -and $w[1].Name -eq '腾讯 QQ')
+    Check 'winget: truncated id is dropped, name kept' ($w[2].Id -eq '' -and $w[2].Name -like 'Some Very Long*')
+    Check 'winget: no table means no rows' (@(ConvertFrom-WingetTable "No installed package found matching input criteria.").Count -eq 0)
+    # 启动命令里取程序路径
+    Check 'Get-CommandExe handles quotes and arguments' ((Get-CommandExe '"C:\Program Files\App\app.exe" --tray') -eq 'C:\Program Files\App\app.exe' -and (Get-CommandExe 'C:\Tools\x.exe /min') -eq 'C:\Tools\x.exe')
 
     # 空间地图的辅助函数
     $top = [DiskMap]::TopFiles($dirA, 1)

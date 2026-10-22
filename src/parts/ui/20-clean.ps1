@@ -107,6 +107,7 @@ if (-not (Stopping)) { $sync.Sizes = $sizes }
 }
 
 $ctl.BtnScan.Add_Click({ UI-Log (T "开始扫描..."); Do-Scan })
+$ctl.BtnCleanCustom.Add_Click({ Show-Page 'settings'; $ctl.SetScroll.UpdateLayout(); $ctl.SetCleanCard.BringIntoView() })
 
 $ctl.BtnHogs.Add_Click({
     Show-Page 'map'
