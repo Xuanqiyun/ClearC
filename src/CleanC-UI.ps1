@@ -5276,6 +5276,7 @@ Zoom 装在这里的程序和本地数据。会议录像默认存在「文档」
 选中一行可以打开位置、压缩或删除；勾选前面的方框，或按住 Ctrl、Shift，可以选多项一起删；按住鼠标（左键或右键）上下拖可以一次选中连着的几行。系统文件夹、软件安装文件夹、C 盘个人文件夹和搬家后的数据带小锁，不能在这里删。	Select a row to open its location, compress or delete it. Tick the boxes in front, or hold Ctrl or Shift, to select several and delete them together; hold the left or right mouse button and drag up or down to select a run of rows. System folders, app installation folders, personal folders on C: and moved data have a lock and can't be deleted here.
 删除选中的 {0} 项…	Delete {0} selected items…
 已复制 {0} 个路径	Copied {0} paths
+空间地图：双击的「{0}」进不去（扫描结果里没有它的下一层）	Space map: can't open "{0}" by double-clicking (the scan has nothing below it)
 。点行前面的方框取消某一项，按 Esc 全部取消	. Click a row's box to clear it, or press Esc to clear all
 勾选行前面的方框来选中，可以勾一项或多项，再打开位置、压缩或删除；单击行的其他地方不会选中，双击文件夹往里点；按住鼠标上下拖可以一次勾上连着的几行。系统文件夹、软件安装文件夹、C 盘个人文件夹和搬家后的数据带小锁，不能在这里删。	Tick the box at the start of a row to select it, one row or several, then open its location, compress or delete. Clicking elsewhere on a row doesn't select it; double-click a folder to open it; hold the mouse button and drag up or down to tick a run of rows. System folders, app installation folders, personal folders on C: and moved data have a lock and can't be deleted here.
 \n\n按快速扫描的结果，实际能腾出 {0} 到 {1}：其中 {2} 是硬链接，同一份文件在别处还有名字，那些名字还在就不会腾出空间。	\n\nAccording to the fast scan, this frees between {0} and {1}: {2} of it is hard links, files that still have names elsewhere, and their space is freed only once all their names are gone.
@@ -5839,6 +5840,9 @@ if ($script:mode -match '(?i)/check') {
 }
 # 界面自测（给自动测试用）：照常打开窗口，点一遍界面功能，对话框一律当作点了「取消」，做完自己关掉
 $script:uiTest = [bool]($script:mode -match '(?i)/uitest')
+# 这个 exe 是什么时候构建的（同一个版本号可能构建过好几次，反馈问题时好对上）
+$script:AppBuild = ''
+try { $bf = if ($env:CLEANC_SELF -and (Test-Path -LiteralPath $env:CLEANC_SELF)) { $env:CLEANC_SELF } elseif ($script:selfScript) { $script:selfScript } else { '' }; if ($bf) { $script:AppBuild = '{0:yyyy-MM-dd HH:mm}' -f (Get-Item -LiteralPath $bf).LastWriteTime } } catch {}
 $script:uiSheets = New-Object System.Collections.Generic.List[string]
 if ($script:mode -match '(?i)/selftest') {
     Init-DriveThreads
@@ -8517,7 +8521,7 @@ $ctl.BtnIssue.Add_Click({ Open-Web ($script:projectPage + '/issues') })
 $ctl.BtnCopyDiag.Add_Click({
     $c = $null; try { $c = New-Object System.IO.DriveInfo 'C:\' } catch {}
     $info = @(
-        ((T "腾挪 ClearC {0}") -f $script:AppVersion)
+        ((T "腾挪 ClearC {0}") -f $script:AppVersion) + $(if ($script:AppBuild) { " ($($script:AppBuild))" } else { '' })
         ((T "Windows {0}，{1} 位") -f [Environment]::OSVersion.Version, $(if ([Environment]::Is64BitOperatingSystem) { 64 } else { 32 }))
         $(if ($c) { (T "C 盘剩余 {0} / 共 {1}") -f (Fmt $c.AvailableFreeSpace), (Fmt $c.TotalSize) } else { '' })
         ((T "屏幕可用区域 {0:N0} x {1:N0}") -f [System.Windows.SystemParameters]::WorkArea.Width, [System.Windows.SystemParameters]::WorkArea.Height)
@@ -10538,7 +10542,7 @@ function Test-InCheckBox($lv, $el) {
 # 复选框模式（设置里开着「项目复选框」）：只有点方框才选中、取消。单击行的其他地方不选，双击文件夹照常往里点；
 # 按住鼠标上下拖是把拖过的行勾上（加在已勾的上面）；Ctrl 点照常加上或去掉一行；Shift 点是把上次勾的那一行到这一行都勾上；
 # 键盘上下键只移动焦点，空格勾上或取消；Esc 全部取消
-$script:tickAnchor = -1
+$script:tickAnchor = -1; $script:kbRow = -1; $script:lastPress = $null
 function Test-CheckMode { $win.Resources['MapCkVis'] -eq [System.Windows.Visibility]::Visible -and ($script:mapView -eq 'dirs' -or $script:mapView -eq 'files') }
 function Add-MapRange([int]$from, [int]$to) {
     $lv = $ctl.MapList; $n = $lv.Items.Count
@@ -10576,6 +10580,7 @@ $ctl.MapList.Add_PreviewKeyDown({
     $n = $s.Items.Count; if ($n -eq 0) { return }
     $cur = -1; $f = [System.Windows.Input.Keyboard]::FocusedElement
     if ($f -is [System.Windows.Controls.ListViewItem]) { $cur = $s.ItemContainerGenerator.IndexFromContainer($f) }
+    elseif ($script:kbRow -ge 0 -and $script:kbRow -lt $n) { $cur = $script:kbRow }
     $k = $e.Key
     if ($k -eq [System.Windows.Input.Key]::Space) {
         if ($cur -ge 0) { $it = $s.Items[$cur]; if ($s.SelectedItems.Contains($it)) { [void]$s.SelectedItems.Remove($it) } else { [void]$s.SelectedItems.Add($it) }; $script:tickAnchor = $cur }
@@ -10588,6 +10593,7 @@ $ctl.MapList.Add_PreviewKeyDown({
     $to = [math]::Min($n - 1, $to)
     $s.ScrollIntoView($s.Items[$to]); $s.UpdateLayout()
     $c = $s.ItemContainerGenerator.ContainerFromIndex($to); if ($c) { [void]$c.Focus() }
+    $script:kbRow = $to
 })
 # 按下：记下从哪一行开始；真正拖到别的行才算拖选
 function Begin-RowDrag($s, $e, [string]$button) {
@@ -10600,11 +10606,24 @@ function Begin-RowDrag($s, $e, [string]$button) {
     $c = $null; try { $c = [System.Windows.Controls.ItemsControl]::ContainerFromElement($s, $e.OriginalSource) } catch {}
     if ($button -eq 'Right') { $script:menuRow = if ($c) { $c.Content } else { $null } }
     if (-not $c) { return }
-    if ($button -eq 'Left' -and $e.ClickCount -ge 2) { if (Enter-MapRow $c.Content) { $e.Handled = $true }; return }   # 双击
+    if ($button -eq 'Left') {
+        # 双击：Windows 给的点击次数，或者自己算（同一行、在系统设的双击时间内、鼠标没怎么动）
+        $pt = $e.GetPosition($s); $row = $c.Content
+        $lp = $script:lastPress
+        $dbl = $e.ClickCount -ge 2 -or ($lp -and [object]::ReferenceEquals($lp.Row, $row) -and ($e.Timestamp - $lp.Ts) -ge 0 -and ($e.Timestamp - $lp.Ts) -le [System.Windows.Forms.SystemInformation]::DoubleClickTime -and
+                                        [math]::Abs($pt.X - $lp.X) -le 6 -and [math]::Abs($pt.Y - $lp.Y) -le 6)
+        $script:lastPress = if ($dbl) { $null } else { @{ Row = $row; Ts = $e.Timestamp; X = $pt.X; Y = $pt.Y } }
+        if ($dbl) {
+            if (Enter-MapRow $row) { $e.Handled = $true }
+            elseif ($row -and $row.IsDir) { Write-LogFile ((T "空间地图：双击的「{0}」进不去（扫描结果里没有它的下一层）") -f $row.Name) }
+            return
+        }
+    }
     $i = $s.ItemContainerGenerator.IndexFromContainer($c)
     if ($i -lt 0) { return }
     $p = Invoke-RowPress $i $button $shift $ctrl
-    if ($p.Handled) { $e.Handled = $true; try { [void]$c.Focus() } catch {} }   # 焦点挪过来，但不选中
+    # 不选中；键盘焦点给列表（不给这一行：给行的话列表会把它滚进视野，两下之间行就挪了位置，双击会点到别的行）
+    if ($p.Handled) { $e.Handled = $true; $script:kbRow = $i; try { if (-not $s.IsKeyboardFocusWithin) { [void]$s.Focus() } } catch {} }
     if ($p.NoDrag) { return }
     $script:rdrag = @{ Lv = $s; Anchor = $i; Cur = $i; Moved = $false; Ctrl = [bool]$p.Add; Base = $null; Cap = $null; Button = $button }
 }
@@ -12855,7 +12874,8 @@ $win.MinHeight = [math]::Min([double]600,  [double]$wa.Height - 24)
 if ($wa.Height -lt 800) { $ctl.LogPanel.Height = 130 }
 $ctl.OvPlanScroll.MaxHeight = [math]::Max([double]80, [math]::Min([double]190, [double]$wa.Height - 560))
 $win.Title = ((T "腾挪 ClearC {0}") -f $script:AppVersion)
-$ctl.AppVer.Text = ((T "版本 {0}") -f $script:AppVersion)
+Write-LogFile ((T "腾挪 ClearC {0}") -f $script:AppVersion + $(if ($script:AppBuild) { " ($($script:AppBuild))" } else { '' }))
+$ctl.AppVer.Text = ((T "版本 {0}") -f $script:AppVersion) + $(if ($script:AppBuild) { " · " + $script:AppBuild } else { '' })
 Write-LogFile ((T "==== 腾挪 ClearC {0} 启动；Windows {1}；屏幕可用区域 {2:N0} x {3:N0}") -f $script:AppVersion, [Environment]::OSVersion.Version, $wa.Width, $wa.Height)
 if ($script:themeFail) { Write-LogFile ((T "深色界面没能打开，这次用浅色：{0}") -f $script:themeFail) }
 

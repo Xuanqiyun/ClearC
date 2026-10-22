@@ -145,7 +145,7 @@ $ctl.BtnIssue.Add_Click({ Open-Web ($script:projectPage + '/issues') })
 $ctl.BtnCopyDiag.Add_Click({
     $c = $null; try { $c = New-Object System.IO.DriveInfo 'C:\' } catch {}
     $info = @(
-        ((T "腾挪 ClearC {0}") -f $script:AppVersion)
+        ((T "腾挪 ClearC {0}") -f $script:AppVersion) + $(if ($script:AppBuild) { " ($($script:AppBuild))" } else { '' })
         ((T "Windows {0}，{1} 位") -f [Environment]::OSVersion.Version, $(if ([Environment]::Is64BitOperatingSystem) { 64 } else { 32 }))
         $(if ($c) { (T "C 盘剩余 {0} / 共 {1}") -f (Fmt $c.AvailableFreeSpace), (Fmt $c.TotalSize) } else { '' })
         ((T "屏幕可用区域 {0:N0} x {1:N0}") -f [System.Windows.SystemParameters]::WorkArea.Width, [System.Windows.SystemParameters]::WorkArea.Height)

@@ -399,7 +399,8 @@ $win.MinHeight = [math]::Min([double]600,  [double]$wa.Height - 24)
 if ($wa.Height -lt 800) { $ctl.LogPanel.Height = 130 }
 $ctl.OvPlanScroll.MaxHeight = [math]::Max([double]80, [math]::Min([double]190, [double]$wa.Height - 560))
 $win.Title = ((T "腾挪 ClearC {0}") -f $script:AppVersion)
-$ctl.AppVer.Text = ((T "版本 {0}") -f $script:AppVersion)
+Write-LogFile ((T "腾挪 ClearC {0}") -f $script:AppVersion + $(if ($script:AppBuild) { " ($($script:AppBuild))" } else { '' }))
+$ctl.AppVer.Text = ((T "版本 {0}") -f $script:AppVersion) + $(if ($script:AppBuild) { " · " + $script:AppBuild } else { '' })
 Write-LogFile ((T "==== 腾挪 ClearC {0} 启动；Windows {1}；屏幕可用区域 {2:N0} x {3:N0}") -f $script:AppVersion, [Environment]::OSVersion.Version, $wa.Width, $wa.Height)
 if ($script:themeFail) { Write-LogFile ((T "深色界面没能打开，这次用浅色：{0}") -f $script:themeFail) }
 
