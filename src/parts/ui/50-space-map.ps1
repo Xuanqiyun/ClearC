@@ -74,8 +74,23 @@ function Get-DiskNote([double]$size, [double]$disk, [double]$shared, [bool]$isFi
     if ($disk -ge 0 -and ($size - $disk) -ge 32MB -and $disk -lt $size * 0.85) { $t += (T " · 实际只占 {0}") -f (Fmt $disk) }
     return $t
 }
+# 同一个列表重新列一遍时（改了设置、删完、方块图和文件夹之间切换、找文件改条件），原来选中的还选着
+function Get-MapKeep([string]$key) {
+    $keep = @{}
+    if ($script:mapListKey -eq $key) { foreach ($x in @($ctl.MapList.SelectedItems)) { if ($x.Path) { $keep[([string]$x.Path).ToLowerInvariant()] = $true } } }
+    $script:mapListKey = $key
+    return $keep
+}
+function Restore-MapKeep($keep) {
+    if ($keep.Count -eq 0) { $script:tickMode = $false; return }
+    $script:bulkSel = $true
+    try { foreach ($x in @($ctl.MapList.Items)) { if ($x.Path -and $keep.ContainsKey(([string]$x.Path).ToLowerInvariant())) { [void]$ctl.MapList.SelectedItems.Add($x) } } }
+    finally { $script:bulkSel = $false }
+    if ($ctl.MapList.SelectedItems.Count -eq 0) { $script:tickMode = $false }
+}
 function Show-MapLevel($node) {
     if (-not $node) { return }
+    $keep = Get-MapKeep ('dirs|' + $node.FullPath())
     $script:mapCur = $node
     $dn = Get-Flag 'MapDisk'
     $hasDisk = $dn -and $script:mapRoot -and $script:mapRoot.HasDisk
@@ -138,6 +153,7 @@ function Show-MapLevel($node) {
         [void]$rows.Add($more)
     }
     $ctl.MapList.ItemsSource = $rows
+    Restore-MapKeep $keep
     $ctl.MapPath.Text = $path
     $ctl.MapInfo.Text = (T "这一层共 {0}，{1:N0} 个文件{2}") -f (Fmt $node.Size), $node.Files, $(if ($script:mapScanAt) { (T " · 扫描于 {0:HH:mm}（{1}）") -f $script:mapScanAt, $script:mapHow } else { '' })
     $ctl.BtnMapAcct.Visibility = if ($script:mapRoot -and $script:mapRoot.HasDisk) { 'Visible' } else { 'Collapsed' }
@@ -295,6 +311,7 @@ function Get-MapChatNodes {
     return $out
 }
 function Show-MapFiles {
+    $keep = Get-MapKeep 'files'
     $rows = New-Object System.Collections.Generic.List[MapRow]
     $f = Get-MapFilter
     if ($f.Chat) { $res = [DiskMap]::FindFilesIn($f.Min, $f.Before, $f.Exts, $f.Name, $f.Chat.Nodes.ToArray(), $script:mapFindMax) }
@@ -314,6 +331,7 @@ function Show-MapFiles {
         [void]$rows.Add($row)
     }
     $ctl.MapList.ItemsSource = $rows
+    Restore-MapKeep $keep
     $head = (T "找到 {0:N0} 个文件，共 {1}") -f $res.Count, (Fmt $res.Bytes)
     if ($res.Count -gt $rows.Count) { $head += ((T "，下面列出最大的 {0:N0} 个") -f $rows.Count) }
     $ctl.MapPath.Text = $head
@@ -419,7 +437,11 @@ $ctl.MapGrow.Add_MouseDoubleClick({
     Show-MapLevel $node
 })
 $ctl.MapList.Add_MouseDoubleClick({
-    $r = $ctl.MapList.SelectedItem
+    param($s, $e)
+    # 双击的是鼠标下面那一行（多选时 SelectedItem 不一定是它）；在复选框上连点两下只是勾两次，不进文件夹；右键双击、双击滚动条都不算
+    if ($e.ChangedButton -ne [System.Windows.Input.MouseButton]::Left -or (Test-InCheckBox $s $e.OriginalSource)) { return }
+    $c = $null; try { $c = [System.Windows.Controls.ItemsControl]::ContainerFromElement($s, $e.OriginalSource) } catch {}
+    $r = if ($c) { $c.Content } else { $null }
     if ($r -and $r.IsDir -and $r.Node) {
         if ($script:mapView -ne 'dirs') { $ctl.MapViewDirs.IsChecked = $true }
         Show-MapLevel $r.Node
@@ -427,6 +449,7 @@ $ctl.MapList.Add_MouseDoubleClick({
 })
 function Update-MapSel {
     $nAll = $ctl.MapList.Items.Count; $nSel = $ctl.MapList.SelectedItems.Count
+    if ($nSel -eq 0) { $script:tickMode = $false }
     $ctl.MapAll.IsEnabled = ($script:mapView -eq 'dirs' -or $script:mapView -eq 'files') -and $nAll -gt 0
     $ctl.MapAll.IsChecked = if ($script:mapView -eq 'grow' -or $nSel -eq 0) { $false } elseif ($nSel -ge $nAll) { $true } else { $null }
     $sel = if ($script:mapView -ne 'grow') { @($ctl.MapList.SelectedItems) } else { @() }
@@ -441,6 +464,7 @@ function Update-MapSel {
         $tot = [double]0; foreach ($x in $sel) { $tot += [double]$x.Size }
         $t = (T "已选 {0} 项，共 {1}") -f $sel.Count, (Fmt $tot)
         if ($del.Count -lt $sel.Count) { $t += ((T "（其中 {0} 项带小锁或是链接，不会删）") -f ($sel.Count - $del.Count)) }
+        if (Test-TickMode) { $t += (T '。点行前面的方框取消某一项，按 Esc 全部取消') }
         $ctl.MapSel.Text = $t; return
     }
     $ctl.MapSel.Text = if ($r.Locked) { (T "{0}：不能在这里删（{1}）") -f $r.Name, $r.LockTip } else { "{0}  {1}" -f $r.Name, $r.SizeText }
@@ -449,7 +473,7 @@ $script:bulkSel = $false
 $ctl.MapList.Add_SelectionChanged({ if (-not $script:bulkSel) { Update-MapSel } })
 $ctl.MapAll.Add_Click({
     $lv = $ctl.MapList
-    if ($lv.Items.Count -gt 0 -and $lv.SelectedItems.Count -ge $lv.Items.Count) { $lv.UnselectAll() } else { $lv.SelectAll() }
+    if ($lv.Items.Count -gt 0 -and $lv.SelectedItems.Count -ge $lv.Items.Count) { $lv.UnselectAll(); $script:tickMode = $false } else { $lv.SelectAll(); $script:tickMode = $true }
     Update-MapSel
 })
 # ---------- 右键菜单：和下面的按钮做一样的事 ----------
@@ -559,19 +583,52 @@ function Test-InCheckBox($lv, $el) {
     } catch {}
     return $false
 }
+# 勾选模式：用复选框勾过以后（还有勾着的），点行的其他地方是「加上这一行」，不会把勾过的清掉；
+# 按住 Shift 点是把上次勾的那一行到这一行都加上。要取消某一行就点它的方框，全部取消按 Esc
+$script:tickMode = $false; $script:tickAnchor = -1
+function Test-TickMode { $script:tickMode -and $ctl.MapList.SelectedItems.Count -gt 0 -and $win.Resources['MapCkVis'] -eq [System.Windows.Visibility]::Visible }
+function Invoke-TickClick([int]$i, [bool]$shift) {
+    $lv = $ctl.MapList; $n = $lv.Items.Count
+    if ($i -lt 0 -or $i -ge $n) { return }
+    $from = if ($shift -and $script:tickAnchor -ge 0 -and $script:tickAnchor -lt $n) { $script:tickAnchor } else { $i }
+    $script:bulkSel = $true
+    try { for ($k = [math]::Min($from, $i); $k -le [math]::Max($from, $i); $k++) { $it = $lv.Items[$k]; if (-not $lv.SelectedItems.Contains($it)) { [void]$lv.SelectedItems.Add($it) } } }
+    finally { $script:bulkSel = $false }
+    $script:tickAnchor = $i
+    Update-MapSel
+}
+# 复选框点了以后：记下进了勾选模式，以及从哪一行接着加
+$ctl.MapList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent, [System.Windows.RoutedEventHandler]{
+    param($s, $e)
+    if (-not ($e.OriginalSource -is [System.Windows.Controls.CheckBox])) { return }
+    $c = $null; try { $c = [System.Windows.Controls.ItemsControl]::ContainerFromElement($ctl.MapList, $e.OriginalSource) } catch {}
+    if ($c) { $script:tickAnchor = $ctl.MapList.ItemContainerGenerator.IndexFromContainer($c) }
+    $script:tickMode = ($ctl.MapList.SelectedItems.Count -gt 0)
+})
+# Esc：全部取消
+$ctl.MapList.Add_PreviewKeyDown({
+    param($s, $e)
+    if ($e.Key -eq [System.Windows.Input.Key]::Escape -and $s.SelectedItems.Count -gt 0) { $s.UnselectAll(); $script:tickMode = $false; $e.Handled = $true }
+})
 # 按下：记下从哪一行开始；真正拖到别的行才算拖选（只是点一下照常）
 function Begin-RowDrag($s, $e, [string]$button) {
     Stop-RowDrag
     if (-not ($e.OriginalSource -is [System.Windows.DependencyObject])) { return }
-    $mods = [System.Windows.Input.Keyboard]::Modifiers
-    # 左键按着 Shift：Windows 列表自己就会从上次点的那一行选到这里，不用管
-    if ($button -eq 'Left' -and ($mods -band [System.Windows.Input.ModifierKeys]::Shift)) { return }
     if ($button -eq 'Left' -and (Test-InCheckBox $s $e.OriginalSource)) { return }
+    $mods = [System.Windows.Input.Keyboard]::Modifiers
+    $shift = ($mods -band [System.Windows.Input.ModifierKeys]::Shift) -ne 0
+    $ctrl = ($mods -band [System.Windows.Input.ModifierKeys]::Control) -ne 0
     $c = $null; try { $c = [System.Windows.Controls.ItemsControl]::ContainerFromElement($s, $e.OriginalSource) } catch {}
     if (-not $c) { return }
     $i = $s.ItemContainerGenerator.IndexFromContainer($c)
     if ($i -lt 0) { return }
-    $ctrl = ($mods -band [System.Windows.Input.ModifierKeys]::Control) -ne 0
+    if ((Test-TickMode) -and -not $ctrl) {
+        # 勾选模式：不让列表把已经勾的清掉，只是加上这一行（右键点没勾的行也一样，菜单对全部勾着的行起作用）
+        Invoke-TickClick $i ($shift -and $button -eq 'Left')
+        $e.Handled = $true
+        try { [void]$c.Focus() } catch {}
+        $ctrl = $true          # 接着拖的话，是在勾着的基础上加
+    } elseif ($button -eq 'Left' -and $shift) { return }   # 左键按着 Shift：Windows 列表自己会从上次点的那一行选到这里
     $script:rdrag = @{ Lv = $s; Anchor = $i; Cur = $i; Moved = $false; Ctrl = $ctrl; Base = $null; Cap = $null; Button = $button }
 }
 $ctl.MapList.Add_PreviewMouseLeftButtonDown({ param($s, $e) Begin-RowDrag $s $e 'Left' })

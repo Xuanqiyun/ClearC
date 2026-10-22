@@ -113,6 +113,28 @@ function Invoke-UiTest {
             $ctl.SetMapCheck.IsChecked = $true; & $click $ctl.SetMapCheck; $win.UpdateLayout()
             if (-not $hidden) { throw 'switch did not hide the check boxes' }
         }
+        & $step 'ticked rows are kept when clicking another row' {
+            $lv = $ctl.MapList; $lv.UnselectAll(); $win.UpdateLayout()
+            if ($lv.Items.Count -lt 8) { throw 'too few rows' }
+            foreach ($q in 0, 2) {
+                $k = Find-Visual ($lv.ItemContainerGenerator.ContainerFromIndex($q)) ([System.Windows.Controls.CheckBox])
+                $k.IsChecked = $true; $k.RaiseEvent((New-Object System.Windows.RoutedEventArgs ([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent)))
+            }
+            if (-not (Test-TickMode)) { throw 'ticking did not start tick mode' }
+            Invoke-TickClick 4 $false
+            if ($lv.SelectedItems.Count -ne 3) { throw ("clicking a row after ticking: {0} selected, expected 3" -f $lv.SelectedItems.Count) }
+            Invoke-TickClick 6 $true
+            if ($lv.SelectedItems.Count -ne 5) { throw ("shift-click after ticking: {0} selected, expected 5" -f $lv.SelectedItems.Count) }
+            Refresh-MapRows
+            if ($lv.SelectedItems.Count -ne 5) { throw ("refreshing the list kept {0} of 5" -f $lv.SelectedItems.Count) }
+            $src = [System.Windows.PresentationSource]::FromVisual($lv)
+            if ($src) {
+                $ka = New-Object System.Windows.Input.KeyEventArgs ([System.Windows.Input.Keyboard]::PrimaryDevice), $src, 0, ([System.Windows.Input.Key]::Escape)
+                $ka.RoutedEvent = [System.Windows.Input.Keyboard]::PreviewKeyDownEvent
+                $lv.RaiseEvent($ka)
+                if ($lv.SelectedItems.Count -ne 0 -or (Test-TickMode)) { throw 'Esc did not clear the ticks' }
+            }
+        }
         & $step 'select all' {
             $lv = $ctl.MapList
             & $click $ctl.MapAll; if ($lv.SelectedItems.Count -ne $lv.Items.Count -or $ctl.MapAll.IsChecked -ne $true) { throw 'not all selected' }
