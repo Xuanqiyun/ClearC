@@ -38,7 +38,7 @@ $timer.Add_Tick({
         [DirStat]::Cancel = $false
         if ($sync.WasCancelled) { UI-Log (T '已中途取消。') }
         # 删过、搬过东西以后，逐个扫描得到的旧树不再拿来用（读文件表的结果靠变更日志更新）
-        if (@('scan', 'movescan', 'apps', 'map', 'movesize', 'dup', 'update', 'startup', 'winget', 'odinfo', 'csanalyze', 'leftovers') -notcontains [string]$sync.Mode) { [DiskMap]::Invalidate() }
+        if (@('scan', 'movescan', 'apps', 'map', 'movesize', 'dup', 'update', 'startup', 'winget', 'odinfo', 'csanalyze', 'leftovers', 'recent') -notcontains [string]$sync.Mode) { [DiskMap]::Invalidate() }
 
         if ($sync.Mode -eq 'scan') {
             if ($sync.WasCancelled -or -not $sync.Sizes) {
@@ -127,7 +127,8 @@ $timer.Add_Tick({
                 $script:prevSnap = $null
                 if (-not $stopped) { try { Update-Growth $root } catch { $script:growNote = (T '没能和上次比较') } } else { $script:growNote = (T '这次扫描中途停止了，不和上次比较') }
                 End-Op ($(if ($stopped) { (T "已中途停止，看过 {0:N0} 个文件，共 {1}") } else { (T "完成，{0:N0} 个文件，共 {1}") }) -f $root.Files, (Fmt $root.Size))
-                if ($script:mapView -eq 'grow') { Set-MapView 'grow' } elseif ($script:mapView -eq 'files') { Show-MapFiles } else { Show-MapLevel $root }
+                $script:recentRows = $null; $script:recentNote = ''
+                if ($script:mapView -eq 'grow') { Set-MapView 'grow' } elseif ($script:mapView -eq 'files') { Show-MapOverview; Show-MapFiles } elseif ($script:mapView -eq 'types') { Show-MapTypes } elseif ($script:mapView -eq 'recent') { Show-MapOverview; Show-MapRecent } else { Show-MapLevel $root }
                 if ($stopped) { $ctl.MapInfo.Text = (T '扫描中途停止了，下面只是已经看过的部分') }
                 Add-History
             } else { End-Op (T '没有完成') }
@@ -235,6 +236,19 @@ $timer.Add_Tick({
         elseif ($sync.Mode -eq 'leftovers') {
             End-Op (T '完成')
             Build-StartRows 'leftover' $sync.LeftoverResult
+        }
+        elseif ($sync.Mode -eq 'recent') {
+            End-Op (T '完成')
+            $script:recentRows = $sync.RecentResult
+            $n = [string]$sync.RecentNote
+            $script:recentNote = switch -Wildcard ($n) {
+                'no-index' { (T '这块盘的文件表不在内存里了，再扫描一次就可以') }
+                'no-journal' { (T '这块盘没有开变更日志（USN Journal），Windows 一般只给系统盘开') }
+                'refs' { (T '这块盘的变更日志是 ReFS 的格式，暂时不认') }
+                'journal-from:*' { (T "按变更日志统计，最近 {0} 天。日志只保留到 {1:yyyy-MM-dd HH:mm}，更早的改动看不到。大小按文件现在的大小算，删掉的只计个数；只列改动最集中的文件夹") -f $sync.RecentDays, [DateTime]::FromFileTimeUtc([long]$n.Substring(13)).ToLocalTime() }
+                default { (T "按变更日志统计，最近 {0} 天。大小按文件现在的大小算（日志里没有写了多少字节），删掉的只计个数；只列改动最集中的文件夹") -f $sync.RecentDays }
+            }
+            if ($script:mapView -eq 'recent') { Show-MapRecent }
         }
         elseif ($sync.Mode -eq 'vdisk') {
             $x = $sync.VdRes
@@ -532,7 +546,7 @@ $win.Add_ContentRendered({
     }
     if ($script:riskShown) { return }
     $script:riskShown = $true
-    if (Test-Path -LiteralPath $script:riskFile) { Ask-Mode; return }
+    if (Test-Path -LiteralPath $script:riskFile) { return }
     $ans = Show-Sheet -Kind warn -Title (T '使用前请先阅读安全风险提示') `
         -Text (T "本工具会按你的选择删除或搬移电脑上的文件。删除的文件可能无法恢复，存在资料丢失的风险。`n`n每次删除前，请确认这些资料确实不再需要、删除不会给你带来损失；重要资料请先备份。因使用本工具造成的资料丢失或其他损失，责任由使用者自行承担，开发者不承担责任。`n`n完整说明随时可以在左侧「帮助」里查看。") `
         -Confirm (T '我已阅读并了解上述风险，同意自行承担使用本工具的后果。') -Buttons @((T '退出'), (T '同意并继续')) -Primary (T '同意并继续') -Cancel (T '退出')
@@ -542,16 +556,7 @@ $win.Add_ContentRendered({
         [IO.File]::WriteAllText($script:riskFile, ((T "{0:yyyy-MM-dd HH:mm:ss}  已同意（版本 {1}）") -f (Get-Date), $script:AppVersion), [Text.Encoding]::UTF8)
     } catch {}
     Write-LogFile (T '用户已同意安全风险提示')
-    Ask-Mode
 })
-# 还没选过模式就问一句（老版本升上来的也会问一次）
-function Ask-Mode {
-    if ((Get-Setting 'Mode' '')) { return }
-    $ans = Show-Sheet -Title (T '你是哪类用户？') -Text (T "按你的需要决定界面上有多少东西，随时可以在「设置」里换。`n`n普通用户：清理缓存、省空间、看哪里占地方、卸载软件，够用也不复杂。`n工程师：再加上重复文件、搬家管理、自动提醒、操作日志，以及各页的进阶功能。`n开发者和 IT：全部功能，包括计划任务、右键菜单、保留的存储、组件存储分析、自定义清理列表、空间明细和自检。") `
-        -Buttons @((T '普通用户'), (T '工程师'), (T '开发者和 IT')) -Primary (T '普通用户') -Cancel (T '普通用户')
-    $mode = switch ($ans) { (T '工程师') { 'pro' } (T '开发者和 IT') { 'expert' } default { 'basic' } }
-    Set-Mode $mode
-}
 $global:CLEANC_UI_SHOWN = $true   # 告诉外层 exe：界面已经正常打开
 if ($script:uiTest) { $win.WindowStartupLocation = 'Manual'; $win.Left = -32000; $win.Top = -32000; $win.ShowActivated = $false; $win.ShowInTaskbar = $false }
 $win.ShowDialog() | Out-Null

@@ -47,6 +47,31 @@ public static class FsTools {
         try { long len = new FileInfo(file).Length; return len > 0 && OnDisk(file) < len * 0.9; } catch { return false; }
     }
     // 把 dup 换成指向 keep 的硬链接：两个位置都还在，只占一份空间。返回空字符串表示成功
+    static readonly Dictionary<string, string> ownerOfSid = new Dictionary<string, string>();
+    // 文件的所有者（「DOMAIN\名字」；读不到就空）。同一个账户只翻译一次
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    static extern uint GetNamedSecurityInfoW(string name, int type, uint info, out IntPtr owner, out IntPtr group, out IntPtr dacl, out IntPtr sacl, out IntPtr sd);
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    static extern bool ConvertSidToStringSidW(IntPtr sid, out IntPtr str);
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    static extern bool LookupAccountSidW(string system, IntPtr sid, StringBuilder name, ref int nameLen, StringBuilder domain, ref int domLen, out int use);
+    [DllImport("kernel32.dll")] static extern IntPtr LocalFree(IntPtr p);
+    public static string Owner(string path) {
+        if (System.IO.Path.DirectorySeparatorChar != '\\') return "";
+        IntPtr owner, g, d, s, sd;
+        if (GetNamedSecurityInfoW(path, 1, 1, out owner, out g, out d, out s, out sd) != 0 || owner == IntPtr.Zero) return "";
+        try {
+            IntPtr ps; string sidText = "";
+            if (ConvertSidToStringSidW(owner, out ps)) { sidText = Marshal.PtrToStringUni(ps); LocalFree(ps); }
+            string name;
+            lock (ownerOfSid) { if (sidText.Length > 0 && ownerOfSid.TryGetValue(sidText, out name)) return name; }
+            StringBuilder nm = new StringBuilder(256), dm = new StringBuilder(256); int nl = 256, dl = 256, use;
+            name = LookupAccountSidW(null, owner, nm, ref nl, dm, ref dl, out use) ? (dm.Length > 0 ? dm + "\\" + nm : nm.ToString()) : sidText;
+            lock (ownerOfSid) { if (sidText.Length > 0) ownerOfSid[sidText] = name; }
+            return name;
+        } catch { return ""; } finally { if (sd != IntPtr.Zero) LocalFree(sd); }
+    }
+    public static bool IsCompressed(string path) { try { return (System.IO.File.GetAttributes(path) & System.IO.FileAttributes.Compressed) != 0; } catch { return false; } }
     public static string MergeHardLink(string keep, string dup) {
         try {
             if (!string.Equals(System.IO.Path.GetPathRoot(keep), System.IO.Path.GetPathRoot(dup), StringComparison.OrdinalIgnoreCase)) return L10n.T("不在同一块盘上");
