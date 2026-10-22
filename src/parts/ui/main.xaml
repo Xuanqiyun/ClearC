@@ -1472,22 +1472,23 @@
                 ToolTip="把现在看到的列表存成 CSV 文件，可以用 Excel 打开"/>
         <Button x:Name="BtnMapReport" DockPanel.Dock="Right" Style="{StaticResource Small}" Content="导出报告" Margin="0,0,8,0" VerticalAlignment="Center" IsEnabled="False"
                 ToolTip="把这块盘的空间情况存成一个网页报告：方块图、最大的文件夹和文件、各类文件占多少、和上次比的变化。在浏览器里按 Ctrl+P 可以存成 PDF"/>
-        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-          <Button x:Name="BtnMapUp" Style="{StaticResource Small}" Margin="0,0,10,0" IsEnabled="False" ToolTip="回到上一级文件夹">
+        <!-- 左边是「上一级」和路径；地方不够时说明文字末尾省略，「空间明细」靠右一直看得见，不会被右边的按钮挡住 -->
+        <DockPanel VerticalAlignment="Center" Margin="0,0,12,0">
+          <Button x:Name="BtnMapUp" DockPanel.Dock="Left" Style="{StaticResource Small}" Margin="0,0,10,0" IsEnabled="False" ToolTip="回到上一级文件夹" VerticalAlignment="Center">
             <StackPanel Orientation="Horizontal">
               <TextBlock Text="&#xE72B;" FontFamily="{StaticResource Icons}" FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0"/>
               <TextBlock Text="上一级" VerticalAlignment="Center"/>
             </StackPanel>
           </Button>
           <StackPanel VerticalAlignment="Center">
-            <TextBlock x:Name="MapPath" Text="还没有扫描" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" MaxWidth="560"/>
-            <StackPanel Orientation="Horizontal">
-              <TextBlock x:Name="MapInfo" Style="{StaticResource Caption}" Text="选一块盘，点「扫描」。C 盘通常一两分钟就能扫完。"/>
-              <Button x:Name="BtnMapAcct" Style="{StaticResource LinkButton}" Content="空间明细" FontSize="12" Padding="10,0,2,0" VerticalAlignment="Center" Visibility="Collapsed"
+            <TextBlock x:Name="MapPath" Text="还没有扫描" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" MaxWidth="560" HorizontalAlignment="Left"/>
+            <DockPanel>
+              <Button x:Name="BtnMapAcct" DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="空间明细" FontSize="12" Padding="10,0,2,0" VerticalAlignment="Center" Visibility="Collapsed"
                       ToolTip="已用空间都花在哪：文件实际占用、文件表（MFT）、硬链接、压缩和稀疏文件，以及为什么和按文件大小相加对不上"/>
-            </StackPanel>
+              <TextBlock x:Name="MapInfo" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" Text="选一块盘，点「扫描」。C 盘通常一两分钟就能扫完。"/>
+            </DockPanel>
           </StackPanel>
-        </StackPanel>
+        </DockPanel>
       </DockPanel>
       <!-- 找文件的条件：只在「找文件」时显示 -->
       <WrapPanel x:Name="MapFilter" Grid.Row="2" Margin="0,0,0,10" Visibility="Collapsed">
