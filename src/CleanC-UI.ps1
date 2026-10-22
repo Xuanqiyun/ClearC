@@ -1058,6 +1058,57 @@ public sealed class WinVolume : IVolume {             // Windows：\\.\C:
 public struct MftLink { public int Parent; public ushort ParentSeq; public string Name; }
 
 // 读出来的文件表：每个记录号一格
+// 文件按扩展名分成几类，扫描时顺手统计每类有多少个、多大。0 其他 1 视频 2 图片 3 音乐 4 文档 5 压缩包和安装包 6 镜像和虚拟磁盘 7 程序 8 日志和临时文件 9 代码和开发
+public static class FileCats {
+    public const int N = 10;
+    public static readonly string[] Keys = { "other", "video", "picture", "music", "doc", "archive", "image", "program", "log", "code" };
+    static readonly Dictionary<long, byte> map = new Dictionary<long, byte>();
+    static FileCats() {
+        Add(1, "mp4 mkv avi mov wmv flv m4v ts m2ts webm mpg mpeg rmvb rm 3gp vob");
+        Add(2, "jpg jpeg png gif bmp tif tiff heic webp raw cr2 cr3 nef arw dng psd svg ico");
+        Add(3, "mp3 flac wav aac m4a ogg wma ape opus");
+        Add(4, "pdf doc docx xls xlsx ppt pptx txt md epub mobi csv wps et dps rtf odt ods odp one");
+        Add(5, "zip rar 7z tar gz tgz bz2 xz zst cab msi msp msix msixbundle appx appxbundle apk dmg");
+        Add(6, "iso img vhd vhdx avhdx vmdk vdi qcow2 wim esd gho");
+        Add(7, "exe dll sys ocx pak bin vpk pck assets bundle resource uasset upk");
+        Add(8, "log etl dmp mdmp hdmp tmp temp bak old cache chk");
+        Add(9, "cs js ts tsx jsx py java h hpp c cpp cc go rs rb php json xml yml yaml map obj pdb lib o class pyc ipynb sql ps1 psm1 sh bat cmd swift kt scala lock toml");
+    }
+    static void Add(byte cat, string exts) { foreach (string x in exts.Split(' ')) { long k = Key(x); if (k >= 0) map[k] = cat; } }
+    // 最多 10 个字符的小写扩展名装进一个 long（每个字符 6 位：字母、数字和少数符号）
+    static int Code(int c) {
+        if (c >= 'A' && c <= 'Z') c += 32;
+        if (c >= 'a' && c <= 'z') return c - 'a' + 1;
+        if (c >= '0' && c <= '9') return c - '0' + 27;
+        if (c == '-') return 37; if (c == '_') return 38; if (c == '~') return 39; if (c == '+') return 40;
+        return -1;
+    }
+    public static long Key(string ext) {
+        if (ext.Length == 0 || ext.Length > 10) return -1;
+        long k = 0;
+        for (int i = 0; i < ext.Length; i++) { int c = Code(ext[i]); if (c < 0) return -1; k = (k << 6) | (long)c; }
+        return k;
+    }
+    public static byte OfName(string name) {
+        if (string.IsNullOrEmpty(name)) return 0;
+        int dot = name.LastIndexOf('.');
+        if (dot < 0 || dot == name.Length - 1 || dot == 0) return 0;
+        byte c; return map.TryGetValue(Key(name.Substring(dot + 1)), out c) ? c : (byte)0;
+    }
+    // UTF-16LE 的名字（文件表里的样子）
+    public static byte Of(byte[] b, int off, int len) {
+        int chars = len / 2, dot = -1;
+        for (int i = chars - 1; i >= 0; i--) { int o = off + i * 2; if (b[o] == '.' && b[o + 1] == 0) { dot = i; break; } }
+        if (dot <= 0 || dot == chars - 1 || chars - 1 - dot > 10) return 0;
+        long k = 0;
+        for (int i = dot + 1; i < chars; i++) {
+            int o = off + i * 2; if (b[o + 1] != 0) return 0;
+            int c = Code(b[o]); if (c < 0) return 0;
+            k = (k << 6) | (long)c;
+        }
+        byte cat; return map.TryGetValue(k, out cat) ? cat : (byte)0;
+    }
+}
 public sealed class MftIndex {
     public string Root;
     public int RecordSize, SectorSize; public long ClusterSize;
@@ -1068,6 +1119,7 @@ public sealed class MftIndex {
     public long[] Size, Write;
     public long[] Disk;                               // 这条记录里的数据实际占的盘（主记录和续页各记各的；压缩、稀疏、只在云端的文件比文件大小小，很小的文件放在记录里不另占）
     public byte[] Flag;                               // 1 在用  2 文件夹  4 链接（重解析点）  8 有属性列表
+    public byte[] Cat;                                // 文件类别（FileCats）
     public string[] Name;                             // 只存文件夹、1 MB 以上的文件和有属性列表的文件的名字
     public Dictionary<int, List<MftLink>> Extra = new Dictionary<int, List<MftLink>>();   // 第二个起的名字（硬链接）
     public long Bad;                                  // 校验不过的记录
@@ -1079,19 +1131,19 @@ public sealed class MftIndex {
     public void Alloc(int n) {
         Count = n;
         Parent = new int[n]; ParentSeq = new ushort[n]; Seq = new ushort[n];
-        Size = new long[n]; Write = new long[n]; Disk = new long[n]; Flag = new byte[n]; Name = new string[n];
+        Size = new long[n]; Write = new long[n]; Disk = new long[n]; Flag = new byte[n]; Name = new string[n]; Cat = new byte[n];
         for (int i = 0; i < n; i++) Parent[i] = -1;
     }
     public void Grow(int n) {
         if (n <= Count) return;
         int old = Count;
         Array.Resize(ref Parent, n); Array.Resize(ref ParentSeq, n); Array.Resize(ref Seq, n);
-        Array.Resize(ref Size, n); Array.Resize(ref Write, n); Array.Resize(ref Disk, n); Array.Resize(ref Flag, n); Array.Resize(ref Name, n);
+        Array.Resize(ref Size, n); Array.Resize(ref Write, n); Array.Resize(ref Disk, n); Array.Resize(ref Flag, n); Array.Resize(ref Name, n); Array.Resize(ref Cat, n);
         for (int i = old; i < n; i++) Parent[i] = -1;
         Count = n;
     }
     public void Clear(int frn) {
-        Parent[frn] = -1; ParentSeq[frn] = 0; Seq[frn] = 0; Size[frn] = 0; Write[frn] = 0; Disk[frn] = 0; Flag[frn] = 0; Name[frn] = null;
+        Parent[frn] = -1; ParentSeq[frn] = 0; Seq[frn] = 0; Size[frn] = 0; Write[frn] = 0; Disk[frn] = 0; Flag[frn] = 0; Name[frn] = null; Cat[frn] = 0;
         Extra.Remove(frn); ExtOf.Remove(frn);
     }
     public Dictionary<int, List<int>> ExtOf = new Dictionary<int, List<int>>();   // 主记录 → 读到过的续页
@@ -1394,6 +1446,7 @@ public static class Mft {
         if (hasData) ix.Size[owner] = size;
         ix.Disk[frn] = disk;
         bool keep = ext || (ix.Flag[owner] & (2 | 8)) != 0 || ix.Size[owner] >= BigMin;
+        if (nNames > 0 && (ix.Flag[owner] & 2) == 0 && ix.Parent[owner] < 0) ix.Cat[owner] = FileCats.Of(b, nmOff[0], nmLen[0]);
         for (int i = 0; i < nNames; i++) {
             string nm = keep ? Encoding.Unicode.GetString(b, nmOff[i], nmLen[i]) : null;
             int p = (int)(nmPar[i] & 0xFFFFFFFFFFFF); ushort ps = (ushort)(nmPar[i] >> 48);
@@ -1630,6 +1683,7 @@ public static class Mft {
         big = new List<DmFile>();
         files = 0; orphans = 0;
         long uniq = 0, uniqDisk = 0, linked = 0;
+        long[] tc = new long[FileCats.N], tb = new long[FileCats.N], td = new long[FileCats.N];
         for (int i = 16; i < n; i++) {
             byte f = ix.Flag[i];
             if ((f & 1) == 0 || (f & 2) != 0) continue;
@@ -1640,8 +1694,9 @@ public static class Mft {
             bool multi = ix.Extra.TryGetValue(i, out l) && l.Count > 0;   // 有不止一个名字（硬链接）：每个名字下都算，但盘上只有一份
             bool any = AddFile(ix, nodes, reach, ix.Parent[i], ix.ParentSeq[i], ix.Name[i], size, disk, multi, wt, big, ref files);
             if (multi) foreach (MftLink k in l) any |= AddFile(ix, nodes, reach, k.Parent, k.ParentSeq, k.Name, size, disk, true, wt, big, ref files);
-            if (any) { uniq += size; uniqDisk += disk; if (multi) linked += size; }
+            if (any) { uniq += size; uniqDisk += disk; if (multi) linked += size; byte c = ix.Cat[i]; tc[c]++; tb[c] += size; td[c] += disk; }
         }
+        root.TypeCount = tc; root.TypeBytes = tb; root.TypeDisk = td;
         root.HasDisk = true; root.UniqueSize = uniq; root.UniqueDisk = uniqDisk; root.Linked = linked; root.MftBytes = ix.MftBytes;
         return root;
     }
@@ -1726,6 +1781,7 @@ public class DmNode {
     public bool Cloud;                                // 带重解析点但不是链接的文件夹（OneDrive 等云端文件夹）
     public List<DmNode> Kids = new List<DmNode>();
     public List<DmFile> Big;                          // 只在根上：扫描时记下的 1 MB 以上的文件
+    public long[] TypeCount, TypeBytes, TypeDisk;     // 只在根上：每类文件多少个、多大、实际占多少（逐个扫描时没有实际占用）
     public string FullPath() {
         List<string> parts = new List<string>();
         for (DmNode n = this; n != null; n = n.Parent) parts.Add(n.Name);
@@ -1743,10 +1799,13 @@ public class DmFile {
     public string Path { get { string d = Dir.FullPath(); return (d.EndsWith("\\") || d.EndsWith("/")) ? d + Name : d + System.IO.Path.DirectorySeparatorChar + Name; } }
 }
 public class DmFind { public List<DmFile> Files = new List<DmFile>(); public long Count, Bytes; }
+// 最近改动：一个文件夹里这段时间改过的文件有几个、现在共多大、哪类最多
+public class DmRecent { public string Path; public long Files, Bytes, Deleted; public long[] ByCat = new long[FileCats.N]; public int Depth; }
 public class DmEntry { public string Name, Path; public long Size; public DateTime Modified; public long Disk = -1; }
 
 public static class DiskMap {
     public static volatile bool Cancel;
+    const uint FSCTL_READ_USN_JOURNAL = 0x000900BB;
     public static long FilesSeen, DirsSeen, BytesSeen;
     public static volatile string Current = "";
     public static List<DmFile> BigFiles = new List<DmFile>();   // 空间地图现在显示的那棵树的大文件
@@ -1977,8 +2036,10 @@ public static class DiskMap {
     }
 
     // ---------- 逐个文件夹扫描（多线程） ----------
+    static long[] walkTc, walkTb;
     public static DmNode Scan(string root, int threads) {
         FilesSeen = 0; DirsSeen = 0; BytesSeen = 0; Current = "";
+        walkTc = new long[FileCats.N]; walkTb = new long[FileCats.N];
         string r = root;
         if (Win) { r = root.TrimEnd('\\') + "\\"; } else if (r.Length > 1) { r = r.TrimEnd('/'); }
         DmNode top = new DmNode(); top.Name = r;
@@ -2010,6 +2071,7 @@ public static class DiskMap {
         }
         foreach (Thread th in ts) th.Join();
         Finish(top, big);
+        top.TypeCount = walkTc; top.TypeBytes = walkTb;
         return top;
     }
 
@@ -2018,6 +2080,7 @@ public static class DiskMap {
         Current = dir;
         if (!r.Open(dir)) { n.Denied = true; return; }
         long files = 0, bytes = 0;
+        long[] tc = new long[FileCats.N], tb = new long[FileCats.N];
         try {
             while (!Cancel && r.Next()) {
                 if (r.IsDir) {
@@ -2032,9 +2095,10 @@ public static class DiskMap {
                     if (wt > n.LastWrite) n.LastWrite = wt;
                     files++; bytes += sz;
                     if (sz >= BigMin) { DmFile f = new DmFile(); f.Dir = n; f.Name = r.Name; f.Size = sz; try { f.Modified = DateTime.FromFileTime(wt); } catch { } big.Add(f); }
+                    byte c = FileCats.OfName(r.Name); tc[c]++; tb[c] += sz;
                 }
             }
-        } finally { r.Close(); Interlocked.Add(ref FilesSeen, files); Interlocked.Add(ref BytesSeen, bytes); }
+        } finally { r.Close(); Interlocked.Add(ref FilesSeen, files); Interlocked.Add(ref BytesSeen, bytes); long[] gc = walkTc, gb = walkTb; if (gc != null) for (int i = 0; i < FileCats.N; i++) { Interlocked.Add(ref gc[i], tc[i]); Interlocked.Add(ref gb[i], tb[i]); } }
     }
 
     // 自下而上汇总大小，每一层按大小从大到小排；大文件按大小排好挂在根上
@@ -2053,6 +2117,91 @@ public static class DiskMap {
         top.Big = big;
     }
 
+    // 最近改动最多的文件夹：读变更日志（USN），把这段时间新建、写过、删掉的文件按所在文件夹汇总。
+    // 大小按文件现在的大小算（日志里没有写了多少字节），删掉的文件只计个数。只有直接读过文件表的盘才有（要用文件表把记录号翻译成路径）
+    public static List<DmRecent> RecentDirs(string root, long sinceFileTime, int top, out string note) {
+        note = "";
+        List<DmRecent> res = new List<DmRecent>();
+        string key = root.Substring(0, 1);
+        MftIndex ix = null; lock (cacheLock) { mftIdx.TryGetValue(key, out ix); }
+        if (ix == null) { note = "no-index"; return res; }
+        WinVolume v = null;
+        try { v = new WinVolume(root.Substring(0, 2) + "\\"); } catch { note = "no-volume"; return res; }
+        try {
+            ulong id; long first, next;
+            if (!Mft.QueryJournal(v, out id, out first, out next)) { note = "no-journal"; return res; }
+            Dictionary<int, long[]> perDir = new Dictionary<int, long[]>();     // 父文件夹记录号 → { 文件数, 字节, 删掉的, 各类… }
+            HashSet<long> seen = new HashSet<long>();
+            byte[] inb = new byte[40], outb = new byte[256 * 1024];
+            long usn = first; long oldest = long.MaxValue; int records = 0;
+            for (int loop = 0; loop < 200000 && usn < next && !Cancel; loop++) {
+                Array.Clear(inb, 0, inb.Length);
+                Buffer.BlockCopy(BitConverter.GetBytes(usn), 0, inb, 0, 8);
+                Buffer.BlockCopy(BitConverter.GetBytes(0xFFFFFFFFu), 0, inb, 8, 4);
+                Buffer.BlockCopy(BitConverter.GetBytes(id), 0, inb, 32, 8);
+                int got, err;
+                if (!v.Ioctl(FSCTL_READ_USN_JOURNAL, inb, outb, out got, out err) || got < 8) { note = "read-failed"; break; }
+                long nextUsn = BitConverter.ToInt64(outb, 0);
+                for (int o = 8; o + 60 <= got; ) {
+                    int rl = (int)BitConverter.ToUInt32(outb, o);
+                    if (rl < 60 || o + rl > got) { note = "bad-record"; o = got; break; }
+                    if (BitConverter.ToUInt16(outb, o + 4) != 2) { note = "refs"; o = got; break; }
+                    long ts = BitConverter.ToInt64(outb, o + 32);
+                    if (ts < oldest) oldest = ts;
+                    uint reason = BitConverter.ToUInt32(outb, o + 40), attr = BitConverter.ToUInt32(outb, o + 52);
+                    if (ts >= sinceFileTime && (attr & 0x10) == 0 && (reason & 0x2307) != 0) {   // 写过、变长、截短、新建、删掉、改名到这里
+                        ulong fr = BitConverter.ToUInt64(outb, o + 8), pr = BitConverter.ToUInt64(outb, o + 16);
+                        int frn = (int)(fr & 0xFFFFFFFFFFFF), par = (int)(pr & 0xFFFFFFFFFFFF); ushort seq = (ushort)(fr >> 48);
+                        long k = ((long)par << 32) | (uint)frn;
+                        if (seen.Add(k)) {
+                            long[] a; if (!perDir.TryGetValue(par, out a)) { a = new long[3 + FileCats.N]; perDir[par] = a; }
+                            records++;
+                            bool alive = frn >= 0 && frn < ix.Count && (ix.Flag[frn] & 1) != 0 && ix.Seq[frn] == seq && (reason & 0x200) == 0;
+                            if (alive) { a[0]++; a[1] += ix.Size[frn]; a[3 + ix.Cat[frn]] += ix.Size[frn]; } else { a[2]++; }
+                        }
+                    }
+                    o += rl;
+                }
+                if (got <= 8 || nextUsn <= usn) break;
+                usn = nextUsn;
+            }
+            if (oldest != long.MaxValue && oldest > sinceFileTime) note = "journal-from:" + oldest;   // 日志没那么长：只能从这个时间起算
+            // 翻译成路径，并把数字往上面每一层加（最多 5 层），再把能拆开的拆成下一层
+            Dictionary<string, DmRecent> byPath = new Dictionary<string, DmRecent>(StringComparer.OrdinalIgnoreCase);
+            foreach (KeyValuePair<int, long[]> kv in perDir) {
+                List<string> parts = new List<string>(); int d = kv.Key; bool ok = true;
+                for (int guard = 0; d != 5 && guard < 128; guard++) { if (d < 16 || d >= ix.Count || ix.Name[d] == null || ix.Parent[d] < 0) { ok = false; break; } parts.Add(ix.Name[d]); d = ix.Parent[d]; }
+                if (!ok || d != 5) continue;
+                parts.Reverse();
+                string p = ix.Root.TrimEnd('\\');
+                int depth = 0;
+                for (int i = -1; i < parts.Count; i++) {
+                    if (i >= 0) { p = p + "\\" + parts[i]; depth = i + 1; }
+                    if (depth > 6) break;
+                    DmRecent r; if (!byPath.TryGetValue(p, out r)) { r = new DmRecent(); r.Path = p + (i < 0 ? "\\" : ""); r.Depth = depth; byPath[p] = r; }
+                    r.Files += kv.Value[0]; r.Bytes += kv.Value[1]; r.Deleted += kv.Value[2];
+                    for (int c = 0; c < FileCats.N; c++) r.ByCat[c] += kv.Value[3 + c];
+                }
+            }
+            // 一个文件夹的改动几乎都在它的某个子文件夹里（九成以上）：列子文件夹，不列它
+            List<DmRecent> all = new List<DmRecent>(byPath.Values);
+            all.Sort(delegate(DmRecent a, DmRecent b) { int c = b.Bytes.CompareTo(a.Bytes); return c != 0 ? c : b.Files.CompareTo(a.Files); });
+            Dictionary<string, long> maxChild = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+            foreach (DmRecent r in all) {
+                if (r.Depth < 2) continue;
+                string pp = r.Path.Substring(0, r.Path.LastIndexOf('\\'));
+                long w = r.Bytes + r.Files, cur;
+                if (!maxChild.TryGetValue(pp, out cur) || w > cur) maxChild[pp] = w;
+            }
+            foreach (DmRecent r in all) {
+                if (r.Depth == 0) continue;
+                long mc; bool dominated = maxChild.TryGetValue(r.Path, out mc) && mc >= 0.9 * (r.Bytes + r.Files);
+                if (!dominated && (r.Files > 0 || r.Deleted > 0)) res.Add(r);
+                if (res.Count >= top) break;
+            }
+        } finally { if (v != null) v.Close(); }
+        return res;
+    }
     // 删掉一个文件夹后，从树上摘掉并把大小从上面每一层减掉
     public static void Detach(DmNode n) {
         DmNode p = n.Parent; if (p == null) return;
@@ -2447,6 +2596,31 @@ public static class FsTools {
         try { long len = new FileInfo(file).Length; return len > 0 && OnDisk(file) < len * 0.9; } catch { return false; }
     }
     // 把 dup 换成指向 keep 的硬链接：两个位置都还在，只占一份空间。返回空字符串表示成功
+    static readonly Dictionary<string, string> ownerOfSid = new Dictionary<string, string>();
+    // 文件的所有者（「DOMAIN\名字」；读不到就空）。同一个账户只翻译一次
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    static extern uint GetNamedSecurityInfoW(string name, int type, uint info, out IntPtr owner, out IntPtr group, out IntPtr dacl, out IntPtr sacl, out IntPtr sd);
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    static extern bool ConvertSidToStringSidW(IntPtr sid, out IntPtr str);
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    static extern bool LookupAccountSidW(string system, IntPtr sid, StringBuilder name, ref int nameLen, StringBuilder domain, ref int domLen, out int use);
+    [DllImport("kernel32.dll")] static extern IntPtr LocalFree(IntPtr p);
+    public static string Owner(string path) {
+        if (System.IO.Path.DirectorySeparatorChar != '\\') return "";
+        IntPtr owner, g, d, s, sd;
+        if (GetNamedSecurityInfoW(path, 1, 1, out owner, out g, out d, out s, out sd) != 0 || owner == IntPtr.Zero) return "";
+        try {
+            IntPtr ps; string sidText = "";
+            if (ConvertSidToStringSidW(owner, out ps)) { sidText = Marshal.PtrToStringUni(ps); LocalFree(ps); }
+            string name;
+            lock (ownerOfSid) { if (sidText.Length > 0 && ownerOfSid.TryGetValue(sidText, out name)) return name; }
+            StringBuilder nm = new StringBuilder(256), dm = new StringBuilder(256); int nl = 256, dl = 256, use;
+            name = LookupAccountSidW(null, owner, nm, ref nl, dm, ref dl, out use) ? (dm.Length > 0 ? dm + "\\" + nm : nm.ToString()) : sidText;
+            lock (ownerOfSid) { if (sidText.Length > 0) ownerOfSid[sidText] = name; }
+            return name;
+        } catch { return ""; } finally { if (sd != IntPtr.Zero) LocalFree(sd); }
+    }
+    public static bool IsCompressed(string path) { try { return (System.IO.File.GetAttributes(path) & System.IO.FileAttributes.Compressed) != 0; } catch { return false; } }
     public static string MergeHardLink(string keep, string dup) {
         try {
             if (!string.Equals(System.IO.Path.GetPathRoot(keep), System.IO.Path.GetPathRoot(dup), StringComparison.OrdinalIgnoreCase)) return L10n.T("不在同一块盘上");
@@ -2503,6 +2677,8 @@ public class MapRow {
     public bool IsSummary { get; set; } // 「其余 N 项」那一行：不是真的文件或文件夹
     public long Disk { get; set; }      // 实际占用（-1 不知道）
     public bool Shared { get; set; }    // 有不止一个名字（硬链接）：删了这个名字不腾空间
+    public string Kind { get; set; }    // dir / file / link / more / type（按类型统计的一行）
+    public string Owner { get; set; }   // 找文件：所有者
 }
 public class AppRow : INotifyPropertyChanged {
     public string Name { get; set; }
@@ -3275,7 +3451,7 @@ function Get-OrphanFolders($apps) {
 }
 
 # 使用模式：0 普通用户  1 工程师  2 开发者和 IT。目录项的 Lvl 比当前模式高就不在清理页列出（自动清理不受影响）
-function Get-Mode { switch ((Get-Setting 'Mode' 'expert')) { 'basic' { 0 } 'pro' { 1 } default { 2 } } }
+function Get-Mode { switch ((Get-Setting 'Mode' 'basic')) { 'pro' { 1 } 'expert' { 2 } default { 0 } } }
 # Kind: cache = 缓存类(删除/跳过)   action = 操作类(执行/跳过)   move = 只能搬(搬到其他盘/跳过)   flex = 可搬可删
 function Get-Catalog {
     $docs = [Environment]::GetFolderPath('MyDocuments')
@@ -4833,17 +5009,93 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+这一行是统计，不是文件；双击查看	This row is a statistic, not a file; double-click to look
+ · NTFS 压缩后 {0}（文件大小 {1}）	 · {0} after NTFS compression (file size {1})
+ · 点方块就是选中下面列表里的那一行，列表里选中的方块会描边；双击进入	 · Clicking a block selects that row in the list below; rows selected in the list get an outline; double-click to enter
+{0} {1}	{0} {1}
+系统盘	system drive
+系统与软件	System and apps
+个人文件	Personal files
+可清理的缓存	Cleanable caches
+剩余空间	Free space
+系统与软件：Windows、Program Files、ProgramData 等；个人文件：Users；可清理的缓存：清理页「安全清理」里的那些目录（估算）；其他：页面文件、休眠文件、文件表等不在上面几类里的。剩余空间按 Windows 报告的算。	System and apps: Windows, Program Files, ProgramData and so on; personal files: Users; cleanable caches: the "Safe cleanup" folders on the cleanup page (estimate); other: page file, hibernation file, file table and anything not in those groups. Free space as reported by Windows.
+代码和开发文件	Code and developer files
+ · 所有者 {0}	 · owner {0}
+；所有者只在列出来的这些文件里分	; the owner filter applies only to the files listed
+ · 实际占 {0}	 · {0} on disk
+ · 没归到上面几类的扩展名	 · extensions not in the groups above
+ · 双击看这一类最大的文件	 · double-click to see the largest files of this type
+{0} 上的全部 {1:N0} 个文件按扩展名分类{2}	All {1:N0} files on {0}, grouped by extension{2}
+这次扫描没有按类型统计（可能是旧的扫描结果），再扫描一次就有了	This scan has no type statistics (it may be an older result); scan again to get them
+{0:N0} 个文件新建或改写过	{0:N0} files created or written
+，{0:N0} 个删掉了	, {0:N0} deleted
+ · 主要是{0}	 · mostly {0}
+ · 双击打开这个文件夹	 · double-click to open this folder
+现在共 {0}	now {0}
+最近改动最多的文件夹	Folders with the most recent changes
+选一个时间段，点「查看」	Pick a period and click "Show"
+这块盘是逐个文件夹扫描的，没有读文件表，看不了变更日志。打开「快速扫描」再扫一次就可以	This drive was scanned folder by folder, without the file table, so the change journal can't be read. Turn on "Fast scan" and scan again
+读取变更日志	Read change journal
+正在读变更日志…	Reading the change journal…
+最近改动	Recent changes
+Docker 数据	Docker data
+WSL 发行版	WSL distribution
+Windows 更新	Windows Update
+回收站	Recycle Bin
+浏览器缓存和数据	browser cache and data
+缓存	cache
+临时文件	temporary files
+Steam 游戏	Steam games
+应用商店软件	Store apps
+微信数据	WeChat data
+QQ 数据	QQ data
+蓝屏转储	crash dumps
+NuGet 包	NuGet packages
+JetBrains 缓存	JetBrains cache
+其余 {0}{1}	the rest {0}{1}
+，	, 
+过去 {0}，已用空间{1}{2}	Over the past {0}, used space {1}{2}
+增加 	grew by 
+减少 	shrank by 
+和 {0} 相比，已用空间{1}{2}	Compared with {0}, used space {1}{2}
+，其中 	: 
+和 {0} 的快照比。	Compared with the snapshot {0}. 
+这块盘的文件表不在内存里了，再扫描一次就可以	The file table of this drive is no longer in memory; scan again
+这块盘没有开变更日志（USN Journal），Windows 一般只给系统盘开	This drive has no change journal (USN Journal); Windows usually enables it only on the system drive
+这块盘的变更日志是 ReFS 的格式，暂时不认	The change journal of this drive is in ReFS format, which is not supported yet
+按变更日志统计，最近 {0} 天。日志只保留到 {1:yyyy-MM-dd HH:mm}，更早的改动看不到。大小按文件现在的大小算，删掉的只计个数；只列改动最集中的文件夹	From the change journal, last {0} days. The journal only goes back to {1:yyyy-MM-dd HH:mm}; earlier changes are not visible. Sizes are the files' current sizes, deleted files are only counted; only the folders where changes concentrate are listed
+按变更日志统计，最近 {0} 天。大小按文件现在的大小算（日志里没有写了多少字节），删掉的只计个数；只列改动最集中的文件夹	From the change journal, last {0} days. Sizes are the files' current sizes (the journal does not record bytes written), deleted files are only counted; only the folders where changes concentrate are listed
+查看	Show
+按文件的所有者（Windows 账户）筛选。只在列出来的这些文件里分	Filter by file owner (Windows account). Applies only to the files listed
+每次扫描都会存一份快照（每块盘最多留 40 份）。选一个时间，和那时候的快照比	Every scan saves a snapshot (up to 40 per drive). Pick a time to compare with the snapshot from then
+1 天前	1 day ago
+24 小时	24 hours
+3 天	3 days
+3 天前	3 days ago
+30 天前	30 days ago
+7 天前	7 days ago
+上一次扫描	Previous scan
+最久没改的在前	Oldest first
+最早的一次	Earliest
+最近改过的在前	Newest first
+大的在前	Largest first
+按类型	By type
+按文件系统的变更日志，看这几天哪些文件夹新建、改写的文件最多：多出来的空间多半在那里	From the file system change journal: which folders had the most files created or written in the last days. That is usually where the extra space went
+这块盘上视频、图片、文档、程序、日志各占多少。双击一类，到「找文件」里看这一类最大的文件	How much of this drive is video, pictures, documents, programs and logs. Double-click a type to see its largest files under "Find files"
+最近	Last
+和哪次比	Compare with
+已使用	Used
+所有者	Owner
+排序	Sort
 普通用户	Home user
 工程师	Engineer
 开发者和 IT	Developer and IT
 模式	 mode
 使用模式	Mode
 使用模式：{0}	Mode: {0}
-你是哪类用户？	Which kind of user are you?
 普通用户：清理 C 盘、省空间、空间地图、软件管理、帮助。清理列表里只有常见的缓存和临时文件，删了都会自动重建；有代价的项目仍然默认跳过。	Home user: Clean C:, Save space, Space map, Apps and Help. The cleanup list only has common caches and temporary files that apps rebuild; items with a cost are still skipped by default.
 工程师：再加上重复文件、搬家管理、自动提醒、操作日志；空间地图的找文件、和上次比、导出；省空间的页面文件、还原点、压缩文件夹、虚拟磁盘；软件管理的开机启动、残留文件夹、检查新版本和搬到其他盘；清理列表里多出开发工具的缓存。	Engineer: adds Duplicates, Moves, Reminders and the operation log; find files, compare with last time and export in the space map; page file, restore points, compressed folders and virtual disks in Save space; startup, leftover folders, update check and move in Apps; developer tool caches in the cleanup list.
 开发者和 IT：全部功能。再加上计划任务、右键菜单、保留的存储、组件存储分析、蓝屏转储、临时文件夹位置、自定义清理列表和排除、快速扫描开关、空间明细、检查扫描功能、运行记录，以及 Installer 孤儿安装包、事件日志、NuGet / Gradle / Maven / JetBrains 缓存这类项目。	Developer and IT: everything. Adds scheduled tasks, context menu, reserved storage, component store analysis, crash dumps, temp folder location, custom cleanup list and exclusions, the fast scan switch, space breakdown, scan check, the run log, and items such as orphaned Installer packages, event logs and NuGet / Gradle / Maven / JetBrains caches.
-按你的需要决定界面上有多少东西，随时可以在「设置」里换。\n\n普通用户：清理缓存、省空间、看哪里占地方、卸载软件，够用也不复杂。\n工程师：再加上重复文件、搬家管理、自动提醒、操作日志，以及各页的进阶功能。\n开发者和 IT：全部功能，包括计划任务、右键菜单、保留的存储、组件存储分析、自定义清理列表、空间明细和自检。	Decides how much the window shows. You can change it in Settings at any time.\n\nHome user: clean caches, save space, see what takes up room and uninstall apps. Enough, without the clutter.\nEngineer: adds Duplicates, Moves, Reminders, the operation log and the advanced features on each page.\nDeveloper and IT: everything, including scheduled tasks, context menu, reserved storage, component store analysis, custom cleanup list, space breakdown and self-check.
 按你的需要决定界面上有多少东西。换模式不会丢任何设置和记录，随时可以换回来。	Decides how much the window shows. Switching never loses settings or records, and you can switch back at any time.
 点一下到设置里换模式	Click to change the mode in Settings
 正在读取各块盘的健康信息…	Reading the health of each drive…
@@ -8763,8 +9015,10 @@ if ($script:mode -match '(?i)/autoclean') {
           <StackPanel Orientation="Horizontal">
             <RadioButton x:Name="MapViewDirs" GroupName="mapview" Content="文件夹" IsChecked="True" Style="{StaticResource Seg}"/>
             <RadioButton x:Name="MapViewTree" GroupName="mapview" Content="方块图" Style="{StaticResource Seg}" ToolTip="每个方块的大小就是它占的空间。单击选中，双击文件夹往里点"/>
+            <RadioButton x:Name="MapViewTypes" GroupName="mapview" Content="按类型" Style="{StaticResource Seg}" ToolTip="这块盘上视频、图片、文档、程序、日志各占多少。双击一类，到「找文件」里看这一类最大的文件"/>
             <RadioButton x:Name="MapViewFiles" GroupName="mapview" Content="找文件" Style="{StaticResource Seg}"/>
             <RadioButton x:Name="MapViewGrow" GroupName="mapview" Content="和上次比" Style="{StaticResource Seg}"/>
+            <RadioButton x:Name="MapViewRecent" GroupName="mapview" Content="最近改动" Style="{StaticResource Seg}" ToolTip="按文件系统的变更日志，看这几天哪些文件夹新建、改写的文件最多：多出来的空间多半在那里"/>
           </StackPanel>
         </Border>
         <Button x:Name="BtnMapExport" DockPanel.Dock="Right" Style="{StaticResource Small}" Content="导出 CSV" Margin="0,0,10,0" VerticalAlignment="Center" IsEnabled="False"
@@ -8817,6 +9071,19 @@ if ($script:mode -match '(?i)/autoclean') {
             <ComboBoxItem Content="文档" Tag="doc"/>
             <ComboBoxItem Content="程序和游戏数据" Tag="program"/>
             <ComboBoxItem Content="日志、转储和临时文件" Tag="log"/>
+            <ComboBoxItem Content="代码和开发文件" Tag="code"/>
+          </ComboBox>
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Margin="0,2,18,2">
+          <TextBlock Text="所有者" VerticalAlignment="Center" Foreground="#6E6E73" Margin="0,0,8,0"/>
+          <ComboBox x:Name="MapOwner" Width="170" SelectedIndex="0" ToolTip="按文件的所有者（Windows 账户）筛选。只在列出来的这些文件里分">
+            <ComboBoxItem Content="全部" Tag=""/>
+          </ComboBox>
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Margin="0,2,18,2">
+          <TextBlock Text="排序" VerticalAlignment="Center" Foreground="#6E6E73" Margin="0,0,8,0"/>
+          <ComboBox x:Name="MapSort" Width="140" SelectedIndex="0">
+            <ComboBoxItem Content="大的在前" Tag="size"/><ComboBoxItem Content="最近改过的在前" Tag="new"/><ComboBoxItem Content="最久没改的在前" Tag="old"/>
           </ComboBox>
         </StackPanel>
         <StackPanel Orientation="Horizontal" Margin="0,2,18,2">
@@ -8827,10 +9094,59 @@ if ($script:mode -match '(?i)/autoclean') {
         <CheckBox x:Name="MapChat" Content="只找聊天软件里的" VerticalAlignment="Center" Margin="0,2,0,2"
                   ToolTip="微信、QQ、企业微信、飞书、钉钉、Telegram 等聊天记录文件夹里的大文件。这些文件只能查看、打开位置；要腾地方，可以到「搬家管理」把整个聊天记录搬到其他盘。"/>
       </WrapPanel>
+      <WrapPanel x:Name="MapGrowBar" Grid.Row="3" Margin="0,0,0,10" Visibility="Collapsed">
+        <StackPanel Orientation="Horizontal" Margin="0,2,18,2">
+          <TextBlock Text="和哪次比" VerticalAlignment="Center" Foreground="#6E6E73" Margin="0,0,8,0"/>
+          <ComboBox x:Name="MapGrowBase" Width="150" SelectedIndex="0" ToolTip="每次扫描都会存一份快照（每块盘最多留 40 份）。选一个时间，和那时候的快照比">
+            <ComboBoxItem Content="上一次扫描" Tag="0"/><ComboBoxItem Content="1 天前" Tag="1"/><ComboBoxItem Content="3 天前" Tag="3"/>
+            <ComboBoxItem Content="7 天前" Tag="7"/><ComboBoxItem Content="30 天前" Tag="30"/><ComboBoxItem Content="最早的一次" Tag="9999"/>
+          </ComboBox>
+        </StackPanel>
+      </WrapPanel>
+      <WrapPanel x:Name="MapRecentBar" Grid.Row="3" Margin="0,0,0,10" Visibility="Collapsed">
+        <StackPanel Orientation="Horizontal" Margin="0,2,18,2">
+          <TextBlock Text="最近" VerticalAlignment="Center" Foreground="#6E6E73" Margin="0,0,8,0"/>
+          <ComboBox x:Name="MapRecentDays" Width="120" SelectedIndex="0">
+            <ComboBoxItem Content="24 小时" Tag="1"/><ComboBoxItem Content="3 天" Tag="3"/><ComboBoxItem Content="7 天" Tag="7"/><ComboBoxItem Content="30 天" Tag="30"/>
+          </ComboBox>
+        </StackPanel>
+        <Button x:Name="BtnMapRecent" Content="查看" Style="{StaticResource Small}" VerticalAlignment="Center" Margin="0,2,0,2"/>
+      </WrapPanel>
       <Border Grid.Row="4" Style="{StaticResource Card}" Padding="0,6,0,6">
-        <Grid>
-          <Canvas x:Name="MapTree" Margin="10,4,10,4" ClipToBounds="True" Background="White" Visibility="Collapsed"/>
-          <ListView x:Name="MapList" Background="Transparent" BorderThickness="0" ItemTemplate="{StaticResource MapRowTpl}" ItemContainerStyle="{StaticResource SelRow}" SelectionMode="Extended"
+        <Grid x:Name="MapGrid">
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="0"/>
+            <RowDefinition Height="*"/>
+          </Grid.RowDefinitions>
+          <!-- 概览：这块盘用了多少，系统、个人文件、缓存各占多少（扫描后才有） -->
+          <Border x:Name="MapOverview" Grid.Row="0" Margin="18,6,18,8" Visibility="Collapsed">
+            <StackPanel>
+              <DockPanel>
+                <StackPanel DockPanel.Dock="Right" HorizontalAlignment="Right">
+                  <TextBlock Text="已使用" Style="{StaticResource Caption}" HorizontalAlignment="Right"/>
+                  <TextBlock x:Name="MapOvPct" Text="" FontSize="26" FontWeight="SemiBold" HorizontalAlignment="Right"/>
+                </StackPanel>
+                <StackPanel>
+                  <TextBlock x:Name="MapOvTitle" Text="" Style="{StaticResource Caption}"/>
+                  <TextBlock x:Name="MapOvUsed" Text="" FontSize="26" FontWeight="SemiBold"/>
+                </StackPanel>
+              </DockPanel>
+              <Grid x:Name="MapOvBar" Height="10" Margin="0,8,0,0">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="1*"/><ColumnDefinition Width="0"/><ColumnDefinition Width="0"/><ColumnDefinition Width="0"/><ColumnDefinition Width="0"/>
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Background="#3B82F6" CornerRadius="5,0,0,5" Margin="0,0,1,0"/>
+                <Border Grid.Column="1" Background="#E0A731" Margin="0,0,1,0"/>
+                <Border Grid.Column="2" Background="#3FA37E" Margin="0,0,1,0"/>
+                <Border Grid.Column="3" Background="#8E8E93" Margin="0,0,1,0"/>
+                <Border Grid.Column="4" Background="#9B6FD6" CornerRadius="0,5,5,0"/>
+              </Grid>
+              <WrapPanel x:Name="MapOvLegend" Margin="0,8,0,0"/>
+            </StackPanel>
+          </Border>
+          <Canvas x:Name="MapTree" Grid.Row="1" Margin="10,4,10,8" ClipToBounds="True" Background="White" Visibility="Collapsed"/>
+          <ListView x:Name="MapList" Grid.Row="2" Background="Transparent" BorderThickness="0" ItemTemplate="{StaticResource MapRowTpl}" ItemContainerStyle="{StaticResource SelRow}" SelectionMode="Extended"
                     ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
             <ListView.ContextMenu>
               <ContextMenu x:Name="MapMenu" Style="{StaticResource Menu}">
@@ -8843,7 +9159,7 @@ if ($script:mode -match '(?i)/autoclean') {
               </ContextMenu>
             </ListView.ContextMenu>
           </ListView>
-          <ListView x:Name="MapGrow" Background="White" BorderThickness="0" ItemContainerStyle="{StaticResource GridRow}" Visibility="Collapsed">
+          <ListView x:Name="MapGrow" Grid.Row="2" Background="White" BorderThickness="0" ItemContainerStyle="{StaticResource GridRow}" Visibility="Collapsed">
             <ListView.View>
               <GridView>
                 <GridViewColumn Header="文件夹" Width="480">
@@ -8861,7 +9177,7 @@ if ($script:mode -match '(?i)/autoclean') {
               </GridView>
             </ListView.View>
           </ListView>
-          <StackPanel x:Name="EmptyMap" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,24" IsHitTestVisible="False">
+          <StackPanel x:Name="EmptyMap" Grid.Row="2" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,24" IsHitTestVisible="False">
             <TextBlock Text="&#xE9D9;" FontFamily="{StaticResource Icons}" FontSize="34" Foreground="#C7C7CC" HorizontalAlignment="Center"/>
             <TextBlock x:Name="EmptyMapText" Text="点右上角「扫描」，看看这块盘的空间都去哪了" Foreground="#86868B" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center"/>
           </StackPanel>
@@ -10616,6 +10932,7 @@ foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageM
                'SaveScroll','BtnSaveRefresh','BtnCosOff','BtnCosOn','SaveCosState','SavePfState','SavePfDrive','BtnPfMove','BtnPfAuto','SaveHibState','BtnHibReduced','BtnHibOff','BtnHibFull','BtnFolderCompress','SaveFcState','VdList','VdEmpty','BtnGoDup',
                'BtnAppsRefresh','AppsAll','AppsC','AppsStore','AppsInfo','AppsSearch','AppsLeftBox','BtnAppsLeftClose','BtnAppsLeft','AppsLeftText','AppsList','EmptyApps','EmptyAppsText',
                'BtnAppsUpdates','AppsViewApps','AppsViewStartup','AppsViewTasks','AppsViewMenu','AppsViewLeft','AppsViewBox','AppsFilterBox','StartList','MapHealthBox','MapHealth','MapHealthNote','SetMapHealth',
+               'MapViewTypes','MapViewRecent','MapOwner','MapSort','MapGrowBar','MapGrowBase','MapRecentBar','MapRecentDays','BtnMapRecent','MapGrid','MapOverview','MapOvPct','MapOvTitle','MapOvUsed','MapOvBar','MapOvLegend',
                'SaveCardCos','SaveCardPf','SaveCardHib','SaveCardRp','SaveCardFc','SaveCardOd','SaveCardRs','SaveCardCs','SaveCardDump','SaveCardTmp','SaveCardVd','SaveCardMerge','SetCardMode','SetCardDisplay','SetCardScan','SetModeBasic','SetModePro','SetModeExpert','SetModeNote','ModeTag','AutoJunkRow','FbCopyDiag','FbSelfTest','FbCheckUpdate','MapViewBox',
                'BtnOdFree','SaveOdState','BtnRsOn','BtnRsOff','SaveRsState','BtnCsAnalyze','BtnCsClean','SaveCsState','BtnDumpSmall','BtnDumpAuto','SaveDumpState','SaveTmpState','SaveTmpDrive','BtnTmpMove','BtnTmpAuto','BtnCleanCustom','AutoJunkGB','AutoCleanWhen','SetCleanCard','SetCustomList','SetCustomEmpty','BtnSetCustomAdd','SetExcludeList','SetExcludeEmpty','BtnSetExcludeAdd',
                'BtnMovesRefresh','MovesInfo','MovesList','EmptyMoves','EmptyMovesText',
@@ -10979,7 +11296,7 @@ function End-Op([string]$result, [switch]$KeepCard, [string]$headline = '', $rep
 # 不在这里的（删除单个文件夹、系统压缩、压缩虚拟磁盘、卸载、删除多余副本）要么很快做完，要么停在一半不安全
 $script:cancelModes = @{ scan = 'look'; apps = 'look'; dup = 'look'; map = 'look'
     run = 'run'; dupdel = 'dupdel'; merge = 'merge'; leftdel = 'leftdel'; fcompress = 'fcompress'; moveback = 'moveback'; vmove = 'move'; appmove = 'move'
-    movescan = 'look'; movemany = 'movemany'; mapdel = 'dupdel'; selftest = 'look'; odinfo = 'look'; leftovers = 'look'; odfree = 'look' }
+    movescan = 'look'; movemany = 'movemany'; mapdel = 'dupdel'; selftest = 'look'; odinfo = 'look'; leftovers = 'look'; odfree = 'look'; recent = 'look' }
 $script:cancelUi = ''
 function Update-CancelUi {
     $m = [string]$sync.Mode
@@ -12279,7 +12596,7 @@ $ctl.BtnMapStop.Add_Click({ [DiskMap]::Cancel = $true; UI-Log (T '空间地图�
 
 function New-MapRow($name, $path, [double]$size, [double]$max, [double]$parent, [bool]$isDir, $node, [string]$meta, [string]$kind) {
     $r = New-Object MapRow
-    $r.Name = $name; $r.Path = $path; $r.Size = [long]$size; $r.SizeText = Fmt $size; $r.IsDir = $isDir; $r.Node = $node; $r.Meta = $meta; $r.Disk = -1
+    $r.Name = $name; $r.Path = $path; $r.Size = [long]$size; $r.SizeText = Fmt $size; $r.IsDir = $isDir; $r.Node = $node; $r.Meta = $meta; $r.Disk = -1; $r.Kind = $kind
     $r.Bar = if ($max -gt 0) { [math]::Max([double]2, 160.0 * $size / $max) } else { 0 }
     if ($size -le 0) { $r.Bar = 0 }
     $r.Pct = if ($parent -gt 0) { "{0:N1}%" -f (100.0 * $size / $parent) } else { '' }
@@ -12287,10 +12604,13 @@ function New-MapRow($name, $path, [double]$size, [double]$max, [double]$parent, 
         'dir'  { $r.Glyph = [string][char]0xE8B7; $r.GlyphBrush = '#0A84FF' }
         'link' { $r.Glyph = [string][char]0xE71B; $r.GlyphBrush = '#8E8E93' }
         'more' { $r.Glyph = [string][char]0xE712; $r.GlyphBrush = '#8E8E93' }
+        'type' { $r.Glyph = [string][char]0xE8FD; $r.GlyphBrush = '#0A84FF' }
+        'recent' { $r.Glyph = [string][char]0xE823; $r.GlyphBrush = '#0A84FF' }
         default { $r.Glyph = [string][char]0xE8A5; $r.GlyphBrush = '#8E8E93' }
     }
-    $why = if ($path) { Get-DeleteBlock $path } else { '' }
+    $why = if ($path -and $kind -ne 'type' -and $kind -ne 'recent') { Get-DeleteBlock $path } else { '' }
     if (-not $why -and $path -and (Test-ChatPath $path)) { $why = (T '聊天记录里的文件只能查看和打开位置；要腾地方，到「搬家管理」把整个聊天记录搬到其他盘') }
+    if ($kind -eq 'type' -or $kind -eq 'recent') { $why = (T '这一行是统计，不是文件；双击查看') }
     $r.Locked = [bool]$why; $r.LockTip = $why
     return $r
 }
@@ -12314,6 +12634,12 @@ function Get-DiskNote([double]$size, [double]$disk, [double]$shared, [bool]$isFi
     elseif (-not $isFile -and $shared -ge 32MB -and $shared -ge $size * 0.05) { $t += (T " · 其中 {0} 是硬链接（别处还有同一份）") -f (Fmt $shared) }
     if ($disk -ge 0 -and ($size - $disk) -ge 32MB -and $disk -lt $size * 0.85) { $t += (T " · 实际只占 {0}") -f (Fmt $disk) }
     return $t
+}
+# 文件大小、实际占用、压缩后大小：NTFS 压缩过的文件，实际占用就是压缩后的大小
+function Get-SizeNote([string]$path, [double]$size, [double]$disk, [double]$shared) {
+    if ($disk -lt 0 -or ($size - $disk) -lt 32MB -or $disk -ge $size * 0.85) { return Get-DiskNote $size $disk $shared $true }
+    if ($path -and [FsTools]::IsCompressed($path)) { return (T " · NTFS 压缩后 {0}（文件大小 {1}）") -f (Fmt $disk), (Fmt $size) }
+    return Get-DiskNote $size $disk $shared $true
 }
 # 同一个列表重新列一遍时（改了设置、删完、方块图和文件夹之间切换、找文件改条件），原来选中的还选着
 function Get-MapKeep([string]$key) {
@@ -12379,7 +12705,7 @@ function Show-MapLevel($node) {
             $fd = [double]$f.Disk
             # 目录里记的实际占用看着明显小（压缩、稀疏、只在云端）：再问一次 Windows，以它为准
             if ($fd -ge 0 -and ([double]$f.Size - $fd) -ge 32MB) { $fd = [double][FsTools]::OnDisk($f.Path) }
-            if ($dn) { $fm += Get-DiskNote ([double]$f.Size) $fd 0 $true }
+            if ($dn) { $fm += Get-SizeNote $f.Path ([double]$f.Size) $fd 0 }
             $row = New-MapRow $f.Name $f.Path $f.Size $max $node.Size $false $null $fm 'file'
             $row.When = '{0:yyyy-MM-dd HH:mm}' -f $f.Modified
             $row.Disk = [long]$fd
@@ -12396,6 +12722,7 @@ function Show-MapLevel($node) {
     Restore-MapKeep $keep
     $ctl.MapPath.Text = $path
     $ctl.MapInfo.Text = (T "这一层共 {0}，{1:N0} 个文件{2}") -f (Fmt $node.Size), $node.Files, $(if ($script:mapScanAt) { (T " · 扫描于 {0:HH:mm}（{1}）") -f $script:mapScanAt, $script:mapHow } else { '' })
+    if ($script:mapView -eq 'tree') { $ctl.MapInfo.Text += (T ' · 点方块就是选中下面列表里的那一行，列表里选中的方块会描边；双击进入') }
     $ctl.BtnMapAcct.Visibility = if ($script:mapRoot -and $script:mapRoot.HasDisk -and (Get-Mode) -ge 2) { 'Visible' } else { 'Collapsed' }
     $ctl.BtnMapUp.IsEnabled = ($null -ne $node.Parent)
     $ctl.EmptyMap.Visibility = if ($rows.Count -gt 0) { 'Collapsed' } else { 'Visible' }
@@ -12403,7 +12730,53 @@ function Show-MapLevel($node) {
     $ctl.BtnMapExport.IsEnabled = ($rows.Count -gt 0)
     $ctl.BtnMapReport.IsEnabled = $true
     if ($script:mapView -eq 'tree') { Draw-MapTree }
+    Show-MapOverview
     Update-MapSel
+}
+# 概览：这块盘用了多少，系统与软件、个人文件、缓存各占多少。只有扫的是整块盘时才有
+$script:ovCache = @{}
+function Show-MapOverview {
+    $r = $script:mapRoot
+    if (-not $r -or ($script:mapView -ne 'dirs' -and $script:mapView -ne 'tree' -and $script:mapView -ne 'types')) { $ctl.MapOverview.Visibility = 'Collapsed'; return }
+    $drive = $r.FullPath()
+    if ($drive.Length -ne 3 -or $drive[1] -ne ':') { $ctl.MapOverview.Visibility = 'Collapsed'; return }
+    $total = [double]0; $used = [double]0; $free = [double]0
+    try { $di = New-Object System.IO.DriveInfo $drive; $total = [double]$di.TotalSize; $free = [double]$di.AvailableFreeSpace; $used = $total - $di.TotalFreeSpace } catch {}
+    if ($total -le 0) { $ctl.MapOverview.Visibility = 'Collapsed'; return }
+    $sz = { param($n) if ($n) { if ($r.HasDisk) { [double]$n.Disk } else { [double]$n.Size } } else { [double]0 } }
+    $sys = [double]0
+    foreach ($nm in 'Windows', 'Program Files', 'Program Files (x86)', 'ProgramData', 'Recovery', '$WinREAgent', 'Windows.old', 'PerfLogs') { $sys += & $sz ([DiskMap]::Find($r, (Join-Path $drive $nm))) }
+    $users = & $sz ([DiskMap]::Find($r, (Join-Path $drive 'Users')))
+    # 缓存：清理列表里「安全清理」那些目录在这棵树上的大小（只算系统盘；别的盘没有这些）
+    $cache = [double]0
+    $key = $drive.ToLowerInvariant() + '|' + $(if ($script:mapScanAt) { $script:mapScanAt.Ticks } else { 0 })
+    if ($drive -ieq ($env:SystemDrive + '\')) {
+        if ($script:ovCache.ContainsKey($key)) { $cache = $script:ovCache[$key] }
+        else {
+            foreach ($it in $catalog) {
+                if ($it.Kind -ne 'cache' -or $it.Size -or $it.Custom -or -not $it.Paths -or ([string]$it.G) -ne $script:safeGroup) { continue }
+                try { $cache += [double](Measure-Item $it $r) } catch {}
+            }
+            $script:ovCache[$key] = $cache
+        }
+    }
+    $other = [math]::Max([double]0, $used - $sys - $users)
+    $sys = [math]::Max([double]0, $sys - $cache * 0.3); $users = [math]::Max([double]0, $users - $cache * 0.7)   # 缓存大多在个人目录（AppData），少数在 Windows 和 ProgramData 里
+    $ctl.MapOvTitle.Text = (T "{0} {1}") -f $drive.TrimEnd('\'), $(if ($drive -ieq ($env:SystemDrive + '\')) { (T '系统盘') } else { '' })
+    $ctl.MapOvUsed.Text = "{0} / {1}" -f (Fmt $used), (Fmt $total)
+    $ctl.MapOvPct.Text = "{0:N1}%" -f (100.0 * $used / $total)
+    $parts = @(@((T '系统与软件'), $sys, '#3B82F6'), @((T '个人文件'), $users, '#E0A731'), @((T '可清理的缓存'), $cache, '#3FA37E'), @((T '其他'), $other, '#8E8E93'), @((T '剩余空间'), $free, '#9B6FD6'))
+    for ($i = 0; $i -lt 5; $i++) { $ctl.MapOvBar.ColumnDefinitions[$i].Width = New-Object System.Windows.GridLength ([math]::Max([double]0, $parts[$i][1])), ([System.Windows.GridUnitType]::Star) }
+    $ctl.MapOvLegend.Children.Clear()
+    for ($i = 0; $i -lt 5; $i++) {
+        if ($parts[$i][1] -le 0 -and $i -ne 4) { continue }
+        $sp = New-Object System.Windows.Controls.StackPanel; $sp.Orientation = 'Horizontal'; $sp.Margin = New-Object System.Windows.Thickness 0, 0, 18, 2
+        $dot = New-Object System.Windows.Controls.Border; $dot.Width = 9; $dot.Height = 9; $dot.CornerRadius = New-Object System.Windows.CornerRadius 4.5; $dot.Background = Brush $parts[$i][2] 'b'; $dot.VerticalAlignment = 'Center'; $dot.Margin = New-Object System.Windows.Thickness 0, 0, 6, 0
+        $tb = New-Object System.Windows.Controls.TextBlock; $tb.Text = "{0} {1}" -f $parts[$i][0], (Fmt $parts[$i][1]); $tb.FontSize = 12; $tb.Foreground = Brush '#6E6E73'; $tb.VerticalAlignment = 'Center'
+        [void]$sp.Children.Add($dot); [void]$sp.Children.Add($tb); [void]$ctl.MapOvLegend.Children.Add($sp)
+    }
+    $ctl.MapOverview.ToolTip = (T '系统与软件：Windows、Program Files、ProgramData 等；个人文件：Users；可清理的缓存：清理页「安全清理」里的那些目录（估算）；其他：页面文件、休眠文件、文件表等不在上面几类里的。剩余空间按 Windows 报告的算。')
+    $ctl.MapOverview.Visibility = 'Visible'
 }
 
 # ---------- 方块图：每个方块的面积就是它占的空间（squarified treemap） ----------
@@ -12489,19 +12862,36 @@ function Draw-MapTree {
         }
         if ($row) {
             $b.Cursor = [System.Windows.Input.Cursors]::Hand
+            $b.Add_MouseEnter({ param($s, $e) $s.Opacity = 0.82 })
+            $b.Add_MouseLeave({ param($s, $e) $s.Opacity = 1 })
             $b.Add_MouseLeftButtonDown({
                 param($s, $e)
                 $r = $s.Tag
                 if ($e.ClickCount -ge 2) { if ($r.IsDir -and $r.Node) { Show-MapLevel $r.Node }; $e.Handled = $true; return }
-                if ($script:treeSel) { $script:treeSel.BorderBrush = Brush '#00000000' }
-                $script:treeSel = $s; $s.BorderBrush = Brush '#1D1D1F' 'd'
-                $ctl.MapList.SelectedItems.Clear(); $ctl.MapList.SelectedItem = $r
+                # 点方块 = 在下面的列表里选中这一行（按住 Ctrl 可以多选），列表滚到它那里；列表选中的变化再把方块描上边
+                $ctrl = ([System.Windows.Input.Keyboard]::Modifiers -band [System.Windows.Input.ModifierKeys]::Control) -ne 0
+                if ($ctrl) { if ($ctl.MapList.SelectedItems.Contains($r)) { $ctl.MapList.SelectedItems.Remove($r) } else { [void]$ctl.MapList.SelectedItems.Add($r) } }
+                else { $ctl.MapList.SelectedItems.Clear(); $ctl.MapList.SelectedItem = $r }
+                try { $ctl.MapList.ScrollIntoView($r) } catch {}
+                $e.Handled = $true
             })
         }
         [void]$cv.Children.Add($b)
     }
+    Sync-TreeSel
+}
+# 列表里选中了哪些，方块图上就给哪些描边（方块图和列表一起显示时两边联动）
+function Sync-TreeSel {
+    if ($script:mapView -ne 'tree') { return }
+    $sel = @{}; foreach ($x in @($ctl.MapList.SelectedItems)) { $sel[[System.Runtime.CompilerServices.RuntimeHelpers]::GetHashCode($x)] = $true }
+    $on = Brush '#1D1D1F' 'd'; $off = Brush '#00000000'
+    foreach ($b in @($ctl.MapTree.Children)) {
+        $r = $b.Tag
+        $b.BorderBrush = if ($r -and $sel.ContainsKey([System.Runtime.CompilerServices.RuntimeHelpers]::GetHashCode($r))) { $on } else { $off }
+    }
 }
 $ctl.MapTree.Add_SizeChanged({ if ($script:mapView -eq 'tree') { Draw-MapTree } })
+$ctl.MapList.Add_SelectionChanged({ if (-not $script:bulkSel) { Sync-TreeSel } })
 # 找文件：在扫描时记下的 1 MB 以上的文件里，按大小、多久没改过、类型、名称、所在文件夹筛选
 $script:mapTypes = @{
     video   = '.mp4 .mkv .avi .mov .wmv .flv .m4v .ts .m2ts .webm .mpg .mpeg .rmvb .rm .3gp .vob'
@@ -12512,8 +12902,12 @@ $script:mapTypes = @{
     doc     = '.pdf .doc .docx .xls .xlsx .ppt .pptx .txt .md .epub .mobi .csv .wps .et .dps'
     program = '.exe .dll .sys .ocx .pak .bin .vpk .pck .assets .bundle'
     log     = '.log .etl .dmp .mdmp .hdmp .tmp .temp .bak .old .cache .chk'
+    code    = '.cs .js .ts .tsx .jsx .py .java .h .hpp .c .cpp .cc .go .rs .rb .php .json .xml .yml .yaml .map .obj .pdb .lib .o .class .pyc .ipynb .sql .ps1 .psm1 .sh .bat .cmd .swift .kt .scala .lock .toml'
 }
-$script:mapFindMax = 500
+$script:mapFindMax = 1000
+# 各类文件的名字（和 FileCats 的顺序一样）
+$script:catNames = @((T '其他类型'), (T '视频'), (T '图片'), (T '音乐'), (T '文档'), (T '压缩包和安装包'), (T '光盘映像和虚拟磁盘'), (T '程序和游戏数据'), (T '日志、转储和临时文件'), (T '代码和开发文件'))
+$script:catKeys = @('', 'video', 'picture', 'music', 'doc', 'archive', 'image', 'program', 'log', 'code')
 function Get-MapFilter {
     $min = [double]50MB; $t = $ctl.MapMinSize.SelectedItem; if ($t) { $min = [double]([string]$t.Tag) * 1MB }
     $days = 0; $t = $ctl.MapAge.SelectedItem; if ($t) { $days = [int]([string]$t.Tag) }
@@ -12559,17 +12953,35 @@ function Show-MapFiles {
     $max = if ($res.Files.Count -gt 0) { [double]$res.Files[0].Size } else { 0 }
     $tot = if ($script:mapRoot) { [double]$script:mapRoot.Size } else { 0 }
     $dn = (Get-Flag 'MapDisk') -and $script:mapRoot -and $script:mapRoot.HasDisk
-    foreach ($x in $res.Files) {
+    # 所有者：只给列出来的这些文件查（每个账户只翻译一次，一千个文件不到一秒）
+    $wantOwner = ''; $t = $ctl.MapOwner.SelectedItem; if ($t) { $wantOwner = [string]$t.Tag }
+    $owners = @{}
+    $files = @($res.Files)
+    $sortBy = ''; $t = $ctl.MapSort.SelectedItem; if ($t) { $sortBy = [string]$t.Tag }
+    if ($sortBy -eq 'new') { $files = @($files | Sort-Object { $_.Modified } -Descending) } elseif ($sortBy -eq 'old') { $files = @($files | Sort-Object { $_.Modified }) }
+    foreach ($x in $files) {
         $p = $x.Path
+        $ow = [FsTools]::Owner($p)
+        if ($ow) { $owners[$ow] = $true }
+        if ($wantOwner -and $ow -ne $wantOwner) { continue }
         $fm = (T "{0} · 修改于 {1:yyyy-MM-dd}") -f (Split-Path $p -Parent), $x.Modified
-        if ($dn) { $fm += Get-DiskNote ([double]$x.Size) ([double]$x.Disk) $(if ($x.Shared) { [double]$x.Size } else { 0 }) $true }
+        if ($dn) { $fm += Get-SizeNote $p ([double]$x.Size) ([double]$x.Disk) $(if ($x.Shared) { [double]$x.Size } else { 0 }) }
+        if ($ow) { $fm += (T " · 所有者 {0}") -f ($ow -replace '^.*\\', '') }
         $row = New-MapRow $x.Name $p $x.Size $max $tot $false $null $fm 'file'
         $row.When = '{0:yyyy-MM-dd HH:mm}' -f $x.Modified
-        $row.Disk = [long]$x.Disk; $row.Shared = [bool]$x.Shared
+        $row.Disk = [long]$x.Disk; $row.Shared = [bool]$x.Shared; $row.Owner = $ow
         # 聊天记录里的文件只看不删：要腾地方就整体搬家
         if ($f.Chat) { $row.Locked = $true; $row.LockTip = (T '聊天记录里的文件只能查看和打开位置；要腾地方，到「搬家管理」把整个聊天记录搬到其他盘') }
         [void]$rows.Add($row)
     }
+    # 所有者下拉框：列出来的文件里有哪些账户
+    $script:ownerFill = $true
+    try {
+        $cur = $wantOwner
+        while ($ctl.MapOwner.Items.Count -gt 1) { $ctl.MapOwner.Items.RemoveAt(1) }
+        foreach ($o in @($owners.Keys | Sort-Object)) { $it = New-Object System.Windows.Controls.ComboBoxItem; $it.Content = $o; $it.Tag = $o; [void]$ctl.MapOwner.Items.Add($it); if ($o -eq $cur) { $ctl.MapOwner.SelectedItem = $it } }
+        if (-not $ctl.MapOwner.SelectedItem) { $ctl.MapOwner.SelectedIndex = 0 }
+    } finally { $script:ownerFill = $false }
     $ctl.MapList.ItemsSource = $rows
     Restore-MapKeep $keep
     $head = (T "找到 {0:N0} 个文件，共 {1}") -f $res.Count, (Fmt $res.Bytes)
@@ -12577,6 +12989,7 @@ function Show-MapFiles {
     $ctl.MapPath.Text = $head
     $where = if ($f.Under) { $f.Under.FullPath() } elseif ($script:mapRoot) { $script:mapRoot.FullPath() } else { '' }
     $ctl.MapInfo.Text = (T "在 {0} 里找，只能找到扫描时记下的 1 MB 以上的文件") -f $where
+    if ($wantOwner) { $ctl.MapInfo.Text += (T "；所有者只在列出来的这些文件里分") }
     if ($f.Chat) {
         $ctl.MapInfo.Text = if ($f.Chat.Names.Count -gt 0) { (T "在聊天记录里找（{0}）。这些文件只能查看和打开位置；要腾地方，可以到「搬家管理」把整个聊天记录搬到其他盘") -f ($f.Chat.Names -join (T '、')) }
                             else { (T '这块盘上没找到聊天软件的聊天记录文件夹（可能已经搬到其他盘了）') }
@@ -12594,6 +13007,8 @@ function Refresh-MapFiles { if ($script:mapView -eq 'files' -and $script:mapRoot
 $ctl.MapMinSize.Add_SelectionChanged({ Refresh-MapFiles })
 $ctl.MapAge.Add_SelectionChanged({ Refresh-MapFiles })
 $ctl.MapType.Add_SelectionChanged({ Refresh-MapFiles })
+$ctl.MapSort.Add_SelectionChanged({ Refresh-MapFiles })
+$ctl.MapOwner.Add_SelectionChanged({ if (-not $script:ownerFill) { Refresh-MapFiles } })
 $ctl.MapUnder.Add_Checked({ $ctl.MapChat.IsChecked = $false; Refresh-MapFiles })
 $ctl.MapUnder.Add_Unchecked({ Refresh-MapFiles })
 $ctl.MapChat.Add_Checked({ $ctl.MapUnder.IsChecked = $false; if ($script:mapView -ne 'files' -and $script:mapRoot) { $ctl.MapViewFiles.IsChecked = $true }; Refresh-MapFiles })
@@ -12618,12 +13033,19 @@ function Set-MapView([string]$v) {
     $script:mapView = $v
     $ctl.MapFilter.Visibility = if ($v -eq 'files') { 'Visible' } else { 'Collapsed' }
     $grow = ($v -eq 'grow'); $tree = ($v -eq 'tree')
+    $ctl.MapGrowBar.Visibility = if ($grow) { 'Visible' } else { 'Collapsed' }
+    $ctl.MapRecentBar.Visibility = if ($v -eq 'recent') { 'Visible' } else { 'Collapsed' }
     $ctl.MapGrow.Visibility = if ($grow) { 'Visible' } else { 'Collapsed' }
     $ctl.MapTree.Visibility = if ($tree) { 'Visible' } else { 'Collapsed' }
-    $ctl.MapList.Visibility = if ($grow -or $tree) { 'Collapsed' } else { 'Visible' }
-    if (-not $script:mapRoot) { return }
+    # 方块图和列表一起显示：上面方块图，下面列表，点哪边另一边都跟着
+    $ctl.MapGrid.RowDefinitions[1].Height = if ($tree) { New-Object System.Windows.GridLength 3, ([System.Windows.GridUnitType]::Star) } else { New-Object System.Windows.GridLength 0 }
+    $ctl.MapGrid.RowDefinitions[2].Height = if ($tree) { New-Object System.Windows.GridLength 2, ([System.Windows.GridUnitType]::Star) } else { New-Object System.Windows.GridLength 1, ([System.Windows.GridUnitType]::Star) }
+    $ctl.MapList.Visibility = if ($grow) { 'Collapsed' } else { 'Visible' }
+    if (-not $script:mapRoot) { $ctl.MapOverview.Visibility = 'Collapsed'; return }
     if ($v -eq 'dirs' -or $tree) { Show-MapLevel $(if ($script:mapCur) { $script:mapCur } else { $script:mapRoot }) }
-    elseif ($v -eq 'files') { Show-MapFiles }
+    elseif ($v -eq 'files') { Show-MapOverview; Show-MapFiles }
+    elseif ($v -eq 'types') { Show-MapTypes }
+    elseif ($v -eq 'recent') { Show-MapOverview; Show-MapRecent }
     else {
         $ctl.MapGrow.ItemsSource = $script:growRows
         $ctl.BtnMapUp.IsEnabled = $false
@@ -12631,8 +13053,10 @@ function Set-MapView([string]$v) {
         $has = $script:growRows -and $script:growRows.Count -gt 0
         $ctl.EmptyMap.Visibility = if ($has) { 'Collapsed' } else { 'Visible' }
         $ctl.EmptyMapText.Text = $script:growNote
-        $ctl.MapPath.Text = (T '和上次扫描相比')
+        $ctl.MapPath.Text = if ($script:growSummary) { $script:growSummary } else { (T '和上次扫描相比') }
+        $ctl.MapPath.ToolTip = $ctl.MapPath.Text
         $ctl.MapInfo.Text = $script:growNote + $(if ($has) { (T ' 双击一行可以跳到这个文件夹。') } else { '' })
+        $ctl.MapOverview.Visibility = 'Collapsed'
         $ctl.BtnMapExport.IsEnabled = [bool]$has
         Update-MapSel
     }
@@ -12641,6 +13065,82 @@ $ctl.MapViewDirs.Add_Checked({ Set-MapView 'dirs' })
 $ctl.MapViewTree.Add_Checked({ Set-MapView 'tree' })
 $ctl.MapViewFiles.Add_Checked({ Set-MapView 'files' })
 $ctl.MapViewGrow.Add_Checked({ Set-MapView 'grow' })
+$ctl.MapViewTypes.Add_Checked({ Set-MapView 'types' })
+$ctl.MapViewRecent.Add_Checked({ Set-MapView 'recent' })
+$ctl.MapGrowBase.Add_SelectionChanged({ if ($script:mapRoot -and $script:mapView -eq 'grow' -and -not $script:growLoading) { try { Compare-Snapshot $script:mapRoot } catch { $script:growNote = (T '没能和上次比较') }; Set-MapView 'grow' } })
+# 按类型：这块盘上每类文件多少个、多大（扫描时顺手数的，所有文件都算，不只 1 MB 以上的）
+function Show-MapTypes {
+    $r = $script:mapRoot
+    $rows = New-Object System.Collections.Generic.List[MapRow]
+    $ctl.BtnMapUp.IsEnabled = $false; $ctl.BtnMapAcct.Visibility = 'Collapsed'
+    if ($r -and $r.TypeBytes) {
+        $order = @(0..9 | Where-Object { $r.TypeCount[$_] -gt 0 } | Sort-Object { $r.TypeBytes[$_] } -Descending)
+        $max = if ($order.Count -gt 0) { [double]$r.TypeBytes[$order[0]] } else { 0 }
+        $tot = [double]0; foreach ($i in 0..9) { $tot += $r.TypeBytes[$i] }
+        foreach ($i in $order) {
+            $meta = (T "{0:N0} 个文件") -f $r.TypeCount[$i]
+            if ($r.TypeDisk -and $r.TypeDisk[$i] -ge 0 -and ([double]$r.TypeBytes[$i] - [double]$r.TypeDisk[$i]) -ge 32MB -and $r.TypeDisk[$i] -lt $r.TypeBytes[$i] * 0.85) { $meta += (T " · 实际占 {0}") -f (Fmt ([double]$r.TypeDisk[$i])) }
+            $meta += $(if ($i -eq 0) { (T ' · 没归到上面几类的扩展名') } else { (T ' · 双击看这一类最大的文件') })
+            $row = New-MapRow $script:catNames[$i] ('type:' + $script:catKeys[$i]) $r.TypeBytes[$i] $max $tot $false $null $meta 'type'
+            $row.FileCount = [long]$r.TypeCount[$i]
+            [void]$rows.Add($row)
+        }
+    }
+    $ctl.MapList.ItemsSource = $rows; $script:mapListKey = 'types'
+    $ctl.MapPath.Text = (T '各类文件占多少')
+    $ctl.MapInfo.Text = if ($r) { (T "{0} 上的全部 {1:N0} 个文件按扩展名分类{2}") -f $r.FullPath().TrimEnd('\'), $r.Files, $(if ($script:mapScanAt) { (T " · 扫描于 {0:HH:mm}") -f $script:mapScanAt } else { '' }) } else { '' }
+    $ctl.EmptyMap.Visibility = if ($rows.Count -gt 0) { 'Collapsed' } else { 'Visible' }
+    if ($rows.Count -eq 0) { $ctl.EmptyMapText.Text = (T '这次扫描没有按类型统计（可能是旧的扫描结果），再扫描一次就有了') }
+    $ctl.BtnMapExport.IsEnabled = ($rows.Count -gt 0); $ctl.BtnMapReport.IsEnabled = [bool]$r
+    Show-MapOverview
+    Update-MapSel
+}
+# 最近改动：读变更日志，看这几天哪些文件夹里新建、改写的文件最多
+$script:recentRows = $null; $script:recentNote = ''
+function Show-MapRecent {
+    $rows = New-Object System.Collections.Generic.List[MapRow]
+    $ctl.BtnMapUp.IsEnabled = $false; $ctl.BtnMapAcct.Visibility = 'Collapsed'
+    $list = $script:recentRows
+    if ($list -and $list.Count -gt 0) {
+        $max = [double]$list[0].Bytes; $tot = [double]0; foreach ($x in $list) { $tot += [double]$x.Bytes }
+        foreach ($x in $list) {
+            $top = -1; $tb = [long]0; for ($i = 0; $i -lt 10; $i++) { if ($x.ByCat[$i] -gt $tb) { $tb = $x.ByCat[$i]; $top = $i } }
+            $meta = (T "{0:N0} 个文件新建或改写过") -f $x.Files
+            if ($x.Deleted -gt 0) { $meta += (T "，{0:N0} 个删掉了") -f $x.Deleted }
+            if ($top -ge 0 -and $tb -ge $x.Bytes * 0.5 -and $x.Bytes -gt 0) { $meta += (T " · 主要是{0}") -f $script:catNames[$top] }
+            $meta += (T ' · 双击打开这个文件夹')
+            $node = [DiskMap]::Find($script:mapRoot, $x.Path)
+            $row = New-MapRow (Split-Path $x.Path -Leaf) $x.Path $x.Bytes $max 0 $false $null $meta 'recent'
+            if (-not $row.Name) { $row.Name = $x.Path }
+            $row.Node = $node; $row.FileCount = [long]$x.Files; $row.Pct = ''
+            $row.SizeText = (T "现在共 {0}") -f (Fmt ([double]$x.Bytes))
+            [void]$rows.Add($row)
+        }
+    }
+    $ctl.MapList.ItemsSource = $rows; $script:mapListKey = 'recent'
+    $ctl.MapPath.Text = (T '最近改动最多的文件夹')
+    $ctl.MapInfo.Text = $script:recentNote
+    $ctl.EmptyMap.Visibility = if ($rows.Count -gt 0) { 'Collapsed' } else { 'Visible' }
+    if ($rows.Count -eq 0) { $ctl.EmptyMapText.Text = if ($script:recentNote) { $script:recentNote } else { (T '选一个时间段，点「查看」') } }
+    $ctl.BtnMapExport.IsEnabled = ($rows.Count -gt 0); $ctl.BtnMapReport.IsEnabled = [bool]$script:mapRoot
+    Update-MapSel
+}
+function Start-MapRecent {
+    if ($script:worker -or -not $script:mapRoot) { return }
+    $days = 1; $t = $ctl.MapRecentDays.SelectedItem; if ($t) { $days = [int]([string]$t.Tag) }
+    if ([string]$script:mapMethod -notlike 'mft*') { $script:recentRows = $null; $script:recentNote = (T '这块盘是逐个文件夹扫描的，没有读文件表，看不了变更日志。打开「快速扫描」再扫一次就可以'); Show-MapRecent; return }
+    $sync.Mode = 'recent'; $sync.RecentResult = $null; $sync.RecentNote = ''; $sync.RecentDays = $days
+    Start-Op (T '读取变更日志') -NoCard; UI-Busy $true
+    $ctl.EmptyMap.Visibility = 'Visible'; $ctl.EmptyMapText.Text = (T '正在读变更日志…'); $ctl.MapList.ItemsSource = $null
+    Start-Worker @'
+$note = ''
+$since = [DateTime]::UtcNow.AddDays(-[double]$arg.Days).ToFileTimeUtc()
+$sync.RecentResult = [DiskMap]::RecentDirs($arg.Root, $since, 60, [ref]$note)
+$sync.RecentNote = $note
+'@ @{ Root = $script:mapRoot.FullPath(); Days = $days }
+}
+$ctl.BtnMapRecent.Add_Click({ Start-MapRecent })
+$ctl.MapRecentDays.Add_SelectionChanged({ if ($script:mapView -eq 'recent' -and $script:mapRoot -and -not $script:worker) { Start-MapRecent } })
 $ctl.BtnMapUp.Add_Click({ if ($script:mapCur -and $script:mapCur.Parent) { Show-MapLevel $script:mapCur.Parent } })
 # 空间明细：已用空间都花在哪，为什么和按文件大小相加对不上（快速扫描读了文件表才有）
 function Show-SpaceAcct {
@@ -12679,8 +13179,19 @@ $ctl.MapGrow.Add_MouseDoubleClick({
 # 双击文件夹往里点。在按下左键（第二下）时处理，不等 MouseDoubleClick：复选框模式下按下已经被拦住不让列表选中，
 # 那样列表就收不到 MouseDoubleClick 了。双击的是鼠标下面那一行；在复选框上连点两下只是勾两次，右键双击、双击滚动条都不算
 function Enter-MapRow($r) {
+    if ($r -and $r.Kind -eq 'type') {
+        $k = ([string]$r.Path).Substring(5)
+        foreach ($it in $ctl.MapType.Items) { if ([string]$it.Tag -eq $k) { $ctl.MapType.SelectedItem = $it } }
+        $ctl.MapUnder.IsChecked = $false; $ctl.MapChat.IsChecked = $false
+        $ctl.MapViewFiles.IsChecked = $true
+        return $true
+    }
+    if ($r -and $r.Kind -eq 'recent') {
+        if ($r.Node) { $ctl.MapViewDirs.IsChecked = $true; Show-MapLevel $r.Node } else { Open-Location $r.Path }
+        return $true
+    }
     if (-not ($r -and $r.IsDir -and $r.Node)) { return $false }
-    if ($script:mapView -ne 'dirs') { $ctl.MapViewDirs.IsChecked = $true }
+    if ($script:mapView -ne 'dirs' -and $script:mapView -ne 'tree') { $ctl.MapViewDirs.IsChecked = $true }
     Show-MapLevel $r.Node
     return $true
 }
@@ -13057,8 +13568,18 @@ footer { margin-top:40px; color:var(--mute); font-size:12px; border-top:1px soli
         & $add '</table>'
     }
 
-    # 按类型统计
-    $ext = [DiskMap]::ExtTotals()
+    # 按类型统计：扫描时数过全部文件就用那个，否则只有 1 MB 以上的
+    $tr = $script:mapRoot
+    if ($tr -and $tr.TypeBytes) {
+        $order = @(0..9 | Where-Object { $tr.TypeCount[$_] -gt 0 } | Sort-Object { $tr.TypeBytes[$_] } -Descending)
+        if ($order.Count -gt 0) {
+            & $add ('<h2>{0}</h2><table><tr><th>{1}</th><th class="n">{2}</th><th class="n">{3}</th><th>{4}</th></tr>' -f (& $H (T '各类文件占多少')), (& $H (T '类型')), (& $H (T '文件数')), (& $H (T '大小')), '')
+            $max = [double]$tr.TypeBytes[$order[0]]
+            foreach ($i in $order) { & $add ('<tr><td>{0}</td><td class="n">{1:N0}</td><td class="n">{2}</td><td>{3}</td></tr>' -f (& $H $script:catNames[$i]), $tr.TypeCount[$i], (& $H (Fmt ([double]$tr.TypeBytes[$i]))), (& $bar ([double]$tr.TypeBytes[$i]) $max)) }
+            & $add '</table>'
+        }
+    }
+    $ext = if ($tr -and $tr.TypeBytes) { @{} } else { [DiskMap]::ExtTotals() }
     if ($ext.Count -gt 0) {
         $names = [ordered]@{ video = (T '视频'); archive = (T '压缩包和安装包'); image = (T '光盘映像和虚拟磁盘'); picture = (T '图片'); music = (T '音乐'); doc = (T '文档'); program = (T '程序和游戏数据'); log = (T '日志、转储和临时文件'); other = (T '其他类型') }
         $of = @{}; foreach ($k in $script:mapTypes.Keys) { foreach ($e in ($script:mapTypes[$k] -split ' ')) { if ($e) { $of[$e.ToLowerInvariant()] = $k } } }
@@ -13121,7 +13642,7 @@ $ctl.BtnMapExport.Add_Click({
         $lines.Add((Csv-Line @((T '名称'), (T '路径'), (T '类型'), (T '大小（字节）'), (T '大小'), (T '文件数'), (T '最近修改'))))
         foreach ($r in $list) {
             if ($r.IsSummary) { continue }
-            $k = if ($r.IsDir) { (T '文件夹') } elseif ($r.Node -and $r.Node.IsLink) { (T '链接') } else { (T '文件') }
+            $k = if ($r.Kind -eq 'type') { (T '类型') } elseif ($r.Kind -eq 'recent') { (T '最近改动') } elseif ($r.IsDir) { (T '文件夹') } elseif ($r.Node -and $r.Node.IsLink) { (T '链接') } else { (T '文件') }
             $lines.Add((Csv-Line @($r.Name, $r.Path, $k, [long]$r.Size, $r.SizeText, $(if ($r.IsDir) { $r.FileCount } else { '' }), $r.When)))
         }
     }
@@ -13134,21 +13655,100 @@ $ctl.BtnMapExport.Add_Click({
 function Open-MapRow($r) { if ($r.IsSummary) { if ($script:mapCur) { Open-Location $script:mapCur.FullPath() } } else { Open-Location $r.Path } }
 $ctl.BtnMapOpen.Add_Click({ $r = $ctl.MapList.SelectedItem; if ($r) { Open-MapRow $r } })
 
-# 和上次比：把这次扫描的快照和上次的对比，列出变化最大的文件夹
+# 和上次比：每次扫描存一份快照（带日期，每块盘最多留 40 份），和选定的那一份对比，列出变化最大的文件夹，
+# 并用一句话说清多出来的空间主要在哪（Docker、浏览器缓存、某个文件夹……）
+function Read-Snapshot([string]$file) {
+    $old = @{}; $oldAt = ''; $oldHow = 'walk'; $used = [double]-1
+    foreach ($l in [IO.File]::ReadAllLines($file, [Text.Encoding]::UTF8)) {
+        if ($l.StartsWith('#method=')) { $oldHow = $l.Substring(8).Trim(); continue }
+        if ($l.StartsWith('#used=')) { $used = [double]$l.Substring(6).Trim(); continue }
+        if ($l.StartsWith('#')) { $oldAt = $l.TrimStart('#').Trim(); continue }
+        $a = $l.Split("`t"); if ($a.Count -eq 2) { $old[$a[0].ToLowerInvariant()] = [double]$a[1] }
+    }
+    return @{ Map = $old; At = $oldAt; How = $oldHow; Used = $used }
+}
+# 选「和哪次比」：上一次，或者 N 天前最近的一份（没那么早的就拿最早的）
+function Pick-Snapshot([string]$letter, [int]$days) {
+    $latest = Join-Path $script:snapDir "$letter-latest.txt"
+    if ($days -le 0) { return $(if (Test-Path -LiteralPath $latest) { $latest } else { '' }) }
+    $files = @(Get-ChildItem -LiteralPath $script:snapDir -Filter "$letter-2*.txt" -ErrorAction SilentlyContinue | Sort-Object Name)
+    if ($files.Count -eq 0) { return $(if (Test-Path -LiteralPath $latest) { $latest } else { '' }) }
+    $cut = (Get-Date).AddDays(-$days)
+    $pick = $null
+    foreach ($f in $files) {
+        $t = $null; try { $t = [DateTime]::ParseExact($f.BaseName.Substring(2), 'yyyyMMdd-HHmm', $null) } catch { continue }
+        if ($t -le $cut) { $pick = $f } else { break }
+    }
+    if (-not $pick) { $pick = $files[0] }
+    return $pick.FullName
+}
 function Update-Growth($root) {
-    $script:growRows = New-Object 'System.Collections.ObjectModel.ObservableCollection[GrowRow]'
     $letter = $root.FullPath().Substring(0, 1).ToUpper()
     New-Item -ItemType Directory -Path $script:snapDir -Force | Out-Null
     $latest = Join-Path $script:snapDir "$letter-latest.txt"
-    $old = @{}; $oldAt = ''; $oldHow = 'walk'
-    if (Test-Path -LiteralPath $latest) {
-        foreach ($l in [IO.File]::ReadAllLines($latest, [Text.Encoding]::UTF8)) {
-            if ($l.StartsWith('#method=')) { $oldHow = $l.Substring(8).Trim(); continue }
-            if ($l.StartsWith('#')) { $oldAt = $l.TrimStart('#').Trim(); continue }
-            $a = $l.Split("`t"); if ($a.Count -eq 2) { $old[$a[0].ToLowerInvariant()] = [double]$a[1] }
-        }
-    }
     $snap = [DiskMap]::Snapshot($root, 4, 100MB)
+    $script:curSnap = $snap
+    # 先和上一次比（界面上默认选的就是它），再把这次存起来
+    Compare-Snapshot $root
+    $out = New-Object System.Collections.Generic.List[string]
+    $out.Add(('#method=' + $(if ([string]$script:mapMethod -like 'mft*') { 'mft' } else { 'walk' })))   # 放在日期前面：旧版本只认最后一个 # 行当日期
+    $used = [double]-1; try { $di = New-Object System.IO.DriveInfo ($root.FullPath()); $used = [double]($di.TotalSize - $di.TotalFreeSpace) } catch {}
+    if ($used -ge 0) { $out.Add('#used=' + [long]$used) }
+    $out.Add(("# {0:yyyy-MM-dd HH:mm}" -f (Get-Date)))
+    foreach ($l in $snap) { $out.Add($l) }
+    if (Test-Path -LiteralPath $latest) { Copy-Item -LiteralPath $latest -Destination (Join-Path $script:snapDir "$letter-previous.txt") -Force -ErrorAction SilentlyContinue }
+    [IO.File]::WriteAllLines($latest, $out.ToArray(), (New-Object Text.UTF8Encoding $false))
+    # 带日期的一份：一天最多留一份（同一天的覆盖），总共最多 40 份
+    $dated = Join-Path $script:snapDir ("{0}-{1:yyyyMMdd-HHmm}.txt" -f $letter, (Get-Date))
+    foreach ($f in @(Get-ChildItem -LiteralPath $script:snapDir -Filter ("{0}-{1:yyyyMMdd}-*.txt" -f $letter, (Get-Date)) -ErrorAction SilentlyContinue)) { Remove-Item -LiteralPath $f.FullName -Force -ErrorAction SilentlyContinue }
+    Copy-Item -LiteralPath $latest -Destination $dated -Force -ErrorAction SilentlyContinue
+    $all = @(Get-ChildItem -LiteralPath $script:snapDir -Filter "$letter-2*.txt" -ErrorAction SilentlyContinue | Sort-Object Name)
+    if ($all.Count -gt 40) { foreach ($f in @($all | Select-Object -First ($all.Count - 40))) { Remove-Item -LiteralPath $f.FullName -Force -ErrorAction SilentlyContinue } }
+}
+# 多出来（或少掉）的空间主要在哪：从变化最大的文件夹里挑互不包含的几个，认得出的（Docker、WSL、浏览器缓存、Windows 更新……）写名字
+function Explain-Growth($items, [double]$totalDelta) {
+    $known = @(
+        @('\docker\', (T 'Docker 数据')), @('docker-desktop', (T 'Docker 数据')), @('\ext4.vhdx', (T 'WSL 发行版')), @('\packages\canonicalgrouplimited', (T 'WSL 发行版')),
+        @('\softwaredistribution', (T 'Windows 更新')), @('\windows.old', 'Windows.old'), @('\$recycle.bin', (T '回收站')), @('\winsxs', (T '组件存储（WinSxS）')),
+        @('\user data\', (T '浏览器缓存和数据')), @('\cache', (T '缓存')), @('\temp', (T '临时文件')), @('\steamapps', (T 'Steam 游戏')), @('\appdata\local\packages', (T '应用商店软件')),
+        @('\onedrive', 'OneDrive'), @('\xwechat_files', (T '微信数据')), @('\wechat files', (T '微信数据')), @('\tencent files', (T 'QQ 数据')), @('\minidump', (T '蓝屏转储')), @('\memory.dmp', (T '蓝屏转储')),
+        @('\node_modules', 'node_modules'), @('\.nuget', (T 'NuGet 包')), @('\jetbrains', (T 'JetBrains 缓存')), @('\videos', (T '视频')), @('\downloads', (T '下载'))
+    )
+    $sign = if ($totalDelta -ge 0) { 1 } else { -1 }
+    $cands = @($items | Where-Object { $_.D * $sign -gt 0 } | Sort-Object { $_.D * $sign } -Descending)
+    $picked = New-Object System.Collections.ArrayList
+    foreach ($c in $cands) {
+        if ($picked.Count -ge 4) { break }
+        $p = ([string]$c.P).TrimEnd('\').ToLowerInvariant()
+        $dup = $false
+        foreach ($q in $picked) { $qp = ([string]$q.P).TrimEnd('\').ToLowerInvariant(); if ($p.StartsWith($qp + '\') -or $qp.StartsWith($p + '\') -or $p -eq $qp) { $dup = $true; break } }
+        if ($dup) { continue }
+        if ([math]::Abs($c.D) -lt [math]::Max(200MB, [math]::Abs($totalDelta) * 0.08)) { break }
+        [void]$picked.Add($c)
+    }
+    $parts = New-Object System.Collections.Generic.List[string]
+    $acc = [double]0
+    foreach ($c in $picked) {
+        $p = ([string]$c.P).ToLowerInvariant() + '\'
+        $name = $null; foreach ($k in $known) { if ($p -like ('*' + $k[0] + '*')) { $name = $k[1]; break } }
+        $label = if ($name) { "{0}（{1}）" -f $name, (Shorten ([string]$c.P)) } else { Shorten ([string]$c.P) }
+        $parts.Add(("{0} {1}{2}" -f $label, $(if ($c.D -gt 0) { '+' } else { '−' }), (Fmt ([math]::Abs($c.D)))))
+        $acc += $c.D
+    }
+    $rest = $totalDelta - $acc
+    if ($parts.Count -gt 0 -and [math]::Abs($rest) -ge 100MB) { $parts.Add(((T "其余 {0}{1}") -f $(if ($rest -gt 0) { '+' } else { '−' }), (Fmt ([math]::Abs($rest))))) }
+    return ($parts -join (T '，'))
+}
+function Compare-Snapshot($root) {
+    $script:growRows = New-Object 'System.Collections.ObjectModel.ObservableCollection[GrowRow]'
+    $script:growSummary = ''
+    $letter = $root.FullPath().Substring(0, 1).ToUpper()
+    $days = 0; $t = $ctl.MapGrowBase.SelectedItem; if ($t) { $days = [int]([string]$t.Tag) }
+    $file = Pick-Snapshot $letter $days
+    $old = @{}; $oldAt = ''; $oldHow = 'walk'; $oldUsed = [double]-1
+    if ($file -and (Test-Path -LiteralPath $file)) { $s = Read-Snapshot $file; $old = $s.Map; $oldAt = $s.At; $oldHow = $s.How; $oldUsed = $s.Used }
+    $snap = $script:curSnap
+    if (-not $snap) { $snap = [DiskMap]::Snapshot($root, 4, 100MB); $script:curSnap = $snap }
     $script:prevSnap = $old
     if ($old.Count -gt 0) {
         $list = New-Object System.Collections.ArrayList
@@ -13160,6 +13760,15 @@ function Update-Growth($root) {
             if ([math]::Abs($d) -ge 100MB) { [void]$list.Add(@{ P = $a[0]; B = $before; N = $now; D = $d; Had = $old.ContainsKey($k) }) }
         }
         foreach ($k in $old.Keys) { if (-not $seen.ContainsKey($k) -and $old[$k] -ge 200MB) { [void]$list.Add(@{ P = $k; B = $old[$k]; N = [double]0; D = -$old[$k]; Had = $true }) } }
+        # 一句话：已用空间变了多少，主要在哪
+        $usedNow = [double]-1; try { $di = New-Object System.IO.DriveInfo ($root.FullPath()); $usedNow = [double]($di.TotalSize - $di.TotalFreeSpace) } catch {}
+        $span = ''; try { $t0 = [DateTime]::ParseExact($oldAt, 'yyyy-MM-dd HH:mm', $null); $span = FmtSpan ((Get-Date) - $t0) } catch {}
+        $delta = if ($oldUsed -ge 0 -and $usedNow -ge 0) { $usedNow - $oldUsed } else { [double]$root.Size - [double](($old.Values | Measure-Object -Maximum).Maximum) }
+        if ($oldUsed -ge 0 -and $usedNow -ge 0) {
+            $head = if ($span) { (T "过去 {0}，已用空间{1}{2}") -f $span, $(if ($delta -ge 0) { (T '增加 ') } else { (T '减少 ') }), (Fmt ([math]::Abs($delta))) } else { (T "和 {0} 相比，已用空间{1}{2}") -f $oldAt, $(if ($delta -ge 0) { (T '增加 ') } else { (T '减少 ') }), (Fmt ([math]::Abs($delta))) }
+            $why = Explain-Growth $list $delta
+            $script:growSummary = if ($why) { "{0}{1}{2}。" -f $head, (T '，其中 '), $why } else { $head + '。' }
+        }
         foreach ($x in @($list | Sort-Object { $_.D } -Descending | Select-Object -First 60)) {
             $g = New-Object GrowRow
             $g.Path = $x.P
@@ -13177,12 +13786,7 @@ function Update-Growth($root) {
             $script:growNote += $(if ($newHow -eq 'mft') { (T '。这次是直接读文件表，原来进不去的文件夹（比如 System Volume Information）也算进来了，这些文件夹看起来变大不一定是真的变大') } else { (T '。这次是逐个文件夹扫描的，进不去的文件夹没算进来，这些文件夹看起来变小不一定是真的变小') })
         }
     } else { $script:growNote = (T '这是第一次扫描这块盘。下次再扫描，就能看到哪些文件夹变大了') }
-    $out = New-Object System.Collections.Generic.List[string]
-    $out.Add(('#method=' + $(if ([string]$script:mapMethod -like 'mft*') { 'mft' } else { 'walk' })))   # 放在日期前面：旧版本只认最后一个 # 行当日期
-    $out.Add(("# {0:yyyy-MM-dd HH:mm}" -f (Get-Date)))
-    foreach ($l in $snap) { $out.Add($l) }
-    if (Test-Path -LiteralPath $latest) { Copy-Item -LiteralPath $latest -Destination (Join-Path $script:snapDir "$letter-previous.txt") -Force -ErrorAction SilentlyContinue }
-    [IO.File]::WriteAllLines($latest, $out.ToArray(), (New-Object Text.UTF8Encoding $true))
+    if ($days -gt 0 -and $file) { $script:growNote = ((T "和 {0} 的快照比。") -f (Split-Path $file -Leaf)) + $script:growNote }
 }
 
 # 删除：移到回收站或永久删除，都要先勾选确认
@@ -14790,8 +15394,8 @@ function Apply-Mode {
     $m = Get-Mode
     $v = { param([int]$need) if ($m -ge $need) { [System.Windows.Visibility]::Visible } else { [System.Windows.Visibility]::Collapsed } }
     # 空间地图：找文件、和上次比、导出、压缩是工程师的；快速扫描开关、空间明细是开发者的
-    foreach ($n in 'MapViewFiles', 'MapViewGrow', 'BtnMapExport', 'BtnMapReport', 'BtnMapCompress') { $ctl[$n].Visibility = & $v 1 }
-    if ($m -lt 1 -and -not $ctl.MapViewDirs.IsChecked -and -not $ctl.MapViewTree.IsChecked) { $ctl.MapViewDirs.IsChecked = $true }
+    foreach ($n in 'MapViewFiles', 'MapViewGrow', 'MapViewRecent', 'BtnMapExport', 'BtnMapReport', 'BtnMapCompress') { $ctl[$n].Visibility = & $v 1 }
+    if ($m -lt 1 -and -not $ctl.MapViewDirs.IsChecked -and -not $ctl.MapViewTree.IsChecked -and -not $ctl.MapViewTypes.IsChecked) { $ctl.MapViewDirs.IsChecked = $true }
     # 省空间
     foreach ($n in 'SaveCardPf', 'SaveCardRp', 'SaveCardFc', 'SaveCardVd', 'SaveCardMerge') { $ctl[$n].Visibility = & $v 1 }
     foreach ($n in 'SaveCardRs', 'SaveCardCs', 'SaveCardDump', 'SaveCardTmp') { $ctl[$n].Visibility = & $v 2 }
@@ -15379,6 +15983,39 @@ function Invoke-UiTest {
             if ($ctl.MapAll.IsEnabled) { throw 'select all enabled in the treemap' }
             $ctl.MapViewDirs.IsChecked = $true
         }
+        & $step 'file types view' {
+            $ctl.MapViewTypes.IsChecked = $true; $win.UpdateLayout()
+            if ($ctl.MapList.Items.Count -lt 1) { throw 'no type rows' }
+            $sum = [long]0; foreach ($r in $ctl.MapList.Items) { $sum += $r.FileCount }
+            if ($sum -ne $tree.Files) { throw ("type counts {0} != files {1}" -f $sum, $tree.Files) }
+            $first = $ctl.MapList.Items[0]
+            if (-not (Enter-MapRow $first)) { throw 'type row does not open the file search' }
+            if (-not $ctl.MapViewFiles.IsChecked -or [string]$ctl.MapType.SelectedItem.Tag -ne ([string]$first.Path).Substring(5)) { throw 'file search not set to that type' }
+            if ($ctl.MapOwner.Items.Count -lt 2 -and $ctl.MapList.Items.Count -gt 0) { throw 'no owners listed' }
+            $ctl.MapSort.SelectedIndex = 1; $win.UpdateLayout()
+            if ($ctl.MapList.Items.Count -gt 1 -and [string]$ctl.MapList.Items[0].When -lt [string]$ctl.MapList.Items[1].When) { throw 'not sorted by date' }
+            $ctl.MapSort.SelectedIndex = 0; $ctl.MapType.SelectedIndex = 0
+        }
+        & $step 'treemap and list are linked' {
+            $ctl.MapViewDirs.IsChecked = $true; Show-MapLevel $tree
+            $ctl.MapViewTree.IsChecked = $true; $win.UpdateLayout(); [void](& $waitUi { $ctl.MapTree.Children.Count -gt 0 } 3000)
+            if ($ctl.MapList.Visibility -ne 'Visible' -or $ctl.MapTree.Children.Count -lt 1) { throw 'treemap without the list' }
+            $row = $ctl.MapList.Items[0]
+            $ctl.MapList.SelectedItems.Clear(); $ctl.MapList.SelectedItem = $row; $win.UpdateLayout()
+            $blk = $null; foreach ($b in $ctl.MapTree.Children) { if ([object]::ReferenceEquals($b.Tag, $row)) { $blk = $b } }
+            if (-not $blk) { throw 'no block for the first row' }
+            if ($blk.BorderBrush.Color.A -eq 0) { throw 'selected row not outlined on the treemap' }
+            # 点第二块：列表里选中的换成它
+            $blk2 = $null; foreach ($b in $ctl.MapTree.Children) { if ($b.Tag -and -not [object]::ReferenceEquals($b.Tag, $row)) { $blk2 = $b; break } }
+            if ($blk2) {
+                $ev = New-Object System.Windows.Input.MouseButtonEventArgs ([System.Windows.Input.Mouse]::PrimaryDevice), 0, ([System.Windows.Input.MouseButton]::Left)
+                $ev.RoutedEvent = [System.Windows.UIElement]::MouseLeftButtonDownEvent
+                $blk2.RaiseEvent($ev); $win.UpdateLayout()
+                if (-not [object]::ReferenceEquals($ctl.MapList.SelectedItem, $blk2.Tag)) { throw 'clicking a block did not select the row' }
+                if ($blk.BorderBrush.Color.A -ne 0 -or $blk2.BorderBrush.Color.A -eq 0) { throw 'outline did not move to the clicked block' }
+            }
+            $ctl.MapViewDirs.IsChecked = $true
+        }
         if ($env:CLEANC_SHOTS -eq '1') {
             & $step 'screenshots for the README' {
                 $root = $win.Content
@@ -15396,7 +16033,26 @@ function Invoke-UiTest {
                 if (-not (& $waitUi { -not $script:worker } 120000)) { throw 'space map scan did not finish' }
                 if (-not $script:mapRoot -or [object]::ReferenceEquals($script:mapRoot, $tree)) { throw 'space map has no scan of the drive' }
                 $ctl.OpPanel.Visibility = 'Collapsed'; & $shot 'map'
+                if ($ctl.MapOverview.Visibility -ne 'Visible' -or -not $ctl.MapOvPct.Text) { throw 'drive overview missing' }
                 $ctl.MapViewTree.IsChecked = $true; & $shot 'map-tree'
+                $ctl.MapViewTypes.IsChecked = $true; & $shot 'map-types'
+                if ($ctl.MapList.Items.Count -lt 3) { throw 'type statistics missing for the drive' }
+                # 最近改动：读变更日志（要文件表在内存里）
+                $ctl.MapViewRecent.IsChecked = $true; Start-MapRecent
+                if (-not (& $waitUi { -not $script:worker } 90000)) { throw 'recent changes did not finish' }
+                $L.Add(("recent changes: {0} folders; {1}" -f @($script:recentRows).Count, $script:recentNote))
+                if ([string]$script:mapMethod -like 'mft*' -and @($script:recentRows).Count -lt 1 -and $script:recentNote -notmatch 'USN') { throw ('no recent changes: ' + $script:recentNote) }
+                & $shot 'map-recent'
+                # 再扫一次：和上次比要能说出增长在哪
+                Start-MapScan "$env:SystemDrive\"
+                if (-not (& $waitUi { -not $script:worker } 120000)) { throw 'second space map scan did not finish' }
+                $ctl.OpPanel.Visibility = 'Collapsed'
+                $ctl.MapViewGrow.IsChecked = $true; $win.UpdateLayout()
+                $L.Add('growth: ' + $script:growSummary)
+                if (-not $script:growSummary) { throw 'no growth summary after the second scan' }
+                $ctl.MapGrowBase.SelectedIndex = 5; $win.UpdateLayout()
+                if ($script:growNote -notmatch '\d{8}-\d{4}') { throw ('baseline note: ' + $script:growNote) }
+                $ctl.MapGrowBase.SelectedIndex = 0
                 $ctl.MapViewDirs.IsChecked = $true
                 Show-Page 'save'; $ctl.SaveScroll.ScrollToTop(); & $shot 'save'
                 Show-Page 'dup'; & $shot 'dup'
@@ -15465,7 +16121,7 @@ $timer.Add_Tick({
         [DirStat]::Cancel = $false
         if ($sync.WasCancelled) { UI-Log (T '已中途取消。') }
         # 删过、搬过东西以后，逐个扫描得到的旧树不再拿来用（读文件表的结果靠变更日志更新）
-        if (@('scan', 'movescan', 'apps', 'map', 'movesize', 'dup', 'update', 'startup', 'winget', 'odinfo', 'csanalyze', 'leftovers') -notcontains [string]$sync.Mode) { [DiskMap]::Invalidate() }
+        if (@('scan', 'movescan', 'apps', 'map', 'movesize', 'dup', 'update', 'startup', 'winget', 'odinfo', 'csanalyze', 'leftovers', 'recent') -notcontains [string]$sync.Mode) { [DiskMap]::Invalidate() }
 
         if ($sync.Mode -eq 'scan') {
             if ($sync.WasCancelled -or -not $sync.Sizes) {
@@ -15554,7 +16210,8 @@ $timer.Add_Tick({
                 $script:prevSnap = $null
                 if (-not $stopped) { try { Update-Growth $root } catch { $script:growNote = (T '没能和上次比较') } } else { $script:growNote = (T '这次扫描中途停止了，不和上次比较') }
                 End-Op ($(if ($stopped) { (T "已中途停止，看过 {0:N0} 个文件，共 {1}") } else { (T "完成，{0:N0} 个文件，共 {1}") }) -f $root.Files, (Fmt $root.Size))
-                if ($script:mapView -eq 'grow') { Set-MapView 'grow' } elseif ($script:mapView -eq 'files') { Show-MapFiles } else { Show-MapLevel $root }
+                $script:recentRows = $null; $script:recentNote = ''
+                if ($script:mapView -eq 'grow') { Set-MapView 'grow' } elseif ($script:mapView -eq 'files') { Show-MapOverview; Show-MapFiles } elseif ($script:mapView -eq 'types') { Show-MapTypes } elseif ($script:mapView -eq 'recent') { Show-MapOverview; Show-MapRecent } else { Show-MapLevel $root }
                 if ($stopped) { $ctl.MapInfo.Text = (T '扫描中途停止了，下面只是已经看过的部分') }
                 Add-History
             } else { End-Op (T '没有完成') }
@@ -15662,6 +16319,19 @@ $timer.Add_Tick({
         elseif ($sync.Mode -eq 'leftovers') {
             End-Op (T '完成')
             Build-StartRows 'leftover' $sync.LeftoverResult
+        }
+        elseif ($sync.Mode -eq 'recent') {
+            End-Op (T '完成')
+            $script:recentRows = $sync.RecentResult
+            $n = [string]$sync.RecentNote
+            $script:recentNote = switch -Wildcard ($n) {
+                'no-index' { (T '这块盘的文件表不在内存里了，再扫描一次就可以') }
+                'no-journal' { (T '这块盘没有开变更日志（USN Journal），Windows 一般只给系统盘开') }
+                'refs' { (T '这块盘的变更日志是 ReFS 的格式，暂时不认') }
+                'journal-from:*' { (T "按变更日志统计，最近 {0} 天。日志只保留到 {1:yyyy-MM-dd HH:mm}，更早的改动看不到。大小按文件现在的大小算，删掉的只计个数；只列改动最集中的文件夹") -f $sync.RecentDays, [DateTime]::FromFileTimeUtc([long]$n.Substring(13)).ToLocalTime() }
+                default { (T "按变更日志统计，最近 {0} 天。大小按文件现在的大小算（日志里没有写了多少字节），删掉的只计个数；只列改动最集中的文件夹") -f $sync.RecentDays }
+            }
+            if ($script:mapView -eq 'recent') { Show-MapRecent }
         }
         elseif ($sync.Mode -eq 'vdisk') {
             $x = $sync.VdRes
@@ -15959,7 +16629,7 @@ $win.Add_ContentRendered({
     }
     if ($script:riskShown) { return }
     $script:riskShown = $true
-    if (Test-Path -LiteralPath $script:riskFile) { Ask-Mode; return }
+    if (Test-Path -LiteralPath $script:riskFile) { return }
     $ans = Show-Sheet -Kind warn -Title (T '使用前请先阅读安全风险提示') `
         -Text (T "本工具会按你的选择删除或搬移电脑上的文件。删除的文件可能无法恢复，存在资料丢失的风险。`n`n每次删除前，请确认这些资料确实不再需要、删除不会给你带来损失；重要资料请先备份。因使用本工具造成的资料丢失或其他损失，责任由使用者自行承担，开发者不承担责任。`n`n完整说明随时可以在左侧「帮助」里查看。") `
         -Confirm (T '我已阅读并了解上述风险，同意自行承担使用本工具的后果。') -Buttons @((T '退出'), (T '同意并继续')) -Primary (T '同意并继续') -Cancel (T '退出')
@@ -15969,16 +16639,7 @@ $win.Add_ContentRendered({
         [IO.File]::WriteAllText($script:riskFile, ((T "{0:yyyy-MM-dd HH:mm:ss}  已同意（版本 {1}）") -f (Get-Date), $script:AppVersion), [Text.Encoding]::UTF8)
     } catch {}
     Write-LogFile (T '用户已同意安全风险提示')
-    Ask-Mode
 })
-# 还没选过模式就问一句（老版本升上来的也会问一次）
-function Ask-Mode {
-    if ((Get-Setting 'Mode' '')) { return }
-    $ans = Show-Sheet -Title (T '你是哪类用户？') -Text (T "按你的需要决定界面上有多少东西，随时可以在「设置」里换。`n`n普通用户：清理缓存、省空间、看哪里占地方、卸载软件，够用也不复杂。`n工程师：再加上重复文件、搬家管理、自动提醒、操作日志，以及各页的进阶功能。`n开发者和 IT：全部功能，包括计划任务、右键菜单、保留的存储、组件存储分析、自定义清理列表、空间明细和自检。") `
-        -Buttons @((T '普通用户'), (T '工程师'), (T '开发者和 IT')) -Primary (T '普通用户') -Cancel (T '普通用户')
-    $mode = switch ($ans) { (T '工程师') { 'pro' } (T '开发者和 IT') { 'expert' } default { 'basic' } }
-    Set-Mode $mode
-}
 $global:CLEANC_UI_SHOWN = $true   # 告诉外层 exe：界面已经正常打开
 if ($script:uiTest) { $win.WindowStartupLocation = 'Manual'; $win.Left = -32000; $win.Top = -32000; $win.ShowActivated = $false; $win.ShowInTaskbar = $false }
 $win.ShowDialog() | Out-Null

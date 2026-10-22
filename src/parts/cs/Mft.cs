@@ -85,6 +85,57 @@ public sealed class WinVolume : IVolume {             // Windows：\\.\C:
 public struct MftLink { public int Parent; public ushort ParentSeq; public string Name; }
 
 // 读出来的文件表：每个记录号一格
+// 文件按扩展名分成几类，扫描时顺手统计每类有多少个、多大。0 其他 1 视频 2 图片 3 音乐 4 文档 5 压缩包和安装包 6 镜像和虚拟磁盘 7 程序 8 日志和临时文件 9 代码和开发
+public static class FileCats {
+    public const int N = 10;
+    public static readonly string[] Keys = { "other", "video", "picture", "music", "doc", "archive", "image", "program", "log", "code" };
+    static readonly Dictionary<long, byte> map = new Dictionary<long, byte>();
+    static FileCats() {
+        Add(1, "mp4 mkv avi mov wmv flv m4v ts m2ts webm mpg mpeg rmvb rm 3gp vob");
+        Add(2, "jpg jpeg png gif bmp tif tiff heic webp raw cr2 cr3 nef arw dng psd svg ico");
+        Add(3, "mp3 flac wav aac m4a ogg wma ape opus");
+        Add(4, "pdf doc docx xls xlsx ppt pptx txt md epub mobi csv wps et dps rtf odt ods odp one");
+        Add(5, "zip rar 7z tar gz tgz bz2 xz zst cab msi msp msix msixbundle appx appxbundle apk dmg");
+        Add(6, "iso img vhd vhdx avhdx vmdk vdi qcow2 wim esd gho");
+        Add(7, "exe dll sys ocx pak bin vpk pck assets bundle resource uasset upk");
+        Add(8, "log etl dmp mdmp hdmp tmp temp bak old cache chk");
+        Add(9, "cs js ts tsx jsx py java h hpp c cpp cc go rs rb php json xml yml yaml map obj pdb lib o class pyc ipynb sql ps1 psm1 sh bat cmd swift kt scala lock toml");
+    }
+    static void Add(byte cat, string exts) { foreach (string x in exts.Split(' ')) { long k = Key(x); if (k >= 0) map[k] = cat; } }
+    // 最多 10 个字符的小写扩展名装进一个 long（每个字符 6 位：字母、数字和少数符号）
+    static int Code(int c) {
+        if (c >= 'A' && c <= 'Z') c += 32;
+        if (c >= 'a' && c <= 'z') return c - 'a' + 1;
+        if (c >= '0' && c <= '9') return c - '0' + 27;
+        if (c == '-') return 37; if (c == '_') return 38; if (c == '~') return 39; if (c == '+') return 40;
+        return -1;
+    }
+    public static long Key(string ext) {
+        if (ext.Length == 0 || ext.Length > 10) return -1;
+        long k = 0;
+        for (int i = 0; i < ext.Length; i++) { int c = Code(ext[i]); if (c < 0) return -1; k = (k << 6) | (long)c; }
+        return k;
+    }
+    public static byte OfName(string name) {
+        if (string.IsNullOrEmpty(name)) return 0;
+        int dot = name.LastIndexOf('.');
+        if (dot < 0 || dot == name.Length - 1 || dot == 0) return 0;
+        byte c; return map.TryGetValue(Key(name.Substring(dot + 1)), out c) ? c : (byte)0;
+    }
+    // UTF-16LE 的名字（文件表里的样子）
+    public static byte Of(byte[] b, int off, int len) {
+        int chars = len / 2, dot = -1;
+        for (int i = chars - 1; i >= 0; i--) { int o = off + i * 2; if (b[o] == '.' && b[o + 1] == 0) { dot = i; break; } }
+        if (dot <= 0 || dot == chars - 1 || chars - 1 - dot > 10) return 0;
+        long k = 0;
+        for (int i = dot + 1; i < chars; i++) {
+            int o = off + i * 2; if (b[o + 1] != 0) return 0;
+            int c = Code(b[o]); if (c < 0) return 0;
+            k = (k << 6) | (long)c;
+        }
+        byte cat; return map.TryGetValue(k, out cat) ? cat : (byte)0;
+    }
+}
 public sealed class MftIndex {
     public string Root;
     public int RecordSize, SectorSize; public long ClusterSize;
@@ -95,6 +146,7 @@ public sealed class MftIndex {
     public long[] Size, Write;
     public long[] Disk;                               // 这条记录里的数据实际占的盘（主记录和续页各记各的；压缩、稀疏、只在云端的文件比文件大小小，很小的文件放在记录里不另占）
     public byte[] Flag;                               // 1 在用  2 文件夹  4 链接（重解析点）  8 有属性列表
+    public byte[] Cat;                                // 文件类别（FileCats）
     public string[] Name;                             // 只存文件夹、1 MB 以上的文件和有属性列表的文件的名字
     public Dictionary<int, List<MftLink>> Extra = new Dictionary<int, List<MftLink>>();   // 第二个起的名字（硬链接）
     public long Bad;                                  // 校验不过的记录
@@ -106,19 +158,19 @@ public sealed class MftIndex {
     public void Alloc(int n) {
         Count = n;
         Parent = new int[n]; ParentSeq = new ushort[n]; Seq = new ushort[n];
-        Size = new long[n]; Write = new long[n]; Disk = new long[n]; Flag = new byte[n]; Name = new string[n];
+        Size = new long[n]; Write = new long[n]; Disk = new long[n]; Flag = new byte[n]; Name = new string[n]; Cat = new byte[n];
         for (int i = 0; i < n; i++) Parent[i] = -1;
     }
     public void Grow(int n) {
         if (n <= Count) return;
         int old = Count;
         Array.Resize(ref Parent, n); Array.Resize(ref ParentSeq, n); Array.Resize(ref Seq, n);
-        Array.Resize(ref Size, n); Array.Resize(ref Write, n); Array.Resize(ref Disk, n); Array.Resize(ref Flag, n); Array.Resize(ref Name, n);
+        Array.Resize(ref Size, n); Array.Resize(ref Write, n); Array.Resize(ref Disk, n); Array.Resize(ref Flag, n); Array.Resize(ref Name, n); Array.Resize(ref Cat, n);
         for (int i = old; i < n; i++) Parent[i] = -1;
         Count = n;
     }
     public void Clear(int frn) {
-        Parent[frn] = -1; ParentSeq[frn] = 0; Seq[frn] = 0; Size[frn] = 0; Write[frn] = 0; Disk[frn] = 0; Flag[frn] = 0; Name[frn] = null;
+        Parent[frn] = -1; ParentSeq[frn] = 0; Seq[frn] = 0; Size[frn] = 0; Write[frn] = 0; Disk[frn] = 0; Flag[frn] = 0; Name[frn] = null; Cat[frn] = 0;
         Extra.Remove(frn); ExtOf.Remove(frn);
     }
     public Dictionary<int, List<int>> ExtOf = new Dictionary<int, List<int>>();   // 主记录 → 读到过的续页
@@ -421,6 +473,7 @@ public static class Mft {
         if (hasData) ix.Size[owner] = size;
         ix.Disk[frn] = disk;
         bool keep = ext || (ix.Flag[owner] & (2 | 8)) != 0 || ix.Size[owner] >= BigMin;
+        if (nNames > 0 && (ix.Flag[owner] & 2) == 0 && ix.Parent[owner] < 0) ix.Cat[owner] = FileCats.Of(b, nmOff[0], nmLen[0]);
         for (int i = 0; i < nNames; i++) {
             string nm = keep ? Encoding.Unicode.GetString(b, nmOff[i], nmLen[i]) : null;
             int p = (int)(nmPar[i] & 0xFFFFFFFFFFFF); ushort ps = (ushort)(nmPar[i] >> 48);
@@ -657,6 +710,7 @@ public static class Mft {
         big = new List<DmFile>();
         files = 0; orphans = 0;
         long uniq = 0, uniqDisk = 0, linked = 0;
+        long[] tc = new long[FileCats.N], tb = new long[FileCats.N], td = new long[FileCats.N];
         for (int i = 16; i < n; i++) {
             byte f = ix.Flag[i];
             if ((f & 1) == 0 || (f & 2) != 0) continue;
@@ -667,8 +721,9 @@ public static class Mft {
             bool multi = ix.Extra.TryGetValue(i, out l) && l.Count > 0;   // 有不止一个名字（硬链接）：每个名字下都算，但盘上只有一份
             bool any = AddFile(ix, nodes, reach, ix.Parent[i], ix.ParentSeq[i], ix.Name[i], size, disk, multi, wt, big, ref files);
             if (multi) foreach (MftLink k in l) any |= AddFile(ix, nodes, reach, k.Parent, k.ParentSeq, k.Name, size, disk, true, wt, big, ref files);
-            if (any) { uniq += size; uniqDisk += disk; if (multi) linked += size; }
+            if (any) { uniq += size; uniqDisk += disk; if (multi) linked += size; byte c = ix.Cat[i]; tc[c]++; tb[c] += size; td[c] += disk; }
         }
+        root.TypeCount = tc; root.TypeBytes = tb; root.TypeDisk = td;
         root.HasDisk = true; root.UniqueSize = uniq; root.UniqueDisk = uniqDisk; root.Linked = linked; root.MftBytes = ix.MftBytes;
         return root;
     }

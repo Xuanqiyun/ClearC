@@ -617,7 +617,7 @@ function Get-OrphanFolders($apps) {
 }
 
 # 使用模式：0 普通用户  1 工程师  2 开发者和 IT。目录项的 Lvl 比当前模式高就不在清理页列出（自动清理不受影响）
-function Get-Mode { switch ((Get-Setting 'Mode' 'expert')) { 'basic' { 0 } 'pro' { 1 } default { 2 } } }
+function Get-Mode { switch ((Get-Setting 'Mode' 'basic')) { 'pro' { 1 } 'expert' { 2 } default { 0 } } }
 # Kind: cache = 缓存类(删除/跳过)   action = 操作类(执行/跳过)   move = 只能搬(搬到其他盘/跳过)   flex = 可搬可删
 function Get-Catalog {
     $docs = [Environment]::GetFolderPath('MyDocuments')

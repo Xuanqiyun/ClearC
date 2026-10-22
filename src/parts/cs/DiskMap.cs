@@ -12,6 +12,7 @@ public class DmNode {
     public bool Cloud;                                // 带重解析点但不是链接的文件夹（OneDrive 等云端文件夹）
     public List<DmNode> Kids = new List<DmNode>();
     public List<DmFile> Big;                          // 只在根上：扫描时记下的 1 MB 以上的文件
+    public long[] TypeCount, TypeBytes, TypeDisk;     // 只在根上：每类文件多少个、多大、实际占多少（逐个扫描时没有实际占用）
     public string FullPath() {
         List<string> parts = new List<string>();
         for (DmNode n = this; n != null; n = n.Parent) parts.Add(n.Name);
@@ -29,10 +30,13 @@ public class DmFile {
     public string Path { get { string d = Dir.FullPath(); return (d.EndsWith("\\") || d.EndsWith("/")) ? d + Name : d + System.IO.Path.DirectorySeparatorChar + Name; } }
 }
 public class DmFind { public List<DmFile> Files = new List<DmFile>(); public long Count, Bytes; }
+// 最近改动：一个文件夹里这段时间改过的文件有几个、现在共多大、哪类最多
+public class DmRecent { public string Path; public long Files, Bytes, Deleted; public long[] ByCat = new long[FileCats.N]; public int Depth; }
 public class DmEntry { public string Name, Path; public long Size; public DateTime Modified; public long Disk = -1; }
 
 public static class DiskMap {
     public static volatile bool Cancel;
+    const uint FSCTL_READ_USN_JOURNAL = 0x000900BB;
     public static long FilesSeen, DirsSeen, BytesSeen;
     public static volatile string Current = "";
     public static List<DmFile> BigFiles = new List<DmFile>();   // 空间地图现在显示的那棵树的大文件
@@ -263,8 +267,10 @@ public static class DiskMap {
     }
 
     // ---------- 逐个文件夹扫描（多线程） ----------
+    static long[] walkTc, walkTb;
     public static DmNode Scan(string root, int threads) {
         FilesSeen = 0; DirsSeen = 0; BytesSeen = 0; Current = "";
+        walkTc = new long[FileCats.N]; walkTb = new long[FileCats.N];
         string r = root;
         if (Win) { r = root.TrimEnd('\\') + "\\"; } else if (r.Length > 1) { r = r.TrimEnd('/'); }
         DmNode top = new DmNode(); top.Name = r;
@@ -296,6 +302,7 @@ public static class DiskMap {
         }
         foreach (Thread th in ts) th.Join();
         Finish(top, big);
+        top.TypeCount = walkTc; top.TypeBytes = walkTb;
         return top;
     }
 
@@ -304,6 +311,7 @@ public static class DiskMap {
         Current = dir;
         if (!r.Open(dir)) { n.Denied = true; return; }
         long files = 0, bytes = 0;
+        long[] tc = new long[FileCats.N], tb = new long[FileCats.N];
         try {
             while (!Cancel && r.Next()) {
                 if (r.IsDir) {
@@ -318,9 +326,10 @@ public static class DiskMap {
                     if (wt > n.LastWrite) n.LastWrite = wt;
                     files++; bytes += sz;
                     if (sz >= BigMin) { DmFile f = new DmFile(); f.Dir = n; f.Name = r.Name; f.Size = sz; try { f.Modified = DateTime.FromFileTime(wt); } catch { } big.Add(f); }
+                    byte c = FileCats.OfName(r.Name); tc[c]++; tb[c] += sz;
                 }
             }
-        } finally { r.Close(); Interlocked.Add(ref FilesSeen, files); Interlocked.Add(ref BytesSeen, bytes); }
+        } finally { r.Close(); Interlocked.Add(ref FilesSeen, files); Interlocked.Add(ref BytesSeen, bytes); long[] gc = walkTc, gb = walkTb; if (gc != null) for (int i = 0; i < FileCats.N; i++) { Interlocked.Add(ref gc[i], tc[i]); Interlocked.Add(ref gb[i], tb[i]); } }
     }
 
     // 自下而上汇总大小，每一层按大小从大到小排；大文件按大小排好挂在根上
@@ -339,6 +348,91 @@ public static class DiskMap {
         top.Big = big;
     }
 
+    // 最近改动最多的文件夹：读变更日志（USN），把这段时间新建、写过、删掉的文件按所在文件夹汇总。
+    // 大小按文件现在的大小算（日志里没有写了多少字节），删掉的文件只计个数。只有直接读过文件表的盘才有（要用文件表把记录号翻译成路径）
+    public static List<DmRecent> RecentDirs(string root, long sinceFileTime, int top, out string note) {
+        note = "";
+        List<DmRecent> res = new List<DmRecent>();
+        string key = root.Substring(0, 1);
+        MftIndex ix = null; lock (cacheLock) { mftIdx.TryGetValue(key, out ix); }
+        if (ix == null) { note = "no-index"; return res; }
+        WinVolume v = null;
+        try { v = new WinVolume(root.Substring(0, 2) + "\\"); } catch { note = "no-volume"; return res; }
+        try {
+            ulong id; long first, next;
+            if (!Mft.QueryJournal(v, out id, out first, out next)) { note = "no-journal"; return res; }
+            Dictionary<int, long[]> perDir = new Dictionary<int, long[]>();     // 父文件夹记录号 → { 文件数, 字节, 删掉的, 各类… }
+            HashSet<long> seen = new HashSet<long>();
+            byte[] inb = new byte[40], outb = new byte[256 * 1024];
+            long usn = first; long oldest = long.MaxValue; int records = 0;
+            for (int loop = 0; loop < 200000 && usn < next && !Cancel; loop++) {
+                Array.Clear(inb, 0, inb.Length);
+                Buffer.BlockCopy(BitConverter.GetBytes(usn), 0, inb, 0, 8);
+                Buffer.BlockCopy(BitConverter.GetBytes(0xFFFFFFFFu), 0, inb, 8, 4);
+                Buffer.BlockCopy(BitConverter.GetBytes(id), 0, inb, 32, 8);
+                int got, err;
+                if (!v.Ioctl(FSCTL_READ_USN_JOURNAL, inb, outb, out got, out err) || got < 8) { note = "read-failed"; break; }
+                long nextUsn = BitConverter.ToInt64(outb, 0);
+                for (int o = 8; o + 60 <= got; ) {
+                    int rl = (int)BitConverter.ToUInt32(outb, o);
+                    if (rl < 60 || o + rl > got) { note = "bad-record"; o = got; break; }
+                    if (BitConverter.ToUInt16(outb, o + 4) != 2) { note = "refs"; o = got; break; }
+                    long ts = BitConverter.ToInt64(outb, o + 32);
+                    if (ts < oldest) oldest = ts;
+                    uint reason = BitConverter.ToUInt32(outb, o + 40), attr = BitConverter.ToUInt32(outb, o + 52);
+                    if (ts >= sinceFileTime && (attr & 0x10) == 0 && (reason & 0x2307) != 0) {   // 写过、变长、截短、新建、删掉、改名到这里
+                        ulong fr = BitConverter.ToUInt64(outb, o + 8), pr = BitConverter.ToUInt64(outb, o + 16);
+                        int frn = (int)(fr & 0xFFFFFFFFFFFF), par = (int)(pr & 0xFFFFFFFFFFFF); ushort seq = (ushort)(fr >> 48);
+                        long k = ((long)par << 32) | (uint)frn;
+                        if (seen.Add(k)) {
+                            long[] a; if (!perDir.TryGetValue(par, out a)) { a = new long[3 + FileCats.N]; perDir[par] = a; }
+                            records++;
+                            bool alive = frn >= 0 && frn < ix.Count && (ix.Flag[frn] & 1) != 0 && ix.Seq[frn] == seq && (reason & 0x200) == 0;
+                            if (alive) { a[0]++; a[1] += ix.Size[frn]; a[3 + ix.Cat[frn]] += ix.Size[frn]; } else { a[2]++; }
+                        }
+                    }
+                    o += rl;
+                }
+                if (got <= 8 || nextUsn <= usn) break;
+                usn = nextUsn;
+            }
+            if (oldest != long.MaxValue && oldest > sinceFileTime) note = "journal-from:" + oldest;   // 日志没那么长：只能从这个时间起算
+            // 翻译成路径，并把数字往上面每一层加（最多 5 层），再把能拆开的拆成下一层
+            Dictionary<string, DmRecent> byPath = new Dictionary<string, DmRecent>(StringComparer.OrdinalIgnoreCase);
+            foreach (KeyValuePair<int, long[]> kv in perDir) {
+                List<string> parts = new List<string>(); int d = kv.Key; bool ok = true;
+                for (int guard = 0; d != 5 && guard < 128; guard++) { if (d < 16 || d >= ix.Count || ix.Name[d] == null || ix.Parent[d] < 0) { ok = false; break; } parts.Add(ix.Name[d]); d = ix.Parent[d]; }
+                if (!ok || d != 5) continue;
+                parts.Reverse();
+                string p = ix.Root.TrimEnd('\\');
+                int depth = 0;
+                for (int i = -1; i < parts.Count; i++) {
+                    if (i >= 0) { p = p + "\\" + parts[i]; depth = i + 1; }
+                    if (depth > 6) break;
+                    DmRecent r; if (!byPath.TryGetValue(p, out r)) { r = new DmRecent(); r.Path = p + (i < 0 ? "\\" : ""); r.Depth = depth; byPath[p] = r; }
+                    r.Files += kv.Value[0]; r.Bytes += kv.Value[1]; r.Deleted += kv.Value[2];
+                    for (int c = 0; c < FileCats.N; c++) r.ByCat[c] += kv.Value[3 + c];
+                }
+            }
+            // 一个文件夹的改动几乎都在它的某个子文件夹里（九成以上）：列子文件夹，不列它
+            List<DmRecent> all = new List<DmRecent>(byPath.Values);
+            all.Sort(delegate(DmRecent a, DmRecent b) { int c = b.Bytes.CompareTo(a.Bytes); return c != 0 ? c : b.Files.CompareTo(a.Files); });
+            Dictionary<string, long> maxChild = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+            foreach (DmRecent r in all) {
+                if (r.Depth < 2) continue;
+                string pp = r.Path.Substring(0, r.Path.LastIndexOf('\\'));
+                long w = r.Bytes + r.Files, cur;
+                if (!maxChild.TryGetValue(pp, out cur) || w > cur) maxChild[pp] = w;
+            }
+            foreach (DmRecent r in all) {
+                if (r.Depth == 0) continue;
+                long mc; bool dominated = maxChild.TryGetValue(r.Path, out mc) && mc >= 0.9 * (r.Bytes + r.Files);
+                if (!dominated && (r.Files > 0 || r.Deleted > 0)) res.Add(r);
+                if (res.Count >= top) break;
+            }
+        } finally { if (v != null) v.Close(); }
+        return res;
+    }
     // 删掉一个文件夹后，从树上摘掉并把大小从上面每一层减掉
     public static void Detach(DmNode n) {
         DmNode p = n.Parent; if (p == null) return;

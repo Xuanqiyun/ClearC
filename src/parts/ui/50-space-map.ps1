@@ -126,7 +126,7 @@ $ctl.BtnMapStop.Add_Click({ [DiskMap]::Cancel = $true; UI-Log (T '空间地图�
 
 function New-MapRow($name, $path, [double]$size, [double]$max, [double]$parent, [bool]$isDir, $node, [string]$meta, [string]$kind) {
     $r = New-Object MapRow
-    $r.Name = $name; $r.Path = $path; $r.Size = [long]$size; $r.SizeText = Fmt $size; $r.IsDir = $isDir; $r.Node = $node; $r.Meta = $meta; $r.Disk = -1
+    $r.Name = $name; $r.Path = $path; $r.Size = [long]$size; $r.SizeText = Fmt $size; $r.IsDir = $isDir; $r.Node = $node; $r.Meta = $meta; $r.Disk = -1; $r.Kind = $kind
     $r.Bar = if ($max -gt 0) { [math]::Max([double]2, 160.0 * $size / $max) } else { 0 }
     if ($size -le 0) { $r.Bar = 0 }
     $r.Pct = if ($parent -gt 0) { "{0:N1}%" -f (100.0 * $size / $parent) } else { '' }
@@ -134,10 +134,13 @@ function New-MapRow($name, $path, [double]$size, [double]$max, [double]$parent, 
         'dir'  { $r.Glyph = [string][char]0xE8B7; $r.GlyphBrush = '#0A84FF' }
         'link' { $r.Glyph = [string][char]0xE71B; $r.GlyphBrush = '#8E8E93' }
         'more' { $r.Glyph = [string][char]0xE712; $r.GlyphBrush = '#8E8E93' }
+        'type' { $r.Glyph = [string][char]0xE8FD; $r.GlyphBrush = '#0A84FF' }
+        'recent' { $r.Glyph = [string][char]0xE823; $r.GlyphBrush = '#0A84FF' }
         default { $r.Glyph = [string][char]0xE8A5; $r.GlyphBrush = '#8E8E93' }
     }
-    $why = if ($path) { Get-DeleteBlock $path } else { '' }
+    $why = if ($path -and $kind -ne 'type' -and $kind -ne 'recent') { Get-DeleteBlock $path } else { '' }
     if (-not $why -and $path -and (Test-ChatPath $path)) { $why = (T '聊天记录里的文件只能查看和打开位置；要腾地方，到「搬家管理」把整个聊天记录搬到其他盘') }
+    if ($kind -eq 'type' -or $kind -eq 'recent') { $why = (T '这一行是统计，不是文件；双击查看') }
     $r.Locked = [bool]$why; $r.LockTip = $why
     return $r
 }
@@ -161,6 +164,12 @@ function Get-DiskNote([double]$size, [double]$disk, [double]$shared, [bool]$isFi
     elseif (-not $isFile -and $shared -ge 32MB -and $shared -ge $size * 0.05) { $t += (T " · 其中 {0} 是硬链接（别处还有同一份）") -f (Fmt $shared) }
     if ($disk -ge 0 -and ($size - $disk) -ge 32MB -and $disk -lt $size * 0.85) { $t += (T " · 实际只占 {0}") -f (Fmt $disk) }
     return $t
+}
+# 文件大小、实际占用、压缩后大小：NTFS 压缩过的文件，实际占用就是压缩后的大小
+function Get-SizeNote([string]$path, [double]$size, [double]$disk, [double]$shared) {
+    if ($disk -lt 0 -or ($size - $disk) -lt 32MB -or $disk -ge $size * 0.85) { return Get-DiskNote $size $disk $shared $true }
+    if ($path -and [FsTools]::IsCompressed($path)) { return (T " · NTFS 压缩后 {0}（文件大小 {1}）") -f (Fmt $disk), (Fmt $size) }
+    return Get-DiskNote $size $disk $shared $true
 }
 # 同一个列表重新列一遍时（改了设置、删完、方块图和文件夹之间切换、找文件改条件），原来选中的还选着
 function Get-MapKeep([string]$key) {
@@ -226,7 +235,7 @@ function Show-MapLevel($node) {
             $fd = [double]$f.Disk
             # 目录里记的实际占用看着明显小（压缩、稀疏、只在云端）：再问一次 Windows，以它为准
             if ($fd -ge 0 -and ([double]$f.Size - $fd) -ge 32MB) { $fd = [double][FsTools]::OnDisk($f.Path) }
-            if ($dn) { $fm += Get-DiskNote ([double]$f.Size) $fd 0 $true }
+            if ($dn) { $fm += Get-SizeNote $f.Path ([double]$f.Size) $fd 0 }
             $row = New-MapRow $f.Name $f.Path $f.Size $max $node.Size $false $null $fm 'file'
             $row.When = '{0:yyyy-MM-dd HH:mm}' -f $f.Modified
             $row.Disk = [long]$fd
@@ -243,6 +252,7 @@ function Show-MapLevel($node) {
     Restore-MapKeep $keep
     $ctl.MapPath.Text = $path
     $ctl.MapInfo.Text = (T "这一层共 {0}，{1:N0} 个文件{2}") -f (Fmt $node.Size), $node.Files, $(if ($script:mapScanAt) { (T " · 扫描于 {0:HH:mm}（{1}）") -f $script:mapScanAt, $script:mapHow } else { '' })
+    if ($script:mapView -eq 'tree') { $ctl.MapInfo.Text += (T ' · 点方块就是选中下面列表里的那一行，列表里选中的方块会描边；双击进入') }
     $ctl.BtnMapAcct.Visibility = if ($script:mapRoot -and $script:mapRoot.HasDisk -and (Get-Mode) -ge 2) { 'Visible' } else { 'Collapsed' }
     $ctl.BtnMapUp.IsEnabled = ($null -ne $node.Parent)
     $ctl.EmptyMap.Visibility = if ($rows.Count -gt 0) { 'Collapsed' } else { 'Visible' }
@@ -250,7 +260,53 @@ function Show-MapLevel($node) {
     $ctl.BtnMapExport.IsEnabled = ($rows.Count -gt 0)
     $ctl.BtnMapReport.IsEnabled = $true
     if ($script:mapView -eq 'tree') { Draw-MapTree }
+    Show-MapOverview
     Update-MapSel
+}
+# 概览：这块盘用了多少，系统与软件、个人文件、缓存各占多少。只有扫的是整块盘时才有
+$script:ovCache = @{}
+function Show-MapOverview {
+    $r = $script:mapRoot
+    if (-not $r -or ($script:mapView -ne 'dirs' -and $script:mapView -ne 'tree' -and $script:mapView -ne 'types')) { $ctl.MapOverview.Visibility = 'Collapsed'; return }
+    $drive = $r.FullPath()
+    if ($drive.Length -ne 3 -or $drive[1] -ne ':') { $ctl.MapOverview.Visibility = 'Collapsed'; return }
+    $total = [double]0; $used = [double]0; $free = [double]0
+    try { $di = New-Object System.IO.DriveInfo $drive; $total = [double]$di.TotalSize; $free = [double]$di.AvailableFreeSpace; $used = $total - $di.TotalFreeSpace } catch {}
+    if ($total -le 0) { $ctl.MapOverview.Visibility = 'Collapsed'; return }
+    $sz = { param($n) if ($n) { if ($r.HasDisk) { [double]$n.Disk } else { [double]$n.Size } } else { [double]0 } }
+    $sys = [double]0
+    foreach ($nm in 'Windows', 'Program Files', 'Program Files (x86)', 'ProgramData', 'Recovery', '$WinREAgent', 'Windows.old', 'PerfLogs') { $sys += & $sz ([DiskMap]::Find($r, (Join-Path $drive $nm))) }
+    $users = & $sz ([DiskMap]::Find($r, (Join-Path $drive 'Users')))
+    # 缓存：清理列表里「安全清理」那些目录在这棵树上的大小（只算系统盘；别的盘没有这些）
+    $cache = [double]0
+    $key = $drive.ToLowerInvariant() + '|' + $(if ($script:mapScanAt) { $script:mapScanAt.Ticks } else { 0 })
+    if ($drive -ieq ($env:SystemDrive + '\')) {
+        if ($script:ovCache.ContainsKey($key)) { $cache = $script:ovCache[$key] }
+        else {
+            foreach ($it in $catalog) {
+                if ($it.Kind -ne 'cache' -or $it.Size -or $it.Custom -or -not $it.Paths -or ([string]$it.G) -ne $script:safeGroup) { continue }
+                try { $cache += [double](Measure-Item $it $r) } catch {}
+            }
+            $script:ovCache[$key] = $cache
+        }
+    }
+    $other = [math]::Max([double]0, $used - $sys - $users)
+    $sys = [math]::Max([double]0, $sys - $cache * 0.3); $users = [math]::Max([double]0, $users - $cache * 0.7)   # 缓存大多在个人目录（AppData），少数在 Windows 和 ProgramData 里
+    $ctl.MapOvTitle.Text = (T "{0} {1}") -f $drive.TrimEnd('\'), $(if ($drive -ieq ($env:SystemDrive + '\')) { (T '系统盘') } else { '' })
+    $ctl.MapOvUsed.Text = "{0} / {1}" -f (Fmt $used), (Fmt $total)
+    $ctl.MapOvPct.Text = "{0:N1}%" -f (100.0 * $used / $total)
+    $parts = @(@((T '系统与软件'), $sys, '#3B82F6'), @((T '个人文件'), $users, '#E0A731'), @((T '可清理的缓存'), $cache, '#3FA37E'), @((T '其他'), $other, '#8E8E93'), @((T '剩余空间'), $free, '#9B6FD6'))
+    for ($i = 0; $i -lt 5; $i++) { $ctl.MapOvBar.ColumnDefinitions[$i].Width = New-Object System.Windows.GridLength ([math]::Max([double]0, $parts[$i][1])), ([System.Windows.GridUnitType]::Star) }
+    $ctl.MapOvLegend.Children.Clear()
+    for ($i = 0; $i -lt 5; $i++) {
+        if ($parts[$i][1] -le 0 -and $i -ne 4) { continue }
+        $sp = New-Object System.Windows.Controls.StackPanel; $sp.Orientation = 'Horizontal'; $sp.Margin = New-Object System.Windows.Thickness 0, 0, 18, 2
+        $dot = New-Object System.Windows.Controls.Border; $dot.Width = 9; $dot.Height = 9; $dot.CornerRadius = New-Object System.Windows.CornerRadius 4.5; $dot.Background = Brush $parts[$i][2] 'b'; $dot.VerticalAlignment = 'Center'; $dot.Margin = New-Object System.Windows.Thickness 0, 0, 6, 0
+        $tb = New-Object System.Windows.Controls.TextBlock; $tb.Text = "{0} {1}" -f $parts[$i][0], (Fmt $parts[$i][1]); $tb.FontSize = 12; $tb.Foreground = Brush '#6E6E73'; $tb.VerticalAlignment = 'Center'
+        [void]$sp.Children.Add($dot); [void]$sp.Children.Add($tb); [void]$ctl.MapOvLegend.Children.Add($sp)
+    }
+    $ctl.MapOverview.ToolTip = (T '系统与软件：Windows、Program Files、ProgramData 等；个人文件：Users；可清理的缓存：清理页「安全清理」里的那些目录（估算）；其他：页面文件、休眠文件、文件表等不在上面几类里的。剩余空间按 Windows 报告的算。')
+    $ctl.MapOverview.Visibility = 'Visible'
 }
 
 # ---------- 方块图：每个方块的面积就是它占的空间（squarified treemap） ----------
@@ -336,19 +392,36 @@ function Draw-MapTree {
         }
         if ($row) {
             $b.Cursor = [System.Windows.Input.Cursors]::Hand
+            $b.Add_MouseEnter({ param($s, $e) $s.Opacity = 0.82 })
+            $b.Add_MouseLeave({ param($s, $e) $s.Opacity = 1 })
             $b.Add_MouseLeftButtonDown({
                 param($s, $e)
                 $r = $s.Tag
                 if ($e.ClickCount -ge 2) { if ($r.IsDir -and $r.Node) { Show-MapLevel $r.Node }; $e.Handled = $true; return }
-                if ($script:treeSel) { $script:treeSel.BorderBrush = Brush '#00000000' }
-                $script:treeSel = $s; $s.BorderBrush = Brush '#1D1D1F' 'd'
-                $ctl.MapList.SelectedItems.Clear(); $ctl.MapList.SelectedItem = $r
+                # 点方块 = 在下面的列表里选中这一行（按住 Ctrl 可以多选），列表滚到它那里；列表选中的变化再把方块描上边
+                $ctrl = ([System.Windows.Input.Keyboard]::Modifiers -band [System.Windows.Input.ModifierKeys]::Control) -ne 0
+                if ($ctrl) { if ($ctl.MapList.SelectedItems.Contains($r)) { $ctl.MapList.SelectedItems.Remove($r) } else { [void]$ctl.MapList.SelectedItems.Add($r) } }
+                else { $ctl.MapList.SelectedItems.Clear(); $ctl.MapList.SelectedItem = $r }
+                try { $ctl.MapList.ScrollIntoView($r) } catch {}
+                $e.Handled = $true
             })
         }
         [void]$cv.Children.Add($b)
     }
+    Sync-TreeSel
+}
+# 列表里选中了哪些，方块图上就给哪些描边（方块图和列表一起显示时两边联动）
+function Sync-TreeSel {
+    if ($script:mapView -ne 'tree') { return }
+    $sel = @{}; foreach ($x in @($ctl.MapList.SelectedItems)) { $sel[[System.Runtime.CompilerServices.RuntimeHelpers]::GetHashCode($x)] = $true }
+    $on = Brush '#1D1D1F' 'd'; $off = Brush '#00000000'
+    foreach ($b in @($ctl.MapTree.Children)) {
+        $r = $b.Tag
+        $b.BorderBrush = if ($r -and $sel.ContainsKey([System.Runtime.CompilerServices.RuntimeHelpers]::GetHashCode($r))) { $on } else { $off }
+    }
 }
 $ctl.MapTree.Add_SizeChanged({ if ($script:mapView -eq 'tree') { Draw-MapTree } })
+$ctl.MapList.Add_SelectionChanged({ if (-not $script:bulkSel) { Sync-TreeSel } })
 # 找文件：在扫描时记下的 1 MB 以上的文件里，按大小、多久没改过、类型、名称、所在文件夹筛选
 $script:mapTypes = @{
     video   = '.mp4 .mkv .avi .mov .wmv .flv .m4v .ts .m2ts .webm .mpg .mpeg .rmvb .rm .3gp .vob'
@@ -359,8 +432,12 @@ $script:mapTypes = @{
     doc     = '.pdf .doc .docx .xls .xlsx .ppt .pptx .txt .md .epub .mobi .csv .wps .et .dps'
     program = '.exe .dll .sys .ocx .pak .bin .vpk .pck .assets .bundle'
     log     = '.log .etl .dmp .mdmp .hdmp .tmp .temp .bak .old .cache .chk'
+    code    = '.cs .js .ts .tsx .jsx .py .java .h .hpp .c .cpp .cc .go .rs .rb .php .json .xml .yml .yaml .map .obj .pdb .lib .o .class .pyc .ipynb .sql .ps1 .psm1 .sh .bat .cmd .swift .kt .scala .lock .toml'
 }
-$script:mapFindMax = 500
+$script:mapFindMax = 1000
+# 各类文件的名字（和 FileCats 的顺序一样）
+$script:catNames = @((T '其他类型'), (T '视频'), (T '图片'), (T '音乐'), (T '文档'), (T '压缩包和安装包'), (T '光盘映像和虚拟磁盘'), (T '程序和游戏数据'), (T '日志、转储和临时文件'), (T '代码和开发文件'))
+$script:catKeys = @('', 'video', 'picture', 'music', 'doc', 'archive', 'image', 'program', 'log', 'code')
 function Get-MapFilter {
     $min = [double]50MB; $t = $ctl.MapMinSize.SelectedItem; if ($t) { $min = [double]([string]$t.Tag) * 1MB }
     $days = 0; $t = $ctl.MapAge.SelectedItem; if ($t) { $days = [int]([string]$t.Tag) }
@@ -406,17 +483,35 @@ function Show-MapFiles {
     $max = if ($res.Files.Count -gt 0) { [double]$res.Files[0].Size } else { 0 }
     $tot = if ($script:mapRoot) { [double]$script:mapRoot.Size } else { 0 }
     $dn = (Get-Flag 'MapDisk') -and $script:mapRoot -and $script:mapRoot.HasDisk
-    foreach ($x in $res.Files) {
+    # 所有者：只给列出来的这些文件查（每个账户只翻译一次，一千个文件不到一秒）
+    $wantOwner = ''; $t = $ctl.MapOwner.SelectedItem; if ($t) { $wantOwner = [string]$t.Tag }
+    $owners = @{}
+    $files = @($res.Files)
+    $sortBy = ''; $t = $ctl.MapSort.SelectedItem; if ($t) { $sortBy = [string]$t.Tag }
+    if ($sortBy -eq 'new') { $files = @($files | Sort-Object { $_.Modified } -Descending) } elseif ($sortBy -eq 'old') { $files = @($files | Sort-Object { $_.Modified }) }
+    foreach ($x in $files) {
         $p = $x.Path
+        $ow = [FsTools]::Owner($p)
+        if ($ow) { $owners[$ow] = $true }
+        if ($wantOwner -and $ow -ne $wantOwner) { continue }
         $fm = (T "{0} · 修改于 {1:yyyy-MM-dd}") -f (Split-Path $p -Parent), $x.Modified
-        if ($dn) { $fm += Get-DiskNote ([double]$x.Size) ([double]$x.Disk) $(if ($x.Shared) { [double]$x.Size } else { 0 }) $true }
+        if ($dn) { $fm += Get-SizeNote $p ([double]$x.Size) ([double]$x.Disk) $(if ($x.Shared) { [double]$x.Size } else { 0 }) }
+        if ($ow) { $fm += (T " · 所有者 {0}") -f ($ow -replace '^.*\\', '') }
         $row = New-MapRow $x.Name $p $x.Size $max $tot $false $null $fm 'file'
         $row.When = '{0:yyyy-MM-dd HH:mm}' -f $x.Modified
-        $row.Disk = [long]$x.Disk; $row.Shared = [bool]$x.Shared
+        $row.Disk = [long]$x.Disk; $row.Shared = [bool]$x.Shared; $row.Owner = $ow
         # 聊天记录里的文件只看不删：要腾地方就整体搬家
         if ($f.Chat) { $row.Locked = $true; $row.LockTip = (T '聊天记录里的文件只能查看和打开位置；要腾地方，到「搬家管理」把整个聊天记录搬到其他盘') }
         [void]$rows.Add($row)
     }
+    # 所有者下拉框：列出来的文件里有哪些账户
+    $script:ownerFill = $true
+    try {
+        $cur = $wantOwner
+        while ($ctl.MapOwner.Items.Count -gt 1) { $ctl.MapOwner.Items.RemoveAt(1) }
+        foreach ($o in @($owners.Keys | Sort-Object)) { $it = New-Object System.Windows.Controls.ComboBoxItem; $it.Content = $o; $it.Tag = $o; [void]$ctl.MapOwner.Items.Add($it); if ($o -eq $cur) { $ctl.MapOwner.SelectedItem = $it } }
+        if (-not $ctl.MapOwner.SelectedItem) { $ctl.MapOwner.SelectedIndex = 0 }
+    } finally { $script:ownerFill = $false }
     $ctl.MapList.ItemsSource = $rows
     Restore-MapKeep $keep
     $head = (T "找到 {0:N0} 个文件，共 {1}") -f $res.Count, (Fmt $res.Bytes)
@@ -424,6 +519,7 @@ function Show-MapFiles {
     $ctl.MapPath.Text = $head
     $where = if ($f.Under) { $f.Under.FullPath() } elseif ($script:mapRoot) { $script:mapRoot.FullPath() } else { '' }
     $ctl.MapInfo.Text = (T "在 {0} 里找，只能找到扫描时记下的 1 MB 以上的文件") -f $where
+    if ($wantOwner) { $ctl.MapInfo.Text += (T "；所有者只在列出来的这些文件里分") }
     if ($f.Chat) {
         $ctl.MapInfo.Text = if ($f.Chat.Names.Count -gt 0) { (T "在聊天记录里找（{0}）。这些文件只能查看和打开位置；要腾地方，可以到「搬家管理」把整个聊天记录搬到其他盘") -f ($f.Chat.Names -join (T '、')) }
                             else { (T '这块盘上没找到聊天软件的聊天记录文件夹（可能已经搬到其他盘了）') }
@@ -441,6 +537,8 @@ function Refresh-MapFiles { if ($script:mapView -eq 'files' -and $script:mapRoot
 $ctl.MapMinSize.Add_SelectionChanged({ Refresh-MapFiles })
 $ctl.MapAge.Add_SelectionChanged({ Refresh-MapFiles })
 $ctl.MapType.Add_SelectionChanged({ Refresh-MapFiles })
+$ctl.MapSort.Add_SelectionChanged({ Refresh-MapFiles })
+$ctl.MapOwner.Add_SelectionChanged({ if (-not $script:ownerFill) { Refresh-MapFiles } })
 $ctl.MapUnder.Add_Checked({ $ctl.MapChat.IsChecked = $false; Refresh-MapFiles })
 $ctl.MapUnder.Add_Unchecked({ Refresh-MapFiles })
 $ctl.MapChat.Add_Checked({ $ctl.MapUnder.IsChecked = $false; if ($script:mapView -ne 'files' -and $script:mapRoot) { $ctl.MapViewFiles.IsChecked = $true }; Refresh-MapFiles })
@@ -465,12 +563,19 @@ function Set-MapView([string]$v) {
     $script:mapView = $v
     $ctl.MapFilter.Visibility = if ($v -eq 'files') { 'Visible' } else { 'Collapsed' }
     $grow = ($v -eq 'grow'); $tree = ($v -eq 'tree')
+    $ctl.MapGrowBar.Visibility = if ($grow) { 'Visible' } else { 'Collapsed' }
+    $ctl.MapRecentBar.Visibility = if ($v -eq 'recent') { 'Visible' } else { 'Collapsed' }
     $ctl.MapGrow.Visibility = if ($grow) { 'Visible' } else { 'Collapsed' }
     $ctl.MapTree.Visibility = if ($tree) { 'Visible' } else { 'Collapsed' }
-    $ctl.MapList.Visibility = if ($grow -or $tree) { 'Collapsed' } else { 'Visible' }
-    if (-not $script:mapRoot) { return }
+    # 方块图和列表一起显示：上面方块图，下面列表，点哪边另一边都跟着
+    $ctl.MapGrid.RowDefinitions[1].Height = if ($tree) { New-Object System.Windows.GridLength 3, ([System.Windows.GridUnitType]::Star) } else { New-Object System.Windows.GridLength 0 }
+    $ctl.MapGrid.RowDefinitions[2].Height = if ($tree) { New-Object System.Windows.GridLength 2, ([System.Windows.GridUnitType]::Star) } else { New-Object System.Windows.GridLength 1, ([System.Windows.GridUnitType]::Star) }
+    $ctl.MapList.Visibility = if ($grow) { 'Collapsed' } else { 'Visible' }
+    if (-not $script:mapRoot) { $ctl.MapOverview.Visibility = 'Collapsed'; return }
     if ($v -eq 'dirs' -or $tree) { Show-MapLevel $(if ($script:mapCur) { $script:mapCur } else { $script:mapRoot }) }
-    elseif ($v -eq 'files') { Show-MapFiles }
+    elseif ($v -eq 'files') { Show-MapOverview; Show-MapFiles }
+    elseif ($v -eq 'types') { Show-MapTypes }
+    elseif ($v -eq 'recent') { Show-MapOverview; Show-MapRecent }
     else {
         $ctl.MapGrow.ItemsSource = $script:growRows
         $ctl.BtnMapUp.IsEnabled = $false
@@ -478,8 +583,10 @@ function Set-MapView([string]$v) {
         $has = $script:growRows -and $script:growRows.Count -gt 0
         $ctl.EmptyMap.Visibility = if ($has) { 'Collapsed' } else { 'Visible' }
         $ctl.EmptyMapText.Text = $script:growNote
-        $ctl.MapPath.Text = (T '和上次扫描相比')
+        $ctl.MapPath.Text = if ($script:growSummary) { $script:growSummary } else { (T '和上次扫描相比') }
+        $ctl.MapPath.ToolTip = $ctl.MapPath.Text
         $ctl.MapInfo.Text = $script:growNote + $(if ($has) { (T ' 双击一行可以跳到这个文件夹。') } else { '' })
+        $ctl.MapOverview.Visibility = 'Collapsed'
         $ctl.BtnMapExport.IsEnabled = [bool]$has
         Update-MapSel
     }
@@ -488,6 +595,82 @@ $ctl.MapViewDirs.Add_Checked({ Set-MapView 'dirs' })
 $ctl.MapViewTree.Add_Checked({ Set-MapView 'tree' })
 $ctl.MapViewFiles.Add_Checked({ Set-MapView 'files' })
 $ctl.MapViewGrow.Add_Checked({ Set-MapView 'grow' })
+$ctl.MapViewTypes.Add_Checked({ Set-MapView 'types' })
+$ctl.MapViewRecent.Add_Checked({ Set-MapView 'recent' })
+$ctl.MapGrowBase.Add_SelectionChanged({ if ($script:mapRoot -and $script:mapView -eq 'grow' -and -not $script:growLoading) { try { Compare-Snapshot $script:mapRoot } catch { $script:growNote = (T '没能和上次比较') }; Set-MapView 'grow' } })
+# 按类型：这块盘上每类文件多少个、多大（扫描时顺手数的，所有文件都算，不只 1 MB 以上的）
+function Show-MapTypes {
+    $r = $script:mapRoot
+    $rows = New-Object System.Collections.Generic.List[MapRow]
+    $ctl.BtnMapUp.IsEnabled = $false; $ctl.BtnMapAcct.Visibility = 'Collapsed'
+    if ($r -and $r.TypeBytes) {
+        $order = @(0..9 | Where-Object { $r.TypeCount[$_] -gt 0 } | Sort-Object { $r.TypeBytes[$_] } -Descending)
+        $max = if ($order.Count -gt 0) { [double]$r.TypeBytes[$order[0]] } else { 0 }
+        $tot = [double]0; foreach ($i in 0..9) { $tot += $r.TypeBytes[$i] }
+        foreach ($i in $order) {
+            $meta = (T "{0:N0} 个文件") -f $r.TypeCount[$i]
+            if ($r.TypeDisk -and $r.TypeDisk[$i] -ge 0 -and ([double]$r.TypeBytes[$i] - [double]$r.TypeDisk[$i]) -ge 32MB -and $r.TypeDisk[$i] -lt $r.TypeBytes[$i] * 0.85) { $meta += (T " · 实际占 {0}") -f (Fmt ([double]$r.TypeDisk[$i])) }
+            $meta += $(if ($i -eq 0) { (T ' · 没归到上面几类的扩展名') } else { (T ' · 双击看这一类最大的文件') })
+            $row = New-MapRow $script:catNames[$i] ('type:' + $script:catKeys[$i]) $r.TypeBytes[$i] $max $tot $false $null $meta 'type'
+            $row.FileCount = [long]$r.TypeCount[$i]
+            [void]$rows.Add($row)
+        }
+    }
+    $ctl.MapList.ItemsSource = $rows; $script:mapListKey = 'types'
+    $ctl.MapPath.Text = (T '各类文件占多少')
+    $ctl.MapInfo.Text = if ($r) { (T "{0} 上的全部 {1:N0} 个文件按扩展名分类{2}") -f $r.FullPath().TrimEnd('\'), $r.Files, $(if ($script:mapScanAt) { (T " · 扫描于 {0:HH:mm}") -f $script:mapScanAt } else { '' }) } else { '' }
+    $ctl.EmptyMap.Visibility = if ($rows.Count -gt 0) { 'Collapsed' } else { 'Visible' }
+    if ($rows.Count -eq 0) { $ctl.EmptyMapText.Text = (T '这次扫描没有按类型统计（可能是旧的扫描结果），再扫描一次就有了') }
+    $ctl.BtnMapExport.IsEnabled = ($rows.Count -gt 0); $ctl.BtnMapReport.IsEnabled = [bool]$r
+    Show-MapOverview
+    Update-MapSel
+}
+# 最近改动：读变更日志，看这几天哪些文件夹里新建、改写的文件最多
+$script:recentRows = $null; $script:recentNote = ''
+function Show-MapRecent {
+    $rows = New-Object System.Collections.Generic.List[MapRow]
+    $ctl.BtnMapUp.IsEnabled = $false; $ctl.BtnMapAcct.Visibility = 'Collapsed'
+    $list = $script:recentRows
+    if ($list -and $list.Count -gt 0) {
+        $max = [double]$list[0].Bytes; $tot = [double]0; foreach ($x in $list) { $tot += [double]$x.Bytes }
+        foreach ($x in $list) {
+            $top = -1; $tb = [long]0; for ($i = 0; $i -lt 10; $i++) { if ($x.ByCat[$i] -gt $tb) { $tb = $x.ByCat[$i]; $top = $i } }
+            $meta = (T "{0:N0} 个文件新建或改写过") -f $x.Files
+            if ($x.Deleted -gt 0) { $meta += (T "，{0:N0} 个删掉了") -f $x.Deleted }
+            if ($top -ge 0 -and $tb -ge $x.Bytes * 0.5 -and $x.Bytes -gt 0) { $meta += (T " · 主要是{0}") -f $script:catNames[$top] }
+            $meta += (T ' · 双击打开这个文件夹')
+            $node = [DiskMap]::Find($script:mapRoot, $x.Path)
+            $row = New-MapRow (Split-Path $x.Path -Leaf) $x.Path $x.Bytes $max 0 $false $null $meta 'recent'
+            if (-not $row.Name) { $row.Name = $x.Path }
+            $row.Node = $node; $row.FileCount = [long]$x.Files; $row.Pct = ''
+            $row.SizeText = (T "现在共 {0}") -f (Fmt ([double]$x.Bytes))
+            [void]$rows.Add($row)
+        }
+    }
+    $ctl.MapList.ItemsSource = $rows; $script:mapListKey = 'recent'
+    $ctl.MapPath.Text = (T '最近改动最多的文件夹')
+    $ctl.MapInfo.Text = $script:recentNote
+    $ctl.EmptyMap.Visibility = if ($rows.Count -gt 0) { 'Collapsed' } else { 'Visible' }
+    if ($rows.Count -eq 0) { $ctl.EmptyMapText.Text = if ($script:recentNote) { $script:recentNote } else { (T '选一个时间段，点「查看」') } }
+    $ctl.BtnMapExport.IsEnabled = ($rows.Count -gt 0); $ctl.BtnMapReport.IsEnabled = [bool]$script:mapRoot
+    Update-MapSel
+}
+function Start-MapRecent {
+    if ($script:worker -or -not $script:mapRoot) { return }
+    $days = 1; $t = $ctl.MapRecentDays.SelectedItem; if ($t) { $days = [int]([string]$t.Tag) }
+    if ([string]$script:mapMethod -notlike 'mft*') { $script:recentRows = $null; $script:recentNote = (T '这块盘是逐个文件夹扫描的，没有读文件表，看不了变更日志。打开「快速扫描」再扫一次就可以'); Show-MapRecent; return }
+    $sync.Mode = 'recent'; $sync.RecentResult = $null; $sync.RecentNote = ''; $sync.RecentDays = $days
+    Start-Op (T '读取变更日志') -NoCard; UI-Busy $true
+    $ctl.EmptyMap.Visibility = 'Visible'; $ctl.EmptyMapText.Text = (T '正在读变更日志…'); $ctl.MapList.ItemsSource = $null
+    Start-Worker @'
+$note = ''
+$since = [DateTime]::UtcNow.AddDays(-[double]$arg.Days).ToFileTimeUtc()
+$sync.RecentResult = [DiskMap]::RecentDirs($arg.Root, $since, 60, [ref]$note)
+$sync.RecentNote = $note
+'@ @{ Root = $script:mapRoot.FullPath(); Days = $days }
+}
+$ctl.BtnMapRecent.Add_Click({ Start-MapRecent })
+$ctl.MapRecentDays.Add_SelectionChanged({ if ($script:mapView -eq 'recent' -and $script:mapRoot -and -not $script:worker) { Start-MapRecent } })
 $ctl.BtnMapUp.Add_Click({ if ($script:mapCur -and $script:mapCur.Parent) { Show-MapLevel $script:mapCur.Parent } })
 # 空间明细：已用空间都花在哪，为什么和按文件大小相加对不上（快速扫描读了文件表才有）
 function Show-SpaceAcct {
@@ -526,8 +709,19 @@ $ctl.MapGrow.Add_MouseDoubleClick({
 # 双击文件夹往里点。在按下左键（第二下）时处理，不等 MouseDoubleClick：复选框模式下按下已经被拦住不让列表选中，
 # 那样列表就收不到 MouseDoubleClick 了。双击的是鼠标下面那一行；在复选框上连点两下只是勾两次，右键双击、双击滚动条都不算
 function Enter-MapRow($r) {
+    if ($r -and $r.Kind -eq 'type') {
+        $k = ([string]$r.Path).Substring(5)
+        foreach ($it in $ctl.MapType.Items) { if ([string]$it.Tag -eq $k) { $ctl.MapType.SelectedItem = $it } }
+        $ctl.MapUnder.IsChecked = $false; $ctl.MapChat.IsChecked = $false
+        $ctl.MapViewFiles.IsChecked = $true
+        return $true
+    }
+    if ($r -and $r.Kind -eq 'recent') {
+        if ($r.Node) { $ctl.MapViewDirs.IsChecked = $true; Show-MapLevel $r.Node } else { Open-Location $r.Path }
+        return $true
+    }
     if (-not ($r -and $r.IsDir -and $r.Node)) { return $false }
-    if ($script:mapView -ne 'dirs') { $ctl.MapViewDirs.IsChecked = $true }
+    if ($script:mapView -ne 'dirs' -and $script:mapView -ne 'tree') { $ctl.MapViewDirs.IsChecked = $true }
     Show-MapLevel $r.Node
     return $true
 }
@@ -904,8 +1098,18 @@ footer { margin-top:40px; color:var(--mute); font-size:12px; border-top:1px soli
         & $add '</table>'
     }
 
-    # 按类型统计
-    $ext = [DiskMap]::ExtTotals()
+    # 按类型统计：扫描时数过全部文件就用那个，否则只有 1 MB 以上的
+    $tr = $script:mapRoot
+    if ($tr -and $tr.TypeBytes) {
+        $order = @(0..9 | Where-Object { $tr.TypeCount[$_] -gt 0 } | Sort-Object { $tr.TypeBytes[$_] } -Descending)
+        if ($order.Count -gt 0) {
+            & $add ('<h2>{0}</h2><table><tr><th>{1}</th><th class="n">{2}</th><th class="n">{3}</th><th>{4}</th></tr>' -f (& $H (T '各类文件占多少')), (& $H (T '类型')), (& $H (T '文件数')), (& $H (T '大小')), '')
+            $max = [double]$tr.TypeBytes[$order[0]]
+            foreach ($i in $order) { & $add ('<tr><td>{0}</td><td class="n">{1:N0}</td><td class="n">{2}</td><td>{3}</td></tr>' -f (& $H $script:catNames[$i]), $tr.TypeCount[$i], (& $H (Fmt ([double]$tr.TypeBytes[$i]))), (& $bar ([double]$tr.TypeBytes[$i]) $max)) }
+            & $add '</table>'
+        }
+    }
+    $ext = if ($tr -and $tr.TypeBytes) { @{} } else { [DiskMap]::ExtTotals() }
     if ($ext.Count -gt 0) {
         $names = [ordered]@{ video = (T '视频'); archive = (T '压缩包和安装包'); image = (T '光盘映像和虚拟磁盘'); picture = (T '图片'); music = (T '音乐'); doc = (T '文档'); program = (T '程序和游戏数据'); log = (T '日志、转储和临时文件'); other = (T '其他类型') }
         $of = @{}; foreach ($k in $script:mapTypes.Keys) { foreach ($e in ($script:mapTypes[$k] -split ' ')) { if ($e) { $of[$e.ToLowerInvariant()] = $k } } }
@@ -968,7 +1172,7 @@ $ctl.BtnMapExport.Add_Click({
         $lines.Add((Csv-Line @((T '名称'), (T '路径'), (T '类型'), (T '大小（字节）'), (T '大小'), (T '文件数'), (T '最近修改'))))
         foreach ($r in $list) {
             if ($r.IsSummary) { continue }
-            $k = if ($r.IsDir) { (T '文件夹') } elseif ($r.Node -and $r.Node.IsLink) { (T '链接') } else { (T '文件') }
+            $k = if ($r.Kind -eq 'type') { (T '类型') } elseif ($r.Kind -eq 'recent') { (T '最近改动') } elseif ($r.IsDir) { (T '文件夹') } elseif ($r.Node -and $r.Node.IsLink) { (T '链接') } else { (T '文件') }
             $lines.Add((Csv-Line @($r.Name, $r.Path, $k, [long]$r.Size, $r.SizeText, $(if ($r.IsDir) { $r.FileCount } else { '' }), $r.When)))
         }
     }
@@ -981,21 +1185,100 @@ $ctl.BtnMapExport.Add_Click({
 function Open-MapRow($r) { if ($r.IsSummary) { if ($script:mapCur) { Open-Location $script:mapCur.FullPath() } } else { Open-Location $r.Path } }
 $ctl.BtnMapOpen.Add_Click({ $r = $ctl.MapList.SelectedItem; if ($r) { Open-MapRow $r } })
 
-# 和上次比：把这次扫描的快照和上次的对比，列出变化最大的文件夹
+# 和上次比：每次扫描存一份快照（带日期，每块盘最多留 40 份），和选定的那一份对比，列出变化最大的文件夹，
+# 并用一句话说清多出来的空间主要在哪（Docker、浏览器缓存、某个文件夹……）
+function Read-Snapshot([string]$file) {
+    $old = @{}; $oldAt = ''; $oldHow = 'walk'; $used = [double]-1
+    foreach ($l in [IO.File]::ReadAllLines($file, [Text.Encoding]::UTF8)) {
+        if ($l.StartsWith('#method=')) { $oldHow = $l.Substring(8).Trim(); continue }
+        if ($l.StartsWith('#used=')) { $used = [double]$l.Substring(6).Trim(); continue }
+        if ($l.StartsWith('#')) { $oldAt = $l.TrimStart('#').Trim(); continue }
+        $a = $l.Split("`t"); if ($a.Count -eq 2) { $old[$a[0].ToLowerInvariant()] = [double]$a[1] }
+    }
+    return @{ Map = $old; At = $oldAt; How = $oldHow; Used = $used }
+}
+# 选「和哪次比」：上一次，或者 N 天前最近的一份（没那么早的就拿最早的）
+function Pick-Snapshot([string]$letter, [int]$days) {
+    $latest = Join-Path $script:snapDir "$letter-latest.txt"
+    if ($days -le 0) { return $(if (Test-Path -LiteralPath $latest) { $latest } else { '' }) }
+    $files = @(Get-ChildItem -LiteralPath $script:snapDir -Filter "$letter-2*.txt" -ErrorAction SilentlyContinue | Sort-Object Name)
+    if ($files.Count -eq 0) { return $(if (Test-Path -LiteralPath $latest) { $latest } else { '' }) }
+    $cut = (Get-Date).AddDays(-$days)
+    $pick = $null
+    foreach ($f in $files) {
+        $t = $null; try { $t = [DateTime]::ParseExact($f.BaseName.Substring(2), 'yyyyMMdd-HHmm', $null) } catch { continue }
+        if ($t -le $cut) { $pick = $f } else { break }
+    }
+    if (-not $pick) { $pick = $files[0] }
+    return $pick.FullName
+}
 function Update-Growth($root) {
-    $script:growRows = New-Object 'System.Collections.ObjectModel.ObservableCollection[GrowRow]'
     $letter = $root.FullPath().Substring(0, 1).ToUpper()
     New-Item -ItemType Directory -Path $script:snapDir -Force | Out-Null
     $latest = Join-Path $script:snapDir "$letter-latest.txt"
-    $old = @{}; $oldAt = ''; $oldHow = 'walk'
-    if (Test-Path -LiteralPath $latest) {
-        foreach ($l in [IO.File]::ReadAllLines($latest, [Text.Encoding]::UTF8)) {
-            if ($l.StartsWith('#method=')) { $oldHow = $l.Substring(8).Trim(); continue }
-            if ($l.StartsWith('#')) { $oldAt = $l.TrimStart('#').Trim(); continue }
-            $a = $l.Split("`t"); if ($a.Count -eq 2) { $old[$a[0].ToLowerInvariant()] = [double]$a[1] }
-        }
-    }
     $snap = [DiskMap]::Snapshot($root, 4, 100MB)
+    $script:curSnap = $snap
+    # 先和上一次比（界面上默认选的就是它），再把这次存起来
+    Compare-Snapshot $root
+    $out = New-Object System.Collections.Generic.List[string]
+    $out.Add(('#method=' + $(if ([string]$script:mapMethod -like 'mft*') { 'mft' } else { 'walk' })))   # 放在日期前面：旧版本只认最后一个 # 行当日期
+    $used = [double]-1; try { $di = New-Object System.IO.DriveInfo ($root.FullPath()); $used = [double]($di.TotalSize - $di.TotalFreeSpace) } catch {}
+    if ($used -ge 0) { $out.Add('#used=' + [long]$used) }
+    $out.Add(("# {0:yyyy-MM-dd HH:mm}" -f (Get-Date)))
+    foreach ($l in $snap) { $out.Add($l) }
+    if (Test-Path -LiteralPath $latest) { Copy-Item -LiteralPath $latest -Destination (Join-Path $script:snapDir "$letter-previous.txt") -Force -ErrorAction SilentlyContinue }
+    [IO.File]::WriteAllLines($latest, $out.ToArray(), (New-Object Text.UTF8Encoding $false))
+    # 带日期的一份：一天最多留一份（同一天的覆盖），总共最多 40 份
+    $dated = Join-Path $script:snapDir ("{0}-{1:yyyyMMdd-HHmm}.txt" -f $letter, (Get-Date))
+    foreach ($f in @(Get-ChildItem -LiteralPath $script:snapDir -Filter ("{0}-{1:yyyyMMdd}-*.txt" -f $letter, (Get-Date)) -ErrorAction SilentlyContinue)) { Remove-Item -LiteralPath $f.FullName -Force -ErrorAction SilentlyContinue }
+    Copy-Item -LiteralPath $latest -Destination $dated -Force -ErrorAction SilentlyContinue
+    $all = @(Get-ChildItem -LiteralPath $script:snapDir -Filter "$letter-2*.txt" -ErrorAction SilentlyContinue | Sort-Object Name)
+    if ($all.Count -gt 40) { foreach ($f in @($all | Select-Object -First ($all.Count - 40))) { Remove-Item -LiteralPath $f.FullName -Force -ErrorAction SilentlyContinue } }
+}
+# 多出来（或少掉）的空间主要在哪：从变化最大的文件夹里挑互不包含的几个，认得出的（Docker、WSL、浏览器缓存、Windows 更新……）写名字
+function Explain-Growth($items, [double]$totalDelta) {
+    $known = @(
+        @('\docker\', (T 'Docker 数据')), @('docker-desktop', (T 'Docker 数据')), @('\ext4.vhdx', (T 'WSL 发行版')), @('\packages\canonicalgrouplimited', (T 'WSL 发行版')),
+        @('\softwaredistribution', (T 'Windows 更新')), @('\windows.old', 'Windows.old'), @('\$recycle.bin', (T '回收站')), @('\winsxs', (T '组件存储（WinSxS）')),
+        @('\user data\', (T '浏览器缓存和数据')), @('\cache', (T '缓存')), @('\temp', (T '临时文件')), @('\steamapps', (T 'Steam 游戏')), @('\appdata\local\packages', (T '应用商店软件')),
+        @('\onedrive', 'OneDrive'), @('\xwechat_files', (T '微信数据')), @('\wechat files', (T '微信数据')), @('\tencent files', (T 'QQ 数据')), @('\minidump', (T '蓝屏转储')), @('\memory.dmp', (T '蓝屏转储')),
+        @('\node_modules', 'node_modules'), @('\.nuget', (T 'NuGet 包')), @('\jetbrains', (T 'JetBrains 缓存')), @('\videos', (T '视频')), @('\downloads', (T '下载'))
+    )
+    $sign = if ($totalDelta -ge 0) { 1 } else { -1 }
+    $cands = @($items | Where-Object { $_.D * $sign -gt 0 } | Sort-Object { $_.D * $sign } -Descending)
+    $picked = New-Object System.Collections.ArrayList
+    foreach ($c in $cands) {
+        if ($picked.Count -ge 4) { break }
+        $p = ([string]$c.P).TrimEnd('\').ToLowerInvariant()
+        $dup = $false
+        foreach ($q in $picked) { $qp = ([string]$q.P).TrimEnd('\').ToLowerInvariant(); if ($p.StartsWith($qp + '\') -or $qp.StartsWith($p + '\') -or $p -eq $qp) { $dup = $true; break } }
+        if ($dup) { continue }
+        if ([math]::Abs($c.D) -lt [math]::Max(200MB, [math]::Abs($totalDelta) * 0.08)) { break }
+        [void]$picked.Add($c)
+    }
+    $parts = New-Object System.Collections.Generic.List[string]
+    $acc = [double]0
+    foreach ($c in $picked) {
+        $p = ([string]$c.P).ToLowerInvariant() + '\'
+        $name = $null; foreach ($k in $known) { if ($p -like ('*' + $k[0] + '*')) { $name = $k[1]; break } }
+        $label = if ($name) { "{0}（{1}）" -f $name, (Shorten ([string]$c.P)) } else { Shorten ([string]$c.P) }
+        $parts.Add(("{0} {1}{2}" -f $label, $(if ($c.D -gt 0) { '+' } else { '−' }), (Fmt ([math]::Abs($c.D)))))
+        $acc += $c.D
+    }
+    $rest = $totalDelta - $acc
+    if ($parts.Count -gt 0 -and [math]::Abs($rest) -ge 100MB) { $parts.Add(((T "其余 {0}{1}") -f $(if ($rest -gt 0) { '+' } else { '−' }), (Fmt ([math]::Abs($rest))))) }
+    return ($parts -join (T '，'))
+}
+function Compare-Snapshot($root) {
+    $script:growRows = New-Object 'System.Collections.ObjectModel.ObservableCollection[GrowRow]'
+    $script:growSummary = ''
+    $letter = $root.FullPath().Substring(0, 1).ToUpper()
+    $days = 0; $t = $ctl.MapGrowBase.SelectedItem; if ($t) { $days = [int]([string]$t.Tag) }
+    $file = Pick-Snapshot $letter $days
+    $old = @{}; $oldAt = ''; $oldHow = 'walk'; $oldUsed = [double]-1
+    if ($file -and (Test-Path -LiteralPath $file)) { $s = Read-Snapshot $file; $old = $s.Map; $oldAt = $s.At; $oldHow = $s.How; $oldUsed = $s.Used }
+    $snap = $script:curSnap
+    if (-not $snap) { $snap = [DiskMap]::Snapshot($root, 4, 100MB); $script:curSnap = $snap }
     $script:prevSnap = $old
     if ($old.Count -gt 0) {
         $list = New-Object System.Collections.ArrayList
@@ -1007,6 +1290,15 @@ function Update-Growth($root) {
             if ([math]::Abs($d) -ge 100MB) { [void]$list.Add(@{ P = $a[0]; B = $before; N = $now; D = $d; Had = $old.ContainsKey($k) }) }
         }
         foreach ($k in $old.Keys) { if (-not $seen.ContainsKey($k) -and $old[$k] -ge 200MB) { [void]$list.Add(@{ P = $k; B = $old[$k]; N = [double]0; D = -$old[$k]; Had = $true }) } }
+        # 一句话：已用空间变了多少，主要在哪
+        $usedNow = [double]-1; try { $di = New-Object System.IO.DriveInfo ($root.FullPath()); $usedNow = [double]($di.TotalSize - $di.TotalFreeSpace) } catch {}
+        $span = ''; try { $t0 = [DateTime]::ParseExact($oldAt, 'yyyy-MM-dd HH:mm', $null); $span = FmtSpan ((Get-Date) - $t0) } catch {}
+        $delta = if ($oldUsed -ge 0 -and $usedNow -ge 0) { $usedNow - $oldUsed } else { [double]$root.Size - [double](($old.Values | Measure-Object -Maximum).Maximum) }
+        if ($oldUsed -ge 0 -and $usedNow -ge 0) {
+            $head = if ($span) { (T "过去 {0}，已用空间{1}{2}") -f $span, $(if ($delta -ge 0) { (T '增加 ') } else { (T '减少 ') }), (Fmt ([math]::Abs($delta))) } else { (T "和 {0} 相比，已用空间{1}{2}") -f $oldAt, $(if ($delta -ge 0) { (T '增加 ') } else { (T '减少 ') }), (Fmt ([math]::Abs($delta))) }
+            $why = Explain-Growth $list $delta
+            $script:growSummary = if ($why) { "{0}{1}{2}。" -f $head, (T '，其中 '), $why } else { $head + '。' }
+        }
         foreach ($x in @($list | Sort-Object { $_.D } -Descending | Select-Object -First 60)) {
             $g = New-Object GrowRow
             $g.Path = $x.P
@@ -1024,12 +1316,7 @@ function Update-Growth($root) {
             $script:growNote += $(if ($newHow -eq 'mft') { (T '。这次是直接读文件表，原来进不去的文件夹（比如 System Volume Information）也算进来了，这些文件夹看起来变大不一定是真的变大') } else { (T '。这次是逐个文件夹扫描的，进不去的文件夹没算进来，这些文件夹看起来变小不一定是真的变小') })
         }
     } else { $script:growNote = (T '这是第一次扫描这块盘。下次再扫描，就能看到哪些文件夹变大了') }
-    $out = New-Object System.Collections.Generic.List[string]
-    $out.Add(('#method=' + $(if ([string]$script:mapMethod -like 'mft*') { 'mft' } else { 'walk' })))   # 放在日期前面：旧版本只认最后一个 # 行当日期
-    $out.Add(("# {0:yyyy-MM-dd HH:mm}" -f (Get-Date)))
-    foreach ($l in $snap) { $out.Add($l) }
-    if (Test-Path -LiteralPath $latest) { Copy-Item -LiteralPath $latest -Destination (Join-Path $script:snapDir "$letter-previous.txt") -Force -ErrorAction SilentlyContinue }
-    [IO.File]::WriteAllLines($latest, $out.ToArray(), (New-Object Text.UTF8Encoding $true))
+    if ($days -gt 0 -and $file) { $script:growNote = ((T "和 {0} 的快照比。") -f (Split-Path $file -Leaf)) + $script:growNote }
 }
 
 # 删除：移到回收站或永久删除，都要先勾选确认

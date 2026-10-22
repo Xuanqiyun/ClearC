@@ -1509,8 +1509,10 @@
           <StackPanel Orientation="Horizontal">
             <RadioButton x:Name="MapViewDirs" GroupName="mapview" Content="文件夹" IsChecked="True" Style="{StaticResource Seg}"/>
             <RadioButton x:Name="MapViewTree" GroupName="mapview" Content="方块图" Style="{StaticResource Seg}" ToolTip="每个方块的大小就是它占的空间。单击选中，双击文件夹往里点"/>
+            <RadioButton x:Name="MapViewTypes" GroupName="mapview" Content="按类型" Style="{StaticResource Seg}" ToolTip="这块盘上视频、图片、文档、程序、日志各占多少。双击一类，到「找文件」里看这一类最大的文件"/>
             <RadioButton x:Name="MapViewFiles" GroupName="mapview" Content="找文件" Style="{StaticResource Seg}"/>
             <RadioButton x:Name="MapViewGrow" GroupName="mapview" Content="和上次比" Style="{StaticResource Seg}"/>
+            <RadioButton x:Name="MapViewRecent" GroupName="mapview" Content="最近改动" Style="{StaticResource Seg}" ToolTip="按文件系统的变更日志，看这几天哪些文件夹新建、改写的文件最多：多出来的空间多半在那里"/>
           </StackPanel>
         </Border>
         <Button x:Name="BtnMapExport" DockPanel.Dock="Right" Style="{StaticResource Small}" Content="导出 CSV" Margin="0,0,10,0" VerticalAlignment="Center" IsEnabled="False"
@@ -1563,6 +1565,19 @@
             <ComboBoxItem Content="文档" Tag="doc"/>
             <ComboBoxItem Content="程序和游戏数据" Tag="program"/>
             <ComboBoxItem Content="日志、转储和临时文件" Tag="log"/>
+            <ComboBoxItem Content="代码和开发文件" Tag="code"/>
+          </ComboBox>
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Margin="0,2,18,2">
+          <TextBlock Text="所有者" VerticalAlignment="Center" Foreground="#6E6E73" Margin="0,0,8,0"/>
+          <ComboBox x:Name="MapOwner" Width="170" SelectedIndex="0" ToolTip="按文件的所有者（Windows 账户）筛选。只在列出来的这些文件里分">
+            <ComboBoxItem Content="全部" Tag=""/>
+          </ComboBox>
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Margin="0,2,18,2">
+          <TextBlock Text="排序" VerticalAlignment="Center" Foreground="#6E6E73" Margin="0,0,8,0"/>
+          <ComboBox x:Name="MapSort" Width="140" SelectedIndex="0">
+            <ComboBoxItem Content="大的在前" Tag="size"/><ComboBoxItem Content="最近改过的在前" Tag="new"/><ComboBoxItem Content="最久没改的在前" Tag="old"/>
           </ComboBox>
         </StackPanel>
         <StackPanel Orientation="Horizontal" Margin="0,2,18,2">
@@ -1573,10 +1588,59 @@
         <CheckBox x:Name="MapChat" Content="只找聊天软件里的" VerticalAlignment="Center" Margin="0,2,0,2"
                   ToolTip="微信、QQ、企业微信、飞书、钉钉、Telegram 等聊天记录文件夹里的大文件。这些文件只能查看、打开位置；要腾地方，可以到「搬家管理」把整个聊天记录搬到其他盘。"/>
       </WrapPanel>
+      <WrapPanel x:Name="MapGrowBar" Grid.Row="3" Margin="0,0,0,10" Visibility="Collapsed">
+        <StackPanel Orientation="Horizontal" Margin="0,2,18,2">
+          <TextBlock Text="和哪次比" VerticalAlignment="Center" Foreground="#6E6E73" Margin="0,0,8,0"/>
+          <ComboBox x:Name="MapGrowBase" Width="150" SelectedIndex="0" ToolTip="每次扫描都会存一份快照（每块盘最多留 40 份）。选一个时间，和那时候的快照比">
+            <ComboBoxItem Content="上一次扫描" Tag="0"/><ComboBoxItem Content="1 天前" Tag="1"/><ComboBoxItem Content="3 天前" Tag="3"/>
+            <ComboBoxItem Content="7 天前" Tag="7"/><ComboBoxItem Content="30 天前" Tag="30"/><ComboBoxItem Content="最早的一次" Tag="9999"/>
+          </ComboBox>
+        </StackPanel>
+      </WrapPanel>
+      <WrapPanel x:Name="MapRecentBar" Grid.Row="3" Margin="0,0,0,10" Visibility="Collapsed">
+        <StackPanel Orientation="Horizontal" Margin="0,2,18,2">
+          <TextBlock Text="最近" VerticalAlignment="Center" Foreground="#6E6E73" Margin="0,0,8,0"/>
+          <ComboBox x:Name="MapRecentDays" Width="120" SelectedIndex="0">
+            <ComboBoxItem Content="24 小时" Tag="1"/><ComboBoxItem Content="3 天" Tag="3"/><ComboBoxItem Content="7 天" Tag="7"/><ComboBoxItem Content="30 天" Tag="30"/>
+          </ComboBox>
+        </StackPanel>
+        <Button x:Name="BtnMapRecent" Content="查看" Style="{StaticResource Small}" VerticalAlignment="Center" Margin="0,2,0,2"/>
+      </WrapPanel>
       <Border Grid.Row="4" Style="{StaticResource Card}" Padding="0,6,0,6">
-        <Grid>
-          <Canvas x:Name="MapTree" Margin="10,4,10,4" ClipToBounds="True" Background="White" Visibility="Collapsed"/>
-          <ListView x:Name="MapList" Background="Transparent" BorderThickness="0" ItemTemplate="{StaticResource MapRowTpl}" ItemContainerStyle="{StaticResource SelRow}" SelectionMode="Extended"
+        <Grid x:Name="MapGrid">
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="0"/>
+            <RowDefinition Height="*"/>
+          </Grid.RowDefinitions>
+          <!-- 概览：这块盘用了多少，系统、个人文件、缓存各占多少（扫描后才有） -->
+          <Border x:Name="MapOverview" Grid.Row="0" Margin="18,6,18,8" Visibility="Collapsed">
+            <StackPanel>
+              <DockPanel>
+                <StackPanel DockPanel.Dock="Right" HorizontalAlignment="Right">
+                  <TextBlock Text="已使用" Style="{StaticResource Caption}" HorizontalAlignment="Right"/>
+                  <TextBlock x:Name="MapOvPct" Text="" FontSize="26" FontWeight="SemiBold" HorizontalAlignment="Right"/>
+                </StackPanel>
+                <StackPanel>
+                  <TextBlock x:Name="MapOvTitle" Text="" Style="{StaticResource Caption}"/>
+                  <TextBlock x:Name="MapOvUsed" Text="" FontSize="26" FontWeight="SemiBold"/>
+                </StackPanel>
+              </DockPanel>
+              <Grid x:Name="MapOvBar" Height="10" Margin="0,8,0,0">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="1*"/><ColumnDefinition Width="0"/><ColumnDefinition Width="0"/><ColumnDefinition Width="0"/><ColumnDefinition Width="0"/>
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Background="#3B82F6" CornerRadius="5,0,0,5" Margin="0,0,1,0"/>
+                <Border Grid.Column="1" Background="#E0A731" Margin="0,0,1,0"/>
+                <Border Grid.Column="2" Background="#3FA37E" Margin="0,0,1,0"/>
+                <Border Grid.Column="3" Background="#8E8E93" Margin="0,0,1,0"/>
+                <Border Grid.Column="4" Background="#9B6FD6" CornerRadius="0,5,5,0"/>
+              </Grid>
+              <WrapPanel x:Name="MapOvLegend" Margin="0,8,0,0"/>
+            </StackPanel>
+          </Border>
+          <Canvas x:Name="MapTree" Grid.Row="1" Margin="10,4,10,8" ClipToBounds="True" Background="White" Visibility="Collapsed"/>
+          <ListView x:Name="MapList" Grid.Row="2" Background="Transparent" BorderThickness="0" ItemTemplate="{StaticResource MapRowTpl}" ItemContainerStyle="{StaticResource SelRow}" SelectionMode="Extended"
                     ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
             <ListView.ContextMenu>
               <ContextMenu x:Name="MapMenu" Style="{StaticResource Menu}">
@@ -1589,7 +1653,7 @@
               </ContextMenu>
             </ListView.ContextMenu>
           </ListView>
-          <ListView x:Name="MapGrow" Background="White" BorderThickness="0" ItemContainerStyle="{StaticResource GridRow}" Visibility="Collapsed">
+          <ListView x:Name="MapGrow" Grid.Row="2" Background="White" BorderThickness="0" ItemContainerStyle="{StaticResource GridRow}" Visibility="Collapsed">
             <ListView.View>
               <GridView>
                 <GridViewColumn Header="文件夹" Width="480">
@@ -1607,7 +1671,7 @@
               </GridView>
             </ListView.View>
           </ListView>
-          <StackPanel x:Name="EmptyMap" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,24" IsHitTestVisible="False">
+          <StackPanel x:Name="EmptyMap" Grid.Row="2" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,24" IsHitTestVisible="False">
             <TextBlock Text="&#xE9D9;" FontFamily="{StaticResource Icons}" FontSize="34" Foreground="#C7C7CC" HorizontalAlignment="Center"/>
             <TextBlock x:Name="EmptyMapText" Text="点右上角「扫描」，看看这块盘的空间都去哪了" Foreground="#86868B" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center"/>
           </StackPanel>

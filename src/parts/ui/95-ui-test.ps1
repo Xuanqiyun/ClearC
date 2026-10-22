@@ -419,6 +419,39 @@ function Invoke-UiTest {
             if ($ctl.MapAll.IsEnabled) { throw 'select all enabled in the treemap' }
             $ctl.MapViewDirs.IsChecked = $true
         }
+        & $step 'file types view' {
+            $ctl.MapViewTypes.IsChecked = $true; $win.UpdateLayout()
+            if ($ctl.MapList.Items.Count -lt 1) { throw 'no type rows' }
+            $sum = [long]0; foreach ($r in $ctl.MapList.Items) { $sum += $r.FileCount }
+            if ($sum -ne $tree.Files) { throw ("type counts {0} != files {1}" -f $sum, $tree.Files) }
+            $first = $ctl.MapList.Items[0]
+            if (-not (Enter-MapRow $first)) { throw 'type row does not open the file search' }
+            if (-not $ctl.MapViewFiles.IsChecked -or [string]$ctl.MapType.SelectedItem.Tag -ne ([string]$first.Path).Substring(5)) { throw 'file search not set to that type' }
+            if ($ctl.MapOwner.Items.Count -lt 2 -and $ctl.MapList.Items.Count -gt 0) { throw 'no owners listed' }
+            $ctl.MapSort.SelectedIndex = 1; $win.UpdateLayout()
+            if ($ctl.MapList.Items.Count -gt 1 -and [string]$ctl.MapList.Items[0].When -lt [string]$ctl.MapList.Items[1].When) { throw 'not sorted by date' }
+            $ctl.MapSort.SelectedIndex = 0; $ctl.MapType.SelectedIndex = 0
+        }
+        & $step 'treemap and list are linked' {
+            $ctl.MapViewDirs.IsChecked = $true; Show-MapLevel $tree
+            $ctl.MapViewTree.IsChecked = $true; $win.UpdateLayout(); [void](& $waitUi { $ctl.MapTree.Children.Count -gt 0 } 3000)
+            if ($ctl.MapList.Visibility -ne 'Visible' -or $ctl.MapTree.Children.Count -lt 1) { throw 'treemap without the list' }
+            $row = $ctl.MapList.Items[0]
+            $ctl.MapList.SelectedItems.Clear(); $ctl.MapList.SelectedItem = $row; $win.UpdateLayout()
+            $blk = $null; foreach ($b in $ctl.MapTree.Children) { if ([object]::ReferenceEquals($b.Tag, $row)) { $blk = $b } }
+            if (-not $blk) { throw 'no block for the first row' }
+            if ($blk.BorderBrush.Color.A -eq 0) { throw 'selected row not outlined on the treemap' }
+            # 点第二块：列表里选中的换成它
+            $blk2 = $null; foreach ($b in $ctl.MapTree.Children) { if ($b.Tag -and -not [object]::ReferenceEquals($b.Tag, $row)) { $blk2 = $b; break } }
+            if ($blk2) {
+                $ev = New-Object System.Windows.Input.MouseButtonEventArgs ([System.Windows.Input.Mouse]::PrimaryDevice), 0, ([System.Windows.Input.MouseButton]::Left)
+                $ev.RoutedEvent = [System.Windows.UIElement]::MouseLeftButtonDownEvent
+                $blk2.RaiseEvent($ev); $win.UpdateLayout()
+                if (-not [object]::ReferenceEquals($ctl.MapList.SelectedItem, $blk2.Tag)) { throw 'clicking a block did not select the row' }
+                if ($blk.BorderBrush.Color.A -ne 0 -or $blk2.BorderBrush.Color.A -eq 0) { throw 'outline did not move to the clicked block' }
+            }
+            $ctl.MapViewDirs.IsChecked = $true
+        }
         if ($env:CLEANC_SHOTS -eq '1') {
             & $step 'screenshots for the README' {
                 $root = $win.Content
@@ -436,7 +469,26 @@ function Invoke-UiTest {
                 if (-not (& $waitUi { -not $script:worker } 120000)) { throw 'space map scan did not finish' }
                 if (-not $script:mapRoot -or [object]::ReferenceEquals($script:mapRoot, $tree)) { throw 'space map has no scan of the drive' }
                 $ctl.OpPanel.Visibility = 'Collapsed'; & $shot 'map'
+                if ($ctl.MapOverview.Visibility -ne 'Visible' -or -not $ctl.MapOvPct.Text) { throw 'drive overview missing' }
                 $ctl.MapViewTree.IsChecked = $true; & $shot 'map-tree'
+                $ctl.MapViewTypes.IsChecked = $true; & $shot 'map-types'
+                if ($ctl.MapList.Items.Count -lt 3) { throw 'type statistics missing for the drive' }
+                # 最近改动：读变更日志（要文件表在内存里）
+                $ctl.MapViewRecent.IsChecked = $true; Start-MapRecent
+                if (-not (& $waitUi { -not $script:worker } 90000)) { throw 'recent changes did not finish' }
+                $L.Add(("recent changes: {0} folders; {1}" -f @($script:recentRows).Count, $script:recentNote))
+                if ([string]$script:mapMethod -like 'mft*' -and @($script:recentRows).Count -lt 1 -and $script:recentNote -notmatch 'USN') { throw ('no recent changes: ' + $script:recentNote) }
+                & $shot 'map-recent'
+                # 再扫一次：和上次比要能说出增长在哪
+                Start-MapScan "$env:SystemDrive\"
+                if (-not (& $waitUi { -not $script:worker } 120000)) { throw 'second space map scan did not finish' }
+                $ctl.OpPanel.Visibility = 'Collapsed'
+                $ctl.MapViewGrow.IsChecked = $true; $win.UpdateLayout()
+                $L.Add('growth: ' + $script:growSummary)
+                if (-not $script:growSummary) { throw 'no growth summary after the second scan' }
+                $ctl.MapGrowBase.SelectedIndex = 5; $win.UpdateLayout()
+                if ($script:growNote -notmatch '\d{8}-\d{4}') { throw ('baseline note: ' + $script:growNote) }
+                $ctl.MapGrowBase.SelectedIndex = 0
                 $ctl.MapViewDirs.IsChecked = $true
                 Show-Page 'save'; $ctl.SaveScroll.ScrollToTop(); & $shot 'save'
                 Show-Page 'dup'; & $shot 'dup'

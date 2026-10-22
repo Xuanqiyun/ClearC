@@ -136,8 +136,12 @@ try {
     Check "XAML colors replaced by role ($x)" ($x -match 'Background="#2' -and $x -match 'Foreground="#F' -and $x -match 'Text="a #FFFFFF b"' -and $x -notmatch 'Color="#F5F5F7"')
     [Theme]::Dark = $false
     # 使用模式（放最后：写设置文件会多出一个文件，别影响前面的空间地图比较）
-    Set-Setting 'Mode' 'basic'; $m0 = Get-Mode; Set-Setting 'Mode' 'pro'; $m1 = Get-Mode; Set-Setting 'Mode' ''; $m2 = Get-Mode
-    Check 'Get-Mode: basic 0, pro 1, unset = expert 2' ($m0 -eq 0 -and $m1 -eq 1 -and $m2 -eq 2)
+    Set-Setting 'Mode' 'expert'; $m2 = Get-Mode; Set-Setting 'Mode' 'pro'; $m1 = Get-Mode; Set-Setting 'Mode' ''; $m0 = Get-Mode
+    Check 'Get-Mode: expert 2, pro 1, unset = basic 0' ($m0 -eq 0 -and $m1 -eq 1 -and $m2 -eq 2)
+    $cats = @([FileCats]::OfName('a.MP4'), [FileCats]::OfName('x.tar.gz'), [FileCats]::OfName('readme'), [FileCats]::OfName('.gitignore'), [FileCats]::OfName('main.cs'), [FileCats]::OfName('b.verylongext'))
+    Check "file categories by extension ($($cats -join ','))" (($cats -join ',') -eq '1,5,0,0,9,0')
+    $u = [Text.Encoding]::Unicode.GetBytes('photo.JPEG'); Check 'file category from UTF-16 name bytes' ([FileCats]::Of($u, 0, $u.Length) -eq 2)
+    Check 'walk scan counts file types' ($tree.TypeBytes -and $tree.TypeBytes.Length -eq 10 -and (($tree.TypeCount | Measure-Object -Sum).Sum) -eq $tree.Files)
 } finally {
     Remove-Item -LiteralPath $lk -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue
