@@ -482,8 +482,8 @@ $win.Add_ContentRendered({
     if ($script:uiTest) {
         if (-not $script:uiStarted) {
             $script:uiStarted = $true
-            # 万一卡住：两分钟后自己关掉
-            $script:uiWatch = New-Object System.Windows.Threading.DispatcherTimer; $script:uiWatch.Interval = [TimeSpan]::FromMinutes(2)
+            # 万一卡住：四分钟后自己关掉（截图时要扫两遍盘）
+            $script:uiWatch = New-Object System.Windows.Threading.DispatcherTimer; $script:uiWatch.Interval = [TimeSpan]::FromMinutes(4)
             $script:uiWatch.Add_Tick({
                 $script:uiWatch.Stop(); if (-not $script:uiDone) { $global:CLEANC_EXIT = 99 }
                 $win.Close()
