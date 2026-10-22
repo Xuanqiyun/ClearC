@@ -197,7 +197,28 @@ function Remove-OneDir($d) {
     # rd 比 Remove-Item 快很多；rd /s 遇到里面的链接也只拆链接，不会跟进去
     & "$sys32\cmd.exe" /c rd /s /q "\\?\$($d.FullName)" 2>$null | Out-Null
 }
+# 可恢复删除（设置里打开）：手动清理时先放进回收站，而不是直接删掉；攒成一批交给系统，比一个个放快
+$script:recycleNow = $false
+$script:recycleBatch = $null
+function Recycle-Flush {
+    if (-not $script:recycleBatch -or $script:recycleBatch.Count -eq 0) { return }
+    $arr = $script:recycleBatch.ToArray(); $script:recycleBatch.Clear()
+    $r = [FsTools]::RecycleMany($arr)
+    if ($r -ne 0) { Log ((T "  有 {0} 项没能放进回收站（错误 {1}）") -f $arr.Count, $r) }
+}
+function Remove-Path($it) {
+    if ($script:recycleNow) {
+        if (-not $script:recycleBatch) { $script:recycleBatch = New-Object System.Collections.Generic.List[string] }
+        $script:recycleBatch.Add($it.FullName)
+        if ($script:recycleBatch.Count -ge 500) { Recycle-Flush }
+        return
+    }
+    if ($it.PSIsContainer) { Remove-OneDir $it } else { Remove-Item -LiteralPath $it.FullName -Force -ErrorAction SilentlyContinue }
+}
 function Remove-Contents([string[]]$paths, [string]$filter, [bool]$wholeDir) {
+    try { Remove-Contents2 $paths $filter $wholeDir } finally { Recycle-Flush }
+}
+function Remove-Contents2([string[]]$paths, [string]$filter, [bool]$wholeDir) {
     $ex = Get-ExcludeList
     $skipEx = { param($x) Log ((T "  跳过（在设置里排除了）：{0}") -f $x); OpLog '删除' (T '跳过：在设置里排除了') $x '' }
     foreach ($p in $paths) {
@@ -207,17 +228,17 @@ function Remove-Contents([string[]]$paths, [string]$filter, [bool]$wholeDir) {
             if (Test-Personal $it.FullName) { Log ((T "  跳过（在个人文件夹里，不删）：{0}") -f $($it.FullName)); OpLog '删除' (T '跳过：在个人文件夹里，不删') $it.FullName ''; continue }
             if (Test-Excluded $it.FullName $ex) { & $skipEx $it.FullName; continue }
             if ($it.PSIsContainer) {
-                if ($wholeDir) { if (Test-HasExcluded $it.FullName $ex) { & $skipEx $it.FullName } else { Remove-OneDir $it } }
+                if ($wholeDir) { if (Test-HasExcluded $it.FullName $ex) { & $skipEx $it.FullName } else { Remove-Path $it } }
                 else {
                     $f = if ($filter) { $filter } else { '*' }
                     foreach ($c in @(Get-ChildItem -LiteralPath $it.FullName -Filter $f -Force -ErrorAction SilentlyContinue)) {
                         if (Stopping) { return }
                         if (Test-Personal $c.FullName) { continue }
                         if ((Test-Excluded $c.FullName $ex) -or ($c.PSIsContainer -and (Test-HasExcluded $c.FullName $ex))) { & $skipEx $c.FullName; continue }
-                        if ($c.PSIsContainer) { Remove-OneDir $c } else { Remove-Item -LiteralPath $c.FullName -Force -ErrorAction SilentlyContinue }
+                        Remove-Path $c
                     }
                 }
-            } else { Remove-Item -LiteralPath $it.FullName -Force -ErrorAction SilentlyContinue }
+            } else { Remove-Path $it }
         }
     }
 }
@@ -258,34 +279,35 @@ function PathHasAny([string]$path, $frags) {
 #         以及 %STEAM%（Steam 的安装目录，从注册表查）；可以用 * 通配一层文件夹；@chromium:<User Data 目录> 展开成 Chromium 系浏览器的各个缓存目录
 #   选项：filter=*.log（只删匹配的文件）  whole（整个文件夹删掉，不只是里面的东西）  confirm（放进「需确认」，默认跳过）  svc=服务,服务（删之前停掉、删完再启动）
 #         pro / expert（只在「工程师」/「开发者和 IT」模式下显示；不写的普通用户也看得到）
+#         careful（放进「谨慎清理」：删了要重新下载或重新生成，默认也清，但单独成组、执行前单独列出来）
 # 只删缓存：不碰 Cookie、历史记录、密码、设置和用户保存的数据。每一条的名称和说明都在翻译表里有英文
 $script:cacheLib = @(
     '用户临时文件 | %TEMP% | 各软件运行时的临时文件，关掉软件就没用了'
     '系统临时文件 | %SYSTEMROOT%\Temp | 系统和安装程序的临时文件'
-    'Windows 更新下载缓存 | %SYSTEMROOT%\SoftwareDistribution\Download | 已装完的更新安装包，下次更新会重新下载需要的部分 | svc=wuauserv,bits'
+    'Windows 更新下载缓存 | %SYSTEMROOT%\SoftwareDistribution\Download | 已装完的更新安装包，下次更新会重新下载需要的部分 | svc=wuauserv,bits careful'
     '系统升级残留目录 | %SYSTEMDRIVE%\$WINDOWS.~BT;%SYSTEMDRIVE%\$WINDOWS.~WS;%SYSTEMDRIVE%\$GetCurrent | 大版本升级留下的临时目录 | whole'
     '磁盘检查残留 (found.000) | %SYSTEMDRIVE%\found.* | 磁盘检查（chkdsk）修复时从损坏的文件里抢救出来的碎片，一般都没用 | whole'
     '崩溃转储与错误报告 | %SYSTEMROOT%\Minidump;%SYSTEMROOT%\MEMORY.DMP;%SYSTEMROOT%\LiveKernelReports;%PROGRAMDATA%\Microsoft\Windows\WER;%LOCALAPPDATA%\Microsoft\Windows\WER;%LOCALAPPDATA%\CrashDumps | 蓝屏、驱动出错（显卡驱动重置等）和程序崩溃时留下的调试文件，只对排查问题的工程师有用'
     '系统组件日志 | %SYSTEMROOT%\Logs\CBS | Windows 更新的安装日志 | filter=*.log'
     'Windows 更新日志 | %SYSTEMROOT%\Logs\WindowsUpdate;%PROGRAMDATA%\USOShared\Logs | Windows 更新的跟踪日志（.etl）'
-    '缩略图缓存 | %LOCALAPPDATA%\Microsoft\Windows\Explorer | 文件夹里图片的小预览图，打开文件夹时会重新生成 | filter=thumbcache_*.db'
+    '缩略图缓存 | %LOCALAPPDATA%\Microsoft\Windows\Explorer | 文件夹里图片的小预览图，打开文件夹时会重新生成 | filter=thumbcache_*.db careful'
     '系统网页缓存 (INetCache) | %LOCALAPPDATA%\Microsoft\Windows\INetCache\IE | Windows 组件和一些软件内嵌的网页浏览留下的缓存'
     '应用商店软件的临时文件 | %LOCALAPPDATA%\Packages\*\TempState;%LOCALAPPDATA%\Packages\*\AC\INetCache;%LOCALAPPDATA%\Packages\*\AC\Temp | 从应用商店装的软件的临时文件和网页缓存。不碰它们保存的数据和设置'
     '远程桌面位图缓存 | %LOCALAPPDATA%\Microsoft\Terminal Server Client\Cache | 远程桌面连接时缓存的画面碎片'
-    'DirectX 着色器缓存 | %LOCALAPPDATA%\D3DSCache | Windows 给游戏和软件编译好的着色器，下次用到时会重新生成'
-    'NVIDIA 安装包与着色器缓存 | %PROGRAMDATA%\NVIDIA Corporation\Downloader;%PROGRAMDATA%\NVIDIA Corporation\NV_Cache;%LOCALAPPDATA%\NVIDIA Corporation\NV_Cache;%LOCALAPPDATA%\NVIDIA\DXCache;%LOCALAPPDATA%\NVIDIA\GLCache;%LOCALAPPDATA%\NVIDIA\VkCache;%LOCALAPPDATA%\NVIDIA\OptixCache | 显卡驱动安装包和游戏着色器缓存，游戏首次启动会重建'
-    'AMD 显卡着色器缓存 | %LOCALAPPDATA%\AMD\DxCache;%LOCALAPPDATA%\AMD\DxcCache;%LOCALAPPDATA%\AMD\GLCache;%LOCALAPPDATA%\AMD\VkCache | AMD 显卡给游戏编译的着色器缓存，游戏首次启动会重建'
-    'Intel 显卡着色器缓存 | %LOCALAPPDATA%\Intel\ShaderCache;%PROGRAMDATA%\Intel\ShaderCache | 核显着色器缓存'
-    'Chrome 浏览器缓存 | @chromium:%LOCALAPPDATA%\Google\Chrome\User Data | 网页缓存。请先关闭浏览器。不影响密码、书签、历史记录'
-    'Edge 浏览器缓存 | @chromium:%LOCALAPPDATA%\Microsoft\Edge\User Data | 网页缓存。请先关闭浏览器。不影响密码、书签、历史记录'
-    'Firefox 浏览器缓存 | %LOCALAPPDATA%\Mozilla\Firefox\Profiles\*\cache2;%LOCALAPPDATA%\Mozilla\Firefox\Profiles\*\startupCache;%LOCALAPPDATA%\Mozilla\Firefox\Profiles\*\shader-cache;%LOCALAPPDATA%\Mozilla\Firefox\Profiles\*\jumpListCache;%LOCALAPPDATA%\Mozilla\Firefox\Profiles\*\OfflineCache | 网页缓存。请先关闭浏览器。不影响密码、书签、历史记录'
-    'Brave 浏览器缓存 | @chromium:%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data | 网页缓存。请先关闭浏览器。不影响密码、书签、历史记录'
-    'Vivaldi 浏览器缓存 | @chromium:%LOCALAPPDATA%\Vivaldi\User Data | 网页缓存。请先关闭浏览器。不影响密码、书签、历史记录'
-    'Opera 浏览器缓存 | %LOCALAPPDATA%\Opera Software\Opera*Stable\Cache;%LOCALAPPDATA%\Opera Software\Opera*Stable\Code Cache;%LOCALAPPDATA%\Opera Software\Opera*Stable\GPUCache;%LOCALAPPDATA%\Opera Software\Opera*Stable\Service Worker\CacheStorage | 网页缓存（含 Opera GX）。请先关闭浏览器。不影响密码、书签、历史记录'
-    'Chrome 测试版 / Chromium 缓存 | @chromium:%LOCALAPPDATA%\Google\Chrome Beta\User Data;@chromium:%LOCALAPPDATA%\Google\Chrome Dev\User Data;@chromium:%LOCALAPPDATA%\Google\Chrome SxS\User Data;@chromium:%LOCALAPPDATA%\Chromium\User Data | Chrome Beta、Dev、Canary 和 Chromium 的网页缓存。请先关闭浏览器'
-    '360 浏览器缓存 | @chromium:%APPDATA%\360se6\User Data;@chromium:%LOCALAPPDATA%\360Chrome\Chrome\User Data;@chromium:%LOCALAPPDATA%\360ChromeX\Chrome\User Data | 360 安全浏览器和 360 极速浏览器的网页缓存。请先关闭浏览器。不影响密码、书签、历史记录'
-    'QQ 浏览器缓存 | @chromium:%LOCALAPPDATA%\Tencent\QQBrowser\User Data | 网页缓存。请先关闭浏览器。不影响密码、书签、历史记录'
-    'Steam 着色器与网页缓存 | %STEAM%\steamapps\shadercache;%STEAM%\appcache\httpcache;%STEAM%\dumps;%STEAM%\logs | 游戏的着色器缓存（首次启动会重建）、Steam 商店页面的缓存、崩溃转储和日志。请先退出 Steam。游戏本身不动'
+    'DirectX 着色器缓存 | %LOCALAPPDATA%\D3DSCache | Windows 给游戏和软件编译好的着色器，下次用到时会重新生成 | careful'
+    'NVIDIA 安装包与着色器缓存 | %PROGRAMDATA%\NVIDIA Corporation\Downloader;%PROGRAMDATA%\NVIDIA Corporation\NV_Cache;%LOCALAPPDATA%\NVIDIA Corporation\NV_Cache;%LOCALAPPDATA%\NVIDIA\DXCache;%LOCALAPPDATA%\NVIDIA\GLCache;%LOCALAPPDATA%\NVIDIA\VkCache;%LOCALAPPDATA%\NVIDIA\OptixCache | 显卡驱动安装包和游戏着色器缓存，游戏首次启动会重建 | careful'
+    'AMD 显卡着色器缓存 | %LOCALAPPDATA%\AMD\DxCache;%LOCALAPPDATA%\AMD\DxcCache;%LOCALAPPDATA%\AMD\GLCache;%LOCALAPPDATA%\AMD\VkCache | AMD 显卡给游戏编译的着色器缓存，游戏首次启动会重建 | careful'
+    'Intel 显卡着色器缓存 | %LOCALAPPDATA%\Intel\ShaderCache;%PROGRAMDATA%\Intel\ShaderCache | 核显着色器缓存 | careful'
+    'Chrome 浏览器缓存 | @chromium:%LOCALAPPDATA%\Google\Chrome\User Data | 网页缓存。请先关闭浏览器。不影响密码、书签、历史记录 | careful'
+    'Edge 浏览器缓存 | @chromium:%LOCALAPPDATA%\Microsoft\Edge\User Data | 网页缓存。请先关闭浏览器。不影响密码、书签、历史记录 | careful'
+    'Firefox 浏览器缓存 | %LOCALAPPDATA%\Mozilla\Firefox\Profiles\*\cache2;%LOCALAPPDATA%\Mozilla\Firefox\Profiles\*\startupCache;%LOCALAPPDATA%\Mozilla\Firefox\Profiles\*\shader-cache;%LOCALAPPDATA%\Mozilla\Firefox\Profiles\*\jumpListCache;%LOCALAPPDATA%\Mozilla\Firefox\Profiles\*\OfflineCache | 网页缓存。请先关闭浏览器。不影响密码、书签、历史记录 | careful'
+    'Brave 浏览器缓存 | @chromium:%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data | 网页缓存。请先关闭浏览器。不影响密码、书签、历史记录 | careful'
+    'Vivaldi 浏览器缓存 | @chromium:%LOCALAPPDATA%\Vivaldi\User Data | 网页缓存。请先关闭浏览器。不影响密码、书签、历史记录 | careful'
+    'Opera 浏览器缓存 | %LOCALAPPDATA%\Opera Software\Opera*Stable\Cache;%LOCALAPPDATA%\Opera Software\Opera*Stable\Code Cache;%LOCALAPPDATA%\Opera Software\Opera*Stable\GPUCache;%LOCALAPPDATA%\Opera Software\Opera*Stable\Service Worker\CacheStorage | 网页缓存（含 Opera GX）。请先关闭浏览器。不影响密码、书签、历史记录 | careful'
+    'Chrome 测试版 / Chromium 缓存 | @chromium:%LOCALAPPDATA%\Google\Chrome Beta\User Data;@chromium:%LOCALAPPDATA%\Google\Chrome Dev\User Data;@chromium:%LOCALAPPDATA%\Google\Chrome SxS\User Data;@chromium:%LOCALAPPDATA%\Chromium\User Data | Chrome Beta、Dev、Canary 和 Chromium 的网页缓存。请先关闭浏览器 | careful'
+    '360 浏览器缓存 | @chromium:%APPDATA%\360se6\User Data;@chromium:%LOCALAPPDATA%\360Chrome\Chrome\User Data;@chromium:%LOCALAPPDATA%\360ChromeX\Chrome\User Data | 360 安全浏览器和 360 极速浏览器的网页缓存。请先关闭浏览器。不影响密码、书签、历史记录 | careful'
+    'QQ 浏览器缓存 | @chromium:%LOCALAPPDATA%\Tencent\QQBrowser\User Data | 网页缓存。请先关闭浏览器。不影响密码、书签、历史记录 | careful'
+    'Steam 着色器与网页缓存 | %STEAM%\steamapps\shadercache;%STEAM%\appcache\httpcache;%STEAM%\dumps;%STEAM%\logs | 游戏的着色器缓存（首次启动会重建）、Steam 商店页面的缓存、崩溃转储和日志。请先退出 Steam。游戏本身不动 | careful'
     'Epic Games 启动器缓存 | %LOCALAPPDATA%\EpicGamesLauncher\Saved\webcache*;%LOCALAPPDATA%\EpicGamesLauncher\Saved\Logs | 启动器的网页缓存和日志。请先退出 Epic Games 启动器。游戏本身不动'
     'Unity 缓存 | %LOCALAPPDATA%\Unity\cache | Unity 编辑器的资源商店下载和全局光照缓存，需要时会重新下载或生成 | pro'
     'Adobe 媒体缓存 | %APPDATA%\Adobe\Common\Media Cache Files;%APPDATA%\Adobe\Common\Media Cache;%APPDATA%\Adobe\Common\Peak Files | Premiere、After Effects、Audition 导入素材时生成的缓存，打开项目会重新生成。请先关闭 Adobe 软件'
@@ -295,15 +317,15 @@ $script:cacheLib = @(
     'VS Code 缓存 | %APPDATA%\Code\Cache;%APPDATA%\Code\CachedData;%APPDATA%\Code\Code Cache;%APPDATA%\Code\GPUCache;%APPDATA%\Code\CachedExtensionVSIXs;%APPDATA%\Code\logs | 编辑器的缓存、下载过的扩展安装包和日志。请先关闭 VS Code。不影响设置和扩展 | pro'
     'Cursor 缓存 | %APPDATA%\Cursor\Cache;%APPDATA%\Cursor\CachedData;%APPDATA%\Cursor\Code Cache;%APPDATA%\Cursor\GPUCache;%APPDATA%\Cursor\logs | 编辑器的缓存和日志。请先关闭 Cursor。不影响设置和扩展 | pro'
     'Cursor 状态库备份 | %APPDATA%\Cursor\User\globalStorage\state.vscdb.backup | Cursor 编辑器状态库的备份副本，主文件保留 | pro'
-    'Spotify 缓存 | %LOCALAPPDATA%\Spotify\Data;%LOCALAPPDATA%\Spotify\Browser\Cache | 播放过的歌曲的缓存。下载供离线听的歌不在这里。请先退出 Spotify'
-    '网易云音乐缓存 | %LOCALAPPDATA%\NetEase\CloudMusic\Cache | 听过的歌的缓存。下载的歌不在这里。请先退出网易云音乐'
-    'pip 缓存 | %LOCALAPPDATA%\pip\cache | Python 装包时下载的安装包副本，再装时会重新下载 | pro'
-    'uv 缓存 | %LOCALAPPDATA%\uv\cache | uv 装 Python 包时的下载缓存，再装时会重新下载 | pro'
-    'npm 缓存 | %LOCALAPPDATA%\npm-cache | Node.js 装包时的下载缓存 | pro'
-    'Yarn 缓存 | %LOCALAPPDATA%\Yarn\Cache | Yarn 装包时的下载缓存 | pro'
-    'NuGet 下载缓存 | %LOCALAPPDATA%\NuGet\v3-cache;%LOCALAPPDATA%\NuGet\http-cache;%LOCALAPPDATA%\NuGet\plugins-cache | .NET 装包时的下载缓存。项目用的包在全局包目录里，不在这里 | pro'
+    'Spotify 缓存 | %LOCALAPPDATA%\Spotify\Data;%LOCALAPPDATA%\Spotify\Browser\Cache | 播放过的歌曲的缓存。下载供离线听的歌不在这里。请先退出 Spotify | careful'
+    '网易云音乐缓存 | %LOCALAPPDATA%\NetEase\CloudMusic\Cache | 听过的歌的缓存。下载的歌不在这里。请先退出网易云音乐 | careful'
+    'pip 缓存 | %LOCALAPPDATA%\pip\cache | Python 装包时下载的安装包副本，再装时会重新下载 | pro careful'
+    'uv 缓存 | %LOCALAPPDATA%\uv\cache | uv 装 Python 包时的下载缓存，再装时会重新下载 | pro careful'
+    'npm 缓存 | %LOCALAPPDATA%\npm-cache | Node.js 装包时的下载缓存 | pro careful'
+    'Yarn 缓存 | %LOCALAPPDATA%\Yarn\Cache | Yarn 装包时的下载缓存 | pro careful'
+    'NuGet 下载缓存 | %LOCALAPPDATA%\NuGet\v3-cache;%LOCALAPPDATA%\NuGet\http-cache;%LOCALAPPDATA%\NuGet\plugins-cache | .NET 装包时的下载缓存。项目用的包在全局包目录里，不在这里 | pro careful'
     'Go 编译缓存 | %LOCALAPPDATA%\go-build | Go 的编译结果缓存，下次编译会重新生成 | pro'
-    'Rust crate 下载缓存 | %USERPROFILE%\.cargo\registry\cache | cargo 下载过的 crate 压缩包，需要时会重新下载 | pro'
+    'Rust crate 下载缓存 | %USERPROFILE%\.cargo\registry\cache | cargo 下载过的 crate 压缩包，需要时会重新下载 | pro careful'
     'Clash Verge 代理日志 | %APPDATA%\io.github.clash-verge-rev.clash-verge-rev\logs;%APPDATA%\clash-verge\logs;%LOCALAPPDATA%\io.github.clash-verge-rev.clash-verge-rev\logs | 代理软件的运行日志，会无限增长。建议在它设置里把日志等级改成 warn | pro'
     'Intel XTU 超频日志 | %PROGRAMDATA%\Intel\Intel Extreme Tuning Utility\Logs | Intel 超频组件的日志，会无限增长 | pro'
     'Apple 设备系统更新包 | %PROGRAMDATA%\Apple\AMPDevicesAgent\*-Temporary-Files;%APPDATA%\Apple Computer\iTunes\*Software Updates | 给 iPhone/iPad 升级时下载的固件，装完就没用了'
@@ -343,7 +365,7 @@ function Get-CacheLibrary {
         if ($f.Count -lt 3) { continue }
         $paths = @()
         foreach ($p in $f[1].Split(';')) { if ($p.Trim()) { $paths += Expand-LibPath $p } }
-        $x = @{ N = (T $f[0].Trim()); Note = (T $f[2].Trim()); Paths = $paths; Confirm = $false; Whole = $false; Filter = ''; Svc = $null; Lvl = 0 }
+        $x = @{ N = (T $f[0].Trim()); Note = (T $f[2].Trim()); Paths = $paths; Confirm = $false; Whole = $false; Filter = ''; Svc = $null; Lvl = 0; Careful = $false }
         if ($f.Count -gt 3) {
             foreach ($o in $f[3].Trim().Split(' ')) {
                 $o = $o.Trim(); if (-not $o) { continue }
@@ -352,6 +374,7 @@ function Get-CacheLibrary {
                 elseif ($o.StartsWith('filter=')) { $x.Filter = $o.Substring(7) }
                 elseif ($o.StartsWith('svc=')) { $x.Svc = @($o.Substring(4).Split(',') | Where-Object { $_ }) }
                 elseif ($o -eq 'pro') { $x.Lvl = 1 }
+                elseif ($o -eq 'careful') { $x.Careful = $true }
                 elseif ($o -eq 'expert') { $x.Lvl = 2 }
             }
         }
@@ -361,6 +384,47 @@ function Get-CacheLibrary {
 }
 # Windows Installer 留下的孤儿安装包：C:\Windows\Installer 里没有任何已装软件、补丁再引用的 .msi / .msp
 # 判断标准和 PatchCleaner 一样：注册表里每个产品、每个补丁登记的 LocalPackage，再用 Windows Installer 自己的接口问一遍。一个引用都没读到就不敢判断，返回空
+# 驱动存储里的旧版驱动包：同一个 inf（原始名）、同一厂商、同一类别有更新版本的那些；启动必需的、系统自带的不算
+function Select-OldDrivers($drivers) {
+    $groups = @{}
+    foreach ($d in $drivers) {
+        if (-not $d.Driver -or $d.Inbox -or $d.BootCritical) { continue }
+        $orig = ([string]$d.OriginalFileName) -replace '^.*[\\/]', ''
+        if (-not $orig) { continue }
+        $k = ($orig + '|' + [string]$d.ProviderName + '|' + [string]$d.ClassName).ToLowerInvariant()
+        if (-not $groups.ContainsKey($k)) { $groups[$k] = New-Object System.Collections.ArrayList }
+        [void]$groups[$k].Add($d)
+    }
+    $old = @()
+    foreach ($g in $groups.Values) {
+        if ($g.Count -lt 2) { continue }
+        $ver = { param($x) $v = $null; if ([version]::TryParse([string]$x.Version, [ref]$v)) { $v } else { [version]'0.0' } }
+        $sorted = @($g | Sort-Object { & $ver $_ }, { $_.Date } -Descending)
+        foreach ($d in @($sorted | Select-Object -Skip 1)) { $old += $d }
+    }
+    return $old
+}
+function Get-OldDriverPackages {
+    $drivers = $null
+    try { Import-Module Dism -ErrorAction Stop; $drivers = @(Get-WindowsDriver -Online -ErrorAction Stop) } catch { return @() }
+    $out = @()
+    foreach ($d in (Select-OldDrivers $drivers)) {
+        $dir = Split-Path ([string]$d.OriginalFileName) -Parent
+        $bytes = [double]0
+        if ($dir -and (Test-Path -LiteralPath $dir)) { try { $bytes = [double][FsTools]::OnDiskTree($dir) } catch { $bytes = 0 } }
+        $out += @{ Published = [string]$d.Driver; Original = (([string]$d.OriginalFileName) -replace '^.*[\\/]', ''); Provider = [string]$d.ProviderName; Class = [string]$d.ClassName; Version = [string]$d.Version; Dir = $dir; Bytes = $bytes }
+    }
+    return $out
+}
+# 用 pnputil 删一个驱动包（不加 /force：正在用的删不掉）。返回空表示成功
+function Remove-DriverPackage([string]$published) {
+    if ($published -notmatch '^oem\d+\.inf$') { return (T '不是 oem 驱动包') }
+    try {
+        $o = & "$env:SystemRoot\System32\pnputil.exe" /delete-driver $published 2>&1 | Out-String
+        if ($LASTEXITCODE -eq 0) { return '' }
+        return ($o -replace '\s+', ' ').Trim()
+    } catch { return $_.Exception.Message }
+}
 function Get-InstallerOrphans {
     $dir = Join-Path $env:SystemRoot 'Installer'
     $files = @(Get-ChildItem -LiteralPath $dir -File -Force -ErrorAction SilentlyContinue | Where-Object { $_.Extension -match '^\.(msi|msp)$' })
@@ -625,6 +689,7 @@ function Get-Catalog {
     $down = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders' -EA SilentlyContinue).'{374DE290-123F-4565-9164-39C4925E467B}'
     if ($down) { $down = [Environment]::ExpandEnvironmentVariables($down) } else { $down = "$env:USERPROFILE\Downloads" }
     $safeG  = '安全清理（缓存、临时文件、日志，删了程序会自动重建）'
+    $careG  = '谨慎清理（删了要重新下载或重新生成，第一次打开会慢一点；默认也清，执行前会单独列出来）'
     $confG  = '需确认（有代价，默认跳过，看清说明再选）'
     $chatG  = '聊天软件的聊天记录（搬到其他盘：聊天记录和文件原样保留，原位置留链接，软件照常使用）'
     $otherG = '其他可搬的文件夹（数据原样保留，原位置留链接，软件照常使用）'
@@ -633,8 +698,13 @@ function Get-Catalog {
     $list = @()
     # ---- 安全清理：缓存 / 临时文件 / 日志，删了程序自动重建（目录库里的）----
     foreach ($x in $lib) {
-        if ($x.Confirm) { continue }
+        if ($x.Confirm -or $x.Careful) { continue }
         $list += @{ G=$safeG; Kind='cache'; Def=(T '删除'); N=$x.N; Paths=$x.Paths; Note=$x.Note; Filter=$x.Filter; Whole=$x.Whole; Svc=$x.Svc; Lvl=$x.Lvl }
+    }
+    # ---- 谨慎清理：浏览器缓存、缩略图、着色器、下载缓存这类，删了要重新下载或重新生成 ----
+    foreach ($x in $lib) {
+        if ($x.Confirm -or -not $x.Careful) { continue }
+        $list += @{ G=$careG; Kind='cache'; Def=(T '删除'); N=$x.N; Paths=$x.Paths; Note=$x.Note; Filter=$x.Filter; Whole=$x.Whole; Svc=$x.Svc; Lvl=$x.Lvl; Careful=$true }
     }
     $list += @(
         @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); N=(T '清空回收站');            Note=(T '回收站里是你以前删掉、但还能找回的文件。清空后就永远找不回了，请先打开回收站确认里面没有要的东西')
@@ -658,6 +728,9 @@ function Get-Catalog {
         @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T 'Windows Installer 孤儿安装包'); Lvl=2; Note=(T 'C:\Windows\Installer 里没有任何已装软件和补丁再引用的安装包（.msi / .msp），多半是软件升级、卸载后留下的。判断方法和 PatchCleaner 一样。删了以后，万一哪个软件修复或卸载时提示找不到安装包，重新下载安装一次即可')
            Size={ $s = [double]0; foreach ($f in (Get-InstallerOrphans)) { $s += $f.Length }; $s }
            Act ={ $n = 0; $b = [double]0; foreach ($f in (Get-InstallerOrphans)) { try { Remove-Item -LiteralPath $f.FullName -Force -ErrorAction Stop; $n++; $b += $f.Length } catch { Log ((T "  没删掉：{0}（{1}）") -f $f.FullName, $_.Exception.Message) } }; Log ((T "  Windows Installer 孤儿安装包：删了 {0} 个，{1}") -f $n, (GB $b)) } }
+        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T '驱动存储里的旧版驱动包'); Lvl=2; Note=(T '驱动更新后，旧版本的安装包还留在 C:\Windows\System32\DriverStore 里（和 Driver Store Explorer 的判断一样：同一个驱动、同一厂商有更新版本的那些）。用 pnputil 删除，正在使用的删不掉、启动必需的不碰。删了以后不能回滚到旧版驱动')
+           Size={ $s = [double]0; foreach ($d in (Get-OldDriverPackages)) { $s += $d.Bytes }; $s }
+           Act ={ $n = 0; $b = [double]0; foreach ($d in (Get-OldDriverPackages)) { if (Stopping) { break }; $r = Remove-DriverPackage $d.Published; if ($r -eq '') { $n++; $b += $d.Bytes; Log ((T "  已删除旧版驱动包 {0}（{1} {2}）") -f $d.Published, $d.Provider, $d.Version) } else { Log ((T "  没删掉 {0}：{1}") -f $d.Published, $r) } }; Log ((T "  旧版驱动包：删了 {0} 个，{1}") -f $n, (GB $b)) } }
         @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T '开始菜单里失效的快捷方式'); Lvl=1; Note=(T '指向的程序已经不在了的快捷方式（只看开始菜单，不碰桌面）。目标在没插着的硬盘上的不算。不占什么空间，只是清爽')
            Size={ $s = [double]0; foreach ($f in (Get-BrokenShortcuts)) { $s += $f.Length }; $s }
            Act ={ $n = 0; foreach ($f in (Get-BrokenShortcuts)) { try { Remove-Item -LiteralPath $f.FullName -Force -ErrorAction Stop; $n++; OpLog '删除' (T '失效的快捷方式') $f.FullName '' } catch {} }; Log ((T "  删了 {0} 个失效的快捷方式") -f $n) } }
@@ -729,6 +802,7 @@ function Measure-Item($it, $tree = $null) {
 
 function Invoke-Delete($it, $res, [switch]$Auto) {
     $f0 = FreeC
+    $script:recycleNow = (-not $Auto) -and ((Get-Setting 'Recycle' '0') -eq '1') -and -not $it.Act
     $kind = if ($it.Slow) { 'slow' } elseif ($it.Act) { 'action' } else { 'delete' }
     SetP @{ SubKind = $kind; SubStart = (Get-Date); FreeC0 = [double]$f0; Detail = $it.Note }
     if ($it.Svc) { $it.Svc | ForEach-Object { Stop-Service $_ -Force -ErrorAction SilentlyContinue } }
@@ -743,7 +817,38 @@ function Invoke-Delete($it, $res, [switch]$Auto) {
     Log ((T "  完成  {0,-26} 释放 {1}") -f $it.N, (GB $freed))
     $cat = if ($it.Kind -eq 'action') { '系统设置' } else { '删除' }   # 日志类别保持中文原样，是日志页筛选用的键
     $what = if ($Auto) { ((T "每周自动清理：{0}") -f $($it.N)) } else { ((T "清理：{0}") -f $($it.N)) }
-    OpLog $cat $what $(if ($it.Paths) { $it.Paths -join (T '；') } else { '' }) ((T "C 盘多出 ") + (GB $freed))
+    OpLog $cat $what $(if ($it.Paths) { $it.Paths -join (T '；') } else { '' }) (((T "C 盘多出 ") + (GB $freed)) + ((T "（剩余 {0} → {1}）") -f (GB $f0), (GB (FreeC))) + $(if ($script:recycleNow) { (T '，已放进回收站') } else { '' }))
+    $script:recycleNow = $false
+}
+# 删除前的文件清单：这些项目会删掉哪些文件、文件夹（和 Remove-Contents 的规则一样：个人文件夹和排除的不碰）。
+# 最多看 limit 个，按大小排；每一条 @{ Path; Bytes; IsDir; Item }
+function Get-DeletePreview($items, [int]$limit = 20000) {
+    $ex = Get-ExcludeList
+    $out = New-Object System.Collections.Generic.List[object]
+    $n = 0
+    foreach ($it in $items) {
+        if ($it.Act -or -not $it.Paths) { continue }
+        foreach ($p in $it.Paths) {
+            foreach ($x in @(Get-Item -Path $p -Force -ErrorAction SilentlyContinue)) {
+                if ($n -ge $limit) { break }
+                if ((Test-Personal $x.FullName) -or (Test-Excluded $x.FullName $ex)) { continue }
+                if ($x.PSIsContainer -and -not $it.Whole) {
+                    $f = if ($it.Filter) { $it.Filter } else { '*' }
+                    foreach ($c in @(Get-ChildItem -LiteralPath $x.FullName -Filter $f -Force -ErrorAction SilentlyContinue)) {
+                        if ($n -ge $limit) { break }
+                        if ((Test-Personal $c.FullName) -or (Test-Excluded $c.FullName $ex) -or ($c.PSIsContainer -and (Test-HasExcluded $c.FullName $ex))) { continue }
+                        $b = if ($c.PSIsContainer) { try { [double][FsTools]::OnDiskTree($c.FullName) } catch { [double]0 } } else { [double]$c.Length }
+                        $out.Add(@{ Path = $c.FullName; Bytes = $b; IsDir = [bool]$c.PSIsContainer; Item = $it.N }); $n++
+                    }
+                } else {
+                    if ($x.PSIsContainer -and (Test-HasExcluded $x.FullName $ex)) { continue }
+                    $b = if ($x.PSIsContainer) { try { [double][FsTools]::OnDiskTree($x.FullName) } catch { [double]0 } } else { [double]$x.Length }
+                    $out.Add(@{ Path = $x.FullName; Bytes = $b; IsDir = [bool]$x.PSIsContainer; Item = $it.N }); $n++
+                }
+            }
+        }
+    }
+    return $out
 }
 
 # ---------- 搬家 ----------

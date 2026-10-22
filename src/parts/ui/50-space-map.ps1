@@ -1297,7 +1297,7 @@ function Compare-Snapshot($root) {
         if ($oldUsed -ge 0 -and $usedNow -ge 0) {
             $head = if ($span) { (T "过去 {0}，已用空间{1}{2}") -f $span, $(if ($delta -ge 0) { (T '增加 ') } else { (T '减少 ') }), (Fmt ([math]::Abs($delta))) } else { (T "和 {0} 相比，已用空间{1}{2}") -f $oldAt, $(if ($delta -ge 0) { (T '增加 ') } else { (T '减少 ') }), (Fmt ([math]::Abs($delta))) }
             $why = Explain-Growth $list $delta
-            $script:growSummary = if ($why) { "{0}{1}{2}。" -f $head, (T '，其中 '), $why } else { $head + '。' }
+            $script:growSummary = $(if ($why) { "{0}{1}{2}" -f $head, (T '，其中 '), $why } else { $head }) + (T '。')
         }
         foreach ($x in @($list | Sort-Object { $_.D } -Descending | Select-Object -First 60)) {
             $g = New-Object GrowRow

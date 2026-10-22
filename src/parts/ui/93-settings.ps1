@@ -34,7 +34,8 @@ function Apply-Mode {
     $ctl.BtnCleanCustom.Visibility = & $v 2
     $ctl.AutoJunkRow.Visibility = & $v 1
     $ctl.FbCopyDiag.Visibility = & $v 1; $ctl.FbSelfTest.Visibility = & $v 2
-    $ctl.SetCardDisplay.Visibility = & $v 1; $ctl.SetCardScan.Visibility = & $v 2; $ctl.SetCleanCard.Visibility = & $v 2
+    $ctl.SetCardDisplay.Visibility = & $v 1; $ctl.SetCardScan.Visibility = & $v 2
+    foreach ($n in 'SetCustomList', 'SetCustomEmpty', 'BtnSetCustomAdd', 'SetExcludeList', 'SetExcludeEmpty', 'BtnSetExcludeAdd', 'SetCustomHead', 'SetCustomNote', 'SetExcludeHead', 'SetExcludeNote') { $ctl[$n].Visibility = & $v 2 }
     $ctl.ModeTag.Text = (Get-ModeName $m) + (T '模式')
     $ctl.SetModeNote.Text = switch ($m) {
         0 { (T '普通用户：清理 C 盘、省空间、空间地图、软件管理、帮助。清理列表里只有常见的缓存和临时文件，删了都会自动重建；有代价的项目仍然默认跳过。') }
@@ -94,6 +95,7 @@ function Load-Settings {
         foreach ($k in $script:optSwitches.Keys) { $ctl[$script:optSwitches[$k]].IsChecked = Get-Flag $k }
         $ctl.SetFast.IsChecked = [bool]$ctl.MapFast.IsChecked
         $ctl.SetLowIo.IsChecked = ((Get-Setting 'LowIo' '0') -eq '1')
+        $ctl.SetRecycle.IsChecked = ((Get-Setting 'Recycle' '0') -eq '1')
     } finally { $script:setLoading = $false }
 }
 function Save-Display {
@@ -107,6 +109,12 @@ foreach ($k in $script:optLinks.Keys) { $ctl[$script:optLinks[$k][0]].Add_Click(
 foreach ($k in $script:optSwitches.Keys) { $ctl[$script:optSwitches[$k]].Add_Click({ if (-not $script:setLoading) { Save-Display; if ([object]::ReferenceEquals($this, $ctl.SetMapDisk)) { Refresh-MapRows } } }) }
 $ctl.SetFast.Add_Click({ if (-not $script:setLoading) { Set-FastScan ([bool]$ctl.SetFast.IsChecked) } })
 [DupFinder]::LowPriority = ((Get-Setting 'LowIo' '0') -eq '1')
+$ctl.SetRecycle.Add_Click({
+    if ($script:setLoading) { return }
+    $on = [bool]$ctl.SetRecycle.IsChecked
+    Set-Setting 'Recycle' $(if ($on) { '1' } else { '0' })
+    UI-Log $(if ($on) { (T '删除时先放进回收站：已打开') } else { (T '删除时先放进回收站：已关闭') })
+})
 $ctl.SetLowIo.Add_Click({
     if ($script:setLoading) { return }
     $on = [bool]$ctl.SetLowIo.IsChecked

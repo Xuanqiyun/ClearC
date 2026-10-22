@@ -2441,8 +2441,15 @@
           <Border x:Name="SetCleanCard" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
             <StackPanel>
               <TextBlock Text="清理列表" Style="{StaticResource CardHead}"/>
-              <TextBlock Text="自己加的文件夹" Style="{StaticResource SetName}" Margin="0,14,0,0"/>
-              <TextBlock Style="{StaticResource SetNote}" Text="清理时删掉这些文件夹里的东西，文件夹本身保留。在「清理 C 盘」页单独列成一组，默认选「删除」，每次执行前照样要确认；定期自动清理不碰它们。个人文件夹、系统文件夹和软件的安装文件夹加不进来。"/>
+              <DockPanel x:Name="SetRecycleRow" Margin="0,14,0,0">
+                <CheckBox x:Name="SetRecycle" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                <StackPanel>
+                  <TextBlock Text="删除时先放进回收站" Style="{StaticResource SetName}"/>
+                  <TextBlock Style="{StaticResource SetNote}" Text="手动清理删掉的文件先放进回收站，删错了可以从回收站恢复。慢一些，回收站会变大（清空回收站才真正腾出空间）；太大放不进回收站的文件，Windows 会问你。定期自动清理不受这个影响，照样直接删。"/>
+                </StackPanel>
+              </DockPanel>
+              <TextBlock x:Name="SetCustomHead" Text="自己加的文件夹" Style="{StaticResource SetName}" Margin="0,14,0,0"/>
+              <TextBlock x:Name="SetCustomNote" Style="{StaticResource SetNote}" Text="清理时删掉这些文件夹里的东西，文件夹本身保留。在「清理 C 盘」页单独列成一组，默认选「删除」，每次执行前照样要确认；定期自动清理不碰它们。个人文件夹、系统文件夹和软件的安装文件夹加不进来。"/>
               <ItemsControl x:Name="SetCustomList" Margin="0,6,0,0">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate>
@@ -2455,8 +2462,8 @@
               </ItemsControl>
               <TextBlock x:Name="SetCustomEmpty" Style="{StaticResource SetNote}" Text="还没有加。" Margin="0,6,0,0"/>
               <Button x:Name="BtnSetCustomAdd" Content="添加文件夹…" Style="{StaticResource Small}" HorizontalAlignment="Left" Margin="0,8,0,0"/>
-              <TextBlock Text="排除的文件夹" Style="{StaticResource SetName}" Margin="0,20,0,0"/>
-              <TextBlock Style="{StaticResource SetNote}" Text="清理时一律不碰这些文件夹和里面的东西，估算大小时也不算。比如临时文件夹里某个你要留着的子文件夹。"/>
+              <TextBlock x:Name="SetExcludeHead" Text="排除的文件夹" Style="{StaticResource SetName}" Margin="0,20,0,0"/>
+              <TextBlock x:Name="SetExcludeNote" Style="{StaticResource SetNote}" Text="清理时一律不碰这些文件夹和里面的东西，估算大小时也不算。比如临时文件夹里某个你要留着的子文件夹。"/>
               <ItemsControl x:Name="SetExcludeList" Margin="0,6,0,0">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate>

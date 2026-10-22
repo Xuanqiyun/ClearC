@@ -64,6 +64,18 @@ try {
     Check 'library options: filter, whole, svc, confirm' ((@($lib | Where-Object { $_.Filter -eq '*.log' }).Count -ge 1) -and (@($lib | Where-Object { $_.Whole }).Count -ge 1) -and (@($lib | Where-Object { $_.Svc -contains 'bits' }).Count -eq 1) -and (@($lib | Where-Object { $_.Confirm }).Count -ge 3))
     Check 'library levels: pro and expert entries, Chrome stays basic' ((@($lib | Where-Object { $_.Lvl -eq 1 }).Count -ge 8) -and (@($lib | Where-Object { $_.Lvl -eq 2 }).Count -ge 4) -and $chrome.Lvl -eq 0)
     Check 'catalog carries levels (basic, pro and expert items)' ((@($cat | Where-Object { -not $_.Lvl }).Count -ge 20) -and (@($cat | Where-Object { $_.Lvl -eq 1 }).Count -ge 10) -and (@($cat | Where-Object { $_.Lvl -eq 2 }).Count -ge 6))
+    Check 'library: careful entries (browser caches etc.)' ((@($lib | Where-Object { $_.Careful }).Count -ge 15) -and $chrome.Careful -and -not @($lib | Where-Object { $_.N -eq '用户临时文件' })[0].Careful)
+    Check 'catalog: careful group sits between safe and confirm' ((@($cat | Where-Object { $_.Careful }).Count -ge 15) -and (@($cat | Where-Object { ([string]$_.G).StartsWith('谨慎清理') -and -not $_.Careful }).Count -eq 0))
+    $fake = @(
+        @{ Driver = 'oem1.inf'; OriginalFileName = 'C:\x\nvlti.inf_amd64_a\nvlti.inf'; ProviderName = 'NVIDIA'; ClassName = 'Display'; Version = '31.0.15.3598'; Date = [DateTime]'2023-06-01'; Inbox = $false; BootCritical = $false },
+        @{ Driver = 'oem2.inf'; OriginalFileName = 'C:\x\nvlti.inf_amd64_b\nvlti.inf'; ProviderName = 'NVIDIA'; ClassName = 'Display'; Version = '32.0.15.5599'; Date = [DateTime]'2024-06-01'; Inbox = $false; BootCritical = $false },
+        @{ Driver = 'oem3.inf'; OriginalFileName = 'C:\x\nvlti.inf_amd64_c\nvlti.inf'; ProviderName = 'NVIDIA'; ClassName = 'Display'; Version = '32.0.15.4000'; Date = [DateTime]'2024-01-01'; Inbox = $false; BootCritical = $false },
+        @{ Driver = 'oem4.inf'; OriginalFileName = 'C:\x\rt.inf_amd64_d\rt.inf'; ProviderName = 'Realtek'; ClassName = 'Net'; Version = '10.1'; Date = [DateTime]'2022-01-01'; Inbox = $false; BootCritical = $false },
+        @{ Driver = 'oem5.inf'; OriginalFileName = 'C:\x\stor.inf_amd64_e\stor.inf'; ProviderName = 'Intel'; ClassName = 'SCSIAdapter'; Version = '1.0'; Date = [DateTime]'2022-01-01'; Inbox = $false; BootCritical = $true },
+        @{ Driver = 'oem6.inf'; OriginalFileName = 'C:\x\stor.inf_amd64_f\stor.inf'; ProviderName = 'Intel'; ClassName = 'SCSIAdapter'; Version = '2.0'; Date = [DateTime]'2023-01-01'; Inbox = $false; BootCritical = $true })
+    $oldDrv = @(Select-OldDrivers $fake | ForEach-Object { $_.Driver } | Sort-Object)
+    Check "old driver packages: older NVIDIA versions only, never boot-critical ($($oldDrv -join ','))" (($oldDrv -join ',') -eq 'oem1.inf,oem3.inf')
+    Check 'pnputil refuses non-oem names' ((Remove-DriverPackage 'nvlti.inf') -ne '')
     Check 'every library entry has a name, a note and at least one path or Steam' (@($lib | Where-Object { -not $_.N -or -not $_.Note }).Count -eq 0)
     Check 'the catalog has one index per entry' ((@($cat | ForEach-Object { $_.Idx } | Sort-Object -Unique).Count) -eq $cat.Count)
     # winget 的表格
