@@ -1,6 +1,252 @@
 # ------------------------------------------------------------
 # 省空间
 # ------------------------------------------------------------
+# ------------------------------------------------------------
+# 系统健康：硬件、开机、蓝屏、活动监控、事件
+# ------------------------------------------------------------
+$script:healthData = $null
+function Load-Health {
+    $ctl.HealthNote.Text = (T '正在读取硬件、事件日志和转储文件，要十几秒…')
+    $ctl.BtnHealthRefresh.IsEnabled = $false
+    $ok = Start-BgEngine 'health' 'Get-HealthAll' $null {
+        param($r, $err)
+        $ctl.BtnHealthRefresh.IsEnabled = $true
+        if (-not $r) { $ctl.HealthNote.Text = (T '没能读取：') + $err; return }
+        $script:healthData = $r
+        Show-Health $r
+    }
+    if (-not $ok) { $ctl.BtnHealthRefresh.IsEnabled = $true }
+}
+$ctl.BtnHealthRefresh.Add_Click({ Load-Health })
+# 档位颜色：绿正常、橙留意、红有问题、灰读不到
+$script:hcGreen = @('#1D7A35', '#E5F4E9'); $script:hcAmber = @('#995700', '#FFF1DB'); $script:hcRed = @('#C0101C', '#FDEBEC'); $script:hcGrey = @('#6E6E73', '#F0F0F3'); $script:hcBlue = @('#0A5BC4', '#E3EEFF')
+function New-Chip([string]$text, $tier) { $c = New-Object HealthChip; $c.Text = $text; $c.Fg = $tier[0]; $c.Bg = $tier[1]; return $c }
+function New-HealthCard([string]$title, [string]$sub, $tier) { $c = New-Object HealthCard; $c.Title = $title; $c.Sub = $sub; $c.Stripe = $tier[0]; $c.BarBrush = $tier[0]; return $c }
+function Tier-Worst($a, $b) { $rank = @{ ($script:hcGrey[0]) = 0; ($script:hcGreen[0]) = 1; ($script:hcBlue[0]) = 1; ($script:hcAmber[0]) = 2; ($script:hcRed[0]) = 3 }; if ($rank[$b[0]] -gt $rank[$a[0]]) { $b } else { $a } }
+function Show-Health($r) {
+    $ctl.HealthNote.Text = (T "读取于 {0:HH:mm}，用了 {1:N0} 秒。只看不改。") -f $r.At, $r.Secs
+    $cards = New-Object 'System.Collections.ObjectModel.ObservableCollection[HealthCard]'
+    # CPU
+    $c = $r.Cpu
+    if ($c.Ok) {
+        $tier = $script:hcGreen
+        $card = New-HealthCard (T 'CPU') $c.Name $tier
+        if ($c.Load -ge 0) { $card.Chips.Add((New-Chip ((T "负载 {0}%") -f $c.Load) $(if ($c.Load -ge 90) { $script:hcAmber } else { $script:hcGreen }))); $card.HasBar = $true; $card.BarW = [math]::Max(2, 2.5 * $c.Load) }
+        if ($c.MaxMHz -gt 0) { $card.Chips.Add((New-Chip ("{0:N1} / {1:N1} GHz" -f ($c.MHz / 1000), ($c.MaxMHz / 1000)) $script:hcBlue)) }
+        if ($c.Perf -ge 0) { $t2 = if ($c.Throttle) { $script:hcRed } elseif ($c.Perf -lt 90) { $script:hcAmber } else { $script:hcGreen }; $card.Chips.Add((New-Chip ((T "性能 {0}%") -f $c.Perf) $t2)); $tier = Tier-Worst $tier $t2 }
+        if ($c.Temp -ne $null) { $t2 = if ($c.Temp -ge 90) { $script:hcRed } elseif ($c.Temp -ge 75) { $script:hcAmber } else { $script:hcGreen }; $card.Chips.Add((New-Chip ("{0} °C" -f $c.Temp) $t2)); $tier = Tier-Worst $tier $t2; if ($c.TempNote) { $card.Lines.Add($c.TempNote) } }
+        else { $card.Chips.Add((New-Chip (T '温度读不到') $script:hcGrey)); $card.Lines.Add($c.TempWhy) }
+        $card.Lines.Add(((T "{0} 核 {1} 线程") -f $c.Cores, $c.Threads) + $(if ($c.Throttle) { (T '。性能计数器持续低于标称频率：可能是散热或电源限制在降频') } else { '' }))
+        $card.Stripe = $tier[0]; $card.BarBrush = $tier[0]
+        $cards.Add($card)
+    } else { $card = New-HealthCard (T 'CPU') (T '读不到') $script:hcGrey; $card.Lines.Add($c.Why); $cards.Add($card) }
+    # 内存
+    $m = $r.Mem
+    if ($m.Ok) {
+        $tier = switch ($m.Pressure) { 'high' { $script:hcRed } 'mid' { $script:hcAmber } default { $script:hcGreen } }
+        $card = New-HealthCard (T '内存') ((T "{0} 已用 {1}，可用 {2}") -f (Fmt $m.Total), (Fmt ($m.Total - $m.Free)), (Fmt $m.Free)) $tier
+        $card.HasBar = $true; $card.BarW = [math]::Max(2, 2.5 * $m.UsedPct)
+        $card.Chips.Add((New-Chip ((T "已用 {0}%") -f $m.UsedPct) $(if ($m.UsedPct -ge 92) { $script:hcRed } elseif ($m.UsedPct -ge 80) { $script:hcAmber } else { $script:hcGreen })))
+        $card.Chips.Add((New-Chip ((T "提交 {0}%") -f $m.CommitPct) $(if ($m.CommitPct -ge 90) { $script:hcRed } elseif ($m.CommitPct -ge 75) { $script:hcAmber } else { $script:hcGreen })))
+        if ($m.HardFaults -ge 0) { $card.Chips.Add((New-Chip ((T "硬错误 {0}/秒") -f $m.HardFaults) $(if ($m.HardFaults -ge 100) { $script:hcRed } elseif ($m.HardFaults -ge 20) { $script:hcAmber } else { $script:hcGreen }))) }
+        if ($m.Whea -gt 0) { $card.Chips.Add((New-Chip ((T "WHEA 内存错误 {0} 次") -f $m.Whea) $script:hcRed)) }
+        $card.Lines.Add(((T "提交 {0} / 上限 {1}（物理内存加页面文件）。") -f (Fmt $m.Commit), (Fmt $m.CommitLimit)) + $(switch ($m.Pressure) { 'high' { (T '内存很紧张：程序在频繁换到页面文件，会明显变慢') } 'mid' { (T '内存偏紧') } default { (T '内存够用') } }))
+        if ($m.Whea -gt 0) { $card.Lines.Add((T '最近 30 天 Windows 记录过内存硬件错误（WHEA）：建议跑一次 Windows 内存诊断（mdsched）')) }
+        $cards.Add($card)
+    } else { $card = New-HealthCard (T '内存') (T '读不到') $script:hcGrey; $card.Lines.Add($m.Why); $cards.Add($card) }
+    # 磁盘
+    foreach ($d in @($r.Disks)) {
+        $tier = $script:hcGreen
+        $sub = if ($d.Model) { [string]$d.Model } else { (T '型号读不到') }
+        $card = New-HealthCard ((T "磁盘 {0}") -f $d.Drive) $sub $tier
+        try { $di = New-Object System.IO.DriveInfo ($d.Drive + '\'); $pct = [int][math]::Round(100.0 * ($di.TotalSize - $di.TotalFreeSpace) / [math]::Max(1, $di.TotalSize)); $card.HasBar = $true; $card.BarW = [math]::Max(2, 2.5 * $pct); $card.Chips.Add((New-Chip ((T "已用 {0}%") -f $pct) $(if ($pct -ge 95) { $script:hcRed } elseif ($pct -ge 85) { $script:hcAmber } else { $script:hcGreen }))) } catch {}
+        if ($d.Ok) {
+            $h = [string]$d.Health
+            $t2 = if ($h -match 'Healthy|正常|OK') { $script:hcGreen } elseif ($h) { $script:hcRed } else { $script:hcGrey }
+            $card.Chips.Add((New-Chip $(if ($h) { $h } else { (T '健康状态读不到') }) $t2)); $tier = Tier-Worst $tier $t2
+            if ($d.Temp -ne $null -and [int]$d.Temp -gt 0) { $t2 = if ([int]$d.Temp -ge 60) { $script:hcRed } elseif ([int]$d.Temp -ge 45) { $script:hcAmber } else { $script:hcGreen }; $card.Chips.Add((New-Chip ("{0} °C" -f $d.Temp) $t2)); $tier = Tier-Worst $tier $t2 } else { $card.Chips.Add((New-Chip (T '温度读不到') $script:hcGrey)) }
+            if ($d.Wear -ne $null -and [int]$d.Wear -ge 0) { $t2 = if ([int]$d.Wear -ge 50) { $script:hcRed } elseif ([int]$d.Wear -ge 10) { $script:hcAmber } else { $script:hcGreen }; $card.Chips.Add((New-Chip ((T "磨损 {0}%") -f $d.Wear) $t2)); $tier = Tier-Worst $tier $t2 }
+            if ($d.ReadErrors -ne $null -and [long]$d.ReadErrors -gt 0) { $card.Chips.Add((New-Chip ((T "读错误 {0}") -f $d.ReadErrors) $script:hcRed)); $tier = $script:hcRed }
+            if ($d.Hours -ne $null -and [long]$d.Hours -gt 0) { $card.Lines.Add((T "通电 {0:N0} 小时") -f $d.Hours) }
+            if ($d.Media) { $card.Lines.Add([string]$d.Media) }
+        } else { $card.Chips.Add((New-Chip (T 'SMART 读不到') $script:hcGrey)); $card.Lines.Add((T '这块盘不报告 SMART（USB 硬盘盒、RAID 和部分虚拟机常见）')) }
+        $card.Stripe = $tier[0]; $card.BarBrush = $tier[0]
+        $cards.Add($card)
+    }
+    # 电池
+    $b = $r.Battery
+    if ($b.Present) {
+        $tier = $script:hcGreen
+        $card = New-HealthCard (T '电池') $b.Status $tier
+        if ($b.Charge -ge 0) { $card.HasBar = $true; $card.BarW = [math]::Max(2, 2.5 * $b.Charge); $card.Chips.Add((New-Chip ((T "电量 {0}%") -f $b.Charge) $script:hcBlue)) }
+        if ($b.Design -gt 0 -and $b.Full -gt 0) {
+            $pct = [int][math]::Round(100.0 * $b.Full / $b.Design)
+            $t2 = if ($pct -lt 60) { $script:hcRed } elseif ($pct -lt 80) { $script:hcAmber } else { $script:hcGreen }
+            $card.Chips.Add((New-Chip ((T "健康 {0}%") -f $pct) $t2)); $tier = $t2
+            $card.Lines.Add((T "设计容量 {0:N0} mWh，现在充满 {1:N0} mWh") -f $b.Design, $b.Full)
+        } else { $card.Chips.Add((New-Chip (T '损耗读不到') $script:hcGrey)); if ($b.Why) { $card.Lines.Add($b.Why) } }
+        if ($b.Cycles -ge 0) { $card.Chips.Add((New-Chip ((T "循环 {0} 次") -f $b.Cycles) $script:hcBlue)) } else { $card.Lines.Add((T '循环次数：电池没有报告')) }
+        $card.Stripe = $tier[0]; $card.BarBrush = $tier[0]
+        $cards.Add($card)
+    } else { $card = New-HealthCard (T '电池') (T '没有电池（台式机）') $script:hcGrey; $cards.Add($card) }
+    # 显卡
+    foreach ($g in @($r.Gpu)) {
+        if (-not $g.Ok) { $card = New-HealthCard (T '显卡') (T '读不到') $script:hcGrey; $card.Lines.Add($g.Why); $cards.Add($card); continue }
+        $card = New-HealthCard (T '显卡') $g.Name $script:hcGreen
+        if ($g.Util -ge 0) { $card.HasBar = $true; $card.BarW = [math]::Max(2, 2.5 * $g.Util); $card.Chips.Add((New-Chip ((T "占用 {0}%") -f $g.Util) $(if ($g.Util -ge 95) { $script:hcAmber } else { $script:hcGreen }))) }
+        if ($g.Vram -gt 0) { $card.Chips.Add((New-Chip ($(if ($g.VramUsed -ge 0) { (T "显存 {0} / {1}") -f (Fmt $g.VramUsed), (Fmt $g.Vram) } else { (T "显存 {0}") -f (Fmt $g.Vram) })) $script:hcBlue)) }
+        $card.Chips.Add((New-Chip (T '温度读不到') $script:hcGrey))
+        $card.Lines.Add($g.TempWhy)
+        if ($g.Driver) { $card.Lines.Add(((T "驱动 {0}") -f $g.Driver) + $(if ($g.DriverDate) { ("（{0:yyyy-MM-dd}）" -f $g.DriverDate) } else { '' })) }
+        $cards.Add($card)
+    }
+    # Windows
+    $w = $r.Win
+    $tier = if ($w.BadDevices.Count -gt 0) { $script:hcAmber } else { $script:hcGreen }
+    $card = New-HealthCard 'Windows' ((T "版本 {0}") -f $w.Build) $tier
+    if ($w.Uptime) { $card.Chips.Add((New-Chip ((T "开机 {0}") -f (FmtSpan $w.Uptime)) $(if ($w.Uptime.TotalDays -ge 14) { $script:hcAmber } else { $script:hcBlue }))) }
+    if ($w.PendingReboot) { $card.Chips.Add((New-Chip (T '等待重启') $script:hcAmber)); $tier = Tier-Worst $tier $script:hcAmber }
+    if ($w.LastUpdate) { $card.Chips.Add((New-Chip ((T "更新 {0:yyyy-MM-dd}") -f $w.LastUpdate) $(if (((Get-Date) - $w.LastUpdate).TotalDays -gt 60) { $script:hcAmber } else { $script:hcGreen }))) }
+    $card.Chips.Add((New-Chip ($(if ($w.BadDevices.Count -gt 0) { (T "{0} 个设备有问题") -f $w.BadDevices.Count } else { (T '设备都正常') })) $(if ($w.BadDevices.Count -gt 0) { $script:hcAmber } else { $script:hcGreen })))
+    foreach ($bd in @($w.BadDevices | Select-Object -First 4)) { $card.Lines.Add(("{0}：{1}" -f $bd.Name, $bd.Note)) }
+    if ($w.Uptime -and $w.Uptime.TotalDays -ge 14) { $card.Lines.Add((T '两周没重启了（快速启动的「关机」不算重启）。很多莫名其妙的慢和卡，重启一次就好')) }
+    $card.Stripe = $tier[0]; $card.BarBrush = $tier[0]
+    $cards.Add($card)
+    $ctl.HealthCards.ItemsSource = $cards
+    # 开机
+    $bt = $r.Boot
+    $slow = New-Object 'System.Collections.ObjectModel.ObservableCollection[NoteRow]'
+    if ($bt.Ok) {
+        $ctl.HealthBootText.Text = (T "最近一次开机（{0:yyyy-MM-dd HH:mm}）用了 {1:N0} 秒：到桌面 {2:N0} 秒，桌面出来后开机程序又忙了 {3:N0} 秒才安静下来。") -f $bt.At, ($bt.BootMs / 1000), ($bt.MainMs / 1000), ($bt.PostMs / 1000)
+        if ($bt.History.Count -ge 3) { $avg = ($bt.History | ForEach-Object { $_.BootMs } | Measure-Object -Average).Average; $ctl.HealthBootText.Text += (T "最近 {0} 次平均 {1:N0} 秒。") -f $bt.History.Count, ($avg / 1000) }
+        if ($bt.BootMs -gt 120000) { $ctl.HealthBootText.Text += (T '超过两分钟算慢的。') }
+        foreach ($s in @($bt.Slow)) { $n = New-Object NoteRow; $n.Head = $s.Name; $n.Path = $s.Path; $n.Body = (T "拖慢 {0:N0} 秒，{1} 次") -f ($s.DegradeMs / 1000), $s.Times; $slow.Add($n) }
+        if ($slow.Count -eq 0) { $ctl.HealthBootText.Text += (T '最近 30 天 Windows 没有点名拖慢开机的程序。') }
+    } else { $ctl.HealthBootText.Text = $bt.Why }
+    $ctl.HealthSlow.ItemsSource = $slow
+    # 蓝屏
+    $cr = $r.Crash
+    $dumps = New-Object 'System.Collections.ObjectModel.ObservableCollection[DumpRow]'
+    foreach ($d in @($cr.Dumps)) {
+        $row = New-Object DumpRow
+        $row.When = '{0:yyyy-MM-dd HH:mm}' -f $d.Time; $row.File = $d.File
+        $row.Code = if ($d.Ok) { ('0x{0:X} {1}' -f $d.Code, $d.CodeName).Trim() } else { (T '没解析出来') }
+        $row.Suspect = if ($d.Suspect) { (T "可能是 {0}") -f $d.Suspect } else { '' }
+        $row.SuspectBrush = '#C0101C'
+        $det = @()
+        if ($d.Ok) { $det += (T "参数 {0}") -f ($d.Params -join ' ') }
+        if ($d.Stack.Count -gt 0) { $det += (T "栈上的驱动：{0}") -f (($d.Stack | Select-Object -First 6) -join ', ') }
+        if ($d.Ok) { $det += (T "出事时加载了 {0} 个驱动") -f $d.Drivers }
+        if ($d.Error) { $det += $d.Error }
+        $det += (T "{0}，{1}") -f $d.Name, (Fmt $d.Size)
+        $row.Detail = $det -join (T '。')
+        $dumps.Add($row)
+    }
+    $ctl.HealthDumps.ItemsSource = $dumps
+    $ctl.HealthCrashText.Text = if ($dumps.Count -gt 0) { (T "{0} 里有 {1} 个转储文件（最近的 10 个）。") -f $cr.DumpDir, $dumps.Count } else { (T "没有转储文件：最近没有蓝屏，或者蓝屏时没来得及写出转储。") }
+    if ($cr.MemoryDmp) { $ctl.HealthCrashText.Text += (T "另有完整转储 MEMORY.DMP（{0}，{1:yyyy-MM-dd}），在「省空间」里可以改成只存小转储。") -f (Fmt $cr.MemoryDmp.Size), $cr.MemoryDmp.Time }
+    $evs = New-Object 'System.Collections.ObjectModel.ObservableCollection[NoteRow]'
+    foreach ($x in @($cr.Events)) { $n = New-Object NoteRow; $n.Head = ("{0}（{1}）" -f $x.What, $x.Source); $n.Path = $x.Sample; $n.Body = (T "{0} 次，最近 {1:MM-dd HH:mm}") -f $x.Count, $x.Last; $evs.Add($n) }
+    if ($evs.Count -eq 0) { $n = New-Object NoteRow; $n.Head = (T '没有意外关机、硬件错误和磁盘错误的记录'); $evs.Add($n) }
+    $ctl.HealthEvents.ItemsSource = $evs
+    $drs = New-Object 'System.Collections.ObjectModel.ObservableCollection[NoteRow]'
+    foreach ($x in @($cr.Drivers | Select-Object -First 12)) { $n = New-Object NoteRow; $n.Head = ("{0} {1} {2}" -f $x.Provider, $x.Name, $x.Version).Trim(); $n.Path = $x.Device; $n.Body = '{0:MM-dd HH:mm}' -f $x.When; $drs.Add($n) }
+    if ($drs.Count -eq 0) { $n = New-Object NoteRow; $n.Head = (T '最近 30 天没有装过驱动'); $drs.Add($n) }
+    $ctl.HealthDrivers.ItemsSource = $drs
+    # Windows 事件
+    $errs = New-Object 'System.Collections.ObjectModel.ObservableCollection[NoteRow]'
+    foreach ($x in @($w.Errors)) { $n = New-Object NoteRow; $n.Head = ("{0}：{1}" -f $x.Source, $x.Sample); $n.Path = $x.Sample; $n.Body = (T "{0} 次，最近 {1:MM-dd HH:mm}") -f $x.Count, $x.Last; $errs.Add($n) }
+    $ctl.HealthErrors.ItemsSource = $errs
+    $ctl.HealthWinText.Text = if ($w.ErrorCount -gt 0) { (T "最近 7 天系统日志里有 {0} 条严重或错误事件，来源最多的几个：") -f $w.ErrorCount } else { (T '最近 7 天系统日志里没有严重或错误事件。') }
+}
+$ctl.HealthDumps.AddHandler([System.Windows.Controls.Button]::ClickEvent, [System.Windows.RoutedEventHandler]{ param($s, $e) $b = $e.OriginalSource; if ($b -is [System.Windows.Controls.Button] -and $b.Tag -is [DumpRow]) { Open-Location $b.Tag.File } })
+# SFC / DISM：检查只看不改；修复会改系统文件，先确认。都在终端窗口里跑，过程看得见
+function Start-SystemFileTool([bool]$repair) {
+    $cmd = if ($repair) { 'echo === sfc /scannow === && sfc /scannow && echo === DISM /RestoreHealth === && DISM /Online /Cleanup-Image /RestoreHealth' }
+           else { 'echo === sfc /verifyonly === && sfc /verifyonly && echo === DISM /ScanHealth === && DISM /Online /Cleanup-Image /ScanHealth' }
+    if ($repair) {
+        $ans = Show-Sheet -Kind warn -Title (T '修复系统文件？') -Text (T "会运行 sfc /scannow 和 DISM /RestoreHealth：把损坏的系统文件换成正常的副本。这会改动系统文件（只动 Windows 自己的文件，不碰你的资料），DISM 可能要联网下载，一共要十几分钟到半小时。`n`n先用「检查系统文件（只看）」看一眼有没有问题，再决定要不要修复。") -Buttons @((T '取消'), (T '修复')) -Primary (T '修复') -Cancel (T '取消')
+        if ($ans -ne (T '修复')) { return }
+    }
+    try {
+        Start-Process -FilePath "$env:SystemRoot\System32\cmd.exe" -ArgumentList ('/k ' + $cmd)
+        OpLog '系统设置' $(if ($repair) { (T '修复系统文件（sfc /scannow、DISM /RestoreHealth）') } else { (T '检查系统文件（sfc /verifyonly、DISM /ScanHealth）') }) '' $cmd
+        UI-Log ((T "已在终端里开始：{0}") -f $cmd)
+    } catch { Show-Sheet -Kind warn -Title (T '没能打开终端') -Text $_.Exception.Message | Out-Null }
+}
+$ctl.BtnSfcCheck.Add_Click({ Start-SystemFileTool $false })
+$ctl.BtnSfcRepair.Add_Click({ Start-SystemFileTool $true })
+# 活动监控：后台线程每 3 秒采一次样，把结果放进共享表；界面每秒看一眼
+$script:monShared = $null; $script:monSeen = -1; $script:monTimer = $null
+function Start-Monitor {
+    if ($script:monShared -and -not $script:monShared.Stop) { return }
+    $sh = [hashtable]::Synchronized(@{ Stop = $false; Ver = 0; Rows = $null; At = $null; Base = $null })
+    $script:monShared = $sh; $script:monSeen = -1
+    $threads = [Environment]::ProcessorCount
+    $code = @'
+$sh = $arg.Shared
+$base = Get-ProcSample; $prev = $base; $sh.Base = $base.At
+while (-not $sh.Stop) {
+    Start-Sleep -Seconds 3
+    if ($sh.Stop) { break }
+    $cur = Get-ProcSample
+    $sh.Rows = @(Compare-ProcSample $prev $cur $base $arg.Threads); $sh.At = $cur.At; $sh.Ver++
+    $prev = $cur
+}
+'ok'
+'@
+    $ok = Start-BgEngine 'monitor' $code @{ Shared = $sh; Threads = $threads } { param($r, $err) if ($err) { $ctl.HealthMonText.Text = (T '监控出错：') + $err } }
+    if (-not $ok) { return }
+    $ctl.BtnMonStart.IsEnabled = $false; $ctl.BtnMonStop.IsEnabled = $true
+    $ctl.HealthMonText.Text = (T '正在采样…第一组数据 3 秒后出来')
+    if (-not $script:monTimer) {
+        $script:monTimer = New-Object System.Windows.Threading.DispatcherTimer
+        $script:monTimer.Interval = [TimeSpan]::FromMilliseconds(1000)
+        $script:monTimer.Add_Tick({ Refresh-Monitor })
+    }
+    $script:monTimer.Start()
+    OpLog '系统设置' (T '开始活动监控') '' ''
+}
+function Stop-Monitor {
+    if ($script:monShared) { $script:monShared.Stop = $true }
+    if ($script:monTimer) { $script:monTimer.Stop() }
+    $ctl.BtnMonStart.IsEnabled = $true; $ctl.BtnMonStop.IsEnabled = $false
+    if ($script:monShared -and $script:monShared.Base) { $ctl.HealthMonText.Text = (T "已停止。下面是从 {0:HH:mm:ss} 到 {1:HH:mm:ss} 的结果。") -f $script:monShared.Base, $(if ($script:monShared.At) { $script:monShared.At } else { Get-Date }) }
+}
+function Refresh-Monitor {
+    $sh = $script:monShared
+    if (-not $sh -or $sh.Ver -eq $script:monSeen -or -not $sh.Rows) { return }
+    $script:monSeen = $sh.Ver
+    Show-Monitor @($sh.Rows)
+    $ctl.HealthMonText.Text = (T "从 {0:HH:mm:ss} 开始监控，到 {1:HH:mm:ss}，第 {2} 次采样。同名的进程合在一起算。") -f $sh.Base, $sh.At, $sh.Ver
+}
+function Show-Monitor($rows) {
+    # 同名进程合并（Chrome、Edge 一个标签一个进程）
+    $by = @{}
+    foreach ($x in $rows) {
+        $k = [string]$x.Name
+        if (-not $by.ContainsKey($k)) { $by[$k] = @{ Name = $k; Path = $x.Path; N = 0; Cpu = 0.0; Ws = 0.0; Rate = 0.0; Since = 0.0; Total = 0.0 } }
+        $a = $by[$k]; $a.N++; $a.Cpu += $x.Cpu; $a.Ws += $x.Ws; $a.Rate += $x.WriteRate; $a.Since += $x.WriteSince; $a.Total += $x.WriteTotal
+        if (-not $a.Path -and $x.Path) { $a.Path = $x.Path }
+    }
+    $sort = if ($ctl.MonSortCpu.IsChecked) { 'cpu' } elseif ($ctl.MonSortMem.IsChecked) { 'mem' } else { 'write' }
+    $list = @($by.Values | Sort-Object { switch ($sort) { 'cpu' { $_.Cpu } 'mem' { $_.Ws } default { $_.Since * 1000000 + $_.Rate } } } -Descending | Select-Object -First 25)
+    $max = [double]0; foreach ($a in $list) { if ($a.Since -gt $max) { $max = $a.Since } }
+    $col = New-Object 'System.Collections.ObjectModel.ObservableCollection[ProcRow]'
+    foreach ($a in $list) {
+        $p = New-Object ProcRow
+        $p.Name = $a.Name; $p.Meta = $(if ($a.N -gt 1) { (T "{0} 个进程 · ") -f $a.N } else { '' }) + $(if ($a.Path) { Shorten $a.Path } else { '' })
+        $p.CpuText = '{0:N0}%' -f $a.Cpu; $p.WsText = Fmt $a.Ws; $p.RateText = (T "{0}/秒") -f (Fmt $a.Rate); $p.SinceText = Fmt $a.Since; $p.TotalText = Fmt $a.Total
+        $p.Bar = if ($max -gt 0) { [math]::Max(0, 100.0 * $a.Since / $max) } else { 0 }
+        $col.Add($p)
+    }
+    $ctl.MonList.ItemsSource = $col
+}
+$ctl.BtnMonStart.Add_Click({ Start-Monitor })
+$ctl.BtnMonStop.Add_Click({ Stop-Monitor })
+foreach ($rb in @($ctl.MonSortWrite, $ctl.MonSortCpu, $ctl.MonSortMem)) { $rb.Add_Checked({ if ($script:monShared -and $script:monShared.Rows) { Show-Monitor @($script:monShared.Rows) } }) }
+$win.Add_Closed({ try { if ($script:monShared) { $script:monShared.Stop = $true } } catch {} })
+
 function Load-Save {
     $on = Get-CompactOSOn
     $ctl.SaveCosState.Text = if ($on) { (T '当前：已开启，系统文件已压缩存放') } else { (T '当前：未开启') }

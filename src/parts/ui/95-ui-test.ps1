@@ -236,12 +236,13 @@ function Invoke-UiTest {
             Set-Mode 'basic'
             if ($ctl.NavDup.Visibility -ne 'Collapsed' -or $ctl.NavLog.Visibility -ne 'Collapsed' -or $ctl.BtnLog.Visibility -ne 'Collapsed') { throw 'basic mode still shows advanced pages' }
             if ($ctl.SaveCardRs.Visibility -ne 'Collapsed' -or $ctl.AppsViewBox.Visibility -ne 'Collapsed' -or $ctl.MapViewFiles.Visibility -ne 'Collapsed' -or $ctl.BtnSetCustomAdd.Visibility -ne 'Collapsed') { throw 'basic mode still shows advanced cards' }
-            if ($ctl.NavClean.Visibility -ne 'Visible' -or $ctl.SaveCardCos.Visibility -ne 'Visible' -or $ctl.SaveCardOd.Visibility -ne 'Visible') { throw 'basic mode hides basic things' }
+            if ($ctl.NavClean.Visibility -ne 'Visible' -or $ctl.SaveCardCos.Visibility -ne 'Visible' -or $ctl.SaveCardOd.Visibility -ne 'Visible' -or $ctl.NavHealth.Visibility -ne 'Visible' -or $ctl.HealthCardHw.Visibility -ne 'Visible') { throw 'basic mode hides basic things' }
+            if ($ctl.HealthCardBoot.Visibility -ne 'Collapsed' -or $ctl.HealthCardMon.Visibility -ne 'Collapsed') { throw 'basic mode shows advanced health cards' }
             if ($ctl.ModeTag.Text -ne ((T '普通用户') + (T '模式'))) { throw ('mode tag: ' + $ctl.ModeTag.Text) }
             Set-Mode 'pro'
             if ($ctl.NavDup.Visibility -ne 'Visible' -or $ctl.AppsViewStartup.Visibility -ne 'Visible' -or $ctl.AppsViewTasks.Visibility -ne 'Collapsed' -or $ctl.SaveCardPf.Visibility -ne 'Visible' -or $ctl.SaveCardRs.Visibility -ne 'Collapsed') { throw 'pro mode wrong' }
             Set-Mode 'expert'
-            if ($ctl.AppsViewTasks.Visibility -ne 'Visible' -or $ctl.SaveCardRs.Visibility -ne 'Visible' -or $ctl.BtnLog.Visibility -ne 'Visible' -or $ctl.BtnSetCustomAdd.Visibility -ne 'Visible') { throw 'expert mode wrong' }
+            if ($ctl.AppsViewTasks.Visibility -ne 'Visible' -or $ctl.SaveCardRs.Visibility -ne 'Visible' -or $ctl.BtnLog.Visibility -ne 'Visible' -or $ctl.BtnSetCustomAdd.Visibility -ne 'Visible' -or $ctl.BtnSfcRepair.Visibility -ne 'Visible' -or $ctl.HealthCardEvents.Visibility -ne 'Visible') { throw 'expert mode wrong' }
             if (@($catalog | Where-Object { [int]$_.Lvl -eq 2 }).Count -lt 5 -or @($catalog | Where-Object { [int]$_.Lvl -eq 1 }).Count -lt 5) { throw 'catalog levels missing' }
         }
         & $step 'cleanup tiers: careful group, delete preview, recycle switch' {
@@ -262,6 +263,29 @@ function Invoke-UiTest {
             Show-Page 'settings'; $ctl.SetRecycle.IsChecked = $true; & $click $ctl.SetRecycle
             if ((Get-Setting 'Recycle' '0') -ne '1') { throw 'recycle setting not saved' }
             $ctl.SetRecycle.IsChecked = $false; & $click $ctl.SetRecycle
+        }
+        & $step 'system health page fills in' {
+            Show-Page 'health'
+            if (-not (& $waitUi { $script:healthData -ne $null } 90000)) { throw ('health data not read: ' + $ctl.HealthNote.Text) }
+            $L.Add(('health: ' + $ctl.HealthNote.Text))
+            if ($ctl.HealthCards.Items.Count -lt 3) { throw ("only {0} hardware cards" -f $ctl.HealthCards.Items.Count) }
+            $titles = @($ctl.HealthCards.Items | ForEach-Object { $_.Title })
+            if ($titles -notcontains (T 'CPU') -or $titles -notcontains (T '内存') -or $titles -notcontains 'Windows') { throw ('cards: ' + ($titles -join ',')) }
+            foreach ($c in $ctl.HealthCards.Items) { $L.Add(('  ' + $c.Title + ': ' + (@($c.Chips | ForEach-Object { $_.Text }) -join ' | ') + ' / ' + (@($c.Lines) -join ' / '))) }
+            if (-not $ctl.HealthBootText.Text -or -not $ctl.HealthCrashText.Text -or -not $ctl.HealthWinText.Text) { throw 'boot, crash or events text empty' }
+            $L.Add(('  boot: ' + $ctl.HealthBootText.Text)); $L.Add(('  crash: ' + $ctl.HealthCrashText.Text)); $L.Add(('  events: ' + $ctl.HealthWinText.Text))
+            # 活动监控：采两次样
+            Start-Monitor
+            if (-not (& $waitUi { $script:monShared -and $script:monShared.Ver -ge 1 } 20000)) { throw 'monitor took no sample' }
+            Refresh-Monitor
+            if ($ctl.MonList.Items.Count -lt 1) { throw 'monitor list empty' }
+            $L.Add(('  monitor: ' + $ctl.MonList.Items.Count + ' rows, top ' + $ctl.MonList.Items[0].Name + ' ' + $ctl.MonList.Items[0].SinceText))
+            $ctl.MonSortCpu.IsChecked = $true; if ($ctl.MonList.Items.Count -lt 1) { throw 'monitor list empty after sort' }
+            Stop-Monitor
+            if ($ctl.BtnMonStop.IsEnabled -or -not $script:monShared.Stop) { throw 'monitor not stopped' }
+            if (-not (& $waitUi { -not $script:bg['monitor'] } 15000)) { throw 'monitor thread did not end' }
+            # 系统文件检查按钮只是起终端：不点，查它在不在
+            if ($ctl.BtnSfcCheck.Visibility -ne 'Visible') { throw 'sfc check button hidden' }
         }
         & $step 'restore points card' {
             Show-Page 'save'

@@ -2,7 +2,7 @@
 # 设置：外观、语言、显示哪些内容
 # ------------------------------------------------------------
 # 可以关掉的页面、左下角的按钮：设置里存关掉了的，逗号隔开
-$script:optPages = [ordered]@{ dup = 'SetPageDup'; save = 'SetPageSave'; apps = 'SetPageApps'; moves = 'SetPageMoves'; auto = 'SetPageAuto'; log = 'SetPageLog' }
+$script:optPages = [ordered]@{ dup = 'SetPageDup'; save = 'SetPageSave'; apps = 'SetPageApps'; health = 'SetPageHealth'; moves = 'SetPageMoves'; auto = 'SetPageAuto'; log = 'SetPageLog' }
 $script:optLinks = [ordered]@{ theme = @('SetLinkTheme', 'BtnTheme'); lang = @('SetLinkLang', 'BtnLang'); feedback = @('SetLinkFeedback', 'BtnFeedback'); log = @('SetLinkLog', 'BtnLog') }
 # 开关：设置里的名字 → 设置页上的开关（默认都开）
 $script:optSwitches = [ordered]@{ PageSub = 'SetPageSub'; MapCheck = 'SetMapCheck'; MapBar = 'SetMapBar'; MapPct = 'SetMapPct'; MapMeta = 'SetMapMeta'; MapDisk = 'SetMapDisk'; MapFastBtn = 'SetMapFastBtn'; MapHealth = 'SetMapHealth' }
@@ -33,14 +33,16 @@ function Apply-Mode {
     # 清理页、自动提醒、帮助、设置
     $ctl.BtnCleanCustom.Visibility = & $v 2
     $ctl.AutoJunkRow.Visibility = & $v 1
+    foreach ($n in 'HealthCardBoot', 'HealthCardCrash', 'HealthCardMon') { $ctl[$n].Visibility = & $v 1 }
+    $ctl.BtnSfcRepair.Visibility = & $v 2; $ctl.HealthCardEvents.Visibility = & $v 2
     $ctl.FbCopyDiag.Visibility = & $v 1; $ctl.FbSelfTest.Visibility = & $v 2
     $ctl.SetCardDisplay.Visibility = & $v 1; $ctl.SetCardScan.Visibility = & $v 2
     foreach ($n in 'SetCustomList', 'SetCustomEmpty', 'BtnSetCustomAdd', 'SetExcludeList', 'SetExcludeEmpty', 'BtnSetExcludeAdd', 'SetCustomHead', 'SetCustomNote', 'SetExcludeHead', 'SetExcludeNote') { $ctl[$n].Visibility = & $v 2 }
     $ctl.ModeTag.Text = (Get-ModeName $m) + (T '模式')
     $ctl.SetModeNote.Text = switch ($m) {
         0 { (T '普通用户：清理 C 盘、省空间、空间地图、软件管理、帮助。清理列表里只有常见的缓存和临时文件，删了都会自动重建；有代价的项目仍然默认跳过。') }
-        1 { (T '工程师：再加上重复文件、搬家管理、自动提醒、操作日志；空间地图的找文件、和上次比、导出；省空间的页面文件、还原点、压缩文件夹、虚拟磁盘；软件管理的开机启动、残留文件夹、检查新版本和搬到其他盘；清理列表里多出开发工具的缓存。') }
-        default { (T '开发者和 IT：全部功能。再加上计划任务、右键菜单、保留的存储、组件存储分析、蓝屏转储、临时文件夹位置、自定义清理列表和排除、快速扫描开关、空间明细、检查扫描功能、运行记录，以及 Installer 孤儿安装包、事件日志、NuGet / Gradle / Maven / JetBrains 缓存这类项目。') }
+        1 { (T '工程师：再加上重复文件、搬家管理、自动提醒、操作日志；空间地图的找文件、和上次比、最近改动、导出；省空间的页面文件、还原点、压缩文件夹、虚拟磁盘；软件管理的开机启动、残留文件夹、检查新版本和搬到其他盘；系统健康的开机用时、蓝屏诊断、活动监控；清理列表里多出开发工具的缓存。') }
+        default { (T '开发者和 IT：全部功能。再加上计划任务、右键菜单、保留的存储、组件存储分析、蓝屏转储、临时文件夹位置、自定义清理列表和排除、快速扫描开关、空间明细、检查扫描功能、运行记录、修复系统文件、Windows 事件汇总，以及 Installer 孤儿安装包、事件日志、旧版驱动包、NuGet / Gradle / Maven / JetBrains 缓存这类项目。') }
     }
     $script:setLoading = $true
     try { $ctl.SetModeBasic.IsChecked = ($m -eq 0); $ctl.SetModePro.IsChecked = ($m -eq 1); $ctl.SetModeExpert.IsChecked = ($m -eq 2) } finally { $script:setLoading = $false }

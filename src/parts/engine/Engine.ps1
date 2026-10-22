@@ -682,6 +682,239 @@ function Get-OrphanFolders($apps) {
 
 # 使用模式：0 普通用户  1 工程师  2 开发者和 IT。目录项的 Lvl 比当前模式高就不在清理页列出（自动清理不受影响）
 function Get-Mode { switch ((Get-Setting 'Mode' 'basic')) { 'pro' { 1 } 'expert' { 2 } default { 0 } } }
+# ==================== 系统健康：硬件、启动、蓝屏、事件 ====================
+# 原则：读不到的就明说「读不到」，不拿估算冒充实测。每一项都是 @{ ... Ok = $true/$false; Why = '为什么读不到' }
+function Try-Cim([string]$class, [string]$ns = 'root\cimv2', [string]$filter = '') {
+    try {
+        if ($filter) { return @(Get-CimInstance -ClassName $class -Namespace $ns -Filter $filter -ErrorAction Stop -OperationTimeoutSec 20) }
+        return @(Get-CimInstance -ClassName $class -Namespace $ns -ErrorAction Stop -OperationTimeoutSec 20)
+    } catch { return @() }
+}
+function Try-Counter([string[]]$paths, [int]$samples = 1) {
+    try { return (Get-Counter -Counter $paths -SampleInterval 1 -MaxSamples $samples -ErrorAction Stop).CounterSamples } catch { return @() }
+}
+# CPU：型号、核心数、负载、当前频率和最高频率（降频看得出来）、温度（主板不报就读不到）
+function Get-CpuHealth {
+    $r = @{ Ok = $false; Name = ''; Cores = 0; Threads = 0; Load = -1; MHz = 0; MaxMHz = 0; Perf = -1; Temp = $null; TempWhy = ''; Throttle = $false }
+    $cpu = @(Try-Cim 'Win32_Processor')
+    if ($cpu.Count -eq 0) { $r.Why = (T '读不到处理器信息（WMI）'); return $r }
+    $c = $cpu[0]
+    $r.Name = ([string]$c.Name).Trim(); $r.Cores = [int]$c.NumberOfCores; $r.Threads = [int]$c.NumberOfLogicalProcessors
+    $r.MHz = [int]$c.CurrentClockSpeed; $r.MaxMHz = [int]$c.MaxClockSpeed; $r.Load = [int]$c.LoadPercentage
+    # 「处理器性能」计数器：100% 是标称频率；持续明显低于 100% 又不是空闲，就是被限制了（散热、电源）
+    $s = @(Try-Counter @('\Processor Information(_Total)\% Processor Performance', '\Processor Information(_Total)\% Processor Utility') 2)
+    $perf = @($s | Where-Object { $_.Path -like '*Processor Performance*' } | Select-Object -Last 1)
+    $util = @($s | Where-Object { $_.Path -like '*Processor Utility*' } | Select-Object -Last 1)
+    if ($perf.Count -gt 0) { $r.Perf = [int][math]::Round($perf[0].CookedValue); if ($util.Count -gt 0 -and $util[0].CookedValue -gt 40 -and $r.Perf -lt 75) { $r.Throttle = $true } }
+    if ($util.Count -gt 0 -and $r.Load -lt 0) { $r.Load = [int][math]::Round([math]::Min(100, $util[0].CookedValue)) }
+    # 温度：ACPI 热区（很多主板不报，或者报的是机箱 / 主板温度）
+    $tz = @(Try-Cim 'MSAcpi_ThermalZoneTemperature' 'root\wmi')
+    $temps = @($tz | ForEach-Object { try { ([double]$_.CurrentTemperature - 2732) / 10 } catch { $null } } | Where-Object { $_ -ne $null -and $_ -gt 0 -and $_ -lt 130 })
+    if ($temps.Count -gt 0) { $r.Temp = [int][math]::Round(($temps | Measure-Object -Maximum).Maximum); $r.TempNote = (T '来自 ACPI 热区，可能是主板而不是 CPU 内核的温度') }
+    else { $r.TempWhy = (T '主板没有通过 ACPI 报告温度；要看 CPU 内核温度需要厂商工具（HWiNFO 等）') }
+    $r.Ok = $true
+    return $r
+}
+# 内存：总量、可用、提交量和上限、硬错误（从页面文件读回来的次数）、WHEA 报告过的内存错误
+function Get-MemHealth {
+    $r = @{ Ok = $false; Total = 0; Free = 0; Commit = 0; CommitLimit = 0; HardFaults = -1; Whea = 0; Pressure = '' }
+    $os = @(Try-Cim 'Win32_OperatingSystem')
+    if ($os.Count -eq 0) { $r.Why = (T '读不到内存信息（WMI）'); return $r }
+    $o = $os[0]
+    $r.Total = [double]$o.TotalVisibleMemorySize * 1KB; $r.Free = [double]$o.FreePhysicalMemory * 1KB
+    $r.CommitLimit = [double]$o.TotalVirtualMemorySize * 1KB; $r.Commit = $r.CommitLimit - [double]$o.FreeVirtualMemory * 1KB
+    $s = @(Try-Counter @('\Memory\Page Reads/sec') 3)
+    if ($s.Count -gt 0) { $r.HardFaults = [int][math]::Round((($s | Measure-Object -Property CookedValue -Average).Average)) }
+    try { $r.Whea = @(Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'Microsoft-Windows-WHEA-Logger'; StartTime = (Get-Date).AddDays(-30) } -MaxEvents 200 -ErrorAction Stop | Where-Object { $_.Message -match (T '内存|Memory') }).Count } catch { $r.Whea = 0 }
+    $usedPct = if ($r.Total -gt 0) { 100 * ($r.Total - $r.Free) / $r.Total } else { 0 }
+    $commitPct = if ($r.CommitLimit -gt 0) { 100 * $r.Commit / $r.CommitLimit } else { 0 }
+    $r.UsedPct = [int][math]::Round($usedPct); $r.CommitPct = [int][math]::Round($commitPct)
+    $r.Pressure = if ($usedPct -ge 92 -or $commitPct -ge 90 -or $r.HardFaults -ge 100) { 'high' } elseif ($usedPct -ge 80 -or $commitPct -ge 75 -or $r.HardFaults -ge 20) { 'mid' } else { 'low' }
+    $r.Ok = $true
+    return $r
+}
+# 电池：设计容量、现在充满能到多少、循环次数（台式机没有电池）
+function Get-BatteryHealth {
+    $r = @{ Ok = $false; Present = $false; Design = 0; Full = 0; Cycles = -1; Charge = -1; Status = '' }
+    $b = @(Try-Cim 'Win32_Battery')
+    if ($b.Count -eq 0) { $r.Why = (T '没有电池（台式机）'); $r.Ok = $true; return $r }
+    $r.Present = $true; $r.Charge = [int]$b[0].EstimatedChargeRemaining
+    $r.Status = switch ([int]$b[0].BatteryStatus) { 1 { (T '放电中') } 2 { (T '接着电源') } 3 { (T '已充满') } 4 { (T '电量低') } 5 { (T '电量极低') } 6 { (T '充电中') } 7 { (T '充电中') } 8 { (T '充电中') } 9 { (T '充电中') } default { '' } }
+    $st = @(Try-Cim 'BatteryStaticData' 'root\wmi'); $fc = @(Try-Cim 'BatteryFullChargedCapacity' 'root\wmi'); $cc = @(Try-Cim 'BatteryCycleCount' 'root\wmi')
+    if ($st.Count -gt 0) { $r.Design = [double]$st[0].DesignedCapacity }
+    if ($fc.Count -gt 0) { $r.Full = [double]$fc[0].FullChargedCapacity }
+    if ($cc.Count -gt 0) { $r.Cycles = [int]$cc[0].CycleCount }
+    if ($r.Design -le 0 -or $r.Full -le 0) { $r.Why = (T '电池没有报告设计容量和实际满充容量') }
+    $r.Ok = $true
+    return $r
+}
+# 显卡：型号、驱动版本和日期、显存大小、现在的占用（Windows 的 GPU 计数器）；温度要厂商工具
+function Get-GpuHealth {
+    $out = @()
+    foreach ($v in @(Try-Cim 'Win32_VideoController')) {
+        $g = @{ Ok = $true; Name = ([string]$v.Name).Trim(); Driver = [string]$v.DriverVersion; DriverDate = $null; Vram = 0; Util = -1; VramUsed = -1; TempWhy = (T '温度要厂商工具（NVIDIA、AMD、Intel 的控制面板）才能读') }
+        try { if ($v.DriverDate) { $g.DriverDate = [DateTime]$v.DriverDate } } catch {}
+        # AdapterRAM 是 32 位，超过 4 GB 的显卡报不准：从注册表读 qwMemorySize
+        $g.Vram = [double]$v.AdapterRAM
+        try {
+            foreach ($k in @(Get-ChildItem 'HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}' -ErrorAction Stop | Where-Object { $_.PSChildName -match '^\d{4}$' })) {
+                $p = Get-ItemProperty $k.PSPath -ErrorAction SilentlyContinue
+                if ($p -and $p.DriverDesc -eq $v.Name -and $p.'HardwareInformation.qwMemorySize') { $g.Vram = [double]$p.'HardwareInformation.qwMemorySize'; break }
+            }
+        } catch {}
+        $out += $g
+    }
+    if ($out.Count -eq 0) { return @(@{ Ok = $false; Why = (T '读不到显卡信息（WMI）') }) }
+    # 占用：GPU Engine 计数器按进程分，这里把 3D 引擎的加起来；显存按适配器的专用显存占用
+    $s = @(Try-Counter @('\GPU Engine(*engtype_3D)\Utilization Percentage', '\GPU Adapter Memory(*)\Dedicated Usage') 1)
+    if ($s.Count -gt 0) {
+        $u = [double]0; foreach ($x in @($s | Where-Object { $_.Path -like '*Utilization*' })) { $u += [double]$x.CookedValue }
+        $m = [double]0; foreach ($x in @($s | Where-Object { $_.Path -like '*Dedicated Usage*' })) { $m += [double]$x.CookedValue }
+        $out[0].Util = [int][math]::Min(100, [math]::Round($u)); $out[0].VramUsed = $m
+    }
+    return $out
+}
+# Windows：开机多久、挂起的重启、最近的更新、有问题的设备（设备管理器里带叹号的）、最近 7 天的严重和错误事件按来源
+function Get-WinHealth {
+    $r = @{ Ok = $true; Uptime = $null; LastBoot = $null; PendingReboot = $false; LastUpdate = $null; BadDevices = @(); Errors = @(); ErrorCount = 0; Build = '' }
+    $os = @(Try-Cim 'Win32_OperatingSystem')
+    if ($os.Count -gt 0) { try { $r.LastBoot = [DateTime]$os[0].LastBootUpTime; $r.Uptime = (Get-Date) - $r.LastBoot } catch {}; $r.Build = [string]$os[0].Version }
+    foreach ($k in 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending', 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired') { if (Test-Path $k) { $r.PendingReboot = $true } }
+    try { $p = Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' -Name PendingFileRenameOperations -ErrorAction Stop; if ($p.PendingFileRenameOperations) { $r.PendingReboot = $true } } catch {}
+    try { $h = @(Get-HotFix -ErrorAction Stop | Where-Object { $_.InstalledOn } | Sort-Object InstalledOn -Descending); if ($h.Count -gt 0) { $r.LastUpdate = [DateTime]$h[0].InstalledOn; $r.LastUpdateId = [string]$h[0].HotFixID } } catch {}
+    foreach ($d in @(Try-Cim 'Win32_PnPEntity' 'root\cimv2' 'ConfigManagerErrorCode <> 0')) {
+        $r.BadDevices += @{ Name = [string]$d.Name; Code = [int]$d.ConfigManagerErrorCode; Note = (Get-PnpErrorText ([int]$d.ConfigManagerErrorCode)) }
+    }
+    try {
+        $ev = @(Get-WinEvent -FilterHashtable @{ LogName = 'System'; Level = @(1, 2); StartTime = (Get-Date).AddDays(-7) } -MaxEvents 2000 -ErrorAction Stop)
+        $r.ErrorCount = $ev.Count
+        $r.Errors = @($ev | Group-Object ProviderName | Sort-Object Count -Descending | Select-Object -First 6 | ForEach-Object { @{ Source = $_.Name; Count = $_.Count; Last = ($_.Group | Sort-Object TimeCreated -Descending | Select-Object -First 1).TimeCreated; Sample = (([string]($_.Group[0].Message) -split "`n")[0]).Trim() } })
+    } catch { $r.Errors = @() }
+    return $r
+}
+function Get-PnpErrorText([int]$code) {
+    switch ($code) {
+        1 { (T '没有正确配置') } 3 { (T '驱动可能损坏，或内存不足') } 10 { (T '无法启动') } 12 { (T '找不到足够的可用资源') } 14 { (T '要重启电脑才能正常工作') }
+        18 { (T '要重新安装驱动') } 19 { (T '注册表里的配置信息损坏') } 22 { (T '已被禁用') } 24 { (T '设备不在了，或者没有正确连接') } 28 { (T '没有安装驱动') }
+        31 { (T '无法加载驱动') } 37 { (T '驱动初始化失败') } 39 { (T '驱动损坏或丢失') } 43 { (T '设备报告了问题，Windows 把它停了') } 45 { (T '已拔出') }
+        default { (T "设备管理器错误代码 {0}") -f $code }
+    }
+}
+# 启动：最近一次开机用了多久（Windows 自己记在「诊断-性能」日志里），以及它点名拖慢开机的程序
+function Get-BootHealth {
+    $r = @{ Ok = $false; BootMs = 0; MainMs = 0; PostMs = 0; At = $null; Slow = @(); History = @() }
+    try {
+        $ev = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-Diagnostics-Performance/Operational'; Id = 100 } -MaxEvents 10 -ErrorAction Stop)
+        foreach ($e in $ev) {
+            $x = [xml]$e.ToXml(); $d = @{}
+            foreach ($n in $x.Event.EventData.Data) { $d[[string]$n.Name] = [string]$n.'#text' }
+            $h = @{ At = $e.TimeCreated; BootMs = [int]$d['BootTime']; MainMs = [int]$d['MainPathBootTime']; PostMs = [int]$d['BootPostBootTime'] }
+            $r.History += $h
+        }
+        if ($r.History.Count -gt 0) { $h = $r.History[0]; $r.BootMs = $h.BootMs; $r.MainMs = $h.MainMs; $r.PostMs = $h.PostMs; $r.At = $h.At; $r.Ok = $true }
+        else { $r.Why = (T 'Windows 还没有记录过开机用时（「诊断-性能」日志为空）') }
+    } catch { $r.Why = (T '读不到「诊断-性能」日志') }
+    try {
+        $ev = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-Diagnostics-Performance/Operational'; Id = 101; StartTime = (Get-Date).AddDays(-30) } -MaxEvents 60 -ErrorAction Stop)
+        $byName = @{}
+        foreach ($e in $ev) {
+            $x = [xml]$e.ToXml(); $d = @{}
+            foreach ($n in $x.Event.EventData.Data) { $d[[string]$n.Name] = [string]$n.'#text' }
+            $name = $d['Name']; if (-not $name) { $name = $d['Path'] }
+            if (-not $name) { continue }
+            if (-not $byName.ContainsKey($name)) { $byName[$name] = @{ Name = $name; Path = $d['Path']; Times = 0; DegradeMs = 0; Last = $e.TimeCreated } }
+            $byName[$name].Times++; $byName[$name].DegradeMs = [math]::Max([int]$byName[$name].DegradeMs, [int]$d['DegradationTime'])
+        }
+        $r.Slow = @($byName.Values | Sort-Object { $_.DegradeMs } -Descending | Select-Object -First 8)
+    } catch {}
+    return $r
+}
+# 蓝屏和崩溃：转储文件（自己解析）、相关事件（意外关机、蓝屏记录、硬件错误、磁盘错误）、最近装的驱动
+function Get-CrashHealth {
+    $r = @{ Ok = $true; Dumps = @(); Events = @(); Drivers = @(); DumpDir = (Join-Path $env:SystemRoot 'Minidump'); MemoryDmp = $null }
+    $files = @()
+    if (Test-Path -LiteralPath $r.DumpDir) { $files = @(Get-ChildItem -LiteralPath $r.DumpDir -Filter *.dmp -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 10) }
+    foreach ($f in $files) {
+        $d = $null; try { $d = [DumpInfo]::Parse($f.FullName) } catch { $d = $null }
+        $x = @{ File = $f.FullName; Name = $f.Name; Time = $f.LastWriteTime; Size = [double]$f.Length; Ok = $false; Code = 0; CodeName = ''; Params = @(); Suspect = ''; Stack = @(); Drivers = 0; Error = '' }
+        if ($d) {
+            $x.Ok = $d.Ok; $x.Code = [long]$d.BugCheck; $x.CodeName = [DumpInfo]::CodeName($d.BugCheck); $x.Params = @($d.Params | ForEach-Object { '0x{0:X}' -f $_ })
+            $x.Suspect = $d.Suspect; $x.Stack = @($d.StackDrivers); $x.Drivers = $d.Drivers.Count; $x.Error = $d.Error
+            if ($d.Time -gt [DateTime]'2000-01-01') { $x.Time = $d.Time }
+        }
+        $r.Dumps += $x
+    }
+    $mem = Join-Path $env:SystemRoot 'MEMORY.DMP'
+    if (Test-Path -LiteralPath $mem) { $i = Get-Item -LiteralPath $mem; $r.MemoryDmp = @{ Size = [double]$i.Length; Time = $i.LastWriteTime } }
+    # 事件：Kernel-Power 41 意外关机、BugCheck 1001、WHEA 硬件错误、磁盘和 NTFS 错误
+    $defs = @(
+        @{ Prov = 'Microsoft-Windows-Kernel-Power'; Ids = @(41); What = (T '意外关机或重启（没有正常关机）') },
+        @{ Prov = 'Microsoft-Windows-WER-SystemErrorReporting'; Ids = @(1001); What = (T '蓝屏记录') },
+        @{ Prov = 'Microsoft-Windows-WHEA-Logger'; Ids = @(17, 18, 19, 20, 46, 47); What = (T '硬件错误（CPU、内存、PCIe 报告的）') },
+        @{ Prov = 'disk'; Ids = @(7, 11, 51, 153); What = (T '磁盘读写错误或重试') },
+        @{ Prov = 'Ntfs'; Ids = @(55, 98, 140); What = (T '文件系统损坏或需要检查') },
+        @{ Prov = 'volmgr'; Ids = @(161); What = (T '没能写出转储文件') },
+        @{ Prov = 'Microsoft-Windows-Kernel-General'; Ids = @(1); What = (T '系统时间被改动') }
+    )
+    foreach ($df in $defs) {
+        if ($df.Prov -eq 'Microsoft-Windows-Kernel-General') { continue }
+        try {
+            $ev = @(Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = $df.Prov; Id = $df.Ids; StartTime = (Get-Date).AddDays(-30) } -MaxEvents 200 -ErrorAction Stop)
+            if ($ev.Count -gt 0) { $r.Events += @{ Source = $df.Prov; What = $df.What; Count = $ev.Count; Last = ($ev | Sort-Object TimeCreated -Descending | Select-Object -First 1).TimeCreated; Sample = (([string]$ev[0].Message -split "`n")[0]).Trim() } }
+        } catch {}
+    }
+    # 最近 30 天装的驱动（设备管理器的安装记录）
+    try {
+        $ev = @(Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'Microsoft-Windows-UserPnp'; Id = @(20001, 20003); StartTime = (Get-Date).AddDays(-30) } -MaxEvents 100 -ErrorAction Stop)
+        $seen = @{}
+        foreach ($e in $ev) {
+            $x = [xml]$e.ToXml(); $d = @{}
+            foreach ($n in $x.Event.EventData.Data) { $d[[string]$n.Name] = [string]$n.'#text' }
+            $name = $d['DriverName']; if (-not $name) { $name = $d['DeviceInstanceID'] }
+            $k = $name + '|' + $d['DriverVersion']
+            if ($seen.ContainsKey($k)) { continue }; $seen[$k] = $true
+            $r.Drivers += @{ When = $e.TimeCreated; Name = $name; Provider = $d['DriverProvider']; Version = $d['DriverVersion']; Device = $d['DeviceInstanceID']; Status = $d['Status'] }
+        }
+    } catch {}
+    return $r
+}
+# 一次读完健康页要的全部（在后台线程里跑）
+function Get-HealthAll {
+    $t0 = Get-Date
+    $r = @{ Cpu = (Get-CpuHealth); Mem = (Get-MemHealth); Battery = (Get-BatteryHealth); Gpu = @(Get-GpuHealth); Win = (Get-WinHealth); Boot = (Get-BootHealth); Crash = (Get-CrashHealth); At = (Get-Date) }
+    $r.Disks = @(); foreach ($d in @(Get-FixedDriveLetters)) { try { $h = Get-DiskHealthInfo $d; $h.Drive = $d; $r.Disks += $h } catch {} }
+    $r.Secs = ((Get-Date) - $t0).TotalSeconds
+    return $r
+}
+function Get-FixedDriveLetters { @([IO.DriveInfo]::GetDrives() | Where-Object { $_.DriveType -eq 'Fixed' -and $_.IsReady } | ForEach-Object { $_.Name.TrimEnd('\') }) }
+
+# ---------- 活动监控：窗口开着时每隔几秒采一次样，看谁在吃 CPU、内存、磁盘 ----------
+# 一次采样：每个进程的累计 CPU 时间、工作集、累计写入字节（Windows 从进程启动起记的）
+function Get-ProcSample {
+    $out = @{}
+    foreach ($p in @(Try-Cim 'Win32_Process')) {
+        $id = [int]$p.ProcessId
+        if ($id -le 0) { continue }
+        $out[$id] = @{ Pid = $id; Name = [string]$p.Name; Path = [string]$p.ExecutablePath; Cpu100ns = [double]$p.KernelModeTime + [double]$p.UserModeTime; Ws = [double]$p.WorkingSetSize; Write = [double]$p.WriteTransferCount; Read = [double]$p.ReadTransferCount; Started = $p.CreationDate }
+    }
+    return @{ At = (Get-Date); Procs = $out }
+}
+# 两次采样的差：这段时间里每个进程用了多少 CPU（占全部核心的百分比）、写了多少；再加上从监控开始到现在的累计
+function Compare-ProcSample($prev, $cur, $base, [int]$threads) {
+    $rows = @()
+    $secs = [math]::Max(0.001, ($cur.At - $prev.At).TotalSeconds)
+    foreach ($id in $cur.Procs.Keys) {
+        $c = $cur.Procs[$id]
+        $p = if ($prev.Procs.ContainsKey($id)) { $prev.Procs[$id] } else { $null }
+        $b = if ($base -and $base.Procs.ContainsKey($id)) { $base.Procs[$id] } else { $null }
+        $cpu = if ($p) { 100.0 * ($c.Cpu100ns - $p.Cpu100ns) / 10000000.0 / $secs / [math]::Max(1, $threads) } else { 0 }
+        $w = if ($p) { $c.Write - $p.Write } else { 0 }
+        $wSince = if ($b) { $c.Write - $b.Write } else { $c.Write }   # 监控开始后才出现的进程：从它启动起算
+        $rows += @{ Pid = $id; Name = $c.Name; Path = $c.Path; Cpu = [math]::Max(0, $cpu); Ws = $c.Ws; WriteRate = [math]::Max(0, $w) / $secs; WriteSince = [math]::Max(0, $wSince); WriteTotal = $c.Write; ReadTotal = $c.Read }
+    }
+    return $rows
+}
+
 # Kind: cache = 缓存类(删除/跳过)   action = 操作类(执行/跳过)   move = 只能搬(搬到其他盘/跳过)   flex = 可搬可删
 function Get-Catalog {
     $docs = [Environment]::GetFolderPath('MyDocuments')

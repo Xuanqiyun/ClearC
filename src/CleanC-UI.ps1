@@ -2664,6 +2664,158 @@ public static class FsTools {
     }
 }
 
+// ==================== 蓝屏转储（C:\Windows\Minidump\*.dmp）：不用调试器也能读出错误码、参数、出事时加载的驱动和栈上出现的驱动 ====================
+// 64 位内核小转储：开头是 DUMP_HEADER64（0x2000 字节），接着 TRIAGE_DUMP64，里面记着驱动列表、异常记录和调用栈在文件里的位置
+public class DumpDriver { public string Name; public ulong Base; public uint Size; public bool Hit; }
+public class DumpInfo {
+    public string File, Error = "";
+    public bool Ok, Is64;
+    public uint BugCheck; public ulong[] Params = new ulong[4];
+    public DateTime Time; public uint Build, ServicePackBuild;
+    public ulong ExceptionAddress; public uint ExceptionCode;
+    public List<DumpDriver> Drivers = new List<DumpDriver>();
+    public List<string> StackDrivers = new List<string>();   // 调用栈上出现的驱动（按出现顺序，去重），ntoskrnl 排除
+    public string Suspect = "";                             // 最可能的：异常地址或出事参数落在哪个驱动里；没有就取栈上第一个非系统驱动
+    public static DumpInfo Parse(string path) { return Parse(path, 4 * 1024 * 1024); }
+    public static DumpInfo Parse(string path, int maxBytes) {
+        DumpInfo d = new DumpInfo(); d.File = path;
+        byte[] b;
+        try {
+            using (FileStream fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) {
+                int n = (int)Math.Min(fs.Length, (long)maxBytes); b = new byte[n]; int got = 0;
+                while (got < n) { int r = fs.Read(b, got, n - got); if (r <= 0) break; got += r; }
+            }
+        } catch (Exception e) { d.Error = e.Message; return d; }
+        return Parse(b, d);
+    }
+    public static DumpInfo Parse(byte[] b, DumpInfo d) {
+        if (d == null) d = new DumpInfo();
+        if (b.Length < 0x60 || b[0] != 'P' || b[1] != 'A' || b[2] != 'G' || b[3] != 'E') { d.Error = "not a kernel dump"; return d; }
+        string valid = Encoding.ASCII.GetString(b, 4, 4);
+        if (valid == "DU64") d.Is64 = true; else if (valid == "DUMP") d.Is64 = false; else { d.Error = "unknown dump format " + valid; return d; }
+        try {
+            if (d.Is64) {
+                d.Build = BitConverter.ToUInt32(b, 0x0C);
+                d.BugCheck = BitConverter.ToUInt32(b, 0x38);
+                for (int i = 0; i < 4; i++) d.Params[i] = BitConverter.ToUInt64(b, 0x40 + i * 8);
+                if (b.Length >= 0xFB0) { try { d.Time = DateTime.FromFileTime(BitConverter.ToInt64(b, 0xFA8)); } catch { } }
+                int tri = 0x2000;
+                if (b.Length >= tri + 0x50) {
+                    d.ServicePackBuild = BitConverter.ToUInt32(b, tri);
+                    uint exOff = BitConverter.ToUInt32(b, tri + 0x10), csOff = BitConverter.ToUInt32(b, tri + 0x28), csSize = BitConverter.ToUInt32(b, tri + 0x2C);
+                    uint drvOff = BitConverter.ToUInt32(b, tri + 0x30), drvCount = BitConverter.ToUInt32(b, tri + 0x34);
+                    if (exOff > 0 && exOff + 0x18 <= b.Length) { d.ExceptionCode = BitConverter.ToUInt32(b, (int)exOff); d.ExceptionAddress = BitConverter.ToUInt64(b, (int)exOff + 0x10); }
+                    const int entry = 0x98;   // DUMP_DRIVER_ENTRY64：名字的位置 + KLDR_DATA_TABLE_ENTRY64
+                    for (uint i = 0; i < drvCount && i < 4096; i++) {
+                        long o = (long)drvOff + (long)i * entry;
+                        if (o + entry > b.Length) break;
+                        DumpDriver dr = new DumpDriver();
+                        uint nameOff = BitConverter.ToUInt32(b, (int)o);
+                        dr.Base = BitConverter.ToUInt64(b, (int)o + 8 + 0x30);
+                        dr.Size = BitConverter.ToUInt32(b, (int)o + 8 + 0x40);
+                        dr.Name = ReadString(b, nameOff);
+                        if (dr.Name.Length > 0) d.Drivers.Add(dr);
+                    }
+                    if (csOff > 0 && csSize > 0 && csOff + csSize <= b.Length) {
+                        for (uint p = 0; p + 8 <= csSize; p += 8) {
+                            ulong a = BitConverter.ToUInt64(b, (int)(csOff + p));
+                            DumpDriver hit = Find(d, a);
+                            if (hit != null && !IsKernel(hit.Name) && !d.StackDrivers.Contains(hit.Name)) { d.StackDrivers.Add(hit.Name); hit.Hit = true; }
+                        }
+                    }
+                }
+            } else {
+                d.Build = BitConverter.ToUInt32(b, 0x0C);
+                d.BugCheck = BitConverter.ToUInt32(b, 0x28);
+                for (int i = 0; i < 4; i++) d.Params[i] = BitConverter.ToUInt32(b, 0x2C + i * 4);
+                d.Error = "32-bit dump: only the bug check code is read";
+            }
+            // 最可能的驱动：异常地址，或者这类错误码里记着出事地址的那个参数
+            ulong[] addrs = AddrParams(d);
+            foreach (ulong a in addrs) { DumpDriver hit = Find(d, a); if (hit != null && !IsKernel(hit.Name)) { d.Suspect = hit.Name; hit.Hit = true; break; } }
+            if (d.Suspect.Length == 0 && d.StackDrivers.Count > 0) d.Suspect = d.StackDrivers[0];
+            d.Ok = true;
+        } catch (Exception e) { d.Error = e.Message; }
+        return d;
+    }
+    static ulong[] AddrParams(DumpInfo d) {
+        List<ulong> a = new List<ulong>();
+        if (d.ExceptionAddress != 0) a.Add(d.ExceptionAddress);
+        switch (d.BugCheck) {
+            case 0x0A: case 0xD1: a.Add(d.Params[3]); break;                    // IRQL_NOT_LESS_OR_EQUAL, DRIVER_IRQL…：参数 4 是出事地址
+            case 0x1E: case 0x7E: case 0x8E: case 0x3B: a.Add(d.Params[1]); break;   // 异常类：参数 2 是出事地址
+            case 0x50: case 0xC5: a.Add(d.Params[3]); break;                    // PAGE_FAULT_IN_NONPAGED_AREA：参数 4
+            case 0xC4: a.Add(d.Params[1]); break;
+            case 0x139: a.Add(d.Params[1]); break;
+            case 0xC2: a.Add(d.Params[2]); break;
+        }
+        return a.ToArray();
+    }
+    static bool IsKernel(string n) { n = n.ToLowerInvariant(); return n.StartsWith("ntoskrnl") || n.StartsWith("ntkrnl") || n == "hal.dll" || n.StartsWith("hal") || n == "kd.dll" || n.StartsWith("kdcom") || n == "pshed.dll" || n == "bootvid.dll" || n == "clfs.sys" || n == "ci.dll" || n.StartsWith("mcupdate"); }
+    static DumpDriver Find(DumpInfo d, ulong a) {
+        if (a == 0) return null;
+        foreach (DumpDriver dr in d.Drivers) if (a >= dr.Base && dr.Size > 0 && a < dr.Base + dr.Size) return dr;
+        return null;
+    }
+    static string ReadString(byte[] b, uint off) {
+        if (off == 0 || off + 4 > b.Length) return "";
+        uint len = BitConverter.ToUInt32(b, (int)off);
+        if (len == 0 || len > 1024 || off + 4 + len * 2 > b.Length) return "";
+        return Encoding.Unicode.GetString(b, (int)off + 4, (int)len * 2).TrimEnd('\0');
+    }
+    // 常见错误码的名字（Windows 自己的名字）
+    public static string CodeName(uint c) {
+        switch (c) {
+            case 0x0A: return "IRQL_NOT_LESS_OR_EQUAL"; case 0x1A: return "MEMORY_MANAGEMENT"; case 0x1E: return "KMODE_EXCEPTION_NOT_HANDLED"; case 0x24: return "NTFS_FILE_SYSTEM";
+            case 0x3B: return "SYSTEM_SERVICE_EXCEPTION"; case 0x3D: return "INTERRUPT_EXCEPTION_NOT_HANDLED"; case 0x44: return "MULTIPLE_IRP_COMPLETE_REQUESTS"; case 0x4E: return "PFN_LIST_CORRUPT";
+            case 0x50: return "PAGE_FAULT_IN_NONPAGED_AREA"; case 0x7A: return "KERNEL_DATA_INPAGE_ERROR"; case 0x7E: return "SYSTEM_THREAD_EXCEPTION_NOT_HANDLED"; case 0x7F: return "UNEXPECTED_KERNEL_MODE_TRAP";
+            case 0x8E: return "KERNEL_MODE_EXCEPTION_NOT_HANDLED"; case 0x9F: return "DRIVER_POWER_STATE_FAILURE"; case 0xA0: return "INTERNAL_POWER_ERROR"; case 0xBE: return "ATTEMPTED_WRITE_TO_READONLY_MEMORY";
+            case 0xC2: return "BAD_POOL_CALLER"; case 0xC4: return "DRIVER_VERIFIER_DETECTED_VIOLATION"; case 0xC5: return "DRIVER_CORRUPTED_EXPOOL"; case 0xD1: return "DRIVER_IRQL_NOT_LESS_OR_EQUAL";
+            case 0xD5: return "DRIVER_PAGE_FAULT_IN_FREED_SPECIAL_POOL"; case 0xDE: return "POOL_CORRUPTION_IN_FILE_AREA"; case 0xEF: return "CRITICAL_PROCESS_DIED"; case 0xF4: return "CRITICAL_OBJECT_TERMINATION";
+            case 0xF5: return "FLTMGR_FILE_SYSTEM"; case 0xFC: return "ATTEMPTED_EXECUTE_OF_NOEXECUTE_MEMORY"; case 0x109: return "CRITICAL_STRUCTURE_CORRUPTION"; case 0x116: return "VIDEO_TDR_FAILURE";
+            case 0x117: return "VIDEO_TDR_TIMEOUT_DETECTED"; case 0x119: return "VIDEO_SCHEDULER_INTERNAL_ERROR"; case 0x124: return "WHEA_UNCORRECTABLE_ERROR"; case 0x133: return "DPC_WATCHDOG_VIOLATION";
+            case 0x139: return "KERNEL_SECURITY_CHECK_FAILURE"; case 0x13A: return "KERNEL_MODE_HEAP_CORRUPTION"; case 0x141: return "VIDEO_ENGINE_TIMEOUT_DETECTED"; case 0x154: return "UNEXPECTED_STORE_EXCEPTION";
+            case 0x15F: return "CONNECTED_STANDBY_WATCHDOG_TIMEOUT"; case 0x1A8: return "ACPI_DRIVER_INTERNAL"; case 0x1CA: return "SYNTHETIC_WATCHDOG_TIMEOUT"; case 0x1000007E: return "SYSTEM_THREAD_EXCEPTION_NOT_HANDLED_M";
+            case 0x1000008E: return "KERNEL_MODE_EXCEPTION_NOT_HANDLED_M"; case 0x100000EA: return "THREAD_STUCK_IN_DEVICE_DRIVER_M"; case 0xEA: return "THREAD_STUCK_IN_DEVICE_DRIVER"; case 0xC000021A: return "STATUS_SYSTEM_PROCESS_TERMINATED";
+            default: return "";
+        }
+    }
+}
+// ==================== 系统健康页的卡片和进程行 ====================
+public class HealthChip { string _f, _b; public string Text { get; set; } public string Fg { get { return Theme.F(_f); } set { _f = value; } } public string Bg { get { return Theme.B(_b); } set { _b = value; } } }
+public class HealthCard {
+    public string Title { get; set; }
+    public string Sub { get; set; }
+    public string Tip { get; set; }
+    string _stripe; public string Stripe { get { return Theme.B(_stripe); } set { _stripe = value; } }
+    public List<HealthChip> Chips { get; set; }
+    public List<string> Lines { get; set; }
+    public double BarW { get; set; }
+    public bool HasBar { get; set; }
+    string _bar; public string BarBrush { get { return Theme.B(_bar); } set { _bar = value; } }
+    public HealthCard() { Chips = new List<HealthChip>(); Lines = new List<string>(); }
+}
+public class ProcRow {
+    public string Name { get; set; }
+    public string Meta { get; set; }
+    public string CpuText { get; set; }
+    public string WsText { get; set; }
+    public string RateText { get; set; }
+    public string SinceText { get; set; }
+    public string TotalText { get; set; }
+    public double Bar { get; set; }
+    public double Sort { get; set; }
+}
+public class DumpRow {
+    public string When { get; set; }
+    public string Code { get; set; }
+    public string Suspect { get; set; }
+    public string Detail { get; set; }
+    public string File { get; set; }
+    string _fg; public string SuspectBrush { get { return Theme.F(_fg); } set { _fg = value; } }
+}
+public class NoteRow { public string Head { get; set; } public string Body { get; set; } public string Path { get; set; } public bool HasPath { get; set; } }
+
 // ==================== 界面文字翻译（PowerShell 启动时按语言设置填入；没有就原样返回中文） ====================
 public static class L10n {
     public static System.Collections.Generic.Dictionary<string, string> Map;
@@ -3529,6 +3681,239 @@ function Get-OrphanFolders($apps) {
 
 # 使用模式：0 普通用户  1 工程师  2 开发者和 IT。目录项的 Lvl 比当前模式高就不在清理页列出（自动清理不受影响）
 function Get-Mode { switch ((Get-Setting 'Mode' 'basic')) { 'pro' { 1 } 'expert' { 2 } default { 0 } } }
+# ==================== 系统健康：硬件、启动、蓝屏、事件 ====================
+# 原则：读不到的就明说「读不到」，不拿估算冒充实测。每一项都是 @{ ... Ok = $true/$false; Why = '为什么读不到' }
+function Try-Cim([string]$class, [string]$ns = 'root\cimv2', [string]$filter = '') {
+    try {
+        if ($filter) { return @(Get-CimInstance -ClassName $class -Namespace $ns -Filter $filter -ErrorAction Stop -OperationTimeoutSec 20) }
+        return @(Get-CimInstance -ClassName $class -Namespace $ns -ErrorAction Stop -OperationTimeoutSec 20)
+    } catch { return @() }
+}
+function Try-Counter([string[]]$paths, [int]$samples = 1) {
+    try { return (Get-Counter -Counter $paths -SampleInterval 1 -MaxSamples $samples -ErrorAction Stop).CounterSamples } catch { return @() }
+}
+# CPU：型号、核心数、负载、当前频率和最高频率（降频看得出来）、温度（主板不报就读不到）
+function Get-CpuHealth {
+    $r = @{ Ok = $false; Name = ''; Cores = 0; Threads = 0; Load = -1; MHz = 0; MaxMHz = 0; Perf = -1; Temp = $null; TempWhy = ''; Throttle = $false }
+    $cpu = @(Try-Cim 'Win32_Processor')
+    if ($cpu.Count -eq 0) { $r.Why = (T '读不到处理器信息（WMI）'); return $r }
+    $c = $cpu[0]
+    $r.Name = ([string]$c.Name).Trim(); $r.Cores = [int]$c.NumberOfCores; $r.Threads = [int]$c.NumberOfLogicalProcessors
+    $r.MHz = [int]$c.CurrentClockSpeed; $r.MaxMHz = [int]$c.MaxClockSpeed; $r.Load = [int]$c.LoadPercentage
+    # 「处理器性能」计数器：100% 是标称频率；持续明显低于 100% 又不是空闲，就是被限制了（散热、电源）
+    $s = @(Try-Counter @('\Processor Information(_Total)\% Processor Performance', '\Processor Information(_Total)\% Processor Utility') 2)
+    $perf = @($s | Where-Object { $_.Path -like '*Processor Performance*' } | Select-Object -Last 1)
+    $util = @($s | Where-Object { $_.Path -like '*Processor Utility*' } | Select-Object -Last 1)
+    if ($perf.Count -gt 0) { $r.Perf = [int][math]::Round($perf[0].CookedValue); if ($util.Count -gt 0 -and $util[0].CookedValue -gt 40 -and $r.Perf -lt 75) { $r.Throttle = $true } }
+    if ($util.Count -gt 0 -and $r.Load -lt 0) { $r.Load = [int][math]::Round([math]::Min(100, $util[0].CookedValue)) }
+    # 温度：ACPI 热区（很多主板不报，或者报的是机箱 / 主板温度）
+    $tz = @(Try-Cim 'MSAcpi_ThermalZoneTemperature' 'root\wmi')
+    $temps = @($tz | ForEach-Object { try { ([double]$_.CurrentTemperature - 2732) / 10 } catch { $null } } | Where-Object { $_ -ne $null -and $_ -gt 0 -and $_ -lt 130 })
+    if ($temps.Count -gt 0) { $r.Temp = [int][math]::Round(($temps | Measure-Object -Maximum).Maximum); $r.TempNote = (T '来自 ACPI 热区，可能是主板而不是 CPU 内核的温度') }
+    else { $r.TempWhy = (T '主板没有通过 ACPI 报告温度；要看 CPU 内核温度需要厂商工具（HWiNFO 等）') }
+    $r.Ok = $true
+    return $r
+}
+# 内存：总量、可用、提交量和上限、硬错误（从页面文件读回来的次数）、WHEA 报告过的内存错误
+function Get-MemHealth {
+    $r = @{ Ok = $false; Total = 0; Free = 0; Commit = 0; CommitLimit = 0; HardFaults = -1; Whea = 0; Pressure = '' }
+    $os = @(Try-Cim 'Win32_OperatingSystem')
+    if ($os.Count -eq 0) { $r.Why = (T '读不到内存信息（WMI）'); return $r }
+    $o = $os[0]
+    $r.Total = [double]$o.TotalVisibleMemorySize * 1KB; $r.Free = [double]$o.FreePhysicalMemory * 1KB
+    $r.CommitLimit = [double]$o.TotalVirtualMemorySize * 1KB; $r.Commit = $r.CommitLimit - [double]$o.FreeVirtualMemory * 1KB
+    $s = @(Try-Counter @('\Memory\Page Reads/sec') 3)
+    if ($s.Count -gt 0) { $r.HardFaults = [int][math]::Round((($s | Measure-Object -Property CookedValue -Average).Average)) }
+    try { $r.Whea = @(Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'Microsoft-Windows-WHEA-Logger'; StartTime = (Get-Date).AddDays(-30) } -MaxEvents 200 -ErrorAction Stop | Where-Object { $_.Message -match (T '内存|Memory') }).Count } catch { $r.Whea = 0 }
+    $usedPct = if ($r.Total -gt 0) { 100 * ($r.Total - $r.Free) / $r.Total } else { 0 }
+    $commitPct = if ($r.CommitLimit -gt 0) { 100 * $r.Commit / $r.CommitLimit } else { 0 }
+    $r.UsedPct = [int][math]::Round($usedPct); $r.CommitPct = [int][math]::Round($commitPct)
+    $r.Pressure = if ($usedPct -ge 92 -or $commitPct -ge 90 -or $r.HardFaults -ge 100) { 'high' } elseif ($usedPct -ge 80 -or $commitPct -ge 75 -or $r.HardFaults -ge 20) { 'mid' } else { 'low' }
+    $r.Ok = $true
+    return $r
+}
+# 电池：设计容量、现在充满能到多少、循环次数（台式机没有电池）
+function Get-BatteryHealth {
+    $r = @{ Ok = $false; Present = $false; Design = 0; Full = 0; Cycles = -1; Charge = -1; Status = '' }
+    $b = @(Try-Cim 'Win32_Battery')
+    if ($b.Count -eq 0) { $r.Why = (T '没有电池（台式机）'); $r.Ok = $true; return $r }
+    $r.Present = $true; $r.Charge = [int]$b[0].EstimatedChargeRemaining
+    $r.Status = switch ([int]$b[0].BatteryStatus) { 1 { (T '放电中') } 2 { (T '接着电源') } 3 { (T '已充满') } 4 { (T '电量低') } 5 { (T '电量极低') } 6 { (T '充电中') } 7 { (T '充电中') } 8 { (T '充电中') } 9 { (T '充电中') } default { '' } }
+    $st = @(Try-Cim 'BatteryStaticData' 'root\wmi'); $fc = @(Try-Cim 'BatteryFullChargedCapacity' 'root\wmi'); $cc = @(Try-Cim 'BatteryCycleCount' 'root\wmi')
+    if ($st.Count -gt 0) { $r.Design = [double]$st[0].DesignedCapacity }
+    if ($fc.Count -gt 0) { $r.Full = [double]$fc[0].FullChargedCapacity }
+    if ($cc.Count -gt 0) { $r.Cycles = [int]$cc[0].CycleCount }
+    if ($r.Design -le 0 -or $r.Full -le 0) { $r.Why = (T '电池没有报告设计容量和实际满充容量') }
+    $r.Ok = $true
+    return $r
+}
+# 显卡：型号、驱动版本和日期、显存大小、现在的占用（Windows 的 GPU 计数器）；温度要厂商工具
+function Get-GpuHealth {
+    $out = @()
+    foreach ($v in @(Try-Cim 'Win32_VideoController')) {
+        $g = @{ Ok = $true; Name = ([string]$v.Name).Trim(); Driver = [string]$v.DriverVersion; DriverDate = $null; Vram = 0; Util = -1; VramUsed = -1; TempWhy = (T '温度要厂商工具（NVIDIA、AMD、Intel 的控制面板）才能读') }
+        try { if ($v.DriverDate) { $g.DriverDate = [DateTime]$v.DriverDate } } catch {}
+        # AdapterRAM 是 32 位，超过 4 GB 的显卡报不准：从注册表读 qwMemorySize
+        $g.Vram = [double]$v.AdapterRAM
+        try {
+            foreach ($k in @(Get-ChildItem 'HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}' -ErrorAction Stop | Where-Object { $_.PSChildName -match '^\d{4}$' })) {
+                $p = Get-ItemProperty $k.PSPath -ErrorAction SilentlyContinue
+                if ($p -and $p.DriverDesc -eq $v.Name -and $p.'HardwareInformation.qwMemorySize') { $g.Vram = [double]$p.'HardwareInformation.qwMemorySize'; break }
+            }
+        } catch {}
+        $out += $g
+    }
+    if ($out.Count -eq 0) { return @(@{ Ok = $false; Why = (T '读不到显卡信息（WMI）') }) }
+    # 占用：GPU Engine 计数器按进程分，这里把 3D 引擎的加起来；显存按适配器的专用显存占用
+    $s = @(Try-Counter @('\GPU Engine(*engtype_3D)\Utilization Percentage', '\GPU Adapter Memory(*)\Dedicated Usage') 1)
+    if ($s.Count -gt 0) {
+        $u = [double]0; foreach ($x in @($s | Where-Object { $_.Path -like '*Utilization*' })) { $u += [double]$x.CookedValue }
+        $m = [double]0; foreach ($x in @($s | Where-Object { $_.Path -like '*Dedicated Usage*' })) { $m += [double]$x.CookedValue }
+        $out[0].Util = [int][math]::Min(100, [math]::Round($u)); $out[0].VramUsed = $m
+    }
+    return $out
+}
+# Windows：开机多久、挂起的重启、最近的更新、有问题的设备（设备管理器里带叹号的）、最近 7 天的严重和错误事件按来源
+function Get-WinHealth {
+    $r = @{ Ok = $true; Uptime = $null; LastBoot = $null; PendingReboot = $false; LastUpdate = $null; BadDevices = @(); Errors = @(); ErrorCount = 0; Build = '' }
+    $os = @(Try-Cim 'Win32_OperatingSystem')
+    if ($os.Count -gt 0) { try { $r.LastBoot = [DateTime]$os[0].LastBootUpTime; $r.Uptime = (Get-Date) - $r.LastBoot } catch {}; $r.Build = [string]$os[0].Version }
+    foreach ($k in 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending', 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired') { if (Test-Path $k) { $r.PendingReboot = $true } }
+    try { $p = Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' -Name PendingFileRenameOperations -ErrorAction Stop; if ($p.PendingFileRenameOperations) { $r.PendingReboot = $true } } catch {}
+    try { $h = @(Get-HotFix -ErrorAction Stop | Where-Object { $_.InstalledOn } | Sort-Object InstalledOn -Descending); if ($h.Count -gt 0) { $r.LastUpdate = [DateTime]$h[0].InstalledOn; $r.LastUpdateId = [string]$h[0].HotFixID } } catch {}
+    foreach ($d in @(Try-Cim 'Win32_PnPEntity' 'root\cimv2' 'ConfigManagerErrorCode <> 0')) {
+        $r.BadDevices += @{ Name = [string]$d.Name; Code = [int]$d.ConfigManagerErrorCode; Note = (Get-PnpErrorText ([int]$d.ConfigManagerErrorCode)) }
+    }
+    try {
+        $ev = @(Get-WinEvent -FilterHashtable @{ LogName = 'System'; Level = @(1, 2); StartTime = (Get-Date).AddDays(-7) } -MaxEvents 2000 -ErrorAction Stop)
+        $r.ErrorCount = $ev.Count
+        $r.Errors = @($ev | Group-Object ProviderName | Sort-Object Count -Descending | Select-Object -First 6 | ForEach-Object { @{ Source = $_.Name; Count = $_.Count; Last = ($_.Group | Sort-Object TimeCreated -Descending | Select-Object -First 1).TimeCreated; Sample = (([string]($_.Group[0].Message) -split "`n")[0]).Trim() } })
+    } catch { $r.Errors = @() }
+    return $r
+}
+function Get-PnpErrorText([int]$code) {
+    switch ($code) {
+        1 { (T '没有正确配置') } 3 { (T '驱动可能损坏，或内存不足') } 10 { (T '无法启动') } 12 { (T '找不到足够的可用资源') } 14 { (T '要重启电脑才能正常工作') }
+        18 { (T '要重新安装驱动') } 19 { (T '注册表里的配置信息损坏') } 22 { (T '已被禁用') } 24 { (T '设备不在了，或者没有正确连接') } 28 { (T '没有安装驱动') }
+        31 { (T '无法加载驱动') } 37 { (T '驱动初始化失败') } 39 { (T '驱动损坏或丢失') } 43 { (T '设备报告了问题，Windows 把它停了') } 45 { (T '已拔出') }
+        default { (T "设备管理器错误代码 {0}") -f $code }
+    }
+}
+# 启动：最近一次开机用了多久（Windows 自己记在「诊断-性能」日志里），以及它点名拖慢开机的程序
+function Get-BootHealth {
+    $r = @{ Ok = $false; BootMs = 0; MainMs = 0; PostMs = 0; At = $null; Slow = @(); History = @() }
+    try {
+        $ev = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-Diagnostics-Performance/Operational'; Id = 100 } -MaxEvents 10 -ErrorAction Stop)
+        foreach ($e in $ev) {
+            $x = [xml]$e.ToXml(); $d = @{}
+            foreach ($n in $x.Event.EventData.Data) { $d[[string]$n.Name] = [string]$n.'#text' }
+            $h = @{ At = $e.TimeCreated; BootMs = [int]$d['BootTime']; MainMs = [int]$d['MainPathBootTime']; PostMs = [int]$d['BootPostBootTime'] }
+            $r.History += $h
+        }
+        if ($r.History.Count -gt 0) { $h = $r.History[0]; $r.BootMs = $h.BootMs; $r.MainMs = $h.MainMs; $r.PostMs = $h.PostMs; $r.At = $h.At; $r.Ok = $true }
+        else { $r.Why = (T 'Windows 还没有记录过开机用时（「诊断-性能」日志为空）') }
+    } catch { $r.Why = (T '读不到「诊断-性能」日志') }
+    try {
+        $ev = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-Diagnostics-Performance/Operational'; Id = 101; StartTime = (Get-Date).AddDays(-30) } -MaxEvents 60 -ErrorAction Stop)
+        $byName = @{}
+        foreach ($e in $ev) {
+            $x = [xml]$e.ToXml(); $d = @{}
+            foreach ($n in $x.Event.EventData.Data) { $d[[string]$n.Name] = [string]$n.'#text' }
+            $name = $d['Name']; if (-not $name) { $name = $d['Path'] }
+            if (-not $name) { continue }
+            if (-not $byName.ContainsKey($name)) { $byName[$name] = @{ Name = $name; Path = $d['Path']; Times = 0; DegradeMs = 0; Last = $e.TimeCreated } }
+            $byName[$name].Times++; $byName[$name].DegradeMs = [math]::Max([int]$byName[$name].DegradeMs, [int]$d['DegradationTime'])
+        }
+        $r.Slow = @($byName.Values | Sort-Object { $_.DegradeMs } -Descending | Select-Object -First 8)
+    } catch {}
+    return $r
+}
+# 蓝屏和崩溃：转储文件（自己解析）、相关事件（意外关机、蓝屏记录、硬件错误、磁盘错误）、最近装的驱动
+function Get-CrashHealth {
+    $r = @{ Ok = $true; Dumps = @(); Events = @(); Drivers = @(); DumpDir = (Join-Path $env:SystemRoot 'Minidump'); MemoryDmp = $null }
+    $files = @()
+    if (Test-Path -LiteralPath $r.DumpDir) { $files = @(Get-ChildItem -LiteralPath $r.DumpDir -Filter *.dmp -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 10) }
+    foreach ($f in $files) {
+        $d = $null; try { $d = [DumpInfo]::Parse($f.FullName) } catch { $d = $null }
+        $x = @{ File = $f.FullName; Name = $f.Name; Time = $f.LastWriteTime; Size = [double]$f.Length; Ok = $false; Code = 0; CodeName = ''; Params = @(); Suspect = ''; Stack = @(); Drivers = 0; Error = '' }
+        if ($d) {
+            $x.Ok = $d.Ok; $x.Code = [long]$d.BugCheck; $x.CodeName = [DumpInfo]::CodeName($d.BugCheck); $x.Params = @($d.Params | ForEach-Object { '0x{0:X}' -f $_ })
+            $x.Suspect = $d.Suspect; $x.Stack = @($d.StackDrivers); $x.Drivers = $d.Drivers.Count; $x.Error = $d.Error
+            if ($d.Time -gt [DateTime]'2000-01-01') { $x.Time = $d.Time }
+        }
+        $r.Dumps += $x
+    }
+    $mem = Join-Path $env:SystemRoot 'MEMORY.DMP'
+    if (Test-Path -LiteralPath $mem) { $i = Get-Item -LiteralPath $mem; $r.MemoryDmp = @{ Size = [double]$i.Length; Time = $i.LastWriteTime } }
+    # 事件：Kernel-Power 41 意外关机、BugCheck 1001、WHEA 硬件错误、磁盘和 NTFS 错误
+    $defs = @(
+        @{ Prov = 'Microsoft-Windows-Kernel-Power'; Ids = @(41); What = (T '意外关机或重启（没有正常关机）') },
+        @{ Prov = 'Microsoft-Windows-WER-SystemErrorReporting'; Ids = @(1001); What = (T '蓝屏记录') },
+        @{ Prov = 'Microsoft-Windows-WHEA-Logger'; Ids = @(17, 18, 19, 20, 46, 47); What = (T '硬件错误（CPU、内存、PCIe 报告的）') },
+        @{ Prov = 'disk'; Ids = @(7, 11, 51, 153); What = (T '磁盘读写错误或重试') },
+        @{ Prov = 'Ntfs'; Ids = @(55, 98, 140); What = (T '文件系统损坏或需要检查') },
+        @{ Prov = 'volmgr'; Ids = @(161); What = (T '没能写出转储文件') },
+        @{ Prov = 'Microsoft-Windows-Kernel-General'; Ids = @(1); What = (T '系统时间被改动') }
+    )
+    foreach ($df in $defs) {
+        if ($df.Prov -eq 'Microsoft-Windows-Kernel-General') { continue }
+        try {
+            $ev = @(Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = $df.Prov; Id = $df.Ids; StartTime = (Get-Date).AddDays(-30) } -MaxEvents 200 -ErrorAction Stop)
+            if ($ev.Count -gt 0) { $r.Events += @{ Source = $df.Prov; What = $df.What; Count = $ev.Count; Last = ($ev | Sort-Object TimeCreated -Descending | Select-Object -First 1).TimeCreated; Sample = (([string]$ev[0].Message -split "`n")[0]).Trim() } }
+        } catch {}
+    }
+    # 最近 30 天装的驱动（设备管理器的安装记录）
+    try {
+        $ev = @(Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'Microsoft-Windows-UserPnp'; Id = @(20001, 20003); StartTime = (Get-Date).AddDays(-30) } -MaxEvents 100 -ErrorAction Stop)
+        $seen = @{}
+        foreach ($e in $ev) {
+            $x = [xml]$e.ToXml(); $d = @{}
+            foreach ($n in $x.Event.EventData.Data) { $d[[string]$n.Name] = [string]$n.'#text' }
+            $name = $d['DriverName']; if (-not $name) { $name = $d['DeviceInstanceID'] }
+            $k = $name + '|' + $d['DriverVersion']
+            if ($seen.ContainsKey($k)) { continue }; $seen[$k] = $true
+            $r.Drivers += @{ When = $e.TimeCreated; Name = $name; Provider = $d['DriverProvider']; Version = $d['DriverVersion']; Device = $d['DeviceInstanceID']; Status = $d['Status'] }
+        }
+    } catch {}
+    return $r
+}
+# 一次读完健康页要的全部（在后台线程里跑）
+function Get-HealthAll {
+    $t0 = Get-Date
+    $r = @{ Cpu = (Get-CpuHealth); Mem = (Get-MemHealth); Battery = (Get-BatteryHealth); Gpu = @(Get-GpuHealth); Win = (Get-WinHealth); Boot = (Get-BootHealth); Crash = (Get-CrashHealth); At = (Get-Date) }
+    $r.Disks = @(); foreach ($d in @(Get-FixedDriveLetters)) { try { $h = Get-DiskHealthInfo $d; $h.Drive = $d; $r.Disks += $h } catch {} }
+    $r.Secs = ((Get-Date) - $t0).TotalSeconds
+    return $r
+}
+function Get-FixedDriveLetters { @([IO.DriveInfo]::GetDrives() | Where-Object { $_.DriveType -eq 'Fixed' -and $_.IsReady } | ForEach-Object { $_.Name.TrimEnd('\') }) }
+
+# ---------- 活动监控：窗口开着时每隔几秒采一次样，看谁在吃 CPU、内存、磁盘 ----------
+# 一次采样：每个进程的累计 CPU 时间、工作集、累计写入字节（Windows 从进程启动起记的）
+function Get-ProcSample {
+    $out = @{}
+    foreach ($p in @(Try-Cim 'Win32_Process')) {
+        $id = [int]$p.ProcessId
+        if ($id -le 0) { continue }
+        $out[$id] = @{ Pid = $id; Name = [string]$p.Name; Path = [string]$p.ExecutablePath; Cpu100ns = [double]$p.KernelModeTime + [double]$p.UserModeTime; Ws = [double]$p.WorkingSetSize; Write = [double]$p.WriteTransferCount; Read = [double]$p.ReadTransferCount; Started = $p.CreationDate }
+    }
+    return @{ At = (Get-Date); Procs = $out }
+}
+# 两次采样的差：这段时间里每个进程用了多少 CPU（占全部核心的百分比）、写了多少；再加上从监控开始到现在的累计
+function Compare-ProcSample($prev, $cur, $base, [int]$threads) {
+    $rows = @()
+    $secs = [math]::Max(0.001, ($cur.At - $prev.At).TotalSeconds)
+    foreach ($id in $cur.Procs.Keys) {
+        $c = $cur.Procs[$id]
+        $p = if ($prev.Procs.ContainsKey($id)) { $prev.Procs[$id] } else { $null }
+        $b = if ($base -and $base.Procs.ContainsKey($id)) { $base.Procs[$id] } else { $null }
+        $cpu = if ($p) { 100.0 * ($c.Cpu100ns - $p.Cpu100ns) / 10000000.0 / $secs / [math]::Max(1, $threads) } else { 0 }
+        $w = if ($p) { $c.Write - $p.Write } else { 0 }
+        $wSince = if ($b) { $c.Write - $b.Write } else { $c.Write }   # 监控开始后才出现的进程：从它启动起算
+        $rows += @{ Pid = $id; Name = $c.Name; Path = $c.Path; Cpu = [math]::Max(0, $cpu); Ws = $c.Ws; WriteRate = [math]::Max(0, $w) / $secs; WriteSince = [math]::Max(0, $wSince); WriteTotal = $c.Write; ReadTotal = $c.Read }
+    }
+    return $rows
+}
+
 # Kind: cache = 缓存类(删除/跳过)   action = 操作类(执行/跳过)   move = 只能搬(搬到其他盘/跳过)   flex = 可搬可删
 function Get-Catalog {
     $docs = [Environment]::GetFolderPath('MyDocuments')
@@ -5127,6 +5512,150 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+正在读取硬件、事件日志和转储文件，要十几秒…	Reading hardware, event logs and dump files, this takes ten seconds or so…
+没能读取：	Could not read: 
+读取于 {0:HH:mm}，用了 {1:N0} 秒。只看不改。	Read at {0:HH:mm} in {1:N0} s. Read-only.
+CPU	CPU
+负载 {0}%	load {0}%
+性能 {0}%	performance {0}%
+温度读不到	temperature unavailable
+{0} 核 {1} 线程	{0} cores, {1} threads
+。性能计数器持续低于标称频率：可能是散热或电源限制在降频	. The performance counter stays below the rated clock: thermal or power limits may be throttling it
+内存	Memory
+{0} 已用 {1}，可用 {2}	{0}: {1} used, {2} available
+已用 {0}%	used {0}%
+提交 {0}%	commit {0}%
+硬错误 {0}/秒	hard faults {0}/s
+WHEA 内存错误 {0} 次	WHEA memory errors {0}
+提交 {0} / 上限 {1}（物理内存加页面文件）。	Commit {0} of {1} (RAM plus page file). 
+内存很紧张：程序在频繁换到页面文件，会明显变慢	Memory is very tight: programs are paging to disk and will slow down noticeably
+内存偏紧	Memory is getting tight
+内存够用	Enough memory
+最近 30 天 Windows 记录过内存硬件错误（WHEA）：建议跑一次 Windows 内存诊断（mdsched）	Windows logged memory hardware errors (WHEA) in the last 30 days: run Windows Memory Diagnostic (mdsched)
+型号读不到	model unavailable
+磁盘 {0}	Disk {0}
+健康状态读不到	health unavailable
+读错误 {0}	read errors {0}
+SMART 读不到	no SMART
+这块盘不报告 SMART（USB 硬盘盒、RAID 和部分虚拟机常见）	This drive reports no SMART data (common with USB enclosures, RAID and some virtual machines)
+电池	Battery
+电量 {0}%	charge {0}%
+健康 {0}%	health {0}%
+设计容量 {0:N0} mWh，现在充满 {1:N0} mWh	Design capacity {0:N0} mWh, full charge now {1:N0} mWh
+损耗读不到	wear unavailable
+循环 {0} 次	{0} cycles
+循环次数：电池没有报告	Cycle count: not reported by the battery
+没有电池（台式机）	No battery (desktop)
+显卡	GPU
+占用 {0}%	{0}% busy
+显存 {0} / {1}	VRAM {0} / {1}
+显存 {0}	VRAM {0}
+驱动 {0}	Driver {0}
+开机 {0}	up {0}
+等待重启	restart pending
+更新 {0:yyyy-MM-dd}	updated {0:yyyy-MM-dd}
+{0} 个设备有问题	{0} devices with problems
+设备都正常	all devices OK
+两周没重启了（快速启动的「关机」不算重启）。很多莫名其妙的慢和卡，重启一次就好	No restart for two weeks ("Shut down" with fast startup does not count). Many odd slowdowns go away after one restart
+最近一次开机（{0:yyyy-MM-dd HH:mm}）用了 {1:N0} 秒：到桌面 {2:N0} 秒，桌面出来后开机程序又忙了 {3:N0} 秒才安静下来。	The last boot ({0:yyyy-MM-dd HH:mm}) took {1:N0} s: {2:N0} s to the desktop, then startup programs kept busy for another {3:N0} s. 
+最近 {0} 次平均 {1:N0} 秒。	Average of the last {0} boots: {1:N0} s. 
+超过两分钟算慢的。	More than two minutes counts as slow. 
+拖慢 {0:N0} 秒，{1} 次	slowed boot by {0:N0} s, {1} times
+最近 30 天 Windows 没有点名拖慢开机的程序。	Windows named no program for slowing down boot in the last 30 days.
+没解析出来	not parsed
+可能是 {0}	probably {0}
+参数 {0}	params {0}
+栈上的驱动：{0}	drivers on the stack: {0}
+出事时加载了 {0} 个驱动	{0} drivers loaded at the time
+{0} 里有 {1} 个转储文件（最近的 10 个）。	{1} dump files in {0} (the latest 10). 
+没有转储文件：最近没有蓝屏，或者蓝屏时没来得及写出转储。	No dump files: no recent blue screen, or the dump could not be written. 
+另有完整转储 MEMORY.DMP（{0}，{1:yyyy-MM-dd}），在「省空间」里可以改成只存小转储。	There is also a full dump MEMORY.DMP ({0}, {1:yyyy-MM-dd}); "Save space" can switch to small dumps.
+{0} 次，最近 {1:MM-dd HH:mm}	{0} times, last {1:MM-dd HH:mm}
+没有意外关机、硬件错误和磁盘错误的记录	No unexpected shutdowns, hardware errors or disk errors recorded
+最近 30 天没有装过驱动	No drivers installed in the last 30 days
+最近 7 天系统日志里有 {0} 条严重或错误事件，来源最多的几个：	{0} critical or error events in the System log in the last 7 days; the most frequent sources:
+最近 7 天系统日志里没有严重或错误事件。	No critical or error events in the System log in the last 7 days.
+修复系统文件？	Repair system files?
+会运行 sfc /scannow 和 DISM /RestoreHealth：把损坏的系统文件换成正常的副本。这会改动系统文件（只动 Windows 自己的文件，不碰你的资料），DISM 可能要联网下载，一共要十几分钟到半小时。\n\n先用「检查系统文件（只看）」看一眼有没有问题，再决定要不要修复。	Runs sfc /scannow and DISM /RestoreHealth, replacing damaged system files with good copies. This changes system files (only Windows' own files, never your data); DISM may download from the internet, and it takes ten to thirty minutes.\n\nRun "Check system files (read-only)" first to see whether anything is wrong.
+修复系统文件（sfc /scannow、DISM /RestoreHealth）	Repair system files (sfc /scannow, DISM /RestoreHealth)
+检查系统文件（sfc /verifyonly、DISM /ScanHealth）	Check system files (sfc /verifyonly, DISM /ScanHealth)
+已在终端里开始：{0}	Started in a terminal: {0}
+没能打开终端	Could not open a terminal
+监控出错：	Monitor error: 
+正在采样…第一组数据 3 秒后出来	Sampling… the first numbers appear in 3 seconds
+开始活动监控	Start activity monitor
+已停止。下面是从 {0:HH:mm:ss} 到 {1:HH:mm:ss} 的结果。	Stopped. Below: {0:HH:mm:ss} to {1:HH:mm:ss}.
+从 {0:HH:mm:ss} 开始监控，到 {1:HH:mm:ss}，第 {2} 次采样。同名的进程合在一起算。	Monitoring since {0:HH:mm:ss}, now {1:HH:mm:ss}, sample {2}. Processes with the same name are combined.
+{0} 个进程 · 	{0} processes · 
+{0}/秒	{0}/s
+工程师：再加上重复文件、搬家管理、自动提醒、操作日志；空间地图的找文件、和上次比、最近改动、导出；省空间的页面文件、还原点、压缩文件夹、虚拟磁盘；软件管理的开机启动、残留文件夹、检查新版本和搬到其他盘；系统健康的开机用时、蓝屏诊断、活动监控；清理列表里多出开发工具的缓存。	Engineer: adds Duplicates, Moves, Reminders and the operation log; find files, compare with last time, recent changes and export in the space map; page file, restore points, compressed folders and virtual disks in Save space; startup, leftover folders, update check and move in Apps; boot time, crash diagnosis and activity monitor in System health; developer tool caches in the cleanup list.
+开发者和 IT：全部功能。再加上计划任务、右键菜单、保留的存储、组件存储分析、蓝屏转储、临时文件夹位置、自定义清理列表和排除、快速扫描开关、空间明细、检查扫描功能、运行记录、修复系统文件、Windows 事件汇总，以及 Installer 孤儿安装包、事件日志、旧版驱动包、NuGet / Gradle / Maven / JetBrains 缓存这类项目。	Developer and IT: everything. Adds scheduled tasks, context menu, reserved storage, component store analysis, crash dumps, temp folder location, custom cleanup list and exclusions, the fast scan switch, space breakdown, scan check, the run log, system file repair, the Windows event summary, and items such as orphaned Installer packages, event logs, old driver packages and NuGet / Gradle / Maven / JetBrains caches.
+读不到处理器信息（WMI）	Processor information unavailable (WMI)
+来自 ACPI 热区，可能是主板而不是 CPU 内核的温度	From the ACPI thermal zone; may be the board rather than the CPU core
+主板没有通过 ACPI 报告温度；要看 CPU 内核温度需要厂商工具（HWiNFO 等）	The board does not report a temperature through ACPI; CPU core temperatures need a vendor tool (HWiNFO etc.)
+读不到内存信息（WMI）	Memory information unavailable (WMI)
+内存|Memory	内存|Memory
+放电中	discharging
+接着电源	on AC power
+已充满	fully charged
+电量低	low
+电量极低	critical
+充电中	charging
+电池没有报告设计容量和实际满充容量	The battery does not report design and full-charge capacity
+温度要厂商工具（NVIDIA、AMD、Intel 的控制面板）才能读	Temperature needs a vendor tool (NVIDIA, AMD or Intel control panel)
+读不到显卡信息（WMI）	GPU information unavailable (WMI)
+没有正确配置	not configured correctly
+驱动可能损坏，或内存不足	driver may be corrupted, or out of memory
+无法启动	cannot start
+找不到足够的可用资源	not enough free resources
+要重启电脑才能正常工作	needs a restart to work
+要重新安装驱动	reinstall the driver
+注册表里的配置信息损坏	registry configuration is damaged
+已被禁用	disabled
+设备不在了，或者没有正确连接	device is missing or not connected properly
+没有安装驱动	no driver installed
+无法加载驱动	driver cannot be loaded
+驱动初始化失败	driver failed to initialize
+驱动损坏或丢失	driver corrupted or missing
+设备报告了问题，Windows 把它停了	the device reported a problem and Windows stopped it
+已拔出	unplugged
+设备管理器错误代码 {0}	Device Manager error code {0}
+Windows 还没有记录过开机用时（「诊断-性能」日志为空）	Windows has not recorded a boot time yet (the Diagnostics-Performance log is empty)
+读不到「诊断-性能」日志	Cannot read the Diagnostics-Performance log
+意外关机或重启（没有正常关机）	unexpected shutdown or restart
+蓝屏记录	blue screen record
+硬件错误（CPU、内存、PCIe 报告的）	hardware error (reported by CPU, memory or PCIe)
+磁盘读写错误或重试	disk read/write error or retry
+文件系统损坏或需要检查	file system damaged or needs checking
+没能写出转储文件	dump file could not be written
+系统时间被改动	system time changed
+修复系统文件…	Repair system files…
+开始监控	Start monitoring
+检查系统文件（只看）	Check system files (read-only)
+在终端窗口里运行 sfc /scannow 和 DISM /RestoreHealth：会把损坏的系统文件换成正常的副本（会改系统文件，可能要联网下载）。点了会先确认	Runs sfc /scannow and DISM /RestoreHealth in a terminal window: replaces damaged system files with good copies (changes system files, may download). Asks first
+在终端窗口里运行 sfc /verifyonly 和 DISM /ScanHealth：只检查，不改任何东西。要几分钟	Runs sfc /verifyonly and DISM /ScanHealth in a terminal window: checks only, changes nothing. Takes a few minutes
+系统健康	System health
+写入速度	Write rate
+启动以来写入	Written since start
+本次监控写入	Written while monitoring
+程序	Program
+CPU 最高	Most CPU
+内存最多	Most memory
+写入最多	Most writes
+「启动以来写入」是 Windows 从进程启动起累计的，重启过的进程从头算；写入量不等于磁盘净占用增长（临时文件写了又删）。哪个进程写了哪个文件，只有监控开着的时候能对上：把「空间地图 → 最近改动」里变大的文件夹和这里写入多的程序放在一起看。	"Written since start" is what Windows has counted since the process started; a restarted process starts over. Bytes written are not the same as space used (temporary files get written and deleted). Which process wrote which file can only be matched while monitoring is on: compare the folders that grew under "Space map → Recent changes" with the programs that wrote the most here.
+Windows 事件：最近 7 天的严重错误	Windows events: critical errors in the last 7 days
+最近 30 天的相关事件	Related events in the last 30 days
+最近 30 天装的驱动	Drivers installed in the last 30 days
+开机用时	Boot time
+数据来自 Windows 自己的「诊断-性能」日志（事件 100 和 101）。拖慢开机的程序可以到「软件管理 → 开机启动」里关掉。	From Windows' own Diagnostics-Performance log (events 100 and 101). Programs that slow down boot can be disabled under "Apps → Startup".
+温度、磨损来自 SMART 和 ACPI；CPU 内核温度和显卡温度 Windows 不提供，要厂商工具。所有数字都是读取那一刻的。	Temperature and wear come from SMART and ACPI; Windows does not provide CPU core or GPU temperatures, which need vendor tools. All numbers are from the moment they were read.
+点「开始监控」，每 3 秒采一次样：各个程序这段时间用了多少 CPU、占多少内存、往磁盘写了多少。不装常驻服务，关掉本工具就停。	Click "Start monitoring" to sample every 3 seconds: how much CPU each program used, how much memory it holds and how much it wrote to disk. No resident service; it stops when ClearC closes.
+硬件	Hardware
+硬件状态、开机用时、蓝屏原因、谁在吃资源。只看不改；读不到的数据直接写明读不到，不用估算冒充。	Hardware status, boot time, blue screen causes and what is eating resources. Read-only; anything that cannot be read is marked as such, never estimated.
+系统日志里「严重」和「错误」两级，按来源归并。很多错误是无害的（比如某个服务启动慢了一次）；同一个来源反复出现、时间又和故障对得上的才值得查。详细内容在 Windows 的「事件查看器」里。	Critical and Error levels of the System log, grouped by source. Many are harmless (a service that started slowly once); a source that repeats and matches the time of a problem is worth a look. Details are in Windows Event Viewer.
+蓝屏和崩溃	Blue screens and crashes
+谁在让电脑变慢	What is slowing the PC down
+转储文件是本工具自己解析的（错误码、参数、出事时加载的驱动、栈上出现的驱动），不如 WinDbg 准确；「可能的驱动」只是提示，不是定论。蓝屏时间和最近装的驱动对得上的，优先怀疑那个驱动。	Dump files are parsed by ClearC itself (bug check code, parameters, drivers loaded at the time, drivers on the stack), less accurately than WinDbg; "probably" is a hint, not a verdict. If a blue screen matches the time of a recently installed driver, suspect that driver first.
 \n其中 {0} 项是「谨慎清理」（{1}）：删了要重新下载或重新生成，第一次打开会慢一点。不想清的，在列表里改成「跳过」。	\n{0} of them are "Careful cleanup" ({1}): they will be downloaded or generated again, so the first start is slower. Set any you want to keep to "Skip" in the list.
 \n其中 {0} 项是「需确认」的高风险项目（{1}），请再看一遍说明。	\n{0} of them are "Needs confirmation" items with a cost ({1}); please read their descriptions again.
 \n按设置，这次删除的文件会先放进回收站，可以从回收站恢复。	\nAs set in Settings, deleted files go to the Recycle Bin first and can be restored from there.
@@ -8736,6 +9265,7 @@ if ($script:mode -match '(?i)/autoclean') {
           <TextBlock Text="分析" Style="{StaticResource NavHead}"/>
           <RadioButton x:Name="NavMap" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE9D9;" Content="空间地图"/>
           <RadioButton x:Name="NavApps" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE71D;" Content="软件管理"/>
+          <RadioButton x:Name="NavHealth" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE95E;" Content="系统健康"/>
           <TextBlock x:Name="NavHeadManage" Text="管理" Style="{StaticResource NavHead}"/>
           <RadioButton x:Name="NavMoves" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE8AB;" Content="搬家管理"/>
           <RadioButton x:Name="NavAuto" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE823;" Content="自动提醒"/>
@@ -9539,6 +10069,197 @@ if ($script:mode -match '(?i)/autoclean') {
     </Grid>
 
     <!-- ==================== 软件管理 ==================== -->
+    <!-- ===== 系统健康：硬件、启动、蓝屏、活动监控、事件。读不到的明说读不到 ===== -->
+    <Grid x:Name="PageHealth" Grid.Column="1" Grid.Row="0" Visibility="Collapsed">
+      <ScrollViewer x:Name="HealthScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+        <StackPanel Margin="30,24,30,28" MaxWidth="960" HorizontalAlignment="Left">
+          <DockPanel>
+            <Button x:Name="BtnHealthRefresh" DockPanel.Dock="Right" Content="刷新" VerticalAlignment="Top" Margin="16,4,0,0"/>
+            <StackPanel>
+              <TextBlock Text="系统健康" Style="{StaticResource PageTitle}"/>
+              <TextBlock Style="{StaticResource PageSub}" Text="硬件状态、开机用时、蓝屏原因、谁在吃资源。只看不改；读不到的数据直接写明读不到，不用估算冒充。"/>
+            </StackPanel>
+          </DockPanel>
+          <TextBlock x:Name="HealthNote" Style="{StaticResource Caption}" Margin="0,10,0,0" Text="正在读取…"/>
+
+          <!-- 硬件：每一项一张小卡片 -->
+          <Border x:Name="HealthCardHw" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+            <StackPanel>
+              <TextBlock Text="硬件" Style="{StaticResource CardHead}"/>
+              <ItemsControl x:Name="HealthCards" Margin="0,12,0,0">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <Border Width="290" Margin="0,0,12,12" Padding="0" Background="#F7F7F9" CornerRadius="10" ToolTip="{Binding Tip}">
+                      <DockPanel>
+                        <Border DockPanel.Dock="Left" Width="5" Background="{Binding Stripe}" CornerRadius="10,0,0,10"/>
+                        <StackPanel Margin="14,10,14,12">
+                          <TextBlock Text="{Binding Title}" FontSize="14" FontWeight="SemiBold"/>
+                          <TextBlock Text="{Binding Sub}" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                          <Grid x:Name="HcBar" Margin="0,8,0,0" Height="6">
+                            <Border Background="#EBEBF0" CornerRadius="3"/>
+                            <Border Background="{Binding BarBrush}" CornerRadius="3" HorizontalAlignment="Left" Width="{Binding BarW}"/>
+                          </Grid>
+                          <ItemsControl ItemsSource="{Binding Chips}" Margin="0,8,0,0">
+                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                              <DataTemplate>
+                                <Border Background="{Binding Bg}" CornerRadius="6" Padding="7,2" Margin="0,0,6,4"><TextBlock Text="{Binding Text}" FontSize="11.5" FontWeight="SemiBold" Foreground="{Binding Fg}"/></Border>
+                              </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                          </ItemsControl>
+                          <ItemsControl ItemsSource="{Binding Lines}">
+                            <ItemsControl.ItemTemplate><DataTemplate><TextBlock Text="{Binding}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,3,0,0"/></DataTemplate></ItemsControl.ItemTemplate>
+                          </ItemsControl>
+                        </StackPanel>
+                      </DockPanel>
+                    </Border>
+                    <DataTemplate.Triggers>
+                      <DataTrigger Binding="{Binding HasBar}" Value="False"><Setter TargetName="HcBar" Property="Visibility" Value="Collapsed"/></DataTrigger>
+                    </DataTemplate.Triggers>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Text="温度、磨损来自 SMART 和 ACPI；CPU 内核温度和显卡温度 Windows 不提供，要厂商工具。所有数字都是读取那一刻的。"/>
+            </StackPanel>
+          </Border>
+
+          <!-- 开机 -->
+          <Border x:Name="HealthCardBoot" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+            <StackPanel>
+              <TextBlock Text="开机用时" Style="{StaticResource CardHead}"/>
+              <TextBlock x:Name="HealthBootText" Style="{StaticResource Body}" Margin="0,8,0,0" TextWrapping="Wrap" Text=""/>
+              <ItemsControl x:Name="HealthSlow" Margin="0,8,0,0">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <DockPanel Margin="0,4,0,0">
+                      <TextBlock DockPanel.Dock="Right" Text="{Binding Body}" Style="{StaticResource Caption}" Margin="12,0,0,0" VerticalAlignment="Center"/>
+                      <TextBlock Text="{Binding Head}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}" VerticalAlignment="Center"/>
+                    </DockPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap" Text="数据来自 Windows 自己的「诊断-性能」日志（事件 100 和 101）。拖慢开机的程序可以到「软件管理 → 开机启动」里关掉。"/>
+            </StackPanel>
+          </Border>
+
+          <!-- 蓝屏和崩溃 -->
+          <Border x:Name="HealthCardCrash" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+            <StackPanel>
+              <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top" Margin="20,0,0,0">
+                  <Button x:Name="BtnSfcCheck" Content="检查系统文件（只看）" Margin="0,0,8,0" ToolTip="在终端窗口里运行 sfc /verifyonly 和 DISM /ScanHealth：只检查，不改任何东西。要几分钟"/>
+                  <Button x:Name="BtnSfcRepair" Content="修复系统文件…" ToolTip="在终端窗口里运行 sfc /scannow 和 DISM /RestoreHealth：会把损坏的系统文件换成正常的副本（会改系统文件，可能要联网下载）。点了会先确认"/>
+                </StackPanel>
+                <TextBlock Text="蓝屏和崩溃" Style="{StaticResource CardHead}"/>
+              </DockPanel>
+              <TextBlock x:Name="HealthCrashText" Style="{StaticResource Body}" Margin="0,8,0,0" TextWrapping="Wrap" Text=""/>
+              <ItemsControl x:Name="HealthDumps" Margin="0,8,0,0">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <Border Background="#F7F7F9" CornerRadius="8" Padding="12,8" Margin="0,6,0,0">
+                      <DockPanel>
+                        <Button DockPanel.Dock="Right" x:Name="DumpOpen" Content="打开位置" Tag="{Binding}" Style="{StaticResource Small}" VerticalAlignment="Top" Margin="12,0,0,0"/>
+                        <StackPanel>
+                          <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding When}" FontWeight="SemiBold"/>
+                            <TextBlock Text="{Binding Code}" Margin="10,0,0,0" FontFamily="Consolas"/>
+                            <TextBlock Text="{Binding Suspect}" Margin="10,0,0,0" FontWeight="SemiBold" Foreground="{Binding SuspectBrush}"/>
+                          </StackPanel>
+                          <TextBlock Text="{Binding Detail}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                        </StackPanel>
+                      </DockPanel>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock x:Name="HealthEventsHead" Text="最近 30 天的相关事件" Style="{StaticResource SetName}" Margin="0,14,0,0"/>
+              <ItemsControl x:Name="HealthEvents">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <DockPanel Margin="0,5,0,0">
+                      <TextBlock DockPanel.Dock="Right" Text="{Binding Body}" Style="{StaticResource Caption}" Margin="12,0,0,0" VerticalAlignment="Top"/>
+                      <TextBlock Text="{Binding Head}" TextWrapping="Wrap" ToolTip="{Binding Path}"/>
+                    </DockPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock x:Name="HealthDriversHead" Text="最近 30 天装的驱动" Style="{StaticResource SetName}" Margin="0,14,0,0"/>
+              <ItemsControl x:Name="HealthDrivers">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <DockPanel Margin="0,4,0,0">
+                      <TextBlock DockPanel.Dock="Right" Text="{Binding Body}" Style="{StaticResource Caption}" Margin="12,0,0,0" VerticalAlignment="Center"/>
+                      <TextBlock Text="{Binding Head}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}"/>
+                    </DockPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap" Text="转储文件是本工具自己解析的（错误码、参数、出事时加载的驱动、栈上出现的驱动），不如 WinDbg 准确；「可能的驱动」只是提示，不是定论。蓝屏时间和最近装的驱动对得上的，优先怀疑那个驱动。"/>
+            </StackPanel>
+          </Border>
+
+          <!-- 活动监控 -->
+          <Border x:Name="HealthCardMon" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+            <StackPanel>
+              <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top" Margin="20,0,0,0">
+                  <Border Style="{StaticResource SegBox}" VerticalAlignment="Center" Margin="0,0,10,0">
+                    <StackPanel Orientation="Horizontal">
+                      <RadioButton x:Name="MonSortWrite" GroupName="monsort" Content="写入最多" IsChecked="True" Style="{StaticResource Seg}"/>
+                      <RadioButton x:Name="MonSortCpu" GroupName="monsort" Content="CPU 最高" Style="{StaticResource Seg}"/>
+                      <RadioButton x:Name="MonSortMem" GroupName="monsort" Content="内存最多" Style="{StaticResource Seg}"/>
+                    </StackPanel>
+                  </Border>
+                  <Button x:Name="BtnMonStart" Content="开始监控" Style="{StaticResource Primary}"/>
+                  <Button x:Name="BtnMonStop" Content="停止" Margin="8,0,0,0" IsEnabled="False"/>
+                </StackPanel>
+                <StackPanel>
+                  <TextBlock Text="谁在让电脑变慢" Style="{StaticResource CardHead}"/>
+                  <TextBlock x:Name="HealthMonText" Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap" Text="点「开始监控」，每 3 秒采一次样：各个程序这段时间用了多少 CPU、占多少内存、往磁盘写了多少。不装常驻服务，关掉本工具就停。"/>
+                </StackPanel>
+              </DockPanel>
+              <ListView x:Name="MonList" Margin="0,12,0,0" MaxHeight="420" Background="White" BorderThickness="0" ItemContainerStyle="{StaticResource GridRow}">
+                <ListView.View>
+                  <GridView>
+                    <GridViewColumn Header="程序" Width="250">
+                      <GridViewColumn.CellTemplate><DataTemplate><StackPanel><TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Meta}" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis"/></StackPanel></DataTemplate></GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+                    <GridViewColumn Header="CPU" Width="70"><GridViewColumn.CellTemplate><DataTemplate><TextBlock Text="{Binding CpuText}" TextAlignment="Right"/></DataTemplate></GridViewColumn.CellTemplate></GridViewColumn>
+                    <GridViewColumn Header="内存" Width="90"><GridViewColumn.CellTemplate><DataTemplate><TextBlock Text="{Binding WsText}" TextAlignment="Right"/></DataTemplate></GridViewColumn.CellTemplate></GridViewColumn>
+                    <GridViewColumn Header="写入速度" Width="100"><GridViewColumn.CellTemplate><DataTemplate><TextBlock Text="{Binding RateText}" TextAlignment="Right"/></DataTemplate></GridViewColumn.CellTemplate></GridViewColumn>
+                    <GridViewColumn Header="本次监控写入" Width="200">
+                      <GridViewColumn.CellTemplate><DataTemplate><StackPanel Orientation="Horizontal"><Border Width="{Binding Bar}" Height="8" Background="#3B82F6" CornerRadius="4" VerticalAlignment="Center"/><TextBlock Text="{Binding SinceText}" Margin="8,0,0,0" VerticalAlignment="Center"/></StackPanel></DataTemplate></GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+                    <GridViewColumn Header="启动以来写入" Width="110"><GridViewColumn.CellTemplate><DataTemplate><TextBlock Text="{Binding TotalText}" TextAlignment="Right"/></DataTemplate></GridViewColumn.CellTemplate></GridViewColumn>
+                  </GridView>
+                </ListView.View>
+              </ListView>
+              <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap" Text="「启动以来写入」是 Windows 从进程启动起累计的，重启过的进程从头算；写入量不等于磁盘净占用增长（临时文件写了又删）。哪个进程写了哪个文件，只有监控开着的时候能对上：把「空间地图 → 最近改动」里变大的文件夹和这里写入多的程序放在一起看。"/>
+            </StackPanel>
+          </Border>
+
+          <!-- Windows 事件 -->
+          <Border x:Name="HealthCardEvents" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+            <StackPanel>
+              <TextBlock Text="Windows 事件：最近 7 天的严重错误" Style="{StaticResource CardHead}"/>
+              <TextBlock x:Name="HealthWinText" Style="{StaticResource Body}" Margin="0,8,0,0" TextWrapping="Wrap" Text=""/>
+              <ItemsControl x:Name="HealthErrors" Margin="0,8,0,0">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <DockPanel Margin="0,5,0,0">
+                      <TextBlock DockPanel.Dock="Right" Text="{Binding Body}" Style="{StaticResource Caption}" Margin="12,0,0,0" VerticalAlignment="Top"/>
+                      <TextBlock Text="{Binding Head}" TextWrapping="Wrap" ToolTip="{Binding Path}"/>
+                    </DockPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap" Text="系统日志里「严重」和「错误」两级，按来源归并。很多错误是无害的（比如某个服务启动慢了一次）；同一个来源反复出现、时间又和故障对得上的才值得查。详细内容在 Windows 的「事件查看器」里。"/>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+    </Grid>
     <Grid x:Name="PageApps" Grid.Column="1" Grid.Row="0" Margin="30,24,30,14" Visibility="Collapsed">
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto"/>
@@ -9991,6 +10712,7 @@ if ($script:mode -match '(?i)/autoclean') {
                 <CheckBox x:Name="SetPageDup" Content="重复文件" Width="170" Margin="0,10,0,0"/>
                 <CheckBox x:Name="SetPageSave" Content="省空间" Width="170" Margin="0,10,0,0"/>
                 <CheckBox x:Name="SetPageApps" Content="软件管理" Width="170" Margin="0,10,0,0"/>
+                <CheckBox x:Name="SetPageHealth" Content="系统健康" Width="170" Margin="0,10,0,0"/>
                 <CheckBox x:Name="SetPageMoves" Content="搬家管理" Width="170" Margin="0,10,0,0"/>
                 <CheckBox x:Name="SetPageAuto" Content="自动提醒" Width="170" Margin="0,10,0,0"/>
                 <CheckBox x:Name="SetPageLog" Content="操作日志" Width="170" Margin="0,10,0,0"/>
@@ -11084,6 +11806,8 @@ foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageM
                'BtnAppsRefresh','AppsAll','AppsC','AppsStore','AppsInfo','AppsSearch','AppsLeftBox','BtnAppsLeftClose','BtnAppsLeft','AppsLeftText','AppsList','EmptyApps','EmptyAppsText',
                'BtnAppsUpdates','AppsViewApps','AppsViewStartup','AppsViewTasks','AppsViewMenu','AppsViewLeft','AppsViewBox','AppsFilterBox','StartList','MapHealthBox','MapHealth','MapHealthNote','SetMapHealth',
                'MapViewTypes','MapViewRecent','MapOwner','MapSort','MapGrowBar','MapGrowBase','MapRecentBar','MapRecentDays','BtnMapRecent','MapGrid','MapOverview','MapOvPct','MapOvTitle','MapOvUsed','MapOvBar','MapOvLegend',
+               'NavHealth','PageHealth','HealthScroll','BtnHealthRefresh','HealthNote','HealthCardHw','HealthCards','HealthCardBoot','HealthBootText','HealthSlow','HealthCardCrash','BtnSfcCheck','BtnSfcRepair','HealthCrashText','HealthDumps','HealthEventsHead','HealthEvents','HealthDriversHead','HealthDrivers',
+               'HealthCardMon','MonSortWrite','MonSortCpu','MonSortMem','BtnMonStart','BtnMonStop','HealthMonText','MonList','HealthCardEvents','HealthWinText','HealthErrors','SetPageHealth',
                'SaveCardCos','SaveCardPf','SaveCardHib','SaveCardRp','SaveCardFc','SaveCardOd','SaveCardRs','SaveCardCs','SaveCardDump','SaveCardTmp','SaveCardVd','SaveCardMerge','SetCardMode','SetCardDisplay','SetCardScan','SetModeBasic','SetModePro','SetModeExpert','SetModeNote','ModeTag','AutoJunkRow','FbCopyDiag','FbSelfTest','FbCheckUpdate','MapViewBox',
                'BtnOdFree','SaveOdState','BtnRsOn','BtnRsOff','SaveRsState','BtnCsAnalyze','BtnCsClean','SaveCsState','BtnDumpSmall','BtnDumpAuto','SaveDumpState','SaveTmpState','SaveTmpDrive','BtnTmpMove','BtnTmpAuto','BtnCleanCustom','AutoJunkGB','AutoCleanWhen','SetCleanCard','SetRecycle','SetRecycleRow','SetCustomHead','SetCustomNote','SetExcludeHead','SetExcludeNote','SetCustomList','SetCustomEmpty','BtnSetCustomAdd','SetExcludeList','SetExcludeEmpty','BtnSetExcludeAdd',
                'BtnMovesRefresh','MovesInfo','MovesList','EmptyMoves','EmptyMovesText',
@@ -11111,7 +11835,7 @@ if (-not $ctl.MmDelete -and $ctl.MapList.ContextMenu) { $ctl.MapMenu = $ctl.MapL
 
 # ---------- 左侧导航：两页切换 ----------
 $script:pageList = [ordered]@{
-    clean = @('PageClean', 'NavClean'); dup = @('PageDup', 'NavDup'); save = @('PageSave', 'NavSave'); map = @('PageMap', 'NavMap'); apps = @('PageApps', 'NavApps')
+    clean = @('PageClean', 'NavClean'); dup = @('PageDup', 'NavDup'); save = @('PageSave', 'NavSave'); map = @('PageMap', 'NavMap'); apps = @('PageApps', 'NavApps'); health = @('PageHealth', 'NavHealth')
     moves = @('PageMoves', 'NavMoves'); auto = @('PageAuto', 'NavAuto'); log = @('PageLog', 'NavLog'); help = @('PageHelp', 'NavHelp'); settings = @('PageSettings', 'NavSettings')
 }
 $script:pageLoaded = @{}
@@ -11128,6 +11852,7 @@ function Show-Page([string]$key) {
         'map'   { if (-not $script:pageLoaded.map) { $script:pageLoaded.map = $true; Fill-MapDrives; Start-DiskHealth } }
         'save'  { if (-not $script:pageLoaded.save) { $script:pageLoaded.save = $true; Load-Save } }
         'apps'  { if (-not $script:pageLoaded.apps -and -not $script:worker) { $script:pageLoaded.apps = $true; Load-Apps } }
+        'health' { if (-not $script:pageLoaded.health) { $script:pageLoaded.health = $true; Load-Health } }
         'moves' { if (-not $script:candScanned) { $script:candPending = $true }; if (-not $script:worker) { Load-Moves } }
         'auto'  { Load-Auto }
         'log'   { Load-Log }
@@ -12670,6 +13395,35 @@ function Fill-MapDrives {
 }
 # 盘的健康信息（SSD 磨损、温度、通电时间）：在另一个线程里读，读到了写在标题下面
 $script:dhPs = $null
+# 在后台线程里跑一段引擎代码（不占主工作线程、不显示进度条），完成后在界面线程里回调。同一个 key 同时只跑一个
+$script:bg = @{}
+function Start-BgEngine([string]$key, [string]$code, $arg, [scriptblock]$done) {
+    if ($script:bg[$key]) { return $false }
+    $ps = $null
+    try {
+        $ps = [powershell]::Create()
+        [void]$ps.AddScript("param(`$arg, `$engine)`nInvoke-Expression `$engine`n" + $code).AddArgument($arg).AddArgument($engine)
+        $script:bg[$key] = @{ PS = $ps; AR = $ps.BeginInvoke(); Done = $done; Key = $key }
+    } catch { Write-LogFile ("bg {0}: {1}" -f $key, $_.Exception.Message); if ($ps) { try { $ps.Dispose() } catch {} }; return $false }
+    $t = New-Object System.Windows.Threading.DispatcherTimer
+    $t.Interval = [TimeSpan]::FromMilliseconds(400); $t.Tag = $key
+    $t.Add_Tick({
+        $k = [string]$this.Tag; $j = $script:bg[$k]
+        if (-not $j) { $this.Stop(); return }
+        if (-not $j.AR.IsCompleted) { return }
+        $this.Stop()
+        $result = $null; $err = ''
+        try { $out = $j.PS.EndInvoke($j.AR); if ($out.Count -gt 0) { $result = $out[$out.Count - 1] } } catch { $err = [string]$_.Exception.Message }
+        try { foreach ($er in @($j.PS.Streams.Error | Select-Object -First 3)) { $err += ' | ' + [string]$er } } catch {}
+        if ($err) { Write-LogFile ("bg {0}: {1}" -f $k, $err) }
+        try { $j.PS.Dispose() } catch {}
+        $script:bg.Remove($k)
+        if ($j.Done) { try { & $j.Done $result $err } catch { Write-LogFile ("bg {0} done: {1}" -f $k, $_.Exception.Message) } }
+    })
+    $t.Start()
+    return $true
+}
+function Stop-BgEngine([string]$key) { $j = $script:bg[$key]; if ($j) { try { $j.PS.Stop() } catch {} } }
 function Start-DiskHealth {
     if ($script:dhPs) { return }
     $ctl.MapHealthNote.Text = (T '正在读取各块盘的健康信息…'); $ctl.MapHealthNote.Visibility = 'Visible'
@@ -14463,6 +15217,252 @@ $res = @{}; Invoke-MoveBack $arg.Rec $res; $sync.MoveRes = $res
 # ------------------------------------------------------------
 # 省空间
 # ------------------------------------------------------------
+# ------------------------------------------------------------
+# 系统健康：硬件、开机、蓝屏、活动监控、事件
+# ------------------------------------------------------------
+$script:healthData = $null
+function Load-Health {
+    $ctl.HealthNote.Text = (T '正在读取硬件、事件日志和转储文件，要十几秒…')
+    $ctl.BtnHealthRefresh.IsEnabled = $false
+    $ok = Start-BgEngine 'health' 'Get-HealthAll' $null {
+        param($r, $err)
+        $ctl.BtnHealthRefresh.IsEnabled = $true
+        if (-not $r) { $ctl.HealthNote.Text = (T '没能读取：') + $err; return }
+        $script:healthData = $r
+        Show-Health $r
+    }
+    if (-not $ok) { $ctl.BtnHealthRefresh.IsEnabled = $true }
+}
+$ctl.BtnHealthRefresh.Add_Click({ Load-Health })
+# 档位颜色：绿正常、橙留意、红有问题、灰读不到
+$script:hcGreen = @('#1D7A35', '#E5F4E9'); $script:hcAmber = @('#995700', '#FFF1DB'); $script:hcRed = @('#C0101C', '#FDEBEC'); $script:hcGrey = @('#6E6E73', '#F0F0F3'); $script:hcBlue = @('#0A5BC4', '#E3EEFF')
+function New-Chip([string]$text, $tier) { $c = New-Object HealthChip; $c.Text = $text; $c.Fg = $tier[0]; $c.Bg = $tier[1]; return $c }
+function New-HealthCard([string]$title, [string]$sub, $tier) { $c = New-Object HealthCard; $c.Title = $title; $c.Sub = $sub; $c.Stripe = $tier[0]; $c.BarBrush = $tier[0]; return $c }
+function Tier-Worst($a, $b) { $rank = @{ ($script:hcGrey[0]) = 0; ($script:hcGreen[0]) = 1; ($script:hcBlue[0]) = 1; ($script:hcAmber[0]) = 2; ($script:hcRed[0]) = 3 }; if ($rank[$b[0]] -gt $rank[$a[0]]) { $b } else { $a } }
+function Show-Health($r) {
+    $ctl.HealthNote.Text = (T "读取于 {0:HH:mm}，用了 {1:N0} 秒。只看不改。") -f $r.At, $r.Secs
+    $cards = New-Object 'System.Collections.ObjectModel.ObservableCollection[HealthCard]'
+    # CPU
+    $c = $r.Cpu
+    if ($c.Ok) {
+        $tier = $script:hcGreen
+        $card = New-HealthCard (T 'CPU') $c.Name $tier
+        if ($c.Load -ge 0) { $card.Chips.Add((New-Chip ((T "负载 {0}%") -f $c.Load) $(if ($c.Load -ge 90) { $script:hcAmber } else { $script:hcGreen }))); $card.HasBar = $true; $card.BarW = [math]::Max(2, 2.5 * $c.Load) }
+        if ($c.MaxMHz -gt 0) { $card.Chips.Add((New-Chip ("{0:N1} / {1:N1} GHz" -f ($c.MHz / 1000), ($c.MaxMHz / 1000)) $script:hcBlue)) }
+        if ($c.Perf -ge 0) { $t2 = if ($c.Throttle) { $script:hcRed } elseif ($c.Perf -lt 90) { $script:hcAmber } else { $script:hcGreen }; $card.Chips.Add((New-Chip ((T "性能 {0}%") -f $c.Perf) $t2)); $tier = Tier-Worst $tier $t2 }
+        if ($c.Temp -ne $null) { $t2 = if ($c.Temp -ge 90) { $script:hcRed } elseif ($c.Temp -ge 75) { $script:hcAmber } else { $script:hcGreen }; $card.Chips.Add((New-Chip ("{0} °C" -f $c.Temp) $t2)); $tier = Tier-Worst $tier $t2; if ($c.TempNote) { $card.Lines.Add($c.TempNote) } }
+        else { $card.Chips.Add((New-Chip (T '温度读不到') $script:hcGrey)); $card.Lines.Add($c.TempWhy) }
+        $card.Lines.Add(((T "{0} 核 {1} 线程") -f $c.Cores, $c.Threads) + $(if ($c.Throttle) { (T '。性能计数器持续低于标称频率：可能是散热或电源限制在降频') } else { '' }))
+        $card.Stripe = $tier[0]; $card.BarBrush = $tier[0]
+        $cards.Add($card)
+    } else { $card = New-HealthCard (T 'CPU') (T '读不到') $script:hcGrey; $card.Lines.Add($c.Why); $cards.Add($card) }
+    # 内存
+    $m = $r.Mem
+    if ($m.Ok) {
+        $tier = switch ($m.Pressure) { 'high' { $script:hcRed } 'mid' { $script:hcAmber } default { $script:hcGreen } }
+        $card = New-HealthCard (T '内存') ((T "{0} 已用 {1}，可用 {2}") -f (Fmt $m.Total), (Fmt ($m.Total - $m.Free)), (Fmt $m.Free)) $tier
+        $card.HasBar = $true; $card.BarW = [math]::Max(2, 2.5 * $m.UsedPct)
+        $card.Chips.Add((New-Chip ((T "已用 {0}%") -f $m.UsedPct) $(if ($m.UsedPct -ge 92) { $script:hcRed } elseif ($m.UsedPct -ge 80) { $script:hcAmber } else { $script:hcGreen })))
+        $card.Chips.Add((New-Chip ((T "提交 {0}%") -f $m.CommitPct) $(if ($m.CommitPct -ge 90) { $script:hcRed } elseif ($m.CommitPct -ge 75) { $script:hcAmber } else { $script:hcGreen })))
+        if ($m.HardFaults -ge 0) { $card.Chips.Add((New-Chip ((T "硬错误 {0}/秒") -f $m.HardFaults) $(if ($m.HardFaults -ge 100) { $script:hcRed } elseif ($m.HardFaults -ge 20) { $script:hcAmber } else { $script:hcGreen }))) }
+        if ($m.Whea -gt 0) { $card.Chips.Add((New-Chip ((T "WHEA 内存错误 {0} 次") -f $m.Whea) $script:hcRed)) }
+        $card.Lines.Add(((T "提交 {0} / 上限 {1}（物理内存加页面文件）。") -f (Fmt $m.Commit), (Fmt $m.CommitLimit)) + $(switch ($m.Pressure) { 'high' { (T '内存很紧张：程序在频繁换到页面文件，会明显变慢') } 'mid' { (T '内存偏紧') } default { (T '内存够用') } }))
+        if ($m.Whea -gt 0) { $card.Lines.Add((T '最近 30 天 Windows 记录过内存硬件错误（WHEA）：建议跑一次 Windows 内存诊断（mdsched）')) }
+        $cards.Add($card)
+    } else { $card = New-HealthCard (T '内存') (T '读不到') $script:hcGrey; $card.Lines.Add($m.Why); $cards.Add($card) }
+    # 磁盘
+    foreach ($d in @($r.Disks)) {
+        $tier = $script:hcGreen
+        $sub = if ($d.Model) { [string]$d.Model } else { (T '型号读不到') }
+        $card = New-HealthCard ((T "磁盘 {0}") -f $d.Drive) $sub $tier
+        try { $di = New-Object System.IO.DriveInfo ($d.Drive + '\'); $pct = [int][math]::Round(100.0 * ($di.TotalSize - $di.TotalFreeSpace) / [math]::Max(1, $di.TotalSize)); $card.HasBar = $true; $card.BarW = [math]::Max(2, 2.5 * $pct); $card.Chips.Add((New-Chip ((T "已用 {0}%") -f $pct) $(if ($pct -ge 95) { $script:hcRed } elseif ($pct -ge 85) { $script:hcAmber } else { $script:hcGreen }))) } catch {}
+        if ($d.Ok) {
+            $h = [string]$d.Health
+            $t2 = if ($h -match 'Healthy|正常|OK') { $script:hcGreen } elseif ($h) { $script:hcRed } else { $script:hcGrey }
+            $card.Chips.Add((New-Chip $(if ($h) { $h } else { (T '健康状态读不到') }) $t2)); $tier = Tier-Worst $tier $t2
+            if ($d.Temp -ne $null -and [int]$d.Temp -gt 0) { $t2 = if ([int]$d.Temp -ge 60) { $script:hcRed } elseif ([int]$d.Temp -ge 45) { $script:hcAmber } else { $script:hcGreen }; $card.Chips.Add((New-Chip ("{0} °C" -f $d.Temp) $t2)); $tier = Tier-Worst $tier $t2 } else { $card.Chips.Add((New-Chip (T '温度读不到') $script:hcGrey)) }
+            if ($d.Wear -ne $null -and [int]$d.Wear -ge 0) { $t2 = if ([int]$d.Wear -ge 50) { $script:hcRed } elseif ([int]$d.Wear -ge 10) { $script:hcAmber } else { $script:hcGreen }; $card.Chips.Add((New-Chip ((T "磨损 {0}%") -f $d.Wear) $t2)); $tier = Tier-Worst $tier $t2 }
+            if ($d.ReadErrors -ne $null -and [long]$d.ReadErrors -gt 0) { $card.Chips.Add((New-Chip ((T "读错误 {0}") -f $d.ReadErrors) $script:hcRed)); $tier = $script:hcRed }
+            if ($d.Hours -ne $null -and [long]$d.Hours -gt 0) { $card.Lines.Add((T "通电 {0:N0} 小时") -f $d.Hours) }
+            if ($d.Media) { $card.Lines.Add([string]$d.Media) }
+        } else { $card.Chips.Add((New-Chip (T 'SMART 读不到') $script:hcGrey)); $card.Lines.Add((T '这块盘不报告 SMART（USB 硬盘盒、RAID 和部分虚拟机常见）')) }
+        $card.Stripe = $tier[0]; $card.BarBrush = $tier[0]
+        $cards.Add($card)
+    }
+    # 电池
+    $b = $r.Battery
+    if ($b.Present) {
+        $tier = $script:hcGreen
+        $card = New-HealthCard (T '电池') $b.Status $tier
+        if ($b.Charge -ge 0) { $card.HasBar = $true; $card.BarW = [math]::Max(2, 2.5 * $b.Charge); $card.Chips.Add((New-Chip ((T "电量 {0}%") -f $b.Charge) $script:hcBlue)) }
+        if ($b.Design -gt 0 -and $b.Full -gt 0) {
+            $pct = [int][math]::Round(100.0 * $b.Full / $b.Design)
+            $t2 = if ($pct -lt 60) { $script:hcRed } elseif ($pct -lt 80) { $script:hcAmber } else { $script:hcGreen }
+            $card.Chips.Add((New-Chip ((T "健康 {0}%") -f $pct) $t2)); $tier = $t2
+            $card.Lines.Add((T "设计容量 {0:N0} mWh，现在充满 {1:N0} mWh") -f $b.Design, $b.Full)
+        } else { $card.Chips.Add((New-Chip (T '损耗读不到') $script:hcGrey)); if ($b.Why) { $card.Lines.Add($b.Why) } }
+        if ($b.Cycles -ge 0) { $card.Chips.Add((New-Chip ((T "循环 {0} 次") -f $b.Cycles) $script:hcBlue)) } else { $card.Lines.Add((T '循环次数：电池没有报告')) }
+        $card.Stripe = $tier[0]; $card.BarBrush = $tier[0]
+        $cards.Add($card)
+    } else { $card = New-HealthCard (T '电池') (T '没有电池（台式机）') $script:hcGrey; $cards.Add($card) }
+    # 显卡
+    foreach ($g in @($r.Gpu)) {
+        if (-not $g.Ok) { $card = New-HealthCard (T '显卡') (T '读不到') $script:hcGrey; $card.Lines.Add($g.Why); $cards.Add($card); continue }
+        $card = New-HealthCard (T '显卡') $g.Name $script:hcGreen
+        if ($g.Util -ge 0) { $card.HasBar = $true; $card.BarW = [math]::Max(2, 2.5 * $g.Util); $card.Chips.Add((New-Chip ((T "占用 {0}%") -f $g.Util) $(if ($g.Util -ge 95) { $script:hcAmber } else { $script:hcGreen }))) }
+        if ($g.Vram -gt 0) { $card.Chips.Add((New-Chip ($(if ($g.VramUsed -ge 0) { (T "显存 {0} / {1}") -f (Fmt $g.VramUsed), (Fmt $g.Vram) } else { (T "显存 {0}") -f (Fmt $g.Vram) })) $script:hcBlue)) }
+        $card.Chips.Add((New-Chip (T '温度读不到') $script:hcGrey))
+        $card.Lines.Add($g.TempWhy)
+        if ($g.Driver) { $card.Lines.Add(((T "驱动 {0}") -f $g.Driver) + $(if ($g.DriverDate) { ("（{0:yyyy-MM-dd}）" -f $g.DriverDate) } else { '' })) }
+        $cards.Add($card)
+    }
+    # Windows
+    $w = $r.Win
+    $tier = if ($w.BadDevices.Count -gt 0) { $script:hcAmber } else { $script:hcGreen }
+    $card = New-HealthCard 'Windows' ((T "版本 {0}") -f $w.Build) $tier
+    if ($w.Uptime) { $card.Chips.Add((New-Chip ((T "开机 {0}") -f (FmtSpan $w.Uptime)) $(if ($w.Uptime.TotalDays -ge 14) { $script:hcAmber } else { $script:hcBlue }))) }
+    if ($w.PendingReboot) { $card.Chips.Add((New-Chip (T '等待重启') $script:hcAmber)); $tier = Tier-Worst $tier $script:hcAmber }
+    if ($w.LastUpdate) { $card.Chips.Add((New-Chip ((T "更新 {0:yyyy-MM-dd}") -f $w.LastUpdate) $(if (((Get-Date) - $w.LastUpdate).TotalDays -gt 60) { $script:hcAmber } else { $script:hcGreen }))) }
+    $card.Chips.Add((New-Chip ($(if ($w.BadDevices.Count -gt 0) { (T "{0} 个设备有问题") -f $w.BadDevices.Count } else { (T '设备都正常') })) $(if ($w.BadDevices.Count -gt 0) { $script:hcAmber } else { $script:hcGreen })))
+    foreach ($bd in @($w.BadDevices | Select-Object -First 4)) { $card.Lines.Add(("{0}：{1}" -f $bd.Name, $bd.Note)) }
+    if ($w.Uptime -and $w.Uptime.TotalDays -ge 14) { $card.Lines.Add((T '两周没重启了（快速启动的「关机」不算重启）。很多莫名其妙的慢和卡，重启一次就好')) }
+    $card.Stripe = $tier[0]; $card.BarBrush = $tier[0]
+    $cards.Add($card)
+    $ctl.HealthCards.ItemsSource = $cards
+    # 开机
+    $bt = $r.Boot
+    $slow = New-Object 'System.Collections.ObjectModel.ObservableCollection[NoteRow]'
+    if ($bt.Ok) {
+        $ctl.HealthBootText.Text = (T "最近一次开机（{0:yyyy-MM-dd HH:mm}）用了 {1:N0} 秒：到桌面 {2:N0} 秒，桌面出来后开机程序又忙了 {3:N0} 秒才安静下来。") -f $bt.At, ($bt.BootMs / 1000), ($bt.MainMs / 1000), ($bt.PostMs / 1000)
+        if ($bt.History.Count -ge 3) { $avg = ($bt.History | ForEach-Object { $_.BootMs } | Measure-Object -Average).Average; $ctl.HealthBootText.Text += (T "最近 {0} 次平均 {1:N0} 秒。") -f $bt.History.Count, ($avg / 1000) }
+        if ($bt.BootMs -gt 120000) { $ctl.HealthBootText.Text += (T '超过两分钟算慢的。') }
+        foreach ($s in @($bt.Slow)) { $n = New-Object NoteRow; $n.Head = $s.Name; $n.Path = $s.Path; $n.Body = (T "拖慢 {0:N0} 秒，{1} 次") -f ($s.DegradeMs / 1000), $s.Times; $slow.Add($n) }
+        if ($slow.Count -eq 0) { $ctl.HealthBootText.Text += (T '最近 30 天 Windows 没有点名拖慢开机的程序。') }
+    } else { $ctl.HealthBootText.Text = $bt.Why }
+    $ctl.HealthSlow.ItemsSource = $slow
+    # 蓝屏
+    $cr = $r.Crash
+    $dumps = New-Object 'System.Collections.ObjectModel.ObservableCollection[DumpRow]'
+    foreach ($d in @($cr.Dumps)) {
+        $row = New-Object DumpRow
+        $row.When = '{0:yyyy-MM-dd HH:mm}' -f $d.Time; $row.File = $d.File
+        $row.Code = if ($d.Ok) { ('0x{0:X} {1}' -f $d.Code, $d.CodeName).Trim() } else { (T '没解析出来') }
+        $row.Suspect = if ($d.Suspect) { (T "可能是 {0}") -f $d.Suspect } else { '' }
+        $row.SuspectBrush = '#C0101C'
+        $det = @()
+        if ($d.Ok) { $det += (T "参数 {0}") -f ($d.Params -join ' ') }
+        if ($d.Stack.Count -gt 0) { $det += (T "栈上的驱动：{0}") -f (($d.Stack | Select-Object -First 6) -join ', ') }
+        if ($d.Ok) { $det += (T "出事时加载了 {0} 个驱动") -f $d.Drivers }
+        if ($d.Error) { $det += $d.Error }
+        $det += (T "{0}，{1}") -f $d.Name, (Fmt $d.Size)
+        $row.Detail = $det -join (T '。')
+        $dumps.Add($row)
+    }
+    $ctl.HealthDumps.ItemsSource = $dumps
+    $ctl.HealthCrashText.Text = if ($dumps.Count -gt 0) { (T "{0} 里有 {1} 个转储文件（最近的 10 个）。") -f $cr.DumpDir, $dumps.Count } else { (T "没有转储文件：最近没有蓝屏，或者蓝屏时没来得及写出转储。") }
+    if ($cr.MemoryDmp) { $ctl.HealthCrashText.Text += (T "另有完整转储 MEMORY.DMP（{0}，{1:yyyy-MM-dd}），在「省空间」里可以改成只存小转储。") -f (Fmt $cr.MemoryDmp.Size), $cr.MemoryDmp.Time }
+    $evs = New-Object 'System.Collections.ObjectModel.ObservableCollection[NoteRow]'
+    foreach ($x in @($cr.Events)) { $n = New-Object NoteRow; $n.Head = ("{0}（{1}）" -f $x.What, $x.Source); $n.Path = $x.Sample; $n.Body = (T "{0} 次，最近 {1:MM-dd HH:mm}") -f $x.Count, $x.Last; $evs.Add($n) }
+    if ($evs.Count -eq 0) { $n = New-Object NoteRow; $n.Head = (T '没有意外关机、硬件错误和磁盘错误的记录'); $evs.Add($n) }
+    $ctl.HealthEvents.ItemsSource = $evs
+    $drs = New-Object 'System.Collections.ObjectModel.ObservableCollection[NoteRow]'
+    foreach ($x in @($cr.Drivers | Select-Object -First 12)) { $n = New-Object NoteRow; $n.Head = ("{0} {1} {2}" -f $x.Provider, $x.Name, $x.Version).Trim(); $n.Path = $x.Device; $n.Body = '{0:MM-dd HH:mm}' -f $x.When; $drs.Add($n) }
+    if ($drs.Count -eq 0) { $n = New-Object NoteRow; $n.Head = (T '最近 30 天没有装过驱动'); $drs.Add($n) }
+    $ctl.HealthDrivers.ItemsSource = $drs
+    # Windows 事件
+    $errs = New-Object 'System.Collections.ObjectModel.ObservableCollection[NoteRow]'
+    foreach ($x in @($w.Errors)) { $n = New-Object NoteRow; $n.Head = ("{0}：{1}" -f $x.Source, $x.Sample); $n.Path = $x.Sample; $n.Body = (T "{0} 次，最近 {1:MM-dd HH:mm}") -f $x.Count, $x.Last; $errs.Add($n) }
+    $ctl.HealthErrors.ItemsSource = $errs
+    $ctl.HealthWinText.Text = if ($w.ErrorCount -gt 0) { (T "最近 7 天系统日志里有 {0} 条严重或错误事件，来源最多的几个：") -f $w.ErrorCount } else { (T '最近 7 天系统日志里没有严重或错误事件。') }
+}
+$ctl.HealthDumps.AddHandler([System.Windows.Controls.Button]::ClickEvent, [System.Windows.RoutedEventHandler]{ param($s, $e) $b = $e.OriginalSource; if ($b -is [System.Windows.Controls.Button] -and $b.Tag -is [DumpRow]) { Open-Location $b.Tag.File } })
+# SFC / DISM：检查只看不改；修复会改系统文件，先确认。都在终端窗口里跑，过程看得见
+function Start-SystemFileTool([bool]$repair) {
+    $cmd = if ($repair) { 'echo === sfc /scannow === && sfc /scannow && echo === DISM /RestoreHealth === && DISM /Online /Cleanup-Image /RestoreHealth' }
+           else { 'echo === sfc /verifyonly === && sfc /verifyonly && echo === DISM /ScanHealth === && DISM /Online /Cleanup-Image /ScanHealth' }
+    if ($repair) {
+        $ans = Show-Sheet -Kind warn -Title (T '修复系统文件？') -Text (T "会运行 sfc /scannow 和 DISM /RestoreHealth：把损坏的系统文件换成正常的副本。这会改动系统文件（只动 Windows 自己的文件，不碰你的资料），DISM 可能要联网下载，一共要十几分钟到半小时。`n`n先用「检查系统文件（只看）」看一眼有没有问题，再决定要不要修复。") -Buttons @((T '取消'), (T '修复')) -Primary (T '修复') -Cancel (T '取消')
+        if ($ans -ne (T '修复')) { return }
+    }
+    try {
+        Start-Process -FilePath "$env:SystemRoot\System32\cmd.exe" -ArgumentList ('/k ' + $cmd)
+        OpLog '系统设置' $(if ($repair) { (T '修复系统文件（sfc /scannow、DISM /RestoreHealth）') } else { (T '检查系统文件（sfc /verifyonly、DISM /ScanHealth）') }) '' $cmd
+        UI-Log ((T "已在终端里开始：{0}") -f $cmd)
+    } catch { Show-Sheet -Kind warn -Title (T '没能打开终端') -Text $_.Exception.Message | Out-Null }
+}
+$ctl.BtnSfcCheck.Add_Click({ Start-SystemFileTool $false })
+$ctl.BtnSfcRepair.Add_Click({ Start-SystemFileTool $true })
+# 活动监控：后台线程每 3 秒采一次样，把结果放进共享表；界面每秒看一眼
+$script:monShared = $null; $script:monSeen = -1; $script:monTimer = $null
+function Start-Monitor {
+    if ($script:monShared -and -not $script:monShared.Stop) { return }
+    $sh = [hashtable]::Synchronized(@{ Stop = $false; Ver = 0; Rows = $null; At = $null; Base = $null })
+    $script:monShared = $sh; $script:monSeen = -1
+    $threads = [Environment]::ProcessorCount
+    $code = @'
+$sh = $arg.Shared
+$base = Get-ProcSample; $prev = $base; $sh.Base = $base.At
+while (-not $sh.Stop) {
+    Start-Sleep -Seconds 3
+    if ($sh.Stop) { break }
+    $cur = Get-ProcSample
+    $sh.Rows = @(Compare-ProcSample $prev $cur $base $arg.Threads); $sh.At = $cur.At; $sh.Ver++
+    $prev = $cur
+}
+'ok'
+'@
+    $ok = Start-BgEngine 'monitor' $code @{ Shared = $sh; Threads = $threads } { param($r, $err) if ($err) { $ctl.HealthMonText.Text = (T '监控出错：') + $err } }
+    if (-not $ok) { return }
+    $ctl.BtnMonStart.IsEnabled = $false; $ctl.BtnMonStop.IsEnabled = $true
+    $ctl.HealthMonText.Text = (T '正在采样…第一组数据 3 秒后出来')
+    if (-not $script:monTimer) {
+        $script:monTimer = New-Object System.Windows.Threading.DispatcherTimer
+        $script:monTimer.Interval = [TimeSpan]::FromMilliseconds(1000)
+        $script:monTimer.Add_Tick({ Refresh-Monitor })
+    }
+    $script:monTimer.Start()
+    OpLog '系统设置' (T '开始活动监控') '' ''
+}
+function Stop-Monitor {
+    if ($script:monShared) { $script:monShared.Stop = $true }
+    if ($script:monTimer) { $script:monTimer.Stop() }
+    $ctl.BtnMonStart.IsEnabled = $true; $ctl.BtnMonStop.IsEnabled = $false
+    if ($script:monShared -and $script:monShared.Base) { $ctl.HealthMonText.Text = (T "已停止。下面是从 {0:HH:mm:ss} 到 {1:HH:mm:ss} 的结果。") -f $script:monShared.Base, $(if ($script:monShared.At) { $script:monShared.At } else { Get-Date }) }
+}
+function Refresh-Monitor {
+    $sh = $script:monShared
+    if (-not $sh -or $sh.Ver -eq $script:monSeen -or -not $sh.Rows) { return }
+    $script:monSeen = $sh.Ver
+    Show-Monitor @($sh.Rows)
+    $ctl.HealthMonText.Text = (T "从 {0:HH:mm:ss} 开始监控，到 {1:HH:mm:ss}，第 {2} 次采样。同名的进程合在一起算。") -f $sh.Base, $sh.At, $sh.Ver
+}
+function Show-Monitor($rows) {
+    # 同名进程合并（Chrome、Edge 一个标签一个进程）
+    $by = @{}
+    foreach ($x in $rows) {
+        $k = [string]$x.Name
+        if (-not $by.ContainsKey($k)) { $by[$k] = @{ Name = $k; Path = $x.Path; N = 0; Cpu = 0.0; Ws = 0.0; Rate = 0.0; Since = 0.0; Total = 0.0 } }
+        $a = $by[$k]; $a.N++; $a.Cpu += $x.Cpu; $a.Ws += $x.Ws; $a.Rate += $x.WriteRate; $a.Since += $x.WriteSince; $a.Total += $x.WriteTotal
+        if (-not $a.Path -and $x.Path) { $a.Path = $x.Path }
+    }
+    $sort = if ($ctl.MonSortCpu.IsChecked) { 'cpu' } elseif ($ctl.MonSortMem.IsChecked) { 'mem' } else { 'write' }
+    $list = @($by.Values | Sort-Object { switch ($sort) { 'cpu' { $_.Cpu } 'mem' { $_.Ws } default { $_.Since * 1000000 + $_.Rate } } } -Descending | Select-Object -First 25)
+    $max = [double]0; foreach ($a in $list) { if ($a.Since -gt $max) { $max = $a.Since } }
+    $col = New-Object 'System.Collections.ObjectModel.ObservableCollection[ProcRow]'
+    foreach ($a in $list) {
+        $p = New-Object ProcRow
+        $p.Name = $a.Name; $p.Meta = $(if ($a.N -gt 1) { (T "{0} 个进程 · ") -f $a.N } else { '' }) + $(if ($a.Path) { Shorten $a.Path } else { '' })
+        $p.CpuText = '{0:N0}%' -f $a.Cpu; $p.WsText = Fmt $a.Ws; $p.RateText = (T "{0}/秒") -f (Fmt $a.Rate); $p.SinceText = Fmt $a.Since; $p.TotalText = Fmt $a.Total
+        $p.Bar = if ($max -gt 0) { [math]::Max(0, 100.0 * $a.Since / $max) } else { 0 }
+        $col.Add($p)
+    }
+    $ctl.MonList.ItemsSource = $col
+}
+$ctl.BtnMonStart.Add_Click({ Start-Monitor })
+$ctl.BtnMonStop.Add_Click({ Stop-Monitor })
+foreach ($rb in @($ctl.MonSortWrite, $ctl.MonSortCpu, $ctl.MonSortMem)) { $rb.Add_Checked({ if ($script:monShared -and $script:monShared.Rows) { Show-Monitor @($script:monShared.Rows) } }) }
+$win.Add_Closed({ try { if ($script:monShared) { $script:monShared.Stop = $true } } catch {} })
+
 function Load-Save {
     $on = Get-CompactOSOn
     $ctl.SaveCosState.Text = if ($on) { (T '当前：已开启，系统文件已压缩存放') } else { (T '当前：未开启') }
@@ -15563,7 +16563,7 @@ $sync.DupMerged = $done
 # 设置：外观、语言、显示哪些内容
 # ------------------------------------------------------------
 # 可以关掉的页面、左下角的按钮：设置里存关掉了的，逗号隔开
-$script:optPages = [ordered]@{ dup = 'SetPageDup'; save = 'SetPageSave'; apps = 'SetPageApps'; moves = 'SetPageMoves'; auto = 'SetPageAuto'; log = 'SetPageLog' }
+$script:optPages = [ordered]@{ dup = 'SetPageDup'; save = 'SetPageSave'; apps = 'SetPageApps'; health = 'SetPageHealth'; moves = 'SetPageMoves'; auto = 'SetPageAuto'; log = 'SetPageLog' }
 $script:optLinks = [ordered]@{ theme = @('SetLinkTheme', 'BtnTheme'); lang = @('SetLinkLang', 'BtnLang'); feedback = @('SetLinkFeedback', 'BtnFeedback'); log = @('SetLinkLog', 'BtnLog') }
 # 开关：设置里的名字 → 设置页上的开关（默认都开）
 $script:optSwitches = [ordered]@{ PageSub = 'SetPageSub'; MapCheck = 'SetMapCheck'; MapBar = 'SetMapBar'; MapPct = 'SetMapPct'; MapMeta = 'SetMapMeta'; MapDisk = 'SetMapDisk'; MapFastBtn = 'SetMapFastBtn'; MapHealth = 'SetMapHealth' }
@@ -15594,14 +16594,16 @@ function Apply-Mode {
     # 清理页、自动提醒、帮助、设置
     $ctl.BtnCleanCustom.Visibility = & $v 2
     $ctl.AutoJunkRow.Visibility = & $v 1
+    foreach ($n in 'HealthCardBoot', 'HealthCardCrash', 'HealthCardMon') { $ctl[$n].Visibility = & $v 1 }
+    $ctl.BtnSfcRepair.Visibility = & $v 2; $ctl.HealthCardEvents.Visibility = & $v 2
     $ctl.FbCopyDiag.Visibility = & $v 1; $ctl.FbSelfTest.Visibility = & $v 2
     $ctl.SetCardDisplay.Visibility = & $v 1; $ctl.SetCardScan.Visibility = & $v 2
     foreach ($n in 'SetCustomList', 'SetCustomEmpty', 'BtnSetCustomAdd', 'SetExcludeList', 'SetExcludeEmpty', 'BtnSetExcludeAdd', 'SetCustomHead', 'SetCustomNote', 'SetExcludeHead', 'SetExcludeNote') { $ctl[$n].Visibility = & $v 2 }
     $ctl.ModeTag.Text = (Get-ModeName $m) + (T '模式')
     $ctl.SetModeNote.Text = switch ($m) {
         0 { (T '普通用户：清理 C 盘、省空间、空间地图、软件管理、帮助。清理列表里只有常见的缓存和临时文件，删了都会自动重建；有代价的项目仍然默认跳过。') }
-        1 { (T '工程师：再加上重复文件、搬家管理、自动提醒、操作日志；空间地图的找文件、和上次比、导出；省空间的页面文件、还原点、压缩文件夹、虚拟磁盘；软件管理的开机启动、残留文件夹、检查新版本和搬到其他盘；清理列表里多出开发工具的缓存。') }
-        default { (T '开发者和 IT：全部功能。再加上计划任务、右键菜单、保留的存储、组件存储分析、蓝屏转储、临时文件夹位置、自定义清理列表和排除、快速扫描开关、空间明细、检查扫描功能、运行记录，以及 Installer 孤儿安装包、事件日志、NuGet / Gradle / Maven / JetBrains 缓存这类项目。') }
+        1 { (T '工程师：再加上重复文件、搬家管理、自动提醒、操作日志；空间地图的找文件、和上次比、最近改动、导出；省空间的页面文件、还原点、压缩文件夹、虚拟磁盘；软件管理的开机启动、残留文件夹、检查新版本和搬到其他盘；系统健康的开机用时、蓝屏诊断、活动监控；清理列表里多出开发工具的缓存。') }
+        default { (T '开发者和 IT：全部功能。再加上计划任务、右键菜单、保留的存储、组件存储分析、蓝屏转储、临时文件夹位置、自定义清理列表和排除、快速扫描开关、空间明细、检查扫描功能、运行记录、修复系统文件、Windows 事件汇总，以及 Installer 孤儿安装包、事件日志、旧版驱动包、NuGet / Gradle / Maven / JetBrains 缓存这类项目。') }
     }
     $script:setLoading = $true
     try { $ctl.SetModeBasic.IsChecked = ($m -eq 0); $ctl.SetModePro.IsChecked = ($m -eq 1); $ctl.SetModeExpert.IsChecked = ($m -eq 2) } finally { $script:setLoading = $false }
@@ -15992,12 +16994,13 @@ function Invoke-UiTest {
             Set-Mode 'basic'
             if ($ctl.NavDup.Visibility -ne 'Collapsed' -or $ctl.NavLog.Visibility -ne 'Collapsed' -or $ctl.BtnLog.Visibility -ne 'Collapsed') { throw 'basic mode still shows advanced pages' }
             if ($ctl.SaveCardRs.Visibility -ne 'Collapsed' -or $ctl.AppsViewBox.Visibility -ne 'Collapsed' -or $ctl.MapViewFiles.Visibility -ne 'Collapsed' -or $ctl.BtnSetCustomAdd.Visibility -ne 'Collapsed') { throw 'basic mode still shows advanced cards' }
-            if ($ctl.NavClean.Visibility -ne 'Visible' -or $ctl.SaveCardCos.Visibility -ne 'Visible' -or $ctl.SaveCardOd.Visibility -ne 'Visible') { throw 'basic mode hides basic things' }
+            if ($ctl.NavClean.Visibility -ne 'Visible' -or $ctl.SaveCardCos.Visibility -ne 'Visible' -or $ctl.SaveCardOd.Visibility -ne 'Visible' -or $ctl.NavHealth.Visibility -ne 'Visible' -or $ctl.HealthCardHw.Visibility -ne 'Visible') { throw 'basic mode hides basic things' }
+            if ($ctl.HealthCardBoot.Visibility -ne 'Collapsed' -or $ctl.HealthCardMon.Visibility -ne 'Collapsed') { throw 'basic mode shows advanced health cards' }
             if ($ctl.ModeTag.Text -ne ((T '普通用户') + (T '模式'))) { throw ('mode tag: ' + $ctl.ModeTag.Text) }
             Set-Mode 'pro'
             if ($ctl.NavDup.Visibility -ne 'Visible' -or $ctl.AppsViewStartup.Visibility -ne 'Visible' -or $ctl.AppsViewTasks.Visibility -ne 'Collapsed' -or $ctl.SaveCardPf.Visibility -ne 'Visible' -or $ctl.SaveCardRs.Visibility -ne 'Collapsed') { throw 'pro mode wrong' }
             Set-Mode 'expert'
-            if ($ctl.AppsViewTasks.Visibility -ne 'Visible' -or $ctl.SaveCardRs.Visibility -ne 'Visible' -or $ctl.BtnLog.Visibility -ne 'Visible' -or $ctl.BtnSetCustomAdd.Visibility -ne 'Visible') { throw 'expert mode wrong' }
+            if ($ctl.AppsViewTasks.Visibility -ne 'Visible' -or $ctl.SaveCardRs.Visibility -ne 'Visible' -or $ctl.BtnLog.Visibility -ne 'Visible' -or $ctl.BtnSetCustomAdd.Visibility -ne 'Visible' -or $ctl.BtnSfcRepair.Visibility -ne 'Visible' -or $ctl.HealthCardEvents.Visibility -ne 'Visible') { throw 'expert mode wrong' }
             if (@($catalog | Where-Object { [int]$_.Lvl -eq 2 }).Count -lt 5 -or @($catalog | Where-Object { [int]$_.Lvl -eq 1 }).Count -lt 5) { throw 'catalog levels missing' }
         }
         & $step 'cleanup tiers: careful group, delete preview, recycle switch' {
@@ -16018,6 +17021,29 @@ function Invoke-UiTest {
             Show-Page 'settings'; $ctl.SetRecycle.IsChecked = $true; & $click $ctl.SetRecycle
             if ((Get-Setting 'Recycle' '0') -ne '1') { throw 'recycle setting not saved' }
             $ctl.SetRecycle.IsChecked = $false; & $click $ctl.SetRecycle
+        }
+        & $step 'system health page fills in' {
+            Show-Page 'health'
+            if (-not (& $waitUi { $script:healthData -ne $null } 90000)) { throw ('health data not read: ' + $ctl.HealthNote.Text) }
+            $L.Add(('health: ' + $ctl.HealthNote.Text))
+            if ($ctl.HealthCards.Items.Count -lt 3) { throw ("only {0} hardware cards" -f $ctl.HealthCards.Items.Count) }
+            $titles = @($ctl.HealthCards.Items | ForEach-Object { $_.Title })
+            if ($titles -notcontains (T 'CPU') -or $titles -notcontains (T '内存') -or $titles -notcontains 'Windows') { throw ('cards: ' + ($titles -join ',')) }
+            foreach ($c in $ctl.HealthCards.Items) { $L.Add(('  ' + $c.Title + ': ' + (@($c.Chips | ForEach-Object { $_.Text }) -join ' | ') + ' / ' + (@($c.Lines) -join ' / '))) }
+            if (-not $ctl.HealthBootText.Text -or -not $ctl.HealthCrashText.Text -or -not $ctl.HealthWinText.Text) { throw 'boot, crash or events text empty' }
+            $L.Add(('  boot: ' + $ctl.HealthBootText.Text)); $L.Add(('  crash: ' + $ctl.HealthCrashText.Text)); $L.Add(('  events: ' + $ctl.HealthWinText.Text))
+            # 活动监控：采两次样
+            Start-Monitor
+            if (-not (& $waitUi { $script:monShared -and $script:monShared.Ver -ge 1 } 20000)) { throw 'monitor took no sample' }
+            Refresh-Monitor
+            if ($ctl.MonList.Items.Count -lt 1) { throw 'monitor list empty' }
+            $L.Add(('  monitor: ' + $ctl.MonList.Items.Count + ' rows, top ' + $ctl.MonList.Items[0].Name + ' ' + $ctl.MonList.Items[0].SinceText))
+            $ctl.MonSortCpu.IsChecked = $true; if ($ctl.MonList.Items.Count -lt 1) { throw 'monitor list empty after sort' }
+            Stop-Monitor
+            if ($ctl.BtnMonStop.IsEnabled -or -not $script:monShared.Stop) { throw 'monitor not stopped' }
+            if (-not (& $waitUi { -not $script:bg['monitor'] } 15000)) { throw 'monitor thread did not end' }
+            # 系统文件检查按钮只是起终端：不点，查它在不在
+            if ($ctl.BtnSfcCheck.Visibility -ne 'Visible') { throw 'sfc check button hidden' }
         }
         & $step 'restore points card' {
             Show-Page 'save'

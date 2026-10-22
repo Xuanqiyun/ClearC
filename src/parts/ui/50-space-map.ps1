@@ -16,6 +16,35 @@ function Fill-MapDrives {
 }
 # 盘的健康信息（SSD 磨损、温度、通电时间）：在另一个线程里读，读到了写在标题下面
 $script:dhPs = $null
+# 在后台线程里跑一段引擎代码（不占主工作线程、不显示进度条），完成后在界面线程里回调。同一个 key 同时只跑一个
+$script:bg = @{}
+function Start-BgEngine([string]$key, [string]$code, $arg, [scriptblock]$done) {
+    if ($script:bg[$key]) { return $false }
+    $ps = $null
+    try {
+        $ps = [powershell]::Create()
+        [void]$ps.AddScript("param(`$arg, `$engine)`nInvoke-Expression `$engine`n" + $code).AddArgument($arg).AddArgument($engine)
+        $script:bg[$key] = @{ PS = $ps; AR = $ps.BeginInvoke(); Done = $done; Key = $key }
+    } catch { Write-LogFile ("bg {0}: {1}" -f $key, $_.Exception.Message); if ($ps) { try { $ps.Dispose() } catch {} }; return $false }
+    $t = New-Object System.Windows.Threading.DispatcherTimer
+    $t.Interval = [TimeSpan]::FromMilliseconds(400); $t.Tag = $key
+    $t.Add_Tick({
+        $k = [string]$this.Tag; $j = $script:bg[$k]
+        if (-not $j) { $this.Stop(); return }
+        if (-not $j.AR.IsCompleted) { return }
+        $this.Stop()
+        $result = $null; $err = ''
+        try { $out = $j.PS.EndInvoke($j.AR); if ($out.Count -gt 0) { $result = $out[$out.Count - 1] } } catch { $err = [string]$_.Exception.Message }
+        try { foreach ($er in @($j.PS.Streams.Error | Select-Object -First 3)) { $err += ' | ' + [string]$er } } catch {}
+        if ($err) { Write-LogFile ("bg {0}: {1}" -f $k, $err) }
+        try { $j.PS.Dispose() } catch {}
+        $script:bg.Remove($k)
+        if ($j.Done) { try { & $j.Done $result $err } catch { Write-LogFile ("bg {0} done: {1}" -f $k, $_.Exception.Message) } }
+    })
+    $t.Start()
+    return $true
+}
+function Stop-BgEngine([string]$key) { $j = $script:bg[$key]; if ($j) { try { $j.PS.Stop() } catch {} } }
 function Start-DiskHealth {
     if ($script:dhPs) { return }
     $ctl.MapHealthNote.Text = (T '正在读取各块盘的健康信息…'); $ctl.MapHealthNote.Visibility = 'Visible'

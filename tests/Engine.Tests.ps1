@@ -147,6 +147,42 @@ try {
     $x = [Theme]::Xaml('<Border Background="White" BorderBrush="#E5E5EA"><TextBlock Foreground="#1D1D1F" Text="a #FFFFFF b"/><Border.Background><SolidColorBrush Color="#F5F5F7"/></Border.Background></Border>')
     Check "XAML colors replaced by role ($x)" ($x -match 'Background="#2' -and $x -match 'Foreground="#F' -and $x -match 'Text="a #FFFFFF b"' -and $x -notmatch 'Color="#F5F5F7"')
     [Theme]::Dark = $false
+    # 蓝屏转储解析：自己拼一个 64 位小转储（头部、驱动表、异常记录、调用栈）
+    $dmp = New-Object byte[] 0x3000
+    [Text.Encoding]::ASCII.GetBytes('PAGEDU64').CopyTo($dmp, 0)
+    [BitConverter]::GetBytes([uint32]26100).CopyTo($dmp, 0x0C)
+    [BitConverter]::GetBytes([uint32]0xD1).CopyTo($dmp, 0x38)
+    [BitConverter]::GetBytes([uint64]0x10).CopyTo($dmp, 0x40); [BitConverter]::GetBytes([uint64]2).CopyTo($dmp, 0x48); [BitConverter]::GetBytes([uint64]0).CopyTo($dmp, 0x50); [BitConverter]::GetBytes([Convert]::ToUInt64('FFFFF80012345678', 16)).CopyTo($dmp, 0x58)
+    [BitConverter]::GetBytes(([DateTime]'2026-10-20 08:00:00').ToFileTime()).CopyTo($dmp, 0xFA8)
+    $tri = 0x2000
+    [BitConverter]::GetBytes([uint32]0x2500).CopyTo($dmp, $tri + 0x10)   # 异常记录
+    [BitConverter]::GetBytes([uint32]0x2600).CopyTo($dmp, $tri + 0x28); [BitConverter]::GetBytes([uint32]32).CopyTo($dmp, $tri + 0x2C)   # 调用栈：4 个地址
+    [BitConverter]::GetBytes([uint32]0x2100).CopyTo($dmp, $tri + 0x30); [BitConverter]::GetBytes([uint32]3).CopyTo($dmp, $tri + 0x34)    # 3 个驱动
+    $drv = @(@('ntoskrnl.exe', [Convert]::ToUInt64('FFFFF80000000000', 16), 0x1000000), @('nvlddmkm.sys', [Convert]::ToUInt64('FFFFF80012000000', 16), 0x2000000), @('wdf01000.sys', [Convert]::ToUInt64('FFFFF80030000000', 16), 0x100000))
+    $strAt = 0x2400
+    for ($i = 0; $i -lt 3; $i++) {
+        $o = 0x2100 + $i * 0x98
+        [BitConverter]::GetBytes([uint32]$strAt).CopyTo($dmp, $o)
+        [BitConverter]::GetBytes([uint64]$drv[$i][1]).CopyTo($dmp, $o + 8 + 0x30); [BitConverter]::GetBytes([uint32]$drv[$i][2]).CopyTo($dmp, $o + 8 + 0x40)
+        $nb = [Text.Encoding]::Unicode.GetBytes([string]$drv[$i][0])
+        [BitConverter]::GetBytes([uint32]($nb.Length / 2)).CopyTo($dmp, $strAt); $nb.CopyTo($dmp, $strAt + 4); $strAt += 4 + $nb.Length + 2
+    }
+    [BitConverter]::GetBytes([Convert]::ToUInt32('C0000005', 16)).CopyTo($dmp, 0x2500); [BitConverter]::GetBytes([Convert]::ToUInt64('FFFFF80012345678', 16)).CopyTo($dmp, 0x2510)
+    [BitConverter]::GetBytes([Convert]::ToUInt64('FFFFF80000001234', 16)).CopyTo($dmp, 0x2600); [BitConverter]::GetBytes([Convert]::ToUInt64('FFFFF80030000100', 16)).CopyTo($dmp, 0x2608); [BitConverter]::GetBytes([Convert]::ToUInt64('FFFFF80012345678', 16)).CopyTo($dmp, 0x2610); [BitConverter]::GetBytes([uint64]0x12).CopyTo($dmp, 0x2618)
+    $di = [DumpInfo]::Parse($dmp, $null)
+    Check "dump: bug check and params ($('{0:X}' -f $di.BugCheck))" ($di.Ok -and $di.BugCheck -eq 0xD1 -and $di.Params[3] -eq [Convert]::ToUInt64('FFFFF80012345678', 16) -and $di.Build -eq 26100)
+    Check 'dump: drivers and names' ($di.Drivers.Count -eq 3 -and $di.Drivers[1].Name -eq 'nvlddmkm.sys' -and $di.Drivers[1].Base -eq [Convert]::ToUInt64('FFFFF80012000000', 16))
+    Check "dump: suspect driver from the fault address ($($di.Suspect))" ($di.Suspect -eq 'nvlddmkm.sys')
+    Check "dump: drivers on the stack, kernel excluded ($($di.StackDrivers -join ','))" (($di.StackDrivers -join ',') -eq 'wdf01000.sys,nvlddmkm.sys')
+    Check 'dump: time from the header' ($di.Time.Year -eq 2026 -and $di.Time.Month -eq 10)
+    Check 'dump: code name table' ([DumpInfo]::CodeName(0xD1) -eq 'DRIVER_IRQL_NOT_LESS_OR_EQUAL' -and [DumpInfo]::CodeName(0x7777) -eq '')
+    Check 'dump: garbage is rejected' (-not ([DumpInfo]::Parse((New-Object byte[] 100), $null)).Ok)
+    # 进程采样对比
+    $p1 = @{ At = (Get-Date).AddSeconds(-3); Procs = @{ 10 = @{ Pid = 10; Name = 'a.exe'; Path = ''; Cpu100ns = 0; Ws = 100; Write = 1000; Read = 0 }; 11 = @{ Pid = 11; Name = 'b.exe'; Path = ''; Cpu100ns = 0; Ws = 50; Write = 500; Read = 0 } } }
+    $p2 = @{ At = (Get-Date); Procs = @{ 10 = @{ Pid = 10; Name = 'a.exe'; Path = ''; Cpu100ns = 30000000; Ws = 120; Write = 4000; Read = 0 }; 12 = @{ Pid = 12; Name = 'c.exe'; Path = ''; Cpu100ns = 0; Ws = 10; Write = 700; Read = 0 } } }
+    $cmp = @(Compare-ProcSample $p1 $p2 $p1 2)
+    $ra = @($cmp | Where-Object { $_.Pid -eq 10 })[0]; $rc = @($cmp | Where-Object { $_.Pid -eq 12 })[0]
+    Check "process sample diff: write since and cpu ($($ra.WriteSince), $([int]$ra.Cpu)%)" ($cmp.Count -eq 2 -and $ra.WriteSince -eq 3000 -and $ra.Cpu -gt 30 -and $ra.Cpu -lt 70 -and $rc.WriteSince -eq 700)
     # 使用模式（放最后：写设置文件会多出一个文件，别影响前面的空间地图比较）
     Set-Setting 'Mode' 'expert'; $m2 = Get-Mode; Set-Setting 'Mode' 'pro'; $m1 = Get-Mode; Set-Setting 'Mode' ''; $m0 = Get-Mode
     Check 'Get-Mode: expert 2, pro 1, unset = basic 0' ($m0 -eq 0 -and $m1 -eq 1 -and $m2 -eq 2)
