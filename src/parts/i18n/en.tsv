@@ -156,6 +156,32 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+\n其中 {0} 项是「谨慎清理」（{1}）：删了要重新下载或重新生成，第一次打开会慢一点。不想清的，在列表里改成「跳过」。	\n{0} of them are "Careful cleanup" ({1}): they will be downloaded or generated again, so the first start is slower. Set any you want to keep to "Skip" in the list.
+\n其中 {0} 项是「需确认」的高风险项目（{1}），请再看一遍说明。	\n{0} of them are "Needs confirmation" items with a cost ({1}); please read their descriptions again.
+\n按设置，这次删除的文件会先放进回收站，可以从回收站恢复。	\nAs set in Settings, deleted files go to the Recycle Bin first and can be restored from there.
+看文件清单	View file list
+（整个文件夹）	 (whole folder)
+删除前的文件清单 {0:yyyy-MM-dd HH:mm}，{1:N0} 项，共 {2}	File list before deletion {0:yyyy-MM-dd HH:mm}, {1:N0} items, {2} in total
+按现在的选择会删掉 {0:N0} 项，共 {1}{2}。下面是最大的 {3} 项；整个文件夹的按文件夹算一项。	The current selection deletes {0:N0} items, {1} in total{2}. The largest {3} are listed below; a whole folder counts as one item.
+（只看了前 20000 项）	 (only the first 20,000 were listed)
+\n完整清单已存到：{0}	\nThe full list is saved at: {0}
+打开完整清单	Open full list
+删除前的文件清单	File list before deletion
+删除时先放进回收站：已打开	Recycle Bin first: on
+删除时先放进回收站：已关闭	Recycle Bin first: off
+驱动存储里的旧版驱动包	Old driver packages in the driver store
+  有 {0} 项没能放进回收站（错误 {1}）	  {0} items could not be moved to the Recycle Bin (error {1})
+不是 oem 驱动包	not an oem driver package
+驱动更新后，旧版本的安装包还留在 C:\\Windows\\System32\\DriverStore 里（和 Driver Store Explorer 的判断一样：同一个驱动、同一厂商有更新版本的那些）。用 pnputil 删除，正在使用的删不掉、启动必需的不碰。删了以后不能回滚到旧版驱动	After a driver update the older package stays in C:\\Windows\\System32\\DriverStore (judged like Driver Store Explorer: same driver and vendor with a newer version present). Removed with pnputil; packages in use cannot be removed and boot-critical ones are left alone. Afterwards you cannot roll back to the old driver
+  已删除旧版驱动包 {0}（{1} {2}）	  removed old driver package {0} ({1} {2})
+  没删掉 {0}：{1}	  not removed {0}: {1}
+  旧版驱动包：删了 {0} 个，{1}	  old driver packages: removed {0}, {1}
+（剩余 {0} → {1}）	 (free {0} → {1})
+，已放进回收站	, moved to the Recycle Bin
+删除时先放进回收站	Recycle Bin first
+手动清理删掉的文件先放进回收站，删错了可以从回收站恢复。慢一些，回收站会变大（清空回收站才真正腾出空间）；太大放不进回收站的文件，Windows 会问你。定期自动清理不受这个影响，照样直接删。	Files deleted by a manual cleanup go to the Recycle Bin first, so a mistake can be undone there. Slower, and the Recycle Bin grows (space is only freed when you empty it); for files too large for the Recycle Bin, Windows asks you. Scheduled automatic cleanup is not affected and deletes directly.
+谨慎清理（删了要重新下载或重新生成，第一次打开会慢一点；默认也清，执行前会单独列出来）	Careful cleanup (downloaded or generated again after deletion, so the first start is slower; cleaned by default, listed separately before running)
+谨慎清理	Careful cleanup
 这一行是统计，不是文件；双击查看	This row is a statistic, not a file; double-click to look
  · NTFS 压缩后 {0}（文件大小 {1}）	 · {0} after NTFS compression (file size {1})
  · 点方块就是选中下面列表里的那一行，列表里选中的方块会描边；双击进入	 · Clicking a block selects that row in the list below; rows selected in the list get an outline; double-click to enter

@@ -235,14 +235,33 @@ function Invoke-UiTest {
         & $step 'modes hide and show features' {
             Set-Mode 'basic'
             if ($ctl.NavDup.Visibility -ne 'Collapsed' -or $ctl.NavLog.Visibility -ne 'Collapsed' -or $ctl.BtnLog.Visibility -ne 'Collapsed') { throw 'basic mode still shows advanced pages' }
-            if ($ctl.SaveCardRs.Visibility -ne 'Collapsed' -or $ctl.AppsViewBox.Visibility -ne 'Collapsed' -or $ctl.MapViewFiles.Visibility -ne 'Collapsed' -or $ctl.SetCleanCard.Visibility -ne 'Collapsed') { throw 'basic mode still shows advanced cards' }
+            if ($ctl.SaveCardRs.Visibility -ne 'Collapsed' -or $ctl.AppsViewBox.Visibility -ne 'Collapsed' -or $ctl.MapViewFiles.Visibility -ne 'Collapsed' -or $ctl.BtnSetCustomAdd.Visibility -ne 'Collapsed') { throw 'basic mode still shows advanced cards' }
             if ($ctl.NavClean.Visibility -ne 'Visible' -or $ctl.SaveCardCos.Visibility -ne 'Visible' -or $ctl.SaveCardOd.Visibility -ne 'Visible') { throw 'basic mode hides basic things' }
             if ($ctl.ModeTag.Text -ne ((T '普通用户') + (T '模式'))) { throw ('mode tag: ' + $ctl.ModeTag.Text) }
             Set-Mode 'pro'
             if ($ctl.NavDup.Visibility -ne 'Visible' -or $ctl.AppsViewStartup.Visibility -ne 'Visible' -or $ctl.AppsViewTasks.Visibility -ne 'Collapsed' -or $ctl.SaveCardPf.Visibility -ne 'Visible' -or $ctl.SaveCardRs.Visibility -ne 'Collapsed') { throw 'pro mode wrong' }
             Set-Mode 'expert'
-            if ($ctl.AppsViewTasks.Visibility -ne 'Visible' -or $ctl.SaveCardRs.Visibility -ne 'Visible' -or $ctl.BtnLog.Visibility -ne 'Visible' -or $ctl.SetCleanCard.Visibility -ne 'Visible') { throw 'expert mode wrong' }
+            if ($ctl.AppsViewTasks.Visibility -ne 'Visible' -or $ctl.SaveCardRs.Visibility -ne 'Visible' -or $ctl.BtnLog.Visibility -ne 'Visible' -or $ctl.BtnSetCustomAdd.Visibility -ne 'Visible') { throw 'expert mode wrong' }
             if (@($catalog | Where-Object { [int]$_.Lvl -eq 2 }).Count -lt 5 -or @($catalog | Where-Object { [int]$_.Lvl -eq 1 }).Count -lt 5) { throw 'catalog levels missing' }
+        }
+        & $step 'cleanup tiers: careful group, delete preview, recycle switch' {
+            $care = @($catalog | Where-Object { $_.Careful })
+            if ($care.Count -lt 10 -or @($care | Where-Object { -not ([string]$_.G).StartsWith('谨慎清理') }).Count -gt 0) { throw ("careful items: {0}" -f $care.Count) }
+            if (@($catalog | Where-Object { $_.N -eq (T '驱动存储里的旧版驱动包') }).Count -ne 1) { throw 'old driver packages item missing' }
+            $d = Join-Path $script:appDir 'uitest-preview'; New-Item -ItemType Directory -Path "$d\sub" -Force | Out-Null
+            [IO.File]::WriteAllText("$d\a.tmp", ('x' * 3000)); [IO.File]::WriteAllText("$d\sub\b.tmp", ('y' * 5000)); [IO.File]::WriteAllText("$d\keep.txt", 'z')
+            try {
+                $pv = @(Get-DeletePreview @(@{ N = 'test'; Paths = @($d); Filter = '*.tmp' }) 100)
+                if ($pv.Count -ne 1 -or $pv[0].Bytes -ne 3000) { throw ("preview with filter: {0}" -f $pv.Count) }
+                $pv = @(Get-DeletePreview @(@{ N = 'test'; Paths = @($d) }) 100)
+                if ($pv.Count -ne 3 -or @($pv | Where-Object { $_.IsDir }).Count -ne 1) { throw ("preview: {0}" -f $pv.Count) }
+                $n0 = $script:uiSheets.Count
+                Show-DeletePreview @(@{ N = 'test'; Paths = @($d) })
+                if ($script:uiSheets.Count -le $n0 -or $script:uiSheets[$script:uiSheets.Count - 1] -notmatch 'preview-') { throw 'preview dialog not shown' }
+            } finally { Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue }
+            Show-Page 'settings'; $ctl.SetRecycle.IsChecked = $true; & $click $ctl.SetRecycle
+            if ((Get-Setting 'Recycle' '0') -ne '1') { throw 'recycle setting not saved' }
+            $ctl.SetRecycle.IsChecked = $false; & $click $ctl.SetRecycle
         }
         & $step 'restore points card' {
             Show-Page 'save'

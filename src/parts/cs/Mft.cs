@@ -113,7 +113,7 @@ public static class FileCats {
     public static long Key(string ext) {
         if (ext.Length == 0 || ext.Length > 10) return -1;
         long k = 0;
-        for (int i = 0; i < ext.Length; i++) { int c = Code(ext[i]); if (c < 0) return -1; k = (k << 6) | (long)c; }
+        for (int i = 0; i < ext.Length; i++) { int c = Code(ext[i]); if (c < 0) return -1; k = (k << 6) | (uint)c; }
         return k;
     }
     public static byte OfName(string name) {
@@ -131,7 +131,7 @@ public static class FileCats {
         for (int i = dot + 1; i < chars; i++) {
             int o = off + i * 2; if (b[o + 1] != 0) return 0;
             int c = Code(b[o]); if (c < 0) return 0;
-            k = (k << 6) | (long)c;
+            k = (k << 6) | (uint)c;
         }
         byte cat; return map.TryGetValue(k, out cat) ? cat : (byte)0;
     }

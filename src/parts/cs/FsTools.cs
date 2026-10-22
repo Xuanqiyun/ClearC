@@ -89,6 +89,19 @@ public static class FsTools {
             return "";
         } catch (Exception ex) { return ex.Message; }
     }
+    // 一批文件、文件夹一起放进回收站（可恢复删除）。太大放不进回收站的由系统弹窗问，不会悄悄永久删除
+    public static int RecycleMany(string[] paths) {
+        if (paths == null || paths.Length == 0) return 0;
+        StringBuilder sb = new StringBuilder();
+        foreach (string p in paths) { sb.Append(p); sb.Append('\0'); }
+        sb.Append('\0');
+        SHFILEOPSTRUCT op = new SHFILEOPSTRUCT();
+        op.wFunc = 3; op.pFrom = sb.ToString();
+        op.fFlags = 0x40 | 0x10 | 0x4000 | 0x400 | 0x4;   // ALLOWUNDO | NOCONFIRMATION | WANTNUKEWARNING | NOERRORUI | SILENT
+        int r = SHFileOperationW(ref op);
+        if (r == 0 && op.fAnyOperationsAborted != 0) return -1;
+        return r;
+    }
     // 放进回收站；太大放不进回收站时由系统弹窗询问，不会悄悄永久删除。返回 0 表示成功
     public static int Recycle(string path, long hwnd) {
         SHFILEOPSTRUCT op = new SHFILEOPSTRUCT();

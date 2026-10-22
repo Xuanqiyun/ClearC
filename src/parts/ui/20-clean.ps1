@@ -255,10 +255,21 @@ function Invoke-RunSelected([string]$title = (T '执行所选操作')) {
     $ack = ''
     if ($dels) {
         $text += (T "`n`n其中 {0} 项会删除文件，删除后可能无法恢复。请确认这些资料不再需要。") -f $dels.Count
+        $careful = @($dels | Where-Object { $cat0[$_.Idx].Careful })
+        if ($careful.Count -gt 0) { $text += (T "`n其中 {0} 项是「谨慎清理」（{1}）：删了要重新下载或重新生成，第一次打开会慢一点。不想清的，在列表里改成「跳过」。") -f $careful.Count, (@($careful | ForEach-Object { $_.Name }) -join (T '、')) }
+        $conf = @($dels | Where-Object { ([string]$cat0[$_.Idx].G).StartsWith('需确认') })
+        if ($conf.Count -gt 0) { $text += (T "`n其中 {0} 项是「需确认」的高风险项目（{1}），请再看一遍说明。") -f $conf.Count, (@($conf | ForEach-Object { $_.Name }) -join (T '、')) }
+        if ((Get-Setting 'Recycle' '0') -eq '1') { $text += (T "`n按设置，这次删除的文件会先放进回收站，可以从回收站恢复。") }
         $ack = (T '我已确认要删除的内容不再需要，删除不会给我带来损失；因删除造成的后果由我自己承担。')
     }
     $kind = if ($dels) { 'warn' } else { 'info' }
-    if ((Show-Sheet -Kind $kind -Title ((T "执行 {0} 项操作？") -f $plan.Count) -Text $text -Items $items -Buttons @((T '取消'), (T '开始')) -Primary (T '开始') -Cancel (T '取消') -Confirm $ack) -ne (T '开始')) { return }
+    $btns = if ($dels) { @((T '取消'), (T '看文件清单'), (T '开始')) } else { @((T '取消'), (T '开始')) }
+    while ($true) {
+        $ans = Show-Sheet -Kind $kind -Title ((T "执行 {0} 项操作？") -f $plan.Count) -Text $text -Items $items -Buttons $btns -Primary (T '开始') -Cancel (T '取消') -Confirm $ack
+        if ($ans -eq (T '看文件清单')) { Show-DeletePreview @($dels | ForEach-Object { $cat0[$_.Idx] }); continue }
+        if ($ans -ne (T '开始')) { return }
+        break
+    }
 
     # 要搬聊天软件的数据时，先看它们是不是开着：开着的话文件被占用，搬不成功，必须先退出
     $skipped = @(); $skipWho = ''
@@ -362,6 +373,28 @@ if ($sync.WasCancelled) { Log ((T "已中途取消。C 盘现在剩余 {0}") -f 
 '@ @{ Plan = $plan; Dest = $dest; Allowed = $allowed }
 }
 $ctl.BtnRun.Add_Click({ Invoke-RunSelected })
+# 删除前看清单：列出要删的文件和文件夹（最大的 60 个），完整清单写进一个文本文件
+function Show-DeletePreview($items) {
+    $list = $null
+    try { $list = @(Get-DeletePreview $items 20000) } catch { $list = @() }
+    $sorted = @($list | Sort-Object { $_.Bytes } -Descending)
+    $tot = [double]0; foreach ($x in $sorted) { $tot += $x.Bytes }
+    $lines = @($sorted | Select-Object -First 60 | ForEach-Object { "{0}  {1}{2}" -f (Fmt $_.Bytes), $_.Path, $(if ($_.IsDir) { (T '（整个文件夹）') } else { '' }) })
+    $file = ''
+    try {
+        New-Item -ItemType Directory -Path $script:opLogDir -Force | Out-Null
+        $file = Join-Path $script:opLogDir ("preview-{0:yyyyMMdd-HHmmss}.txt" -f (Get-Date))
+        $all = New-Object System.Collections.Generic.List[string]
+        $all.Add(((T "删除前的文件清单 {0:yyyy-MM-dd HH:mm}，{1:N0} 项，共 {2}") -f (Get-Date), $sorted.Count, (Fmt $tot)))
+        foreach ($x in $sorted) { $all.Add(("{0}`t{1}`t{2}`t{3}" -f [long]$x.Bytes, $(if ($x.IsDir) { 'D' } else { 'F' }), $x.Item, $x.Path)) }
+        [IO.File]::WriteAllLines($file, $all.ToArray(), (New-Object Text.UTF8Encoding $true))
+    } catch { $file = '' }
+    $text = (T "按现在的选择会删掉 {0:N0} 项，共 {1}{2}。下面是最大的 {3} 项；整个文件夹的按文件夹算一项。") -f $sorted.Count, (Fmt $tot), $(if ($list.Count -ge 20000) { (T '（只看了前 20000 项）') } else { '' }), [math]::Min(60, $sorted.Count)
+    if ($file) { $text += (T "`n完整清单已存到：{0}") -f $file }
+    $b = if ($file) { @((T '打开完整清单'), (T '好')) } else { @((T '好')) }
+    $ans = Show-Sheet -Title (T '删除前的文件清单') -Text $text -Items $lines -Buttons $b -Primary (T '好') -Cancel (T '好')
+    if ($ans -eq (T '打开完整清单')) { try { Start-Process $file } catch {} }
+}
 
 # 一键清理：先扫描，扫完按 One 字段（没有就用默认）设好每一项，再走同一个执行流程（会弹确认框）
 function Apply-OneClick {
