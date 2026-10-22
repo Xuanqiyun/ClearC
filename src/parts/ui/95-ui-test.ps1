@@ -217,6 +217,14 @@ function Invoke-UiTest {
                 $script:startRows.Clear()
             } finally { Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue }
         }
+        & $step 'disk health line fills in' {
+            $script:pageLoaded.map = $true; Fill-MapDrives
+            Show-Page 'map'; $win.UpdateLayout()
+            Start-DiskHealth
+            if (-not (& $waitUi { -not $script:dhPs } 60000)) { throw 'disk health did not finish' }
+            if (-not [string]$ctl.MapDiskHealth.Text) { throw ('disk health line is empty; ' + [string]$script:dhErr + ' / direct: ' + (Get-DiskHealth $env:SystemDrive)) }
+            [string]$ctl.MapDiskHealth.Text
+        }
         & $step 'restore points card' {
             Show-Page 'save'
             $sw = [Diagnostics.Stopwatch]::StartNew()
