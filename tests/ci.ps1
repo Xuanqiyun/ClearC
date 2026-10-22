@@ -20,6 +20,18 @@ Step 'checks (PS 5.1)' { powershell -NoProfile -ExecutionPolicy Bypass -File tes
 Step 'engine tests (PS 5.1)' { powershell -NoProfile -ExecutionPolicy Bypass -File tests\Engine.Tests.ps1 }
 Step 'build exe' { powershell -NoProfile -ExecutionPolicy Bypass -File build\build.ps1 }
 if (Test-Path out\ClearC.exe) {
+    # 界面自测：照常打开窗口（放在屏幕外），把界面功能点一遍，对话框都当作点了取消，做完自己关掉
+    $env:CLEANC_REPORT = Join-Path $PWD 'out\uitest.txt'
+    $u = Start-Process -FilePath .\out\ClearC.exe -ArgumentList '/uitest' -PassThru
+    $ulines = @()
+    if (-not $u.WaitForExit(300000)) { Write-Host '::error title=UI test::did not finish within 5 minutes'; $fail = 1 }
+    else {
+        if (Test-Path $env:CLEANC_REPORT) { $ulines = @(Get-Content $env:CLEANC_REPORT -Encoding UTF8) }
+        $ulines | ForEach-Object { Write-Host $_ }
+        if (-not $ulines) { Write-Host ("::error title=UI test::no report was written (exit {0})" -f $u.ExitCode); $fail = 1 }
+        elseif ($u.ExitCode) { Write-Host ("::error title=UI test (exit {0})::{1}" -f $u.ExitCode, (Esc ((@($ulines) | Where-Object { $_ -like 'FAIL*' } | Select-Object -First 20) -join "`n"))); $fail = 1 }
+        else { Write-Host ("::notice title=UI test::{0}" -f (Esc (($ulines | Select-Object -Last 3) -join "`n"))) }
+    }
     $env:CLEANC_QUIET = '1'; $env:CLEANC_REPORT = Join-Path $PWD 'out\selftest.txt'
     $p = Start-Process -FilePath .\out\ClearC.exe -ArgumentList '/selftest' -Wait -PassThru
     $lines = @(); if (Test-Path $env:CLEANC_REPORT) { $lines = @(Get-Content $env:CLEANC_REPORT -Encoding UTF8) }

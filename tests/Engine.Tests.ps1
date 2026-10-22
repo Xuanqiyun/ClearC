@@ -56,6 +56,24 @@ try {
     [DiskMap]::Invalidate()
     Check 'Invalidate drops the walk cache' ($null -eq [DiskMap]::GetTree($T, 2, $false, $false))
 
+    # 实际占用和硬链接：逐层往上汇总，删掉文件夹或文件后跟着减
+    $r0 = New-Object DmNode; $r0.Name = $T; $k1 = New-Object DmNode; $k1.Name = 'k1'; $k1.Parent = $r0; $k2 = New-Object DmNode; $k2.Name = 'k2'; $k2.Parent = $r0
+    [void]$r0.Kids.Add($k1); [void]$r0.Kids.Add($k2)
+    $k1.Own = 1000; $k1.OwnFiles = 2; $k1.OwnDisk = 400; $k1.OwnShared = 600
+    $k2.Own = 500; $k2.OwnFiles = 1; $k2.OwnDisk = 512; $r0.Own = 10; $r0.OwnFiles = 1; $r0.OwnDisk = 0
+    [DiskMap]::Finish($r0, (New-Object 'System.Collections.Generic.List[DmFile]'))
+    Check 'size on disk adds up' ($r0.Disk -eq 912 -and $r0.Shared -eq 600 -and $r0.Size -eq 1510)
+    [DiskMap]::DropFile($k2, 500, 512)
+    Check 'deleting a file takes off its size on disk' ($k2.OwnDisk -eq 0 -and $r0.Disk -eq 400 -and $r0.Size -eq 1010)
+    [DiskMap]::Detach($k1)
+    Check 'deleting a folder takes off its size on disk and hard links' ($r0.Disk -eq 0 -and $r0.Shared -eq 0 -and $r0.Size -eq 10)
+    [DiskMap]::DropFile($r0, 10)
+    Check 'deleting a file of unknown size on disk stays at zero or above' ($r0.OwnDisk -eq 0 -and $r0.Disk -eq 0)
+    $wt = [DiskMap]::Scan($T, 2)
+    Check 'a folder-by-folder scan has no size-on-disk data' (-not $wt.HasDisk -and $wt.Disk -eq 0)
+    $tf = [DiskMap]::TopFiles((Join-Path $T 'b'), 5)
+    Check 'listed files carry size on disk when known' ($tf.Count -ge 1 -and ($tf[0].Disk -eq -1 -or $tf[0].Disk -ge 0))
+
     # 深色配色
     [Theme]::Dark = $false
     Check 'light theme leaves colors alone' ([Theme]::Map('#F5F5F7', [char]'b') -eq '#F5F5F7')

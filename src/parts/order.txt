@@ -28,4 +28,6 @@ ui/80-apps.ps1
 ui/90-reminders.ps1
 ui/91-activity-log.ps1
 ui/92-merge.ps1
+ui/93-settings.ps1
+ui/95-ui-test.ps1
 ui/99-timer-and-start.ps1

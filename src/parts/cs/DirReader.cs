@@ -41,6 +41,7 @@ public sealed class DirReader {
     public bool FellBack;                  // 批量读出错，这个文件夹改用了 FindFirstFileEx
 
     public uint Attr; public long Size, Write;
+    public long Alloc = -1;                // 实际占用（批量读时才有，-1 不知道）
     public uint Tag;                       // 重解析点的类型（有重解析点时才有）
     int nameOff, nameLen; string name;
 
@@ -86,7 +87,7 @@ public sealed class DirReader {
     }
 
     public bool Next() {
-        name = null; Tag = 0;
+        name = null; Tag = 0; Alloc = -1;
         if (mode == 3) {
             while (list != null && li < list.Count) {
                 FileSystemInfo e = list[li++];
@@ -140,6 +141,7 @@ public sealed class DirReader {
             if (nl == 4 && buf[e + 68] == '.' && buf[e + 69] == 0 && buf[e + 70] == '.' && buf[e + 71] == 0) continue;
             Attr = BitConverter.ToUInt32(buf, e + 56);
             Size = BitConverter.ToInt64(buf, e + 40);
+            Alloc = BitConverter.ToInt64(buf, e + 48);
             Write = BitConverter.ToInt64(buf, e + 24);
             if ((Attr & 0x400) != 0) Tag = BitConverter.ToUInt32(buf, e + 64);   // 有重解析点时 EaSize 这一格放的是它的类型
             nameOff = e + 68; nameLen = nl; count++;

@@ -103,6 +103,9 @@ if ($script:mode -match '(?i)/check') {
     $global:CLEANC_UI_SHOWN = $true
     return
 }
+# 界面自测（给自动测试用）：照常打开窗口，点一遍界面功能，对话框一律当作点了「取消」，做完自己关掉
+$script:uiTest = [bool]($script:mode -match '(?i)/uitest')
+$script:uiSheets = New-Object System.Collections.Generic.List[string]
 if ($script:mode -match '(?i)/selftest') {
     Init-DriveThreads
     [DiskMap]::MftOff = ((Get-Setting 'FastScan' '1') -eq '0')

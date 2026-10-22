@@ -242,7 +242,7 @@ function Get-Catalog {
         @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T '系统临时文件');        Paths=@('C:\Windows\Temp'); Note=(T '系统和安装程序的临时文件') }
         @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Windows 更新下载缓存'); Paths=@('C:\Windows\SoftwareDistribution\Download'); Svc=@('wuauserv','bits'); Note=(T '已装完的更新安装包，下次更新会重新下载需要的部分') }
         @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T '系统升级残留目录');    Paths=@('C:\$WINDOWS.~BT','C:\$WINDOWS.~WS','C:\$GetCurrent'); Whole=$true; Note=(T '大版本升级留下的临时目录') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T '崩溃转储与错误报告');  Paths=@('C:\Windows\Minidump','C:\Windows\MEMORY.DMP','C:\ProgramData\Microsoft\Windows\WER',"$env:LOCALAPPDATA\CrashDumps"); Note=(T '蓝屏和程序崩溃时留下的调试文件，只对微软工程师有用') }
+        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T '崩溃转储与错误报告');  Paths=@('C:\Windows\Minidump','C:\Windows\MEMORY.DMP','C:\Windows\LiveKernelReports','C:\ProgramData\Microsoft\Windows\WER',"$env:LOCALAPPDATA\CrashDumps"); Note=(T '蓝屏、驱动出错（显卡驱动重置等）和程序崩溃时留下的调试文件，只对排查问题的工程师有用') }
         @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T '系统组件日志');        Paths=@('C:\Windows\Logs\CBS'); Filter='*.log'; Note=(T 'Windows 更新的安装日志') }
         @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T '缩略图缓存');          Paths=@("$env:LOCALAPPDATA\Microsoft\Windows\Explorer"); Filter='thumbcache_*.db'; Note=(T '文件夹里图片的小预览图，打开文件夹时会重新生成') }
         @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Chrome 浏览器缓存');   Paths=@("$env:LOCALAPPDATA\Google\Chrome\User Data\*\Cache","$env:LOCALAPPDATA\Google\Chrome\User Data\*\Code Cache","$env:LOCALAPPDATA\Google\Chrome\User Data\*\GPUCache"); Note=(T '网页缓存。请先关闭浏览器。不影响密码、书签、历史记录') }
@@ -1334,7 +1334,10 @@ function Invoke-SelfTest([string]$Version) {
     if ([DiskMap]::MftOff) { & $add 'warn' 'direct file table reading is turned off in settings; file table checks skipped' }
     else {
         try { $tree = [DiskMap]::GetTree($sd, $n, $false, $true) } catch { & $add 'fail' ("file table: exception {0}" -f $_.Exception.Message) }
-        if ($tree) { & $add 'pass' ("file table: method {0}, {1:N0} ms, {2:N0} files, {3:N0} folders, {4:N1} GB, unread records {5}" -f [DiskMap]::LastMethod, [DiskMap]::LastMs, $tree.Files, [DiskMap]::DirsSeen, ($tree.Size / 1GB), [DiskMap]::LastFailed) }
+        if ($tree) {
+            & $add 'pass' ("file table: method {0}, {1:N0} ms, {2:N0} files, {3:N0} folders, {4:N1} GB, unread records {5}" -f [DiskMap]::LastMethod, [DiskMap]::LastMs, $tree.Files, [DiskMap]::DirsSeen, ($tree.Size / 1GB), [DiskMap]::LastFailed)
+            if ($tree.HasDisk) { $L.Add(("       each file once {0:N1} GB, on disk {1:N1} GB, with hard links {2:N1} GB, file table itself {3:N2} GB, used on the drive {4:N1} GB" -f ($tree.UniqueSize / 1GB), ($tree.UniqueDisk / 1GB), ($tree.Linked / 1GB), ($tree.MftBytes / 1GB), $(if ($di) { ($di.TotalSize - $di.TotalFreeSpace) / 1GB } else { 0 }))) }
+        }
         elseif (-not (Stopping)) { & $add 'fail' ("file table not used: {0}" -f [DiskMap]::LastNote) }
     }
     if (Stopping) { return @{ Lines = $L; Res = $res; Stopped = $true } }
@@ -1399,6 +1402,21 @@ function Invoke-SelfTest([string]$Version) {
             & $check 'file still open' { param($t) $x = [DiskMap]::Find($t, $base); if ($x -and $x.Own -ne 530000) { "own bytes {0} while the file is open, 530000 after writing (sizes of open files may lag)" -f $x.Own } } $true
             $fs.Write($b1, 0, 25000); $fs.Close(); $fs = $null
             & $check 'file closed' { param($t) $x = [DiskMap]::Find($t, $base); if (-not $x) { 'test folder missing' } elseif ($x.Own -ne 555000) { "own bytes {0}, expected 555000" -f $x.Own } } $false
+            # 实际占用：稀疏文件、NTFS 压缩、系统压缩（WOF）和硬链接，和 Windows 自己报的实际占用（GetCompressedFileSize）比
+            $dd = Join-Path $base 'disk'; New-Item -ItemType Directory -Path $dd -Force | Out-Null
+            $mb = [Text.Encoding]::ASCII.GetBytes(('abcdefghijklmnop' * 65536))
+            foreach ($nm in 'plain.bin', 'ntfs.bin', 'wof.bin') { [IO.File]::WriteAllBytes((Join-Path $dd $nm), $mb) }
+            $wl = New-Object System.Collections.Generic.List[string]
+            try { New-Item -ItemType HardLink -Path (Join-Path $dd 'plain-link.bin') -Target (Join-Path $dd 'plain.bin') -ErrorAction Stop | Out-Null } catch { $wl.Add('hard link: ' + $_.Exception.Message) }
+            $sp = Join-Path $dd 'sparse.bin'
+            [IO.File]::WriteAllBytes($sp, (New-Object byte[] 0))
+            & "$env:SystemRoot\System32\fsutil.exe" sparse setflag $sp 2>&1 | Out-Null
+            $fsp = [IO.File]::Open($sp, [IO.FileMode]::Open, [IO.FileAccess]::Write); $fsp.SetLength(64MB); $fsp.Position = 1MB; $fsp.Write($mb, 0, 65536); $fsp.Close()
+            & "$env:SystemRoot\System32\compact.exe" /c /q (Join-Path $dd 'ntfs.bin') 2>&1 | Out-Null
+            & "$env:SystemRoot\System32\compact.exe" /c /q /exe:xpress4k (Join-Path $dd 'wof.bin') 2>&1 | Out-Null
+            $want = [long]0
+            foreach ($f in @(Get-ChildItem -LiteralPath $dd -File -Force)) { $o = [FsTools]::OnDisk($f.FullName); $want += $o; $wl.Add(('{0} {1:N0}/{2:N0}' -f $f.Name, $o, $f.Length)) }
+            & $check 'size on disk' { param($t) $x = [DiskMap]::Find($t, $dd); if (-not $x) { 'test folder missing' } elseif ([math]::Abs([long]$x.OwnDisk - $want) -gt 5 * 65536 -or [long]$x.OwnShared -ne 2097152) { "on disk {0:N0} (Windows says {1:N0}), with hard links {2:N0} (expected 2,097,152); {3}" -f $x.OwnDisk, $want, $x.OwnShared, ($wl -join ', ') } } $true
             [IO.Directory]::Delete($base, $true)
             & $check 'remove' { param($t) if ([DiskMap]::Find($t, $base)) { 'test folder still there after removing it' } } $false
         } catch { & $add 'fail' ("journal test error: {0}" -f $_.Exception.Message) }

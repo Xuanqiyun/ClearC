@@ -6,7 +6,7 @@
 param()
 
 $ErrorActionPreference = 'SilentlyContinue'
-$script:AppVersion = '2.6'
+$script:AppVersion = '2.7'
 $script:startClock = [Diagnostics.Stopwatch]::StartNew()   # 记下启动各阶段用了多久，写进运行记录
 
 # ---------------- 管理员权限 ----------------
@@ -468,6 +468,9 @@ public static class DupFinder {
         return "/";
     }
 
+    public static volatile bool LowPriority;          // 设置里的「查重复文件时让着其他程序」
+    [DllImport("kernel32.dll")] static extern IntPtr GetCurrentThread();
+    [DllImport("kernel32.dll")] static extern bool SetThreadPriority(IntPtr thread, int priority);
     // 按磁盘分组并行：每块盘各自的线程数；同一块盘内按路径排序，机械硬盘少跳磁头
     static void RunPerVolume(List<DupFile> files, Dictionary<string, int> threads, Action<DupFile, IoWorker> work) {
         Dictionary<string, List<DupFile>> byVol = new Dictionary<string, List<DupFile>>(StringComparer.OrdinalIgnoreCase);
@@ -487,11 +490,16 @@ public static class DupFinder {
             n = Math.Max(1, Math.Min(n, lst.Count));
             for (int i = 0; i < n; i++) {
                 Thread t = new Thread(new ThreadStart(delegate () {
-                    IoWorker w = new IoWorker();
-                    DupFile f;
-                    while (!Cancel && q.TryDequeue(out f)) {
-                        try { work(f, w); } catch { f.Bad = true; }
-                    }
+                    // 让着其他程序：Windows 的后台模式，磁盘和内存都用低优先级（读过的文件不把别的程序缓存的数据挤出内存）
+                    bool bg = false;
+                    if (LowPriority && System.IO.Path.DirectorySeparatorChar == '\\') { try { bg = SetThreadPriority(GetCurrentThread(), 0x00010000 /*THREAD_MODE_BACKGROUND_BEGIN*/); } catch { } }
+                    try {
+                        IoWorker w = new IoWorker();
+                        DupFile f;
+                        while (!Cancel && q.TryDequeue(out f)) {
+                            try { work(f, w); } catch { f.Bad = true; }
+                        }
+                    } finally { if (bg) { try { SetThreadPriority(GetCurrentThread(), 0x00020000 /*THREAD_MODE_BACKGROUND_END*/); } catch { } } }
                 }));
                 t.IsBackground = true;
                 t.Start();
@@ -716,6 +724,7 @@ public sealed class DirReader {
     public bool FellBack;                  // 批量读出错，这个文件夹改用了 FindFirstFileEx
 
     public uint Attr; public long Size, Write;
+    public long Alloc = -1;                // 实际占用（批量读时才有，-1 不知道）
     public uint Tag;                       // 重解析点的类型（有重解析点时才有）
     int nameOff, nameLen; string name;
 
@@ -761,7 +770,7 @@ public sealed class DirReader {
     }
 
     public bool Next() {
-        name = null; Tag = 0;
+        name = null; Tag = 0; Alloc = -1;
         if (mode == 3) {
             while (list != null && li < list.Count) {
                 FileSystemInfo e = list[li++];
@@ -815,6 +824,7 @@ public sealed class DirReader {
             if (nl == 4 && buf[e + 68] == '.' && buf[e + 69] == 0 && buf[e + 70] == '.' && buf[e + 71] == 0) continue;
             Attr = BitConverter.ToUInt32(buf, e + 56);
             Size = BitConverter.ToInt64(buf, e + 40);
+            Alloc = BitConverter.ToInt64(buf, e + 48);
             Write = BitConverter.ToInt64(buf, e + 24);
             if ((Attr & 0x400) != 0) Tag = BitConverter.ToUInt32(buf, e + 64);   // 有重解析点时 EaSize 这一格放的是它的类型
             nameOff = e + 68; nameLen = nl; count++;
@@ -1055,6 +1065,7 @@ public sealed class MftIndex {
     public int Count;
     public int[] Parent; public ushort[] ParentSeq, Seq;
     public long[] Size, Write;
+    public long[] Disk;                               // 这条记录里的数据实际占的盘（主记录和续页各记各的；压缩、稀疏、只在云端的文件比文件大小小，很小的文件放在记录里不另占）
     public byte[] Flag;                               // 1 在用  2 文件夹  4 链接（重解析点）  8 有属性列表
     public string[] Name;                             // 只存文件夹、1 MB 以上的文件和有属性列表的文件的名字
     public Dictionary<int, List<MftLink>> Extra = new Dictionary<int, List<MftLink>>();   // 第二个起的名字（硬链接）
@@ -1067,19 +1078,19 @@ public sealed class MftIndex {
     public void Alloc(int n) {
         Count = n;
         Parent = new int[n]; ParentSeq = new ushort[n]; Seq = new ushort[n];
-        Size = new long[n]; Write = new long[n]; Flag = new byte[n]; Name = new string[n];
+        Size = new long[n]; Write = new long[n]; Disk = new long[n]; Flag = new byte[n]; Name = new string[n];
         for (int i = 0; i < n; i++) Parent[i] = -1;
     }
     public void Grow(int n) {
         if (n <= Count) return;
         int old = Count;
         Array.Resize(ref Parent, n); Array.Resize(ref ParentSeq, n); Array.Resize(ref Seq, n);
-        Array.Resize(ref Size, n); Array.Resize(ref Write, n); Array.Resize(ref Flag, n); Array.Resize(ref Name, n);
+        Array.Resize(ref Size, n); Array.Resize(ref Write, n); Array.Resize(ref Disk, n); Array.Resize(ref Flag, n); Array.Resize(ref Name, n);
         for (int i = old; i < n; i++) Parent[i] = -1;
         Count = n;
     }
     public void Clear(int frn) {
-        Parent[frn] = -1; ParentSeq[frn] = 0; Seq[frn] = 0; Size[frn] = 0; Write[frn] = 0; Flag[frn] = 0; Name[frn] = null;
+        Parent[frn] = -1; ParentSeq[frn] = 0; Seq[frn] = 0; Size[frn] = 0; Write[frn] = 0; Disk[frn] = 0; Flag[frn] = 0; Name[frn] = null;
         Extra.Remove(frn); ExtOf.Remove(frn);
     }
     public Dictionary<int, List<int>> ExtOf = new Dictionary<int, List<int>>();   // 主记录 → 读到过的续页
@@ -1318,6 +1329,7 @@ public static class Mft {
     static void ParseFixed(MftIndex ix, byte[] b, int off, int frn) {
         int rs = ix.RecordSize;
         int flags = U16(b, off + 0x16);
+        ix.Disk[frn] = 0;
         if ((flags & 1) == 0) return;
         ulong baseRef = U64(b, off + 0x20);
         bool ext = (baseRef & 0xFFFFFFFFFFFF) != 0;
@@ -1340,7 +1352,7 @@ public static class Mft {
         int end = off + Math.Min(rs, (int)U32(b, off + 0x18));
         int nNames = 0;
         if (nmOff == null) { nmOff = new int[8]; nmLen = new int[8]; nmPar = new ulong[8]; }
-        long size = 0; bool hasData = false;
+        long size = 0, disk = 0; bool hasData = false;
         while (a + 16 <= end) {
             uint type = U32(b, a);
             if (type == 0xFFFFFFFF) break;
@@ -1362,9 +1374,18 @@ public static class Mft {
                         nmOff[nNames] = c + 0x42; nmLen[nNames] = nl * 2; nmPar[nNames] = U64(b, c); nNames++;
                     }
                 }
-            } else if (type == 0x80 && attrNameLen == 0) {
-                if (nonRes) { if (len >= 0x40 && I64(b, a + 0x10) == 0) { size = I64(b, a + 0x30); hasData = true; } }
-                else { size = U32(b, a + 0x10); hasData = true; }
+            } else if (type == 0x80) {
+                if (attrNameLen == 0) {
+                    if (nonRes) { if (len >= 0x40 && I64(b, a + 0x10) == 0) { size = I64(b, a + 0x30); hasData = true; } }
+                    else { size = U32(b, a + 0x10); hasData = true; }
+                }
+                // 实际占用：没有名字的数据流，加上系统压缩（CompactOS）放压缩后数据的 WofCompressedData 流。
+                // 大小只记在第一段（起始 VCN 为 0）里；压缩或稀疏的按真正分配了的簇算，其他按分配的大小算
+                if (nonRes && len >= 0x40 && I64(b, a + 0x10) == 0 && (attrNameLen == 0 || IsWof(b, a, attrNameLen, len))) {
+                    int af = U16(b, a + 0x0C);
+                    long d = ((af & 0x8001) != 0 && len >= 0x48) ? I64(b, a + 0x40) : I64(b, a + 0x28);
+                    if (d > 0) disk += d;
+                }
             } else if (type == 0xC0) {
                 // 只有目录联接、符号链接这类「代替名字」的重解析点才是链接；OneDrive 等云端文件夹也带重解析点，但里面的东西在这块盘上，要算
                 uint tag = 0; bool known = false;
@@ -1376,6 +1397,7 @@ public static class Mft {
             a += len;
         }
         if (hasData) ix.Size[owner] = size;
+        ix.Disk[frn] = disk;
         bool keep = ext || (ix.Flag[owner] & (2 | 8)) != 0 || ix.Size[owner] >= BigMin;
         for (int i = 0; i < nNames; i++) {
             string nm = keep ? Encoding.Unicode.GetString(b, nmOff[i], nmLen[i]) : null;
@@ -1387,6 +1409,15 @@ public static class Mft {
                 MftLink k = new MftLink(); k.Parent = p; k.ParentSeq = ps; k.Name = nm; l.Add(k);
             }
         }
+    }
+
+    static readonly string Wof = "WofCompressedData";
+    static bool IsWof(byte[] b, int a, int nl, int len) {
+        if (nl != Wof.Length) return false;
+        int o = a + U16(b, a + 0x0A);
+        if (o + nl * 2 > a + len) return false;
+        for (int i = 0; i < nl; i++) if (U16(b, o + i * 2) != Wof[i]) return false;
+        return true;
     }
 
     static bool ReparseTag(MftIndex ix, byte[] b, int a, int len, out uint tag) {
@@ -1573,29 +1604,42 @@ public static class Mft {
         }
         big = new List<DmFile>();
         files = 0; orphans = 0;
+        long uniq = 0, uniqDisk = 0, linked = 0;
         for (int i = 16; i < n; i++) {
             byte f = ix.Flag[i];
             if ((f & 1) == 0 || (f & 2) != 0) continue;
             int pp = ix.Parent[i];
             if (pp >= 16 && (pp >= n || nodes[pp] == null || ix.Seq[pp] != ix.ParentSeq[i])) orphans++;
-            long size = ix.Size[i], wt = ix.Write[i];
-            AddFile(ix, nodes, reach, ix.Parent[i], ix.ParentSeq[i], ix.Name[i], size, wt, big, ref files);
+            long size = ix.Size[i], wt = ix.Write[i], disk = FileDisk(ix, i);
             List<MftLink> l;
-            if (ix.Extra.TryGetValue(i, out l)) foreach (MftLink k in l) AddFile(ix, nodes, reach, k.Parent, k.ParentSeq, k.Name, size, wt, big, ref files);
+            bool multi = ix.Extra.TryGetValue(i, out l) && l.Count > 0;   // 有不止一个名字（硬链接）：每个名字下都算，但盘上只有一份
+            bool any = AddFile(ix, nodes, reach, ix.Parent[i], ix.ParentSeq[i], ix.Name[i], size, disk, multi, wt, big, ref files);
+            if (multi) foreach (MftLink k in l) any |= AddFile(ix, nodes, reach, k.Parent, k.ParentSeq, k.Name, size, disk, true, wt, big, ref files);
+            if (any) { uniq += size; uniqDisk += disk; if (multi) linked += size; }
         }
+        root.HasDisk = true; root.UniqueSize = uniq; root.UniqueDisk = uniqDisk; root.Linked = linked; root.MftBytes = ix.MftBytes;
         return root;
     }
-    static void AddFile(MftIndex ix, DmNode[] nodes, bool[] reach, int p, ushort ps, string name, long size, long wt, List<DmFile> big, ref long files) {
-        if (p < 0 || p >= nodes.Length || nodes[p] == null || !reach[p] || ix.Seq[p] != ps) return;
+    // 一个文件实际占的盘：主记录加上它的续页（续页记着的主记录序号要对得上）
+    static long FileDisk(MftIndex ix, int i) {
+        long d = ix.Disk[i];
+        List<int> el;
+        if (ix.ExtOf.TryGetValue(i, out el)) foreach (int s in el) { ushort c; if (s < ix.Count && (!ix.ExtClaim.TryGetValue(s, out c) || c == ix.Seq[i])) d += ix.Disk[s]; }
+        return d;
+    }
+    static bool AddFile(MftIndex ix, DmNode[] nodes, bool[] reach, int p, ushort ps, string name, long size, long disk, bool shared, long wt, List<DmFile> big, ref long files) {
+        if (p < 0 || p >= nodes.Length || nodes[p] == null || !reach[p] || ix.Seq[p] != ps) return false;
         DmNode d = nodes[p];
-        if (d.IsLink) return;
+        if (d.IsLink) return false;
         d.Own += size; d.OwnFiles++; files++;
+        d.OwnDisk += disk; if (shared) d.OwnShared += size;
         if (wt > d.LastWrite) d.LastWrite = wt;
         if (size >= BigMin && name != null) {
-            DmFile x = new DmFile(); x.Dir = d; x.Name = name; x.Size = size;
+            DmFile x = new DmFile(); x.Dir = d; x.Name = name; x.Size = size; x.Disk = disk; x.Shared = shared;
             try { x.Modified = DateTime.FromFileTime(wt); } catch { }
             big.Add(x);
         }
+        return true;
     }
 
     // ---------- 变更日志（USN）：同一次打开程序里再扫描时，只重读改动过的记录 ----------
@@ -1649,6 +1693,10 @@ public class DmNode {
     public string Name;
     public DmNode Parent;
     public long Size, Own, Files, OwnFiles, LastWrite;
+    // 读文件表时才有：实际占的盘、其中有不止一个名字的文件（硬链接，盘上只有一份，删掉这一个名字不腾空间）
+    public long Disk, OwnDisk, Shared, OwnShared;
+    public bool HasDisk;                              // 只在根上：这棵树是读文件表得来的，上面几项有数
+    public long UniqueSize, UniqueDisk, Linked, MftBytes;   // 只在根上：每个文件只算一次的合计、有硬链接的文件、文件表（$MFT）本身多大
     public bool IsLink, Denied, Gone;
     public bool Cloud;                                // 带重解析点但不是链接的文件夹（OneDrive 等云端文件夹）
     public List<DmNode> Kids = new List<DmNode>();
@@ -1666,10 +1714,11 @@ public class DmNode {
 // 扫描时记下的文件（1 MB 以上）。只存所在文件夹和文件名，完整路径用到时再拼，省内存
 public class DmFile {
     public DmNode Dir; public string Name; public long Size; public DateTime Modified;
+    public long Disk = -1; public bool Shared;        // 实际占用（-1 不知道）；有不止一个名字（硬链接）
     public string Path { get { string d = Dir.FullPath(); return (d.EndsWith("\\") || d.EndsWith("/")) ? d + Name : d + System.IO.Path.DirectorySeparatorChar + Name; } }
 }
 public class DmFind { public List<DmFile> Files = new List<DmFile>(); public long Count, Bytes; }
-public class DmEntry { public string Name, Path; public long Size; public DateTime Modified; }
+public class DmEntry { public string Name, Path; public long Size; public DateTime Modified; public long Disk = -1; }
 
 public static class DiskMap {
     public static volatile bool Cancel;
@@ -1970,9 +2019,9 @@ public static class DiskMap {
         while (st.Count > 0) { DmNode n = st.Pop(); order.Add(n); foreach (DmNode k in n.Kids) st.Push(k); }
         for (int i = order.Count - 1; i >= 0; i--) {
             DmNode n = order[i];
-            long s = n.Own, f = n.OwnFiles, w = n.LastWrite;
-            foreach (DmNode k in n.Kids) { s += k.Size; f += k.Files; if (k.LastWrite > w) w = k.LastWrite; }
-            n.Size = s; n.Files = f; n.LastWrite = w;
+            long s = n.Own, f = n.OwnFiles, w = n.LastWrite, dk = n.OwnDisk, sh = n.OwnShared;
+            foreach (DmNode k in n.Kids) { s += k.Size; f += k.Files; dk += k.Disk; sh += k.Shared; if (k.LastWrite > w) w = k.LastWrite; }
+            n.Size = s; n.Files = f; n.LastWrite = w; n.Disk = dk; n.Shared = sh;
             n.Kids.Sort((a, b) => b.Size.CompareTo(a.Size));
         }
         big.Sort((a, b) => b.Size.CompareTo(a.Size));
@@ -1983,13 +2032,15 @@ public static class DiskMap {
     public static void Detach(DmNode n) {
         DmNode p = n.Parent; if (p == null) return;
         p.Kids.Remove(n); n.Gone = true;
-        for (DmNode a = p; a != null; a = a.Parent) { a.Size -= n.Size; a.Files -= n.Files; }
+        for (DmNode a = p; a != null; a = a.Parent) { a.Size -= n.Size; a.Files -= n.Files; a.Disk -= n.Disk; a.Shared -= n.Shared; }
     }
-    // 删掉某一层里的一个文件
-    public static void DropFile(DmNode dir, long bytes) {
+    // 删掉某一层里的一个文件（disk：实际占用，-1 不知道时按文件大小算）
+    public static void DropFile(DmNode dir, long bytes) { DropFile(dir, bytes, -1); }
+    public static void DropFile(DmNode dir, long bytes, long disk) {
         if (dir == null) return;
-        dir.Own -= bytes; dir.OwnFiles--;
-        for (DmNode a = dir; a != null; a = a.Parent) { a.Size -= bytes; a.Files--; }
+        long dk = Math.Max(0, Math.Min(disk >= 0 ? disk : bytes, dir.OwnDisk));
+        dir.Own -= bytes; dir.OwnFiles--; dir.OwnDisk -= dk;
+        for (DmNode a = dir; a != null; a = a.Parent) { a.Size -= bytes; a.Files--; a.Disk -= dk; }
     }
     // 按路径找节点（大小写不敏感）
     public static DmNode Find(DmNode root, string path) {
@@ -2083,7 +2134,7 @@ public static class DiskMap {
             string sep = (dir.EndsWith("\\") || dir.EndsWith("/")) ? "" : System.IO.Path.DirectorySeparatorChar.ToString();
             while (r.Next()) {
                 if (r.IsDir) continue;
-                DmEntry x = new DmEntry(); x.Name = r.Name; x.Path = dir + sep + r.Name; x.Size = r.Size;
+                DmEntry x = new DmEntry(); x.Name = r.Name; x.Path = dir + sep + r.Name; x.Size = r.Size; x.Disk = r.Alloc;
                 try { x.Modified = DateTime.FromFileTime(r.Write); } catch { }
                 all.Add(x);
             }
@@ -2422,6 +2473,7 @@ public class MapRow {
     public string When { get; set; }    // 导出用：最近修改时间
     public long FileCount { get; set; } // 导出用：文件夹里的文件个数
     public bool IsSummary { get; set; } // 「其余 N 项」那一行：不是真的文件或文件夹
+    public long Disk { get; set; }      // 实际占用（-1 不知道）
 }
 public class AppRow : INotifyPropertyChanged {
     public string Name { get; set; }
@@ -2774,7 +2826,7 @@ function Get-Catalog {
         @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T '系统临时文件');        Paths=@('C:\Windows\Temp'); Note=(T '系统和安装程序的临时文件') }
         @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Windows 更新下载缓存'); Paths=@('C:\Windows\SoftwareDistribution\Download'); Svc=@('wuauserv','bits'); Note=(T '已装完的更新安装包，下次更新会重新下载需要的部分') }
         @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T '系统升级残留目录');    Paths=@('C:\$WINDOWS.~BT','C:\$WINDOWS.~WS','C:\$GetCurrent'); Whole=$true; Note=(T '大版本升级留下的临时目录') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T '崩溃转储与错误报告');  Paths=@('C:\Windows\Minidump','C:\Windows\MEMORY.DMP','C:\ProgramData\Microsoft\Windows\WER',"$env:LOCALAPPDATA\CrashDumps"); Note=(T '蓝屏和程序崩溃时留下的调试文件，只对微软工程师有用') }
+        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T '崩溃转储与错误报告');  Paths=@('C:\Windows\Minidump','C:\Windows\MEMORY.DMP','C:\Windows\LiveKernelReports','C:\ProgramData\Microsoft\Windows\WER',"$env:LOCALAPPDATA\CrashDumps"); Note=(T '蓝屏、驱动出错（显卡驱动重置等）和程序崩溃时留下的调试文件，只对排查问题的工程师有用') }
         @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T '系统组件日志');        Paths=@('C:\Windows\Logs\CBS'); Filter='*.log'; Note=(T 'Windows 更新的安装日志') }
         @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T '缩略图缓存');          Paths=@("$env:LOCALAPPDATA\Microsoft\Windows\Explorer"); Filter='thumbcache_*.db'; Note=(T '文件夹里图片的小预览图，打开文件夹时会重新生成') }
         @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Chrome 浏览器缓存');   Paths=@("$env:LOCALAPPDATA\Google\Chrome\User Data\*\Cache","$env:LOCALAPPDATA\Google\Chrome\User Data\*\Code Cache","$env:LOCALAPPDATA\Google\Chrome\User Data\*\GPUCache"); Note=(T '网页缓存。请先关闭浏览器。不影响密码、书签、历史记录') }
@@ -3866,7 +3918,10 @@ function Invoke-SelfTest([string]$Version) {
     if ([DiskMap]::MftOff) { & $add 'warn' 'direct file table reading is turned off in settings; file table checks skipped' }
     else {
         try { $tree = [DiskMap]::GetTree($sd, $n, $false, $true) } catch { & $add 'fail' ("file table: exception {0}" -f $_.Exception.Message) }
-        if ($tree) { & $add 'pass' ("file table: method {0}, {1:N0} ms, {2:N0} files, {3:N0} folders, {4:N1} GB, unread records {5}" -f [DiskMap]::LastMethod, [DiskMap]::LastMs, $tree.Files, [DiskMap]::DirsSeen, ($tree.Size / 1GB), [DiskMap]::LastFailed) }
+        if ($tree) {
+            & $add 'pass' ("file table: method {0}, {1:N0} ms, {2:N0} files, {3:N0} folders, {4:N1} GB, unread records {5}" -f [DiskMap]::LastMethod, [DiskMap]::LastMs, $tree.Files, [DiskMap]::DirsSeen, ($tree.Size / 1GB), [DiskMap]::LastFailed)
+            if ($tree.HasDisk) { $L.Add(("       each file once {0:N1} GB, on disk {1:N1} GB, with hard links {2:N1} GB, file table itself {3:N2} GB, used on the drive {4:N1} GB" -f ($tree.UniqueSize / 1GB), ($tree.UniqueDisk / 1GB), ($tree.Linked / 1GB), ($tree.MftBytes / 1GB), $(if ($di) { ($di.TotalSize - $di.TotalFreeSpace) / 1GB } else { 0 }))) }
+        }
         elseif (-not (Stopping)) { & $add 'fail' ("file table not used: {0}" -f [DiskMap]::LastNote) }
     }
     if (Stopping) { return @{ Lines = $L; Res = $res; Stopped = $true } }
@@ -3931,6 +3986,21 @@ function Invoke-SelfTest([string]$Version) {
             & $check 'file still open' { param($t) $x = [DiskMap]::Find($t, $base); if ($x -and $x.Own -ne 530000) { "own bytes {0} while the file is open, 530000 after writing (sizes of open files may lag)" -f $x.Own } } $true
             $fs.Write($b1, 0, 25000); $fs.Close(); $fs = $null
             & $check 'file closed' { param($t) $x = [DiskMap]::Find($t, $base); if (-not $x) { 'test folder missing' } elseif ($x.Own -ne 555000) { "own bytes {0}, expected 555000" -f $x.Own } } $false
+            # 实际占用：稀疏文件、NTFS 压缩、系统压缩（WOF）和硬链接，和 Windows 自己报的实际占用（GetCompressedFileSize）比
+            $dd = Join-Path $base 'disk'; New-Item -ItemType Directory -Path $dd -Force | Out-Null
+            $mb = [Text.Encoding]::ASCII.GetBytes(('abcdefghijklmnop' * 65536))
+            foreach ($nm in 'plain.bin', 'ntfs.bin', 'wof.bin') { [IO.File]::WriteAllBytes((Join-Path $dd $nm), $mb) }
+            $wl = New-Object System.Collections.Generic.List[string]
+            try { New-Item -ItemType HardLink -Path (Join-Path $dd 'plain-link.bin') -Target (Join-Path $dd 'plain.bin') -ErrorAction Stop | Out-Null } catch { $wl.Add('hard link: ' + $_.Exception.Message) }
+            $sp = Join-Path $dd 'sparse.bin'
+            [IO.File]::WriteAllBytes($sp, (New-Object byte[] 0))
+            & "$env:SystemRoot\System32\fsutil.exe" sparse setflag $sp 2>&1 | Out-Null
+            $fsp = [IO.File]::Open($sp, [IO.FileMode]::Open, [IO.FileAccess]::Write); $fsp.SetLength(64MB); $fsp.Position = 1MB; $fsp.Write($mb, 0, 65536); $fsp.Close()
+            & "$env:SystemRoot\System32\compact.exe" /c /q (Join-Path $dd 'ntfs.bin') 2>&1 | Out-Null
+            & "$env:SystemRoot\System32\compact.exe" /c /q /exe:xpress4k (Join-Path $dd 'wof.bin') 2>&1 | Out-Null
+            $want = [long]0
+            foreach ($f in @(Get-ChildItem -LiteralPath $dd -File -Force)) { $o = [FsTools]::OnDisk($f.FullName); $want += $o; $wl.Add(('{0} {1:N0}/{2:N0}' -f $f.Name, $o, $f.Length)) }
+            & $check 'size on disk' { param($t) $x = [DiskMap]::Find($t, $dd); if (-not $x) { 'test folder missing' } elseif ([math]::Abs([long]$x.OwnDisk - $want) -gt 5 * 65536 -or [long]$x.OwnShared -ne 2097152) { "on disk {0:N0} (Windows says {1:N0}), with hard links {2:N0} (expected 2,097,152); {3}" -f $x.OwnDisk, $want, $x.OwnShared, ($wl -join ', ') } } $true
             [IO.Directory]::Delete($base, $true)
             & $check 'remove' { param($t) if ([DiskMap]::Find($t, $base)) { 'test folder still there after removing it' } } $false
         } catch { & $add 'fail' ("journal test error: {0}" -f $_.Exception.Message) }
@@ -5160,6 +5230,81 @@ Zoom 装在这里的程序和本地数据。会议录像默认存在「文档」
 微信、QQ、企业微信、飞书、钉钉、Telegram 等聊天记录文件夹里的大文件。这些文件只能查看、打开位置；要腾地方，可以到「搬家管理」把整个聊天记录搬到其他盘。	Large files in the chat data folders of WeChat, QQ, WeCom, Feishu, DingTalk, Telegram and others. These files can only be viewed and located; to free up space, move the whole chat data to another drive on the "Moved folders" page.
 深色界面没能打开，这次用浅色：{0}	The dark interface could not be loaded, using light this time: {0}
 返回的内容里没有版本号	The response did not contain a version number
+打开网页：{0}	Opened web page: {0}
+打不开浏览器，请手动访问 {0}	Couldn't open the browser. Please visit {0} yourself.
+ · 硬链接：别处还有同一份，删了这个不腾空间	 · Hard link: the same file has another name elsewhere, so deleting this frees nothing
+ · 其中 {0} 是硬链接（别处还有同一份）	 · {0} of it is hard links (the same files also exist elsewhere)
+ · 实际只占 {0}	 · only {0} on disk
+· 文件实际占用 {0}：每个文件只算一次，有几个名字的（硬链接）也只算一份	· File data on disk {0}: each file counted once, even if it has several names (hard links)
+　其中系统还原点等（System Volume Information）{0}，在「省空间」里可以查看	   including restore points and the like (System Volume Information) {0}; see "Save space"
+· 文件表（MFT）{0}：NTFS 记录每个文件信息的地方，文件越多越大，删了文件也不会变小	· File table (MFT) {0}: where NTFS keeps a record of every file. It grows with the number of files and doesn't shrink when files are deleted
+· 其他 {0}：NTFS 的日志和变更日志、文件夹的索引、Windows 给系统更新预留的空间（保留的存储）等，不是普通文件	· Other {0}: the NTFS log and change journal, folder indexes, the space Windows reserves for updates (reserved storage) and so on, which are not ordinary files
+· 按文件大小相加（资源管理器的算法）是 {0}	· Adding up file sizes (as File Explorer does) gives {0}
+· 硬链接：{0} 的文件不止一个名字（大多在 WinSxS 和 System32 里），按名字相加会重复算，盘上只有一份	· Hard links: {0} of files have more than one name (mostly in WinSxS and System32). Adding up by name counts them more than once, but there is only one copy on disk
+· 压缩、稀疏和只在云端的文件：实际占用比文件大小合计少 {0}（已经扣掉了零头按整块分配多占的部分）	· Compressed, sparse and cloud-only files: files take {0} less on disk than their combined size (after allowing for the space lost to whole-cluster allocation)
+· 文件按整块（簇，通常 4 KB）分配，零头也占一整块：实际占用比文件大小合计多 {0}	· Files are stored in whole clusters (usually 4 KB), so a partly filled cluster counts in full: files take {0} more on disk than their combined size
+{0} 已用 {1}（共 {2}），其中：	{0}: {1} used of {2}, made up of:
+和「按文件大小相加」的差别：	Compared with adding up file sizes:
+按 {0:HH:mm} 扫描的结果。	Based on the scan at {0:HH:mm}.
+空间明细	Space breakdown
+选中一行可以打开位置、压缩或删除；勾选前面的方框，或按住 Ctrl、Shift，可以选多项一起删；按住右键上下拖可以一次选中连着的几行。系统文件夹、软件安装文件夹、C 盘个人文件夹和搬家后的数据带小锁，不能在这里删。	Select a row to open its location, compress or delete it. Tick the boxes in front, or hold Ctrl or Shift, to select several and delete them together; hold the right mouse button and drag up or down to select a run of rows. System folders, app installation folders, personal folders on C: and moved data have a lock and can't be deleted here.
+删除选中的 {0} 项…	Delete {0} selected items…
+已复制 {0} 个路径	Copied {0} paths
+\n\n按快速扫描的结果，实际能腾出 {0} 到 {1}：其中 {2} 是硬链接，同一份文件在别处还有名字，那些名字还在就不会腾出空间。	\n\nAccording to the fast scan, this frees between {0} and {1}: {2} of it is hard links, files that still have names elsewhere, and their space is freed only once all their names are gone.
+\n\n按快速扫描的结果，这些实际只占 {0}（压缩、稀疏或只在云端的文件比文件大小占得少），删掉腾出的是这么多。	\n\nAccording to the fast scan, these take only {0} on disk (compressed, sparse or cloud-only files take less than their size), so that is how much deleting them frees.
+当前：读不到还原点的信息	Current: restore point information is not available
+当前：这块盘没有开系统保护，也没有还原点	Current: System Protection is off for this drive and there are no restore points
+当前：{0} 个还原点，占 {1}，最多可以用到 {2}	Current: {0} restore points using {1}; the limit is {2}
+没有上限	no limit
+打不开系统保护设置	Couldn't open System Protection
+查重复文件时让着其他程序：已打开	Give way to other programs when finding duplicates: on
+查重复文件时让着其他程序：已关闭	Give way to other programs when finding duplicates: off
+设置：显示内容已恢复默认	Settings: display restored to defaults
+换	Change
+换成「{0}」外观？	Change the appearance to "{0}"?
+本工具会关闭，然后用新的外观重新打开。	ClearC will close and reopen with the new appearance.
+蓝屏、驱动出错（显卡驱动重置等）和程序崩溃时留下的调试文件，只对排查问题的工程师有用	Debug files left by blue screens, driver errors (such as graphics driver resets) and program crashes. Only useful to engineers investigating problems
+恢复默认显示	Restore default display
+打开系统保护设置	Open System Protection
+已用空间都花在哪：文件实际占用、文件表（MFT）、硬链接、压缩和稀疏文件，以及为什么和按文件大小相加对不上	Where the used space goes: file data on disk, the file table (MFT), hard links, compressed and sparse files, and why it differs from adding up file sizes
+页面、按钮、列和说明全部恢复成默认显示。外观、语言和扫描设置不变	Show all pages, buttons, columns and descriptions again. Appearance, language and scan settings stay as they are
+切换语言	Switch language
+外观	Appearance
+选中这一层列出的全部项目；再点一下全部取消	Select everything listed at this level; click again to clear
+在资源管理器里显示	Show in File Explorer
+复制路径	Copy path
+打开文件夹	Open folder
+设置	Settings
+「清理 C 盘」「空间地图」「帮助」和「设置」一直显示。关掉的页面只是不在左侧列出，里面的设置、搬家记录和自动提醒都照旧。	"Clean up C:", "Space map", "Help" and "Settings" are always shown. A hidden page is only left out of the list on the left; its settings, moved folders and reminders keep working.
+关掉只是不在空间地图上显示这个开关；快速扫描本身在下面「扫描和查重」里开关。	Turning this off only hides the switch from the space map; the fast scan itself is turned on or off under "Scanning and duplicates" below.
+占比条	Size bars
+占这一层的百分之几。	The share of this level, in percent.
+右上角的「快速扫描」开关	"Fast scan" switch at the top right
+名字下面的详细信息	Details under the name
+名字右边的蓝色横条，一眼看出谁大。	The blue bar to the right of the name, to see at a glance what is biggest.
+外观和语言	Appearance and language
+外观、语言，以及界面上显示哪些内容。用不上的页面、按钮和说明可以关掉，界面更清爽；随时可以回来打开，不会丢任何设置和记录。	Appearance, language and what the window shows. Pages, buttons and descriptions you don't use can be hidden for a cleaner look; turn them back on here at any time, and no settings or records are lost.
+外观和语言也可以在这一页上面改；「使用反馈」和「运行记录」也在「帮助」页里。	Appearance and language can also be changed at the top of this page; "Feedback" and "Run log" are also on the "Help" page.
+实际占用和硬链接	Size on disk and hard links
+左下角的按钮	Buttons at the bottom left
+左侧显示的页面	Pages on the left
+快速扫描时在名字下面注明：压缩、稀疏和只在云端（OneDrive 等）的文件实际占的盘比文件大小小；WinSxS 这类文件夹里很多文件和系统其他位置是同一份（硬链接），删了也不腾空间。	With the fast scan, note under the name when compressed, sparse and cloud-only (OneDrive and the like) files take less space than their size, and when files in folders such as WinSxS are the same files as elsewhere in Windows (hard links), so deleting them frees nothing.
+扫描和查重	Scanning and duplicates
+换了以后本工具会关闭，再用新的语言打开。	ClearC closes and reopens in the new language after you change it.
+文件个数、最近修改时间、比上次扫描变了多少、链接指向哪里。	Number of files, last modified date, change since the last scan, and where a link points.
+查重复文件时让着其他程序	Give way to other programs when finding duplicates
+每一行前面显示一个复选框，点一下就能多选，不用按住 Ctrl（和资源管理器「查看」里的「项目复选框」一样）。开不开都可以按住右键上下拖，一次选中连着的几行。	Show a check box at the start of each row, so one click adds a row to the selection without holding Ctrl (like "Item check boxes" under "View" in File Explorer). Either way, you can hold the right mouse button and drag up or down to select a run of rows.
+每一页标题下面那行灰色的说明文字。用熟了可以关掉，列表能多显示几行。	The grey line of description under each page title. Once you know your way around, turn it off to fit a few more rows in the lists.
+界面上显示什么	What the window shows
+界面语言	Language
+百分比	Percentages
+直接读取 NTFS 的文件表（MFT），比逐个文件夹查看快得多，还能看出实际占用和硬链接。少数安全软件对直接读盘会提示，可以关掉，改为逐个文件夹扫描。清理、搬家、软件管理统计大小时也按这个设置。	Read the NTFS file table (MFT) directly: much faster than opening every folder, and it also shows size on disk and hard links. A few security programs warn about direct disk reads; turn this off to scan folder by folder instead. Clean up, Moved folders and Apps follow this setting when measuring sizes.
+系统还原点（卷影副本）	Restore points (shadow copies)
+装更新、装驱动之前 Windows 会自动建还原点，系统出问题时可以退回去。还原点放在 C 盘的 System Volume Information 里（空间地图里带小锁的那个文件夹），只记改动过的部分，占的空间有上限，到了上限会自动删掉最旧的。觉得占得多，可以在 Windows 的「系统保护」里点「配置」，调小「最大使用量」，或者删掉这块盘的全部还原点（删了就不能再退回去）。本工具不直接删还原点。	Windows creates restore points automatically before installing updates and drivers, so you can go back if something breaks. They are kept in System Volume Information on C: (the folder with a lock in the space map), store only what changed, and have a size limit; when it is reached, the oldest are deleted automatically. If they take too much space, open Windows' "System Protection", click "Configure" and lower "Max Usage", or delete all restore points for the drive (you can't go back after that). ClearC never deletes restore points itself.
+读文件时用 Windows 的后台模式，磁盘和内存都排在其他程序后面：不拖慢正在用的程序，也不把它们缓存在内存里的数据挤掉。电脑空闲时速度基本不受影响，同时在做别的事时查得慢一些。	Read files in Windows' background mode, behind other programs for both disk and memory: the programs you are using don't slow down, and the data they keep cached in memory isn't pushed out. When the PC is idle the speed is about the same; while you do other things, the search takes longer.
+跟随系统会照 Windows 设置里「选择应用模式」来。换了以后本工具会关闭，再自动打开。	Follow Windows uses the "Choose your app mode" setting. ClearC closes and reopens after you change it.
+页面标题下的说明	Descriptions under page titles
+项目复选框	Item check boxes
 '@
 # 英文的帮助页（整页替换中文的那一页）
 $script:helpEnXaml = @'
@@ -5319,6 +5464,10 @@ $script:helpEnXaml = @'
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Restore points</Run><Run>: shows how many restore points there are, how much space they take and the most they may use. To lower the limit or delete restore points, click "Open System Protection" and change it in Windows' own settings; ClearC never deletes restore points itself.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
                 <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Compress folders</Run><Run>: uses NTFS compression. Files open and edit as usual; they just take up less space. Good for documents, code and old projects.</Run></TextBlock>
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
@@ -5371,7 +5520,11 @@ $script:helpEnXaml = @'
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>Select a row to </Run><Run FontWeight="SemiBold">Open location</Run><Run>, </Run><Run FontWeight="SemiBold">Compress (keeps files)</Run><Run> or </Run><Run FontWeight="SemiBold">Delete</Run><Run>; hold Ctrl or Shift to select several rows and delete them together. When deleting, you can choose "Move to Recycle Bin" (can be restored) or "Delete permanently" (frees space immediately); either way, you must tick the confirmation box first.</Run></TextBlock>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>Select a row to </Run><Run FontWeight="SemiBold">Open location</Run><Run>, </Run><Run FontWeight="SemiBold">Compress (keeps files)</Run><Run> or </Run><Run FontWeight="SemiBold">Delete</Run><Run>. Tick the box at the start of each row (like "Item check boxes" in File Explorer), or hold Ctrl or Shift, to select several rows and delete them together; </Run><Run FontWeight="SemiBold">hold the right mouse button and drag up or down</Run><Run> to select a run of rows at once, and the right-click menu opens when you let go. When deleting, you can choose "Move to Recycle Bin" (can be restored) or "Delete permanently" (frees space immediately); either way, you must tick the confirmation box first.</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">Size on disk and hard links</Run><Run>: with the fast scan, the line under each name notes how little compressed, sparse and cloud-only (OneDrive and the like) files really take, and how much of folders such as WinSxS is hard links (the same file also has a name elsewhere, so deleting this name frees nothing). Click "</Run><Run FontWeight="SemiBold">Space breakdown</Run><Run>" to see how the used space splits into file data, the file table (MFT) and the rest, and why it differs from adding up file sizes. Deleting also tells you how much space you will really get back.</Run></TextBlock>
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
@@ -5502,7 +5655,11 @@ $script:helpEnXaml = @'
               <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Can I close the window while it's running?</Run><LineBreak/><Run>Please don't close the window until the work is done; to stop, click "Cancel". You can click "Continue in background" to collapse the progress card; progress is still shown at the bottom of the window and on the taskbar icon.</Run></TextBlock>
               <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Where can I see the details?</Run><LineBreak/><Run>For the deletions and moves that were made, see "Activity log" on the left. For technical details of what the program did, see "Run log" at the bottom left; the full file is at %TEMP%\CleanC-run.log.</Run></TextBlock>
               <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Less space freed than expected?</Run><LineBreak/><Run>Files moved to the Recycle Bin only free up space after you empty the Recycle Bin, and files in use by other programs are skipped.</Run></TextBlock>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Is there a dark mode?</Run><LineBreak/><Run>Yes. Click "Appearance" at the bottom left and choose Light, Dark or Follow Windows (the "Choose your app mode" setting). ClearC closes and reopens after you change it.</Run></TextBlock>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Is there a dark mode?</Run><LineBreak/><Run>Yes. On the "Settings" page on the left (or with "Appearance" at the bottom left), choose Light, Dark or Follow Windows (the "Choose your app mode" setting). ClearC closes and reopens after you change it.</Run></TextBlock>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Can I hide pages and buttons I don't use?</Run><LineBreak/><Run>Yes. On the "Settings" page, untick the pages you don't use, the buttons at the bottom left, the description under page titles, and the check boxes, bars, percentages, details and "Fast scan" switch of the space map. Anything hidden can be turned back on there at any time, and its settings and records are kept; "Restore default display" brings everything back at once.</Run></TextBlock>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Why doesn't the scanned total match the used space?</Run><LineBreak/><Run>Adding up file sizes counts hard links (one file with several names, common in WinSxS and System32) more than once; compressed, sparse and cloud-only files take less space than their size; and the file table (MFT), the NTFS logs and the space Windows reserves for updates (reserved storage) take space without being ordinary files. After a fast scan, click "Space breakdown" in the space map to see how big each part is.</Run></TextBlock>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">WinSxS looks huge. Can I delete it?</Run><LineBreak/><Run>Not by hand; that can break Windows. Many of its files are the same files as in System32 and other places (hard links), so File Explorer counts them twice and WinSxS looks bigger than it is; with the fast scan, the space map notes how much of it is hard links. What can really go is the old components left behind by updates: use "WinSxS component cleanup (DISM)" on the "Clean up C:" page.</Run></TextBlock>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">Why doesn't ClearC clean the Prefetch folder or "boost memory"?</Run><LineBreak/><Run>Prefetch records which files programs read when they start, so Windows can open your usual programs faster. It is only a few dozen MB, deleting it makes the next starts slower, and it grows back within days. Memory is similar: Windows uses free memory to cache files you use often ("Cached" in Task Manager) and hands it over the moment another program needs it, so forcing it empty only slows the PC down. That is why ClearC does neither.</Run></TextBlock>
               <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">How do I know about new versions?</Run><LineBreak/><Run>Click "Check for updates" under "Feedback" below. If there is a new version, the download page opens; replace the old exe with the new one and your settings, logs and reminders are kept. ClearC does not go online otherwise; it contacts GitHub only when you click that button.</Run></TextBlock>
             </StackPanel>
           </Border>
@@ -5512,7 +5669,7 @@ $script:helpEnXaml = @'
                 <TextBlock Text="&#xE8BD;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
                 <TextBlock Text="Feedback" Style="{StaticResource HelpHead}"/>
               </StackPanel>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,8,0,0" Text="If you run into a problem, find a bug or have a suggestion, feel free to contact the developer directly."/>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,8,0,0" Text="If you run into a problem, find a bug or have a suggestion, add the developer on WeChat or open an issue on GitHub."/>
               <Border Background="#F5F5F7" CornerRadius="10" Padding="18,14" Margin="0,14,0,0">
                 <DockPanel>
                   <Button x:Name="BtnCopyWx" DockPanel.Dock="Right" Style="{StaticResource Primary}" Content="Copy WeChat ID" Padding="18,7" VerticalAlignment="Center"/>
@@ -5523,6 +5680,23 @@ $script:helpEnXaml = @'
                     <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
                       <TextBlock Text="Developer's WeChat" Style="{StaticResource Caption}"/>
                       <TextBlock x:Name="DevWx" Text="45915504" FontSize="20" FontWeight="SemiBold" Margin="0,1,0,0" TextOptions.TextFormattingMode="Ideal"/>
+                    </StackPanel>
+                  </StackPanel>
+                </DockPanel>
+              </Border>
+              <Border Background="#F5F5F7" CornerRadius="10" Padding="18,14" Margin="0,10,0,0">
+                <DockPanel>
+                  <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="BtnIssue" Content="Report an issue" Padding="14,7" Margin="0,0,8,0"/>
+                    <Button x:Name="BtnGitHub" Content="Open page" Padding="14,7"/>
+                  </StackPanel>
+                  <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Width="40" Height="40" CornerRadius="20" Background="#E8F0FE">
+                      <TextBlock Text="&#xE943;" FontFamily="{StaticResource Icons}" FontSize="18" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
+                      <TextBlock Text="GitHub project page: downloads, source code, issues" Style="{StaticResource Caption}"/>
+                      <TextBlock x:Name="GitHubUrl" Text="github.com/Xuanqiyun/ClearC" FontSize="16" FontWeight="SemiBold" Margin="0,1,0,0" TextOptions.TextFormattingMode="Ideal"/>
                     </StackPanel>
                   </StackPanel>
                 </DockPanel>
@@ -5648,6 +5822,9 @@ if ($script:mode -match '(?i)/check') {
     $global:CLEANC_UI_SHOWN = $true
     return
 }
+# 界面自测（给自动测试用）：照常打开窗口，点一遍界面功能，对话框一律当作点了「取消」，做完自己关掉
+$script:uiTest = [bool]($script:mode -match '(?i)/uitest')
+$script:uiSheets = New-Object System.Collections.Generic.List[string]
 if ($script:mode -match '(?i)/selftest') {
     Init-DriveThreads
     [DiskMap]::MftOff = ((Get-Setting 'FastScan' '1') -eq '0')
@@ -5684,6 +5861,12 @@ if ($script:mode -match '(?i)/autoclean') {
         WindowStartupLocation="CenterScreen" FontFamily="Segoe UI, Microsoft YaHei UI" FontSize="13" Background="#F5F5F7"
         Foreground="#1D1D1F" UseLayoutRounding="True" SnapsToDevicePixels="True" TextOptions.TextFormattingMode="Display">
   <Window.Resources>
+    <!-- 设置里可以关掉的显示项：改这几个资源，界面上用到的地方都跟着变 -->
+    <Visibility x:Key="MapCkVis">Visible</Visibility>
+    <Visibility x:Key="MapBarVis">Visible</Visibility>
+    <Visibility x:Key="MapPctVis">Visible</Visibility>
+    <Visibility x:Key="MapMetaVis">Visible</Visibility>
+    <Visibility x:Key="SubVis">Visible</Visibility>
     <!-- 配色：浅灰底 #F5F5F7、白色卡片、正文 #1D1D1F、次要文字 #6E6E73、分隔线 #E5E5EA、唯一的强调色是蓝 #0071E3，红色只给删除 -->
     <FontFamily x:Key="Icons">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
 
@@ -5699,6 +5882,19 @@ if ($script:mode -match '(?i)/autoclean') {
       <Setter Property="Foreground" Value="#6E6E73"/>
       <Setter Property="Margin" Value="0,5,0,0"/>
       <Setter Property="TextWrapping" Value="Wrap"/>
+      <Setter Property="Visibility" Value="{DynamicResource SubVis}"/>
+    </Style>
+    <!-- 设置页：每一项的名字和说明 -->
+    <Style x:Key="SetName" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="13.5"/>
+      <Setter Property="Foreground" Value="#1D1D1F"/>
+    </Style>
+    <Style x:Key="SetNote" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="Foreground" Value="#86868B"/>
+      <Setter Property="TextWrapping" Value="Wrap"/>
+      <Setter Property="LineHeight" Value="18"/>
+      <Setter Property="Margin" Value="0,3,0,0"/>
     </Style>
     <Style x:Key="SectionTitle" TargetType="TextBlock">
       <Setter Property="FontSize" Value="13"/>
@@ -5966,8 +6162,11 @@ if ($script:mode -match '(?i)/autoclean') {
             <Grid Background="Transparent">
               <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
               <Border x:Name="Box" Width="17" Height="17" CornerRadius="4.5" BorderThickness="1" BorderBrush="#B8B8BE" Background="White" VerticalAlignment="Center">
-                <Path x:Name="Mark" Data="M 3.5 7.6 L 6.5 10.6 L 11.6 4.8" Stroke="White" StrokeThickness="2"
-                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Visibility="Collapsed"/>
+                <Grid>
+                  <Path x:Name="Mark" Data="M 3.5 7.6 L 6.5 10.6 L 11.6 4.8" Stroke="White" StrokeThickness="2"
+                        StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Visibility="Collapsed"/>
+                  <Path x:Name="Dash" Data="M 4.5 7.5 L 10.5 7.5" Stroke="White" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Visibility="Collapsed"/>
+                </Grid>
               </Border>
               <ContentPresenter x:Name="CP" Grid.Column="1" Margin="9,0,0,0" VerticalAlignment="Center" RecognizesAccessKey="False"/>
             </Grid>
@@ -5978,9 +6177,56 @@ if ($script:mode -match '(?i)/autoclean') {
                 <Setter TargetName="Box" Property="BorderBrush" Value="#0071E3"/>
                 <Setter TargetName="Mark" Property="Visibility" Value="Visible"/>
               </Trigger>
+              <Trigger Property="IsChecked" Value="{x:Null}">
+                <Setter TargetName="Box" Property="Background" Value="#0071E3"/>
+                <Setter TargetName="Box" Property="BorderBrush" Value="#0071E3"/>
+                <Setter TargetName="Dash" Property="Visibility" Value="Visible"/>
+              </Trigger>
               <Trigger Property="HasContent" Value="False"><Setter TargetName="CP" Property="Visibility" Value="Collapsed"/></Trigger>
               <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45"/></Trigger>
             </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- ===== 右键菜单 ===== -->
+    <Style x:Key="Menu" TargetType="ContextMenu">
+      <Setter Property="OverridesDefaultStyle" Value="True"/>
+      <Setter Property="SnapsToDevicePixels" Value="True"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ContextMenu">
+            <Border Background="White" BorderBrush="#D2D2D7" BorderThickness="1" CornerRadius="8" Padding="4" Margin="0,0,8,8">
+              <Border.Effect><DropShadowEffect BlurRadius="12" ShadowDepth="2" Direction="270" Opacity="0.18"/></Border.Effect>
+              <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
+            </Border>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="MenuRow" TargetType="MenuItem">
+      <Setter Property="Foreground" Value="#1D1D1F"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="MenuItem">
+            <Border x:Name="Bd" Background="Transparent" CornerRadius="5" Padding="12,6,28,6" MinWidth="180">
+              <ContentPresenter ContentSource="Header" RecognizesAccessKey="False" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="Bd" Property="Background" Value="#E8F1FC"/></Trigger>
+              <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.4"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="MenuSep" TargetType="Separator">
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Separator">
+            <Border Height="1" Background="#E5E5EA" Margin="8,4"/>
           </ControlTemplate>
         </Setter.Value>
       </Setter>
@@ -6453,26 +6699,30 @@ if ($script:mode -match '(?i)/autoclean') {
     <DataTemplate x:Key="MapRowTpl">
       <Grid Margin="12,7,14,7">
         <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto"/>
           <ColumnDefinition Width="30"/>
           <ColumnDefinition Width="*"/>
-          <ColumnDefinition Width="172"/>
+          <ColumnDefinition Width="Auto"/>
           <ColumnDefinition Width="92"/>
-          <ColumnDefinition Width="58"/>
+          <ColumnDefinition Width="Auto"/>
         </Grid.ColumnDefinitions>
-        <TextBlock Grid.Column="0" Text="{Binding Glyph}" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="{Binding GlyphBrush}" VerticalAlignment="Center"/>
-        <StackPanel Grid.Column="1" Margin="0,0,14,0" VerticalAlignment="Center">
+        <!-- 项目复选框：和这一行是否选中绑在一起，点它只增减这一行，不影响其他已选的行 -->
+        <CheckBox Grid.Column="0" Visibility="{DynamicResource MapCkVis}" Focusable="False" VerticalAlignment="Center" Margin="0,0,12,0"
+                  IsChecked="{Binding IsSelected, Mode=TwoWay, RelativeSource={RelativeSource AncestorType=ListViewItem}}"/>
+        <TextBlock Grid.Column="1" Text="{Binding Glyph}" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="{Binding GlyphBrush}" VerticalAlignment="Center"/>
+        <StackPanel Grid.Column="2" Margin="0,0,14,0" VerticalAlignment="Center">
           <DockPanel>
             <TextBlock x:Name="Lk" DockPanel.Dock="Right" Text="&#xE72E;" FontFamily="{StaticResource Icons}" FontSize="11" Foreground="#86868B"
                        Margin="8,0,0,0" VerticalAlignment="Center" Visibility="Collapsed" ToolTip="{Binding LockTip}"/>
             <TextBlock Text="{Binding Name}" FontSize="13.5" TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}"/>
           </DockPanel>
-          <TextBlock Text="{Binding Meta}" FontSize="11.5" Foreground="#86868B" TextTrimming="CharacterEllipsis" Margin="0,1,0,0"/>
+          <TextBlock Text="{Binding Meta}" FontSize="11.5" Foreground="#86868B" TextTrimming="CharacterEllipsis" Margin="0,1,0,0" Visibility="{DynamicResource MapMetaVis}" ToolTip="{Binding Meta}"/>
         </StackPanel>
-        <Border Grid.Column="2" Height="8" Width="160" CornerRadius="4" Background="#EFEFF4" HorizontalAlignment="Left" VerticalAlignment="Center">
+        <Border Grid.Column="3" Height="8" Width="160" Margin="0,0,12,0" CornerRadius="4" Background="#EFEFF4" HorizontalAlignment="Left" VerticalAlignment="Center" Visibility="{DynamicResource MapBarVis}">
           <Border Width="{Binding Bar}" HorizontalAlignment="Left" CornerRadius="4" Background="#0071E3"/>
         </Border>
-        <TextBlock Grid.Column="3" Text="{Binding SizeText}" FontWeight="SemiBold" TextAlignment="Right" VerticalAlignment="Center"/>
-        <TextBlock Grid.Column="4" Text="{Binding Pct}" Foreground="#86868B" TextAlignment="Right" VerticalAlignment="Center"/>
+        <TextBlock Grid.Column="4" Text="{Binding SizeText}" FontWeight="SemiBold" TextAlignment="Right" VerticalAlignment="Center"/>
+        <TextBlock Grid.Column="5" Width="58" Text="{Binding Pct}" Foreground="#86868B" TextAlignment="Right" VerticalAlignment="Center" Visibility="{DynamicResource MapPctVis}"/>
       </Grid>
       <DataTemplate.Triggers>
         <DataTrigger Binding="{Binding Locked}" Value="True"><Setter TargetName="Lk" Property="Visibility" Value="Visible"/></DataTrigger>
@@ -6543,11 +6793,12 @@ if ($script:mode -match '(?i)/autoclean') {
           <TextBlock Text="分析" Style="{StaticResource NavHead}"/>
           <RadioButton x:Name="NavMap" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE9D9;" Content="空间地图"/>
           <RadioButton x:Name="NavApps" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE71D;" Content="软件管理"/>
-          <TextBlock Text="管理" Style="{StaticResource NavHead}"/>
+          <TextBlock x:Name="NavHeadManage" Text="管理" Style="{StaticResource NavHead}"/>
           <RadioButton x:Name="NavMoves" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE8AB;" Content="搬家管理"/>
           <RadioButton x:Name="NavAuto" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE823;" Content="自动提醒"/>
           <RadioButton x:Name="NavLog" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE81C;" Content="操作日志"/>
           <RadioButton x:Name="NavHelp" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE897;" Content="帮助" Margin="0,12,0,3"/>
+          <RadioButton x:Name="NavSettings" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE713;" Content="设置"/>
         </StackPanel>
       </DockPanel>
     </Border>
@@ -6939,7 +7190,11 @@ if ($script:mode -match '(?i)/autoclean') {
           </Button>
           <StackPanel VerticalAlignment="Center">
             <TextBlock x:Name="MapPath" Text="还没有扫描" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" MaxWidth="560"/>
-            <TextBlock x:Name="MapInfo" Style="{StaticResource Caption}" Text="选一块盘，点「扫描」。C 盘通常一两分钟就能扫完。"/>
+            <StackPanel Orientation="Horizontal">
+              <TextBlock x:Name="MapInfo" Style="{StaticResource Caption}" Text="选一块盘，点「扫描」。C 盘通常一两分钟就能扫完。"/>
+              <Button x:Name="BtnMapAcct" Style="{StaticResource LinkButton}" Content="空间明细" FontSize="12" Padding="10,0,2,0" VerticalAlignment="Center" Visibility="Collapsed"
+                      ToolTip="已用空间都花在哪：文件实际占用、文件表（MFT）、硬链接、压缩和稀疏文件，以及为什么和按文件大小相加对不上"/>
+            </StackPanel>
           </StackPanel>
         </StackPanel>
       </DockPanel>
@@ -6985,7 +7240,18 @@ if ($script:mode -match '(?i)/autoclean') {
         <Grid>
           <Canvas x:Name="MapTree" Margin="10,4,10,4" ClipToBounds="True" Background="White" Visibility="Collapsed"/>
           <ListView x:Name="MapList" Background="Transparent" BorderThickness="0" ItemTemplate="{StaticResource MapRowTpl}" ItemContainerStyle="{StaticResource SelRow}" SelectionMode="Extended"
-                    ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"/>
+                    ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
+            <ListView.ContextMenu>
+              <ContextMenu x:Name="MapMenu" Style="{StaticResource Menu}">
+                <MenuItem x:Name="MmEnter" Header="打开文件夹" Style="{StaticResource MenuRow}"/>
+                <MenuItem x:Name="MmOpen" Header="在资源管理器里显示" Style="{StaticResource MenuRow}"/>
+                <MenuItem x:Name="MmCopy" Header="复制路径" Style="{StaticResource MenuRow}"/>
+                <Separator Style="{StaticResource MenuSep}"/>
+                <MenuItem x:Name="MmCompress" Header="压缩（不删文件）" Style="{StaticResource MenuRow}"/>
+                <MenuItem x:Name="MmDelete" Header="删除…" Style="{StaticResource MenuRow}"/>
+              </ContextMenu>
+            </ListView.ContextMenu>
+          </ListView>
           <ListView x:Name="MapGrow" Background="White" BorderThickness="0" ItemContainerStyle="{StaticResource GridRow}" Visibility="Collapsed">
             <ListView.View>
               <GridView>
@@ -7017,8 +7283,9 @@ if ($script:mode -match '(?i)/autoclean') {
                   ToolTip="用 NTFS 压缩这个文件夹：文件照常打开、照常修改，只是占的空间变小。适合不常用的资料、旧项目"/>
           <Button x:Name="BtnMapDelete" Content="删除…" Style="{StaticResource Danger}" Padding="18,6" IsEnabled="False"/>
         </StackPanel>
+        <CheckBox x:Name="MapAll" DockPanel.Dock="Left" Content="全选" Visibility="{DynamicResource MapCkVis}" VerticalAlignment="Center" Margin="18,0,12,0" ToolTip="选中这一层列出的全部项目；再点一下全部取消"/>
         <TextBlock x:Name="MapSel" VerticalAlignment="Center" TextWrapping="Wrap" Foreground="#6E6E73" Margin="2,0,16,0"
-                   Text="选中一行可以打开位置、压缩或删除；按住 Ctrl 或 Shift 可以选多项一起删。系统文件夹、软件安装文件夹、C 盘个人文件夹和搬家后的数据带小锁，不能在这里删。"/>
+                   Text="选中一行可以打开位置、压缩或删除；勾选前面的方框，或按住 Ctrl、Shift，可以选多项一起删；按住右键上下拖可以一次选中连着的几行。系统文件夹、软件安装文件夹、C 盘个人文件夹和搬家后的数据带小锁，不能在这里删。"/>
       </DockPanel>
     </Grid>
 
@@ -7075,6 +7342,18 @@ if ($script:mode -match '(?i)/autoclean') {
                 <Button x:Name="BtnHibFull" Content="恢复完整休眠"/>
               </StackPanel>
             </StackPanel>
+          </Border>
+
+          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+            <DockPanel>
+              <Button x:Name="BtnRestoreOpen" DockPanel.Dock="Right" Content="打开系统保护设置" VerticalAlignment="Center" Margin="20,0,0,0"/>
+              <StackPanel>
+                <TextBlock Text="系统还原点（卷影副本）" Style="{StaticResource CardHead}"/>
+                <TextBlock x:Name="SaveRpState" Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
+                           Text="装更新、装驱动之前 Windows 会自动建还原点，系统出问题时可以退回去。还原点放在 C 盘的 System Volume Information 里（空间地图里带小锁的那个文件夹），只记改动过的部分，占的空间有上限，到了上限会自动删掉最旧的。觉得占得多，可以在 Windows 的「系统保护」里点「配置」，调小「最大使用量」，或者删掉这块盘的全部还原点（删了就不能再退回去）。本工具不直接删还原点。"/>
+              </StackPanel>
+            </DockPanel>
           </Border>
 
           <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
@@ -7464,6 +7743,152 @@ if ($script:mode -match '(?i)/autoclean') {
       </Border>
     </Grid>
 
+    <!-- ==================== 设置：外观、语言、显示哪些内容 ==================== -->
+    <Grid x:Name="PageSettings" Grid.Column="1" Grid.Row="0" Visibility="Collapsed">
+      <ScrollViewer x:Name="SetScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+        <StackPanel Margin="30,24,30,28" MaxWidth="900" HorizontalAlignment="Left">
+          <DockPanel>
+            <Button x:Name="BtnSetReset" DockPanel.Dock="Right" Content="恢复默认显示" VerticalAlignment="Top" Margin="16,4,0,0"
+                    ToolTip="页面、按钮、列和说明全部恢复成默认显示。外观、语言和扫描设置不变"/>
+            <StackPanel>
+              <TextBlock Text="设置" Style="{StaticResource PageTitle}"/>
+              <TextBlock Style="{StaticResource PageSub}" Text="外观、语言，以及界面上显示哪些内容。用不上的页面、按钮和说明可以关掉，界面更清爽；随时可以回来打开，不会丢任何设置和记录。"/>
+            </StackPanel>
+          </DockPanel>
+
+          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,20,0,0">
+            <StackPanel>
+              <TextBlock Text="外观和语言" Style="{StaticResource CardHead}"/>
+              <DockPanel Margin="0,14,0,0">
+                <Border DockPanel.Dock="Right" Style="{StaticResource SegBox}" VerticalAlignment="Center" Margin="20,0,0,0">
+                  <StackPanel Orientation="Horizontal">
+                    <RadioButton x:Name="SetThemeLight" GroupName="settheme" Content="浅色" Style="{StaticResource Seg}"/>
+                    <RadioButton x:Name="SetThemeDark" GroupName="settheme" Content="深色" Style="{StaticResource Seg}"/>
+                    <RadioButton x:Name="SetThemeSystem" GroupName="settheme" Content="跟随系统" Style="{StaticResource Seg}"/>
+                  </StackPanel>
+                </Border>
+                <StackPanel VerticalAlignment="Center">
+                  <TextBlock Text="外观" Style="{StaticResource SetName}"/>
+                  <TextBlock Style="{StaticResource SetNote}" Text="跟随系统会照 Windows 设置里「选择应用模式」来。换了以后本工具会关闭，再自动打开。"/>
+                </StackPanel>
+              </DockPanel>
+              <DockPanel Margin="0,16,0,0">
+                <Border DockPanel.Dock="Right" Style="{StaticResource SegBox}" VerticalAlignment="Center" Margin="20,0,0,0">
+                  <StackPanel Orientation="Horizontal">
+                    <RadioButton x:Name="SetLangZh" GroupName="setlang" Style="{StaticResource Seg}"/>
+                    <RadioButton x:Name="SetLangEn" GroupName="setlang" Style="{StaticResource Seg}"/>
+                  </StackPanel>
+                </Border>
+                <StackPanel VerticalAlignment="Center">
+                  <TextBlock Text="界面语言" Style="{StaticResource SetName}"/>
+                  <TextBlock Style="{StaticResource SetNote}" Text="换了以后本工具会关闭，再用新的语言打开。"/>
+                </StackPanel>
+              </DockPanel>
+            </StackPanel>
+          </Border>
+
+          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+            <StackPanel>
+              <TextBlock Text="界面上显示什么" Style="{StaticResource CardHead}"/>
+              <TextBlock Text="左侧显示的页面" Style="{StaticResource SetName}" Margin="0,14,0,0"/>
+              <TextBlock Style="{StaticResource SetNote}" Text="「清理 C 盘」「空间地图」「帮助」和「设置」一直显示。关掉的页面只是不在左侧列出，里面的设置、搬家记录和自动提醒都照旧。"/>
+              <WrapPanel Margin="0,2,0,0">
+                <CheckBox x:Name="SetPageDup" Content="重复文件" Width="170" Margin="0,10,0,0"/>
+                <CheckBox x:Name="SetPageSave" Content="省空间" Width="170" Margin="0,10,0,0"/>
+                <CheckBox x:Name="SetPageApps" Content="软件管理" Width="170" Margin="0,10,0,0"/>
+                <CheckBox x:Name="SetPageMoves" Content="搬家管理" Width="170" Margin="0,10,0,0"/>
+                <CheckBox x:Name="SetPageAuto" Content="自动提醒" Width="170" Margin="0,10,0,0"/>
+                <CheckBox x:Name="SetPageLog" Content="操作日志" Width="170" Margin="0,10,0,0"/>
+              </WrapPanel>
+              <TextBlock Text="左下角的按钮" Style="{StaticResource SetName}" Margin="0,18,0,0"/>
+              <TextBlock Style="{StaticResource SetNote}" Text="外观和语言也可以在这一页上面改；「使用反馈」和「运行记录」也在「帮助」页里。"/>
+              <WrapPanel Margin="0,2,0,0">
+                <CheckBox x:Name="SetLinkTheme" Content="外观" Width="170" Margin="0,10,0,0"/>
+                <CheckBox x:Name="SetLinkLang" Content="切换语言" Width="170" Margin="0,10,0,0"/>
+                <CheckBox x:Name="SetLinkFeedback" Content="使用反馈" Width="170" Margin="0,10,0,0"/>
+                <CheckBox x:Name="SetLinkLog" Content="运行记录" Width="170" Margin="0,10,0,0"/>
+              </WrapPanel>
+              <DockPanel Margin="0,18,0,0">
+                <CheckBox x:Name="SetPageSub" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                <StackPanel>
+                  <TextBlock Text="页面标题下的说明" Style="{StaticResource SetName}"/>
+                  <TextBlock Style="{StaticResource SetNote}" Text="每一页标题下面那行灰色的说明文字。用熟了可以关掉，列表能多显示几行。"/>
+                </StackPanel>
+              </DockPanel>
+            </StackPanel>
+          </Border>
+
+          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+            <StackPanel>
+              <TextBlock Text="空间地图" Style="{StaticResource CardHead}"/>
+              <DockPanel Margin="0,14,0,0">
+                <CheckBox x:Name="SetMapCheck" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                <StackPanel>
+                  <TextBlock Text="项目复选框" Style="{StaticResource SetName}"/>
+                  <TextBlock Style="{StaticResource SetNote}" Text="每一行前面显示一个复选框，点一下就能多选，不用按住 Ctrl（和资源管理器「查看」里的「项目复选框」一样）。开不开都可以按住右键上下拖，一次选中连着的几行。"/>
+                </StackPanel>
+              </DockPanel>
+              <DockPanel Margin="0,16,0,0">
+                <CheckBox x:Name="SetMapBar" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                <StackPanel>
+                  <TextBlock Text="占比条" Style="{StaticResource SetName}"/>
+                  <TextBlock Style="{StaticResource SetNote}" Text="名字右边的蓝色横条，一眼看出谁大。"/>
+                </StackPanel>
+              </DockPanel>
+              <DockPanel Margin="0,16,0,0">
+                <CheckBox x:Name="SetMapPct" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                <StackPanel>
+                  <TextBlock Text="百分比" Style="{StaticResource SetName}"/>
+                  <TextBlock Style="{StaticResource SetNote}" Text="占这一层的百分之几。"/>
+                </StackPanel>
+              </DockPanel>
+              <DockPanel Margin="0,16,0,0">
+                <CheckBox x:Name="SetMapMeta" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                <StackPanel>
+                  <TextBlock Text="名字下面的详细信息" Style="{StaticResource SetName}"/>
+                  <TextBlock Style="{StaticResource SetNote}" Text="文件个数、最近修改时间、比上次扫描变了多少、链接指向哪里。"/>
+                </StackPanel>
+              </DockPanel>
+              <DockPanel Margin="0,16,0,0">
+                <CheckBox x:Name="SetMapDisk" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                <StackPanel>
+                  <TextBlock Text="实际占用和硬链接" Style="{StaticResource SetName}"/>
+                  <TextBlock Style="{StaticResource SetNote}" Text="快速扫描时在名字下面注明：压缩、稀疏和只在云端（OneDrive 等）的文件实际占的盘比文件大小小；WinSxS 这类文件夹里很多文件和系统其他位置是同一份（硬链接），删了也不腾空间。"/>
+                </StackPanel>
+              </DockPanel>
+              <DockPanel Margin="0,16,0,0">
+                <CheckBox x:Name="SetMapFastBtn" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                <StackPanel>
+                  <TextBlock Text="右上角的「快速扫描」开关" Style="{StaticResource SetName}"/>
+                  <TextBlock Style="{StaticResource SetNote}" Text="关掉只是不在空间地图上显示这个开关；快速扫描本身在下面「扫描和查重」里开关。"/>
+                </StackPanel>
+              </DockPanel>
+            </StackPanel>
+          </Border>
+
+          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+            <StackPanel>
+              <TextBlock Text="扫描和查重" Style="{StaticResource CardHead}"/>
+              <DockPanel Margin="0,14,0,0">
+                <CheckBox x:Name="SetFast" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                <StackPanel>
+                  <TextBlock Text="快速扫描" Style="{StaticResource SetName}"/>
+                  <TextBlock Style="{StaticResource SetNote}" Text="直接读取 NTFS 的文件表（MFT），比逐个文件夹查看快得多，还能看出实际占用和硬链接。少数安全软件对直接读盘会提示，可以关掉，改为逐个文件夹扫描。清理、搬家、软件管理统计大小时也按这个设置。"/>
+                </StackPanel>
+              </DockPanel>
+              <DockPanel Margin="0,16,0,0">
+                <CheckBox x:Name="SetLowIo" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                <StackPanel>
+                  <TextBlock Text="查重复文件时让着其他程序" Style="{StaticResource SetName}"/>
+                  <TextBlock Style="{StaticResource SetNote}" Text="读文件时用 Windows 的后台模式，磁盘和内存都排在其他程序后面：不拖慢正在用的程序，也不把它们缓存在内存里的数据挤掉。电脑空闲时速度基本不受影响，同时在做别的事时查得慢一些。"/>
+                </StackPanel>
+              </DockPanel>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+    </Grid>
+
     <!-- ==================== 帮助：使用说明、安全风险提示、使用反馈 ==================== -->
     <Grid x:Name="PageHelp" Grid.Column="1" Grid.Row="0" Visibility="Collapsed">
       <ScrollViewer x:Name="HelpScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
@@ -7620,6 +8045,10 @@ if ($script:mode -match '(?i)/autoclean') {
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">系统还原点</Run><Run>：显示还原点有几个、占了多少、最多能用到多少。要调小上限或删掉还原点，点「打开系统保护设置」在 Windows 自己的设置里改；本工具不直接删还原点。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
                 <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">压缩文件夹</Run><Run>：NTFS 压缩，文件照常打开和修改，只是占的空间变小。适合文档、代码、旧项目。</Run></TextBlock>
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
@@ -7672,7 +8101,11 @@ if ($script:mode -match '(?i)/autoclean') {
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>选中一行可以</Run><Run FontWeight="SemiBold">打开位置</Run><Run>、</Run><Run FontWeight="SemiBold">压缩（不删文件）</Run><Run>或</Run><Run FontWeight="SemiBold">删除</Run><Run>；按住 Ctrl 或 Shift 可以选多项一起删。删除时可以选「移到回收站」（能恢复）或「永久删除」（立刻腾出空间），都要先勾选确认。</Run></TextBlock>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>选中一行可以</Run><Run FontWeight="SemiBold">打开位置</Run><Run>、</Run><Run FontWeight="SemiBold">压缩（不删文件）</Run><Run>或</Run><Run FontWeight="SemiBold">删除</Run><Run>。勾选每一行前面的方框（和资源管理器的「项目复选框」一样），或按住 Ctrl、Shift，可以选多项一起删；</Run><Run FontWeight="SemiBold">按住右键上下拖</Run><Run>可以一次选中连着的几行，松开后弹出右键菜单。删除时可以选「移到回收站」（能恢复）或「永久删除」（立刻腾出空间），都要先勾选确认。</Run></TextBlock>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                <TextBlock Style="{StaticResource HelpPara}"><Run FontWeight="SemiBold">实际占用和硬链接</Run><Run>：快速扫描时，名字下面会注明压缩、稀疏和只在云端（OneDrive 等）的文件实际只占多少，以及 WinSxS 这类文件夹里有多少是硬链接（同一份文件在别处也有名字，删了这个名字不腾空间）。点「</Run><Run FontWeight="SemiBold">空间明细</Run><Run>」可以看到已用空间分成哪几块：文件实际占用、文件表（MFT）和其他，以及为什么和按文件大小相加对不上。删除时也会写明实际能腾出多少。</Run></TextBlock>
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
@@ -7803,7 +8236,11 @@ if ($script:mode -match '(?i)/autoclean') {
               <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">执行时能关窗口吗？</Run><LineBreak/><Run>做完前请不要关闭窗口，想停下请点「取消」。可以点「在后台继续」收起进度卡片，窗口底部和任务栏图标上都能看到进度。</Run></TextBlock>
               <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">在哪看详细过程？</Run><LineBreak/><Run>做过哪些删除和搬运，看左侧的「操作日志」；程序运行的技术细节，看左下角「运行记录」，完整文件在 %TEMP%\CleanC-run.log。</Run></TextBlock>
               <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">释放的空间比预计少？</Run><LineBreak/><Run>放进回收站的文件，要清空回收站后才真正释放空间；正被其他程序占用的文件会被跳过。</Run></TextBlock>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">能用深色界面吗？</Run><LineBreak/><Run>可以。点左下角的「外观」，选浅色、深色或跟随系统（照 Windows 设置里「选择应用模式」来）。换了以后本工具会关闭，再自动打开。</Run></TextBlock>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">能用深色界面吗？</Run><LineBreak/><Run>可以。在左边的「设置」里（或点左下角的「外观」）选浅色、深色或跟随系统（照 Windows 设置里「选择应用模式」来）。换了以后本工具会关闭，再自动打开。</Run></TextBlock>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">能把用不上的页面和按钮藏起来吗？</Run><LineBreak/><Run>可以。在左边的「设置」里勾掉不用的页面、左下角的按钮、页面标题下的说明，以及空间地图里的复选框、占比条、百分比、详细信息和「快速扫描」开关。藏起来的随时可以在那里打开，里面的设置和记录都不受影响；「恢复默认显示」一下全部恢复。</Run></TextBlock>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">为什么扫描出来的合计和「已用空间」对不上？</Run><LineBreak/><Run>按文件大小相加时，硬链接（同一份文件有好几个名字，WinSxS 和 System32 里很多）会重复算；压缩、稀疏和只在云端的文件实际占得比文件大小少；文件表（MFT）、NTFS 的日志、Windows 给更新预留的空间（保留的存储）也占地方，但不是普通文件。快速扫描后，在空间地图点「空间明细」可以看到每一块各多少。</Run></TextBlock>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">WinSxS 看起来很大，能删吗？</Run><LineBreak/><Run>不能手动删，删了系统可能坏掉。里面很多文件和 System32 等位置是同一份（硬链接），资源管理器按名字相加会重复算，实际占的比看上去小；快速扫描时空间地图会注明其中多少是硬链接。真正能清掉的是更新替换下来的旧组件，用「清理 C 盘」里的「WinSxS 组件清理 (DISM)」。</Run></TextBlock>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">为什么不清理 Prefetch 文件夹，也没有「内存加速」？</Run><LineBreak/><Run>Prefetch 里记的是程序启动时要读哪些文件，Windows 靠它让常用软件打开得更快，一共只有几十 MB，删了下次启动反而变慢，过几天又会长回来。内存也一样：Windows 会把空闲的内存拿来缓存常用的文件（任务管理器里的「已缓存」），别的程序要用时马上让出来，强行清空只会让电脑变慢。所以这两样本工具都不做。</Run></TextBlock>
               <TextBlock Style="{StaticResource HelpPara}" Margin="0,10,0,0"><Run FontWeight="SemiBold">怎么知道有没有新版本？</Run><LineBreak/><Run>在下面「使用反馈」里点「检查新版本」，有新版本会打开下载页面；下载新的 exe 换掉旧的就行，设置、日志和自动提醒都会保留。本工具平时不联网，只在你点这个按钮时连一次 GitHub。</Run></TextBlock>
             </StackPanel>
           </Border>
@@ -7813,7 +8250,7 @@ if ($script:mode -match '(?i)/autoclean') {
                 <TextBlock Text="&#xE8BD;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/>
                 <TextBlock Text="使用反馈" Style="{StaticResource HelpHead}"/>
               </StackPanel>
-              <TextBlock Style="{StaticResource HelpPara}" Margin="0,8,0,0" Text="遇到问题、发现错误或有改进建议，欢迎直接联系开发者。"/>
+              <TextBlock Style="{StaticResource HelpPara}" Margin="0,8,0,0" Text="遇到问题、发现错误或有改进建议，欢迎加开发者微信，或在 GitHub 上提交问题（Issues）。"/>
               <Border Background="#F5F5F7" CornerRadius="10" Padding="18,14" Margin="0,14,0,0">
                 <DockPanel>
                   <Button x:Name="BtnCopyWx" DockPanel.Dock="Right" Style="{StaticResource Primary}" Content="复制微信号" Padding="18,7" VerticalAlignment="Center"/>
@@ -7824,6 +8261,23 @@ if ($script:mode -match '(?i)/autoclean') {
                     <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
                       <TextBlock Text="开发者微信" Style="{StaticResource Caption}"/>
                       <TextBlock x:Name="DevWx" Text="45915504" FontSize="20" FontWeight="SemiBold" Margin="0,1,0,0" TextOptions.TextFormattingMode="Ideal"/>
+                    </StackPanel>
+                  </StackPanel>
+                </DockPanel>
+              </Border>
+              <Border Background="#F5F5F7" CornerRadius="10" Padding="18,14" Margin="0,10,0,0">
+                <DockPanel>
+                  <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="BtnIssue" Content="提交问题" Padding="14,7" Margin="0,0,8,0"/>
+                    <Button x:Name="BtnGitHub" Content="打开主页" Padding="14,7"/>
+                  </StackPanel>
+                  <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Width="40" Height="40" CornerRadius="20" Background="#E8F0FE">
+                      <TextBlock Text="&#xE943;" FontFamily="{StaticResource Icons}" FontSize="18" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
+                      <TextBlock Text="GitHub 项目主页：下载新版本、看源代码、提交问题" Style="{StaticResource Caption}"/>
+                      <TextBlock x:Name="GitHubUrl" Text="github.com/Xuanqiyun/ClearC" FontSize="16" FontWeight="SemiBold" Margin="0,1,0,0" TextOptions.TextFormattingMode="Ideal"/>
                     </StackPanel>
                   </StackPanel>
                 </DockPanel>
@@ -7988,7 +8442,7 @@ foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageM
                'BtnMovesRefresh','MovesInfo','MovesList','EmptyMoves','EmptyMovesText',
                'AutoRemindOn','AutoRemindGB','AutoRemindNote','AutoCleanOn','AutoCleanNote','HistInfo','HistChart','HistLast','HistFirst',
                'BtnLogOpenDir','BtnLogRefresh','LogKeep','LogKeepNote','LogCats','LogRange','LogSearch','LogCount','LogList','EmptyLog','EmptyLogText',
-               'BtnLang','BtnLangText','BtnTheme','BtnThemeText','NavHelp','PageHelp','HelpScroll','FeedbackCard','RiskCard','BtnFeedback','BtnCopyWx','BtnCopyDiag','BtnOpenLog','CopyHint','DevWx','BtnSelfTest','BtnCheckUpdate','MapFast','MapChat',
+               'BtnLang','BtnLangText','BtnTheme','BtnThemeText','NavHelp','PageHelp','HelpScroll','FeedbackCard','RiskCard','BtnFeedback','BtnCopyWx','BtnGitHub','BtnIssue','BtnCopyDiag','BtnOpenLog','CopyHint','DevWx','BtnSelfTest','BtnCheckUpdate','MapFast','MapChat',
                'NavClean','NavDup','PageClean','PageDup','AppVer','BtnLog','BtnLogText','BtnLogHide','LogPanel','Dim',
                'CapFree','CapTotal','CapBar','CapReclaim','EmptyClean','EmptyCleanText','EmptyDup','EmptyDupText','SizeCustomRow',
                'DestPick','BtnDestBrowse','DestHint','BtnOneClick','BtnScan','BtnRun','BtnHogs','Hint','List','Summary','Log',
@@ -8000,15 +8454,22 @@ foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageM
                'Overlay','OvTitle','OvTime','OvBar','OvStep','OvWhat','OvChecklist','OvDetail','OvSubBar','OvPlanBox','OvPlanScroll','OvPlan','OvHide','OvClose','OvNote',
                'BtnKeepNew','BtnKeepOld','BtnPickC','BtnPickNone','DupSummary',
                'CleanScroll','CleanMore','CleanMoreText','CleanOverview','CleanOverviewText',
-               'OvCancel','OpCancel','MovesTabCand','MovesTabDone','CandList','EmptyCand','EmptyCandText','MovesCard','CandStore','BtnCandStore','CandStoreText','CandBar','MovesDest','BtnCandMove','BtnCandAll','BtnCandNone','CandSel','MapViewTree','BtnMapReport','MapTree','BtnMapExport','MapFilter','MapMinSize','MapAge','MapType','MapName','MapUnder') { $ctl[$n] = $win.FindName($n) }
+               'OvCancel','OpCancel','MovesTabCand','MovesTabDone','CandList','EmptyCand','EmptyCandText','MovesCard','CandStore','BtnCandStore','CandStoreText','CandBar','MovesDest','BtnCandMove','BtnCandAll','BtnCandNone','CandSel','MapViewTree','BtnMapReport','MapTree','BtnMapExport','MapFilter','MapMinSize','MapAge','MapType','MapName','MapUnder',
+               'MapAll','BtnMapAcct','MapMenu','MmEnter','MmOpen','MmCopy','MmCompress','MmDelete','NavHeadManage','NavSettings','PageSettings','SetScroll','BtnSetReset',
+               'SetThemeLight','SetThemeDark','SetThemeSystem','SetLangZh','SetLangEn','SetPageDup','SetPageSave','SetPageApps','SetPageMoves','SetPageAuto','SetPageLog',
+               'SetLinkTheme','SetLinkLang','SetLinkFeedback','SetLinkLog','SetPageSub','SetMapCheck','SetMapBar','SetMapPct','SetMapMeta','SetMapDisk','SetMapFastBtn','SetFast','SetLowIo',
+               'SaveRpState','BtnRestoreOpen') { $ctl[$n] = $win.FindName($n) }
+# 右键菜单不在窗口的元素树里：万一按名字找不到，就从菜单里一个个取
+if (-not $ctl.MmDelete -and $ctl.MapList.ContextMenu) { $ctl.MapMenu = $ctl.MapList.ContextMenu; foreach ($it in $ctl.MapMenu.Items) { if ($it.Name) { $ctl[$it.Name] = $it } } }
 
 # ---------- 左侧导航：两页切换 ----------
 $script:pageList = [ordered]@{
     clean = @('PageClean', 'NavClean'); dup = @('PageDup', 'NavDup'); save = @('PageSave', 'NavSave'); map = @('PageMap', 'NavMap'); apps = @('PageApps', 'NavApps')
-    moves = @('PageMoves', 'NavMoves'); auto = @('PageAuto', 'NavAuto'); log = @('PageLog', 'NavLog'); help = @('PageHelp', 'NavHelp')
+    moves = @('PageMoves', 'NavMoves'); auto = @('PageAuto', 'NavAuto'); log = @('PageLog', 'NavLog'); help = @('PageHelp', 'NavHelp'); settings = @('PageSettings', 'NavSettings')
 }
 $script:pageLoaded = @{}
 function Show-Page([string]$key) {
+    $script:curPage = $key
     foreach ($k in $script:pageList.Keys) {
         $on = ($k -eq $key)
         $ctl[$script:pageList[$k][0]].Visibility = if ($on) { 'Visible' } else { 'Collapsed' }
@@ -8023,6 +8484,7 @@ function Show-Page([string]$key) {
         'moves' { if (-not $script:candScanned) { $script:candPending = $true }; if (-not $script:worker) { Load-Moves } }
         'auto'  { Load-Auto }
         'log'   { Load-Log }
+        'settings' { Load-Settings }
     }
 }
 foreach ($k in $script:pageList.Keys) {
@@ -8039,6 +8501,16 @@ $ctl.BtnFeedback.Add_Click({
     $ctl.HelpScroll.UpdateLayout()
     $ctl.FeedbackCard.BringIntoView()
 })
+# 点左侧「帮助」总是回到帮助的开头（先点「使用反馈」滚到下面后，帮助已是选中状态，Checked 不会再触发）
+$ctl.NavHelp.Add_Click({ $ctl.HelpScroll.ScrollToTop() })
+$script:projectPage = 'https://github.com/Xuanqiyun/ClearC'
+function Open-Web([string]$url) {
+    # 用资源管理器打开网址：浏览器不会以管理员身份运行
+    try { Start-Process -FilePath "$env:SystemRoot\explorer.exe" -ArgumentList $url; UI-Log ((T "打开网页：{0}") -f $url) }
+    catch { Show-CopyHint ((T "打不开浏览器，请手动访问 {0}") -f $url) }
+}
+$ctl.BtnGitHub.Add_Click({ Open-Web $script:projectPage })
+$ctl.BtnIssue.Add_Click({ Open-Web ($script:projectPage + '/issues') })
 $ctl.BtnCopyWx.Add_Click({
     try { [System.Windows.Clipboard]::SetText($script:devWechat); $ctl.BtnCopyWx.Content = (T '已复制') } catch { $ctl.BtnCopyWx.Content = (T '复制失败，请手动输入') }
 })
@@ -8104,6 +8576,7 @@ function Show-Sheet {
           [string]$Primary = '', [string]$Cancel = '', [string]$Kind = 'info', [string]$Confirm = '')
     if (-not $Primary) { $Primary = $Buttons[-1] }
     if (-not $Cancel)  { $Cancel = $Buttons[0] }
+    if ($script:uiTest) { $script:uiSheets.Add(("{0}`n{1}" -f $Title, $Text)); return $Cancel }   # 界面自测：不弹对话框，当作点了取消
     $sw = $null
     try { $sw = [Windows.Markup.XamlReader]::Parse([Theme]::Xaml($script:sheetXaml)) } catch { $sw = $null }
     if (-not $sw) {
@@ -9512,7 +9985,7 @@ $ctl.BtnMapStop.Add_Click({ [DiskMap]::Cancel = $true; UI-Log (T '空间地图�
 
 function New-MapRow($name, $path, [double]$size, [double]$max, [double]$parent, [bool]$isDir, $node, [string]$meta, [string]$kind) {
     $r = New-Object MapRow
-    $r.Name = $name; $r.Path = $path; $r.Size = [long]$size; $r.SizeText = Fmt $size; $r.IsDir = $isDir; $r.Node = $node; $r.Meta = $meta
+    $r.Name = $name; $r.Path = $path; $r.Size = [long]$size; $r.SizeText = Fmt $size; $r.IsDir = $isDir; $r.Node = $node; $r.Meta = $meta; $r.Disk = -1
     $r.Bar = if ($max -gt 0) { [math]::Max([double]2, 160.0 * $size / $max) } else { 0 }
     if ($size -le 0) { $r.Bar = 0 }
     $r.Pct = if ($parent -gt 0) { "{0:N1}%" -f (100.0 * $size / $parent) } else { '' }
@@ -9540,9 +10013,19 @@ function Test-ChatPath([string]$path) {
     foreach ($d in $script:chatDirs) { if ($p -ieq $d -or $p.StartsWith($d + '\', [StringComparison]::OrdinalIgnoreCase)) { return $true } }
     return $false
 }
+# 实际占用和硬链接的说明（快速扫描读文件表时才知道；设置里可以关掉）
+function Get-DiskNote([double]$size, [double]$disk, [double]$shared, [bool]$isFile) {
+    $t = ''
+    if ($isFile -and $shared -gt 0) { $t += (T ' · 硬链接：别处还有同一份，删了这个不腾空间') }
+    elseif (-not $isFile -and $shared -ge 32MB -and $shared -ge $size * 0.05) { $t += (T " · 其中 {0} 是硬链接（别处还有同一份）") -f (Fmt $shared) }
+    if ($disk -ge 0 -and ($size - $disk) -ge 32MB -and $disk -lt $size * 0.85) { $t += (T " · 实际只占 {0}") -f (Fmt $disk) }
+    return $t
+}
 function Show-MapLevel($node) {
     if (-not $node) { return }
     $script:mapCur = $node
+    $dn = Get-Flag 'MapDisk'
+    $hasDisk = $dn -and $script:mapRoot -and $script:mapRoot.HasDisk
     $path = $node.FullPath()
     $rows = New-Object System.Collections.Generic.List[MapRow]
     # 只列最大的 500 项（子文件夹和这一层自己的文件放在一起比），其余合成一行：上万项的文件夹（比如 WinSxS）也能马上打开
@@ -9577,13 +10060,21 @@ function Show-MapLevel($node) {
                 }
             }
             if ($k.Denied) { $meta += (T ' · 部分内容没有权限读取') }
+            if ($hasDisk) { $meta += Get-DiskNote ([double]$k.Size) ([double]$k.Disk) ([double]$k.Shared) $false }
             $row = New-MapRow $k.Name $p $k.Size $max $node.Size $true $k $meta 'dir'
             $row.When = $when; $row.FileCount = [long]$k.Files
+            if ($script:mapRoot.HasDisk) { $row.Disk = [long]$k.Disk }
             [void]$rows.Add($row)
         } else {
             $f = $x.F
-            $row = New-MapRow $f.Name $f.Path $f.Size $max $node.Size $false $null ((T "文件 · 修改于 {0:yyyy-MM-dd}") -f $f.Modified) 'file'
+            $fm = (T "文件 · 修改于 {0:yyyy-MM-dd}") -f $f.Modified
+            $fd = [double]$f.Disk
+            # 目录里记的实际占用看着明显小（压缩、稀疏、只在云端）：再问一次 Windows，以它为准
+            if ($fd -ge 0 -and ([double]$f.Size - $fd) -ge 32MB) { $fd = [double][FsTools]::OnDisk($f.Path) }
+            if ($dn) { $fm += Get-DiskNote ([double]$f.Size) $fd 0 $true }
+            $row = New-MapRow $f.Name $f.Path $f.Size $max $node.Size $false $null $fm 'file'
             $row.When = '{0:yyyy-MM-dd HH:mm}' -f $f.Modified
+            $row.Disk = [long]$fd
             [void]$rows.Add($row)
         }
     }
@@ -9596,6 +10087,7 @@ function Show-MapLevel($node) {
     $ctl.MapList.ItemsSource = $rows
     $ctl.MapPath.Text = $path
     $ctl.MapInfo.Text = (T "这一层共 {0}，{1:N0} 个文件{2}") -f (Fmt $node.Size), $node.Files, $(if ($script:mapScanAt) { (T " · 扫描于 {0:HH:mm}（{1}）") -f $script:mapScanAt, $script:mapHow } else { '' })
+    $ctl.BtnMapAcct.Visibility = if ($script:mapRoot -and $script:mapRoot.HasDisk) { 'Visible' } else { 'Collapsed' }
     $ctl.BtnMapUp.IsEnabled = ($null -ne $node.Parent)
     $ctl.EmptyMap.Visibility = if ($rows.Count -gt 0) { 'Collapsed' } else { 'Visible' }
     if ($rows.Count -eq 0) { $ctl.EmptyMapText.Text = (T '这个文件夹是空的') }
@@ -9756,10 +10248,14 @@ function Show-MapFiles {
     else { $res = [DiskMap]::FindFiles($f.Min, $f.Before, $f.Exts, $f.Name, $f.Under, $script:mapFindMax) }
     $max = if ($res.Files.Count -gt 0) { [double]$res.Files[0].Size } else { 0 }
     $tot = if ($script:mapRoot) { [double]$script:mapRoot.Size } else { 0 }
+    $dn = (Get-Flag 'MapDisk') -and $script:mapRoot -and $script:mapRoot.HasDisk
     foreach ($x in $res.Files) {
         $p = $x.Path
-        $row = New-MapRow $x.Name $p $x.Size $max $tot $false $null ((T "{0} · 修改于 {1:yyyy-MM-dd}") -f (Split-Path $p -Parent), $x.Modified) 'file'
+        $fm = (T "{0} · 修改于 {1:yyyy-MM-dd}") -f (Split-Path $p -Parent), $x.Modified
+        if ($dn) { $fm += Get-DiskNote ([double]$x.Size) ([double]$x.Disk) $(if ($x.Shared) { [double]$x.Size } else { 0 }) $true }
+        $row = New-MapRow $x.Name $p $x.Size $max $tot $false $null $fm 'file'
         $row.When = '{0:yyyy-MM-dd HH:mm}' -f $x.Modified
+        $row.Disk = [long]$x.Disk
         # 聊天记录里的文件只看不删：要腾地方就整体搬家
         if ($f.Chat) { $row.Locked = $true; $row.LockTip = (T '聊天记录里的文件只能查看和打开位置；要腾地方，到「搬家管理」把整个聊天记录搬到其他盘') }
         [void]$rows.Add($row)
@@ -9776,6 +10272,7 @@ function Show-MapFiles {
     }
     $ctl.MapUnder.ToolTip = if ($script:mapCur) { $script:mapCur.FullPath() } else { $null }
     $ctl.BtnMapUp.IsEnabled = $false
+    $ctl.BtnMapAcct.Visibility = 'Collapsed'
     $ctl.EmptyMap.Visibility = if ($rows.Count -gt 0) { 'Collapsed' } else { 'Visible' }
     if ($rows.Count -eq 0) { $ctl.EmptyMapText.Text = (T '没有符合条件的文件，可以把条件放宽一些') }
     $ctl.BtnMapExport.IsEnabled = ($rows.Count -gt 0)
@@ -9793,12 +10290,13 @@ $ctl.MapChat.Add_Unchecked({ Refresh-MapFiles })
 # 快速扫描（直接读文件表）开关：存在设置里，所有页面统计大小时都按它来
 $ctl.MapFast.IsChecked = ((Get-Setting 'FastScan' '1') -ne '0')
 [DiskMap]::MftOff = -not $ctl.MapFast.IsChecked
-$ctl.MapFast.Add_Click({
-    $on = [bool]$ctl.MapFast.IsChecked
+function Set-FastScan([bool]$on) {
+    $ctl.MapFast.IsChecked = $on; $ctl.SetFast.IsChecked = $on
     [DiskMap]::MftOff = -not $on
     Set-Setting 'FastScan' $(if ($on) { '1' } else { '0' })
     UI-Log $(if ($on) { (T '已打开快速扫描：直接读文件表') } else { (T '已关闭快速扫描：以后逐个文件夹扫描') })
-})
+}
+$ctl.MapFast.Add_Click({ Set-FastScan ([bool]$ctl.MapFast.IsChecked) })
 # 名称：停下打字 0.4 秒后再找，免得每打一个字就刷新一次
 $script:mapNameTimer = New-Object System.Windows.Threading.DispatcherTimer
 $script:mapNameTimer.Interval = [TimeSpan]::FromMilliseconds(400)
@@ -9818,6 +10316,7 @@ function Set-MapView([string]$v) {
     else {
         $ctl.MapGrow.ItemsSource = $script:growRows
         $ctl.BtnMapUp.IsEnabled = $false
+        $ctl.BtnMapAcct.Visibility = 'Collapsed'
         $has = $script:growRows -and $script:growRows.Count -gt 0
         $ctl.EmptyMap.Visibility = if ($has) { 'Collapsed' } else { 'Visible' }
         $ctl.EmptyMapText.Text = $script:growNote
@@ -9832,6 +10331,32 @@ $ctl.MapViewTree.Add_Checked({ Set-MapView 'tree' })
 $ctl.MapViewFiles.Add_Checked({ Set-MapView 'files' })
 $ctl.MapViewGrow.Add_Checked({ Set-MapView 'grow' })
 $ctl.BtnMapUp.Add_Click({ if ($script:mapCur -and $script:mapCur.Parent) { Show-MapLevel $script:mapCur.Parent } })
+# 空间明细：已用空间都花在哪，为什么和按文件大小相加对不上（快速扫描读了文件表才有）
+function Show-SpaceAcct {
+    $r = $script:mapRoot
+    if (-not $r -or -not $r.HasDisk) { return }
+    $drive = $r.FullPath()
+    $total = [double]0; $used = [double]0
+    try { $di = New-Object System.IO.DriveInfo $drive; $total = [double]$di.TotalSize; $used = [double]($di.TotalSize - $di.TotalFreeSpace) } catch {}
+    $files = [double]$r.UniqueDisk; $mft = [double]$r.MftBytes
+    $a = New-Object System.Collections.Generic.List[string]
+    $a.Add(((T "· 文件实际占用 {0}：每个文件只算一次，有几个名字的（硬链接）也只算一份") -f (Fmt $files)))
+    $svi = [DiskMap]::Find($r, (Join-Path $drive 'System Volume Information'))
+    if ($svi -and $svi.Disk -ge 100MB) { $a.Add(((T "　其中系统还原点等（System Volume Information）{0}，在「省空间」里可以查看") -f (Fmt ([double]$svi.Disk)))) }
+    $a.Add(((T "· 文件表（MFT）{0}：NTFS 记录每个文件信息的地方，文件越多越大，删了文件也不会变小") -f (Fmt $mft)))
+    $rest = $used - $files - $mft
+    if ($used -gt 0 -and $rest -ge 0) { $a.Add(((T "· 其他 {0}：NTFS 的日志和变更日志、文件夹的索引、Windows 给系统更新预留的空间（保留的存储）等，不是普通文件") -f (Fmt $rest))) }
+    $b = New-Object System.Collections.Generic.List[string]
+    $b.Add(((T "· 按文件大小相加（资源管理器的算法）是 {0}") -f (Fmt ([double]$r.Size))))
+    if ($r.Linked -gt 0) { $b.Add(((T "· 硬链接：{0} 的文件不止一个名字（大多在 WinSxS 和 System32 里），按名字相加会重复算，盘上只有一份") -f (Fmt ([double]$r.Linked)))) }
+    $d = [double]$r.UniqueSize - [double]$r.UniqueDisk
+    if ($d -ge 1MB) { $b.Add(((T "· 压缩、稀疏和只在云端的文件：实际占用比文件大小合计少 {0}（已经扣掉了零头按整块分配多占的部分）") -f (Fmt $d))) }
+    elseif ($d -le -1MB) { $b.Add(((T "· 文件按整块（簇，通常 4 KB）分配，零头也占一整块：实际占用比文件大小合计多 {0}") -f (Fmt (-$d)))) }
+    $text = ((T "{0} 已用 {1}（共 {2}），其中：") -f $drive.TrimEnd('\'), (Fmt $used), (Fmt $total)) + "`n" + ($a -join "`n") + "`n`n" + (T '和「按文件大小相加」的差别：') + "`n" + ($b -join "`n")
+    if ($script:mapScanAt) { $text += "`n`n" + ((T "按 {0:HH:mm} 扫描的结果。") -f $script:mapScanAt) }
+    Show-Sheet -Title (T '空间明细') -Text $text | Out-Null
+}
+$ctl.BtnMapAcct.Add_Click({ Show-SpaceAcct })
 $ctl.MapGrow.Add_MouseDoubleClick({
     $g = $ctl.MapGrow.SelectedItem
     if (-not $g -or -not $script:mapRoot) { return }
@@ -9848,6 +10373,9 @@ $ctl.MapList.Add_MouseDoubleClick({
     }
 })
 function Update-MapSel {
+    $nAll = $ctl.MapList.Items.Count; $nSel = $ctl.MapList.SelectedItems.Count
+    $ctl.MapAll.IsEnabled = ($script:mapView -ne 'grow') -and $nAll -gt 0
+    $ctl.MapAll.IsChecked = if ($script:mapView -eq 'grow' -or $nSel -eq 0) { $false } elseif ($nSel -ge $nAll) { $true } else { $null }
     $sel = if ($script:mapView -ne 'grow') { @($ctl.MapList.SelectedItems) } else { @() }
     $r = if ($sel.Count -eq 1) { $sel[0] } else { $null }
     $busy = [bool]$script:worker
@@ -9855,7 +10383,7 @@ function Update-MapSel {
     $ctl.BtnMapOpen.IsEnabled = [bool]$r -and -not $busy
     $ctl.BtnMapDelete.IsEnabled = ($del.Count -gt 0) -and -not $busy
     $ctl.BtnMapCompress.IsEnabled = [bool]$r -and $r.IsDir -and -not $busy -and -not (Get-CompressBlock $r.Path)
-    if ($sel.Count -eq 0) { $ctl.MapSel.Text = (T '选中一行可以打开位置、压缩或删除；按住 Ctrl 或 Shift 可以选多项一起删。系统文件夹、软件安装文件夹、C 盘个人文件夹和搬家后的数据带小锁，不能在这里删。'); return }
+    if ($sel.Count -eq 0) { $ctl.MapSel.Text = (T '选中一行可以打开位置、压缩或删除；勾选前面的方框，或按住 Ctrl、Shift，可以选多项一起删；按住右键上下拖可以一次选中连着的几行。系统文件夹、软件安装文件夹、C 盘个人文件夹和搬家后的数据带小锁，不能在这里删。'); return }
     if ($sel.Count -gt 1) {
         $tot = [double]0; foreach ($x in $sel) { $tot += [double]$x.Size }
         $t = (T "已选 {0} 项，共 {1}") -f $sel.Count, (Fmt $tot)
@@ -9864,7 +10392,145 @@ function Update-MapSel {
     }
     $ctl.MapSel.Text = if ($r.Locked) { (T "{0}：不能在这里删（{1}）") -f $r.Name, $r.LockTip } else { "{0}  {1}" -f $r.Name, $r.SizeText }
 }
-$ctl.MapList.Add_SelectionChanged({ Update-MapSel })
+$script:bulkSel = $false
+$ctl.MapList.Add_SelectionChanged({ if (-not $script:bulkSel) { Update-MapSel } })
+$ctl.MapAll.Add_Click({
+    $lv = $ctl.MapList
+    if ($lv.Items.Count -gt 0 -and $lv.SelectedItems.Count -ge $lv.Items.Count) { $lv.UnselectAll() } else { $lv.SelectAll() }
+    Update-MapSel
+})
+# ---------- 右键菜单：和下面的按钮做一样的事 ----------
+function Invoke-Btn($b) { if ($b -and $b.IsEnabled) { $b.RaiseEvent((New-Object System.Windows.RoutedEventArgs ([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))) } }
+# 右键菜单打开前：照选中的行设好每一项能不能点（返回 $false：没选中，不弹菜单）
+function Update-MapMenu {
+    $sel = @($ctl.MapList.SelectedItems)
+    if ($sel.Count -eq 0 -or $script:mapView -eq 'grow') { return $false }
+    $one = if ($sel.Count -eq 1) { $sel[0] } else { $null }
+    $ctl.MmEnter.Visibility = if ($one -and $one.IsDir -and $one.Node) { 'Visible' } else { 'Collapsed' }
+    $ctl.MmOpen.IsEnabled = $ctl.BtnMapOpen.IsEnabled
+    $ctl.MmCopy.IsEnabled = (@($sel | Where-Object { $_.Path }).Count -gt 0)
+    $ctl.MmCompress.IsEnabled = $ctl.BtnMapCompress.IsEnabled
+    $ctl.MmDelete.IsEnabled = $ctl.BtnMapDelete.IsEnabled
+    $nd = @($sel | Where-Object { -not $_.Locked -and $_.Size -gt 0 }).Count
+    $ctl.MmDelete.Header = if ($nd -gt 1) { (T "删除选中的 {0} 项…") -f $nd } else { (T '删除…') }
+    return $true
+}
+$ctl.MapList.Add_ContextMenuOpening({ param($s, $e) if (-not (Update-MapMenu)) { $e.Handled = $true } })
+$ctl.MmEnter.Add_Click({ $r = $ctl.MapList.SelectedItem; if ($r -and $r.IsDir -and $r.Node) { if ($script:mapView -ne 'dirs') { $ctl.MapViewDirs.IsChecked = $true }; Show-MapLevel $r.Node } })
+$ctl.MmOpen.Add_Click({ Invoke-Btn $ctl.BtnMapOpen })
+$ctl.MmCompress.Add_Click({ Invoke-Btn $ctl.BtnMapCompress })
+$ctl.MmDelete.Add_Click({ Invoke-Btn $ctl.BtnMapDelete })
+$ctl.MmCopy.Add_Click({
+    $ps = @($ctl.MapList.SelectedItems | Where-Object { $_.Path } | ForEach-Object { [string]$_.Path })
+    if ($ps.Count -gt 0) { try { [System.Windows.Clipboard]::SetText(($ps -join "`r`n")); $ctl.MapSel.Text = (T "已复制 {0} 个路径") -f $ps.Count } catch {} }
+})
+# ---------- 按住右键上下拖：选中连着的几行（像在资源管理器里拉框）；松开后弹出右键菜单 ----------
+# 按住 Ctrl 再拖：在原来选中的基础上加上这一段
+function Find-Visual($root, [type]$t) {
+    $q = New-Object System.Collections.Queue; $q.Enqueue($root)
+    while ($q.Count -gt 0) {
+        $v = $q.Dequeue()
+        if ($v -is $t) { return $v }
+        $n = [System.Windows.Media.VisualTreeHelper]::GetChildrenCount($v)
+        for ($k = 0; $k -lt $n; $k++) { $q.Enqueue([System.Windows.Media.VisualTreeHelper]::GetChild($v, $k)) }
+    }
+    return $null
+}
+# 纵坐标 y 处是第几行（-1 不在任何一行上）。横坐标取中间，行和行之间的缝上下各挪一点再找
+function Get-RowAt($lv, [double]$y) {
+    $h = [double]$lv.ActualHeight; if ($h -le 4) { return -1 }
+    $yy = [math]::Min([math]::Max($y, 2.0), $h - 2.0)
+    foreach ($dy in 0, -3, 3) {
+        $pt = New-Object System.Windows.Point ([math]::Max(30.0, [double]$lv.ActualWidth / 2)), ($yy + $dy)
+        $hit = $lv.InputHitTest($pt)
+        if ($hit -is [System.Windows.DependencyObject]) {
+            $c = $null; try { $c = [System.Windows.Controls.ItemsControl]::ContainerFromElement($lv, $hit) } catch {}
+            if ($c) { return $lv.ItemContainerGenerator.IndexFromContainer($c) }
+        }
+    }
+    # 拖到了最后一行下面的空白处：算最后一行
+    $n = $lv.Items.Count
+    if ($n -gt 0) {
+        $last = $lv.ItemContainerGenerator.ContainerFromIndex($n - 1)
+        if ($last) { try { if ($y -ge $last.TranslatePoint((New-Object System.Windows.Point 0, $last.ActualHeight), $lv).Y) { return $n - 1 } } catch {} }
+    }
+    return -1
+}
+$script:rdrag = $null
+$script:rdragTimer = New-Object System.Windows.Threading.DispatcherTimer
+$script:rdragTimer.Interval = [TimeSpan]::FromMilliseconds(50)
+function Set-DragRange($d, [int]$to) {
+    $lv = $d.Lv; $items = $lv.Items; $n = $items.Count
+    if ($to -lt 0 -or $to -ge $n -or $to -eq $d.Cur -or $d.Anchor -ge $n) { return }
+    $lo = [math]::Min([math]::Min($d.Anchor, $d.Cur), $to); $hi = [math]::Min($n - 1, [math]::Max([math]::Max($d.Anchor, $d.Cur), $to))
+    $a = [math]::Min($d.Anchor, $to); $b = [math]::Max($d.Anchor, $to)
+    $script:bulkSel = $true
+    try {
+        for ($i = $lo; $i -le $hi; $i++) {
+            $it = $items[$i]
+            $want = ($i -ge $a -and $i -le $b) -or ($d.Base -and $d.Base.Contains($it))
+            $has = $lv.SelectedItems.Contains($it)
+            if ($want -and -not $has) { [void]$lv.SelectedItems.Add($it) } elseif ($has -and -not $want) { [void]$lv.SelectedItems.Remove($it) }
+        }
+    } finally { $script:bulkSel = $false }
+    $d.Cur = $to
+    Update-MapSel
+}
+function Start-RightDrag($d) {
+    $lv = $d.Lv
+    if (-not $script:mapScroller) { $script:mapScroller = Find-Visual $lv ([System.Windows.Controls.ScrollViewer]) }
+    # 鼠标交给列表里的滚动区（不是列表本身：列表自己拿着鼠标、左键又没按着时会把鼠标放掉）
+    $d.Cap = if ($script:mapScroller) { $script:mapScroller } else { $lv }
+    $d.Moved = $true
+    [void]$d.Cap.CaptureMouse()
+    if ($d.Ctrl) { $d.Base = New-Object 'System.Collections.Generic.HashSet[object]'; foreach ($x in @($lv.SelectedItems)) { [void]$d.Base.Add($x) } }
+    else {
+        $script:bulkSel = $true
+        try { $lv.SelectedItems.Clear(); [void]$lv.SelectedItems.Add($lv.Items[$d.Anchor]) } finally { $script:bulkSel = $false }
+    }
+    $script:rdragTimer.Start()
+}
+function Stop-RightDrag {
+    $d = $script:rdrag; $script:rdrag = $null
+    $script:rdragTimer.Stop()
+    if ($d -and $d.Moved -and $d.Cap -and $d.Cap.IsMouseCaptured) { $d.Cap.ReleaseMouseCapture() }
+}
+$ctl.MapList.Add_PreviewMouseRightButtonDown({
+    param($s, $e)
+    Stop-RightDrag
+    if (-not ($e.OriginalSource -is [System.Windows.DependencyObject])) { return }
+    $c = $null; try { $c = [System.Windows.Controls.ItemsControl]::ContainerFromElement($s, $e.OriginalSource) } catch {}
+    if (-not $c) { return }
+    $i = $s.ItemContainerGenerator.IndexFromContainer($c)
+    if ($i -lt 0) { return }
+    $ctrl = ([System.Windows.Input.Keyboard]::Modifiers -band [System.Windows.Input.ModifierKeys]::Control) -ne 0
+    $script:rdrag = @{ Lv = $s; Anchor = $i; Cur = $i; Moved = $false; Ctrl = $ctrl; Base = $null; Cap = $null }
+})
+$ctl.MapList.Add_PreviewMouseMove({
+    param($s, $e)
+    $d = $script:rdrag
+    if (-not $d) { return }
+    if ($e.RightButton -ne [System.Windows.Input.MouseButtonState]::Pressed) { Stop-RightDrag; return }
+    $i = Get-RowAt $s ($e.GetPosition($s).Y)
+    if (-not $d.Moved) { if ($i -lt 0 -or $i -eq $d.Anchor) { return }; Start-RightDrag $d }
+    Set-DragRange $d $i
+})
+$ctl.MapList.Add_PreviewMouseRightButtonUp({ Stop-RightDrag })
+$ctl.MapList.Add_LostMouseCapture({ $d = $script:rdrag; if ($d -and $d.Moved -and $d.Cap -and -not $d.Cap.IsMouseCaptured) { $script:rdrag = $null; $script:rdragTimer.Stop() } })
+# 拖到列表上面或下面：自动滚动，边滚边选
+$script:rdragTimer.Add_Tick({
+    $d = $script:rdrag
+    if (-not $d -or -not $d.Moved) { $script:rdragTimer.Stop(); return }
+    if ([System.Windows.Input.Mouse]::RightButton -ne [System.Windows.Input.MouseButtonState]::Pressed) { Stop-RightDrag; return }
+    $lv = $d.Lv; $y = [System.Windows.Input.Mouse]::GetPosition($lv).Y; $h = [double]$lv.ActualHeight
+    if ($y -ge 0 -and $y -le $h) { return }
+    $sv = $script:mapScroller; if (-not $sv) { return }
+    $over = if ($y -lt 0) { -$y } else { $y - $h }
+    $steps = [math]::Min(4, 1 + [int][math]::Floor($over / 30))
+    for ($k = 0; $k -lt $steps; $k++) { if ($y -lt 0) { $sv.LineUp() } else { $sv.LineDown() } }
+    $lv.UpdateLayout()
+    Set-DragRange $d (Get-RowAt $lv $y)
+})
 function Csv-Line([object[]]$cells) {
     (@($cells | ForEach-Object { $s = [string]$_; if ($s -match '[",\r\n]') { '"' + $s.Replace('"', '""') + '"' } else { $s } }) -join ',')
 }
@@ -10116,16 +10782,30 @@ $ctl.BtnMapDelete.Add_Click({
         if (-not $ok) { Show-Sheet -Kind warn -Title (T '这一项不能删') -Text ("{0}`n`n{1}" -f $r.Path, (T '没有权限打开这个文件夹，看不到里面有什么，不删。')) | Out-Null; return }
     }
     $bytes = [double]0; foreach ($r in $rows) { $bytes += [double]$r.Size }
+    # 快速扫描时知道实际占用和硬链接：说清楚真正能腾出多少
+    $real = ''
+    if ($script:mapRoot -and $script:mapRoot.HasDisk) {
+        $dk = [double]0; $sh = [double]0; $known = $true
+        foreach ($r in $rows) {
+            if ($r.Disk -lt 0) { $known = $false; break }
+            $dk += [double]$r.Disk
+            if ($r.Node) { $sh += [math]::Min([double]$r.Node.Shared, [double]$r.Node.Disk) }
+        }
+        if ($known) {
+            if ($sh -ge 32MB) { $real += ((T "`n`n按快速扫描的结果，实际能腾出 {0} 到 {1}：其中 {2} 是硬链接，同一份文件在别处还有名字，那些名字还在就不会腾出空间。") -f (Fmt ([math]::Max([double]0, $dk - $sh))), (Fmt $dk), (Fmt $sh)) }
+            elseif (($bytes - $dk) -ge 32MB -and $dk -lt $bytes * 0.85) { $real += ((T "`n`n按快速扫描的结果，这些实际只占 {0}（压缩、稀疏或只在云端的文件比文件大小占得少），删掉腾出的是这么多。") -f (Fmt $dk)) }
+        }
+    }
     $how = (T "「移到回收站」可以恢复，但要清空回收站后才真正腾出空间；「永久删除」马上腾出空间，删了就找不回来。")
     $items = $null
     if ($rows.Count -eq 1) {
         $r = $rows[0]
         $kind = if ($r.IsDir) { (T '文件夹') } else { (T '文件') }
         $title = (T "删除这个{0}（{1}）？") -f $kind, $r.SizeText
-        $text = (T "{0}`n`n「移到回收站」可以恢复，但要清空回收站后才真正腾出空间；「永久删除」马上腾出空间，删了就找不回来。") -f $r.Path
+        $text = ((T "{0}`n`n「移到回收站」可以恢复，但要清空回收站后才真正腾出空间；「永久删除」马上腾出空间，删了就找不回来。") -f $r.Path) + $real
     } else {
         $title = (T "删除选中的 {0} 项（{1}）？") -f $rows.Count, (Fmt $bytes)
-        $text = $how
+        $text = $how + $real
         if ($sel.Count -gt $rows.Count) { $text += ((T "`n`n另有 {0} 项带小锁或是链接，不会删。") -f ($sel.Count - $rows.Count)) }
         $items = @($rows | Select-Object -First 40 | ForEach-Object { (T "{0}（{1}）") -f $_.Path, $_.SizeText })
         if ($rows.Count -gt 40) { $items += ((T "……另有 {0} 项") -f ($rows.Count - 40)) }
@@ -10591,6 +11271,10 @@ function Load-Save {
     }
     if ($ctl.SavePfDrive.Items.Count -gt 0) { $ctl.SavePfDrive.SelectedIndex = 0 }
     $ctl.BtnPfMove.IsEnabled = $ctl.SavePfDrive.Items.Count -gt 0
+    $rp = Get-RestoreInfo
+    $ctl.SaveRpState.Text = if (-not $rp.Ok) { (T '当前：读不到还原点的信息') }
+        elseif (-not $rp.On -and $rp.Count -eq 0) { (T '当前：这块盘没有开系统保护，也没有还原点') }
+        else { (T "当前：{0} 个还原点，占 {1}，最多可以用到 {2}") -f $rp.Count, (Fmt $rp.Used), $(if ($rp.Max -le 0 -or $rp.Max -ge 1e18) { (T '没有上限') } else { Fmt $rp.Max }) }
     $h = Get-HiberInfo
     $ctl.SaveHibState.Text = if (-not $h.Exists) { (T '当前：已关闭休眠，没有 hiberfil.sys') } elseif ($h.Reduced) { ((T "当前：精简（只留快速启动），占 {0}") -f $(Fmt $h.Bytes)) } else { ((T "当前：完整休眠，占 {0}") -f $(Fmt $h.Bytes)) }
     $col = New-Object 'System.Collections.ObjectModel.ObservableCollection[VdiskRow]'
@@ -10606,6 +11290,23 @@ function Load-Save {
     $ctl.VdEmpty.Visibility = if ($col.Count -gt 0) { 'Collapsed' } else { 'Visible' }
 }
 $ctl.BtnSaveRefresh.Add_Click({ Load-Save })
+# 系统还原点（卷影副本）：只看，不删；要调整打开 Windows 自己的「系统保护」
+function Get-RestoreInfo {
+    $r = @{ Ok = $false; On = $false; Count = 0; Used = [double]0; Max = [double]0 }
+    try {
+        $vol = @(Get-CimInstance -ClassName Win32_Volume -Filter ("DriveLetter='{0}'" -f $env:SystemDrive) -ErrorAction Stop)[0]
+        if (-not $vol) { return $r }
+        $r.Ok = $true
+        foreach ($s in @(Get-CimInstance -ClassName Win32_ShadowStorage -ErrorAction Stop)) {
+            if ($s.Volume -and [string]$s.Volume.DeviceID -eq [string]$vol.DeviceID) { $r.On = $true; $r.Used += [double]$s.UsedSpace; $r.Max = [double]$s.MaxSpace }
+        }
+        $r.Count = @(Get-CimInstance -ClassName Win32_ShadowCopy -ErrorAction Stop | Where-Object { [string]$_.VolumeName -eq [string]$vol.DeviceID }).Count
+    } catch {}
+    return $r
+}
+$ctl.BtnRestoreOpen.Add_Click({
+    try { Start-Process -FilePath "$env:SystemRoot\System32\SystemPropertiesProtection.exe" } catch { Show-Sheet -Kind warn -Title (T '打不开系统保护设置') -Text $_.Exception.Message | Out-Null }
+})
 $ctl.BtnGoDup.Add_Click({ Show-Page 'dup' })
 foreach ($b in @($ctl.BtnCosOn, $ctl.BtnCosOff)) {
     $b.Add_Click({
@@ -11259,6 +11960,259 @@ $sync.DupMerged = $done
 })
 
 # ------------------------------------------------------------
+# 设置：外观、语言、显示哪些内容
+# ------------------------------------------------------------
+# 可以关掉的页面、左下角的按钮：设置里存关掉了的，逗号隔开
+$script:optPages = [ordered]@{ dup = 'SetPageDup'; save = 'SetPageSave'; apps = 'SetPageApps'; moves = 'SetPageMoves'; auto = 'SetPageAuto'; log = 'SetPageLog' }
+$script:optLinks = [ordered]@{ theme = @('SetLinkTheme', 'BtnTheme'); lang = @('SetLinkLang', 'BtnLang'); feedback = @('SetLinkFeedback', 'BtnFeedback'); log = @('SetLinkLog', 'BtnLog') }
+# 开关：设置里的名字 → 设置页上的开关（默认都开）
+$script:optSwitches = [ordered]@{ PageSub = 'SetPageSub'; MapCheck = 'SetMapCheck'; MapBar = 'SetMapBar'; MapPct = 'SetMapPct'; MapMeta = 'SetMapMeta'; MapDisk = 'SetMapDisk'; MapFastBtn = 'SetMapFastBtn' }
+function Get-Flag([string]$k) { (Get-Setting $k '1') -ne '0' }
+function Get-HiddenSet([string]$k) { $h = @{}; foreach ($x in ((Get-Setting $k '') -split ',')) { $x = $x.Trim(); if ($x) { $h[$x] = $true } }; return $h }
+function Apply-Display {
+    $vis = { param([bool]$on) if ($on) { [System.Windows.Visibility]::Visible } else { [System.Windows.Visibility]::Collapsed } }
+    $win.Resources['SubVis'] = & $vis (Get-Flag 'PageSub')
+    $win.Resources['MapCkVis'] = & $vis (Get-Flag 'MapCheck')
+    $win.Resources['MapBarVis'] = & $vis (Get-Flag 'MapBar')
+    $win.Resources['MapPctVis'] = & $vis (Get-Flag 'MapPct')
+    $win.Resources['MapMetaVis'] = & $vis (Get-Flag 'MapMeta')
+    $ctl.MapFast.Visibility = & $vis (Get-Flag 'MapFastBtn')
+    $hp = Get-HiddenSet 'HidePages'
+    foreach ($k in $script:optPages.Keys) { $ctl[$script:pageList[$k][1]].Visibility = & $vis (-not $hp.ContainsKey($k)) }
+    $ctl.NavHeadManage.Visibility = & $vis (-not ($hp.ContainsKey('moves') -and $hp.ContainsKey('auto') -and $hp.ContainsKey('log')))
+    $hl = Get-HiddenSet 'HideLinks'
+    foreach ($k in $script:optLinks.Keys) { $ctl[$script:optLinks[$k][1]].Visibility = & $vis (-not $hl.ContainsKey($k)) }
+}
+# 换了「实际占用和硬链接」这类要重新生成行的设置：当前这一层重新列一遍
+function Refresh-MapRows {
+    if (-not $script:mapRoot) { return }
+    if ($script:mapView -eq 'files') { Show-MapFiles } elseif ($script:mapView -ne 'grow') { Show-MapLevel $(if ($script:mapCur) { $script:mapCur } else { $script:mapRoot }) }
+}
+$script:setLoading = $false
+function Load-Settings {
+    $script:setLoading = $true
+    try {
+        $ctl.SetThemeLight.IsChecked = ($script:themePref -eq 'light'); $ctl.SetThemeDark.IsChecked = ($script:themePref -eq 'dark'); $ctl.SetThemeSystem.IsChecked = ($script:themePref -eq 'system')
+        $ctl.SetLangZh.IsChecked = ($script:Lang -ne 'en'); $ctl.SetLangEn.IsChecked = ($script:Lang -eq 'en')
+        $hp = Get-HiddenSet 'HidePages'; foreach ($k in $script:optPages.Keys) { $ctl[$script:optPages[$k]].IsChecked = -not $hp.ContainsKey($k) }
+        $hl = Get-HiddenSet 'HideLinks'; foreach ($k in $script:optLinks.Keys) { $ctl[$script:optLinks[$k][0]].IsChecked = -not $hl.ContainsKey($k) }
+        foreach ($k in $script:optSwitches.Keys) { $ctl[$script:optSwitches[$k]].IsChecked = Get-Flag $k }
+        $ctl.SetFast.IsChecked = [bool]$ctl.MapFast.IsChecked
+        $ctl.SetLowIo.IsChecked = ((Get-Setting 'LowIo' '0') -eq '1')
+    } finally { $script:setLoading = $false }
+}
+function Save-Display {
+    Set-Setting 'HidePages' ((@($script:optPages.Keys | Where-Object { -not $ctl[$script:optPages[$_]].IsChecked })) -join ',')
+    Set-Setting 'HideLinks' ((@($script:optLinks.Keys | Where-Object { -not $ctl[$script:optLinks[$_][0]].IsChecked })) -join ',')
+    foreach ($k in $script:optSwitches.Keys) { Set-Setting $k $(if ($ctl[$script:optSwitches[$k]].IsChecked) { '1' } else { '0' }) }
+    Apply-Display
+}
+foreach ($k in $script:optPages.Keys) { $ctl[$script:optPages[$k]].Add_Click({ if (-not $script:setLoading) { Save-Display } }) }
+foreach ($k in $script:optLinks.Keys) { $ctl[$script:optLinks[$k][0]].Add_Click({ if (-not $script:setLoading) { Save-Display } }) }
+foreach ($k in $script:optSwitches.Keys) { $ctl[$script:optSwitches[$k]].Add_Click({ if (-not $script:setLoading) { Save-Display; if ([object]::ReferenceEquals($this, $ctl.SetMapDisk)) { Refresh-MapRows } } }) }
+$ctl.SetFast.Add_Click({ if (-not $script:setLoading) { Set-FastScan ([bool]$ctl.SetFast.IsChecked) } })
+[DupFinder]::LowPriority = ((Get-Setting 'LowIo' '0') -eq '1')
+$ctl.SetLowIo.Add_Click({
+    if ($script:setLoading) { return }
+    $on = [bool]$ctl.SetLowIo.IsChecked
+    Set-Setting 'LowIo' $(if ($on) { '1' } else { '0' }); [DupFinder]::LowPriority = $on
+    UI-Log $(if ($on) { (T '查重复文件时让着其他程序：已打开') } else { (T '查重复文件时让着其他程序：已关闭') })
+})
+$ctl.BtnSetReset.Add_Click({
+    Set-Setting 'HidePages' ''; Set-Setting 'HideLinks' ''
+    foreach ($k in $script:optSwitches.Keys) { Set-Setting $k '1' }
+    Load-Settings; Apply-Display; Refresh-MapRows
+    UI-Log (T '设置：显示内容已恢复默认')
+})
+$ctl.NavSettings.Add_Click({ $ctl.SetScroll.ScrollToTop() })
+# 外观、语言：和左下角的按钮共用，换了要重新打开本工具
+foreach ($rb in @($ctl.SetThemeLight, $ctl.SetThemeDark, $ctl.SetThemeSystem)) {
+    $rb.Add_Checked({
+        if ($script:setLoading) { return }
+        $to = if ([object]::ReferenceEquals($this, $ctl.SetThemeDark)) { 'dark' } elseif ([object]::ReferenceEquals($this, $ctl.SetThemeSystem)) { 'system' } else { 'light' }
+        if (-not (Request-Theme $to)) { Load-Settings }
+    })
+}
+$ctl.SetLangZh.Content = '中文'; $ctl.SetLangEn.Content = 'English'
+foreach ($rb in @($ctl.SetLangZh, $ctl.SetLangEn)) {
+    $rb.Add_Checked({
+        if ($script:setLoading) { return }
+        $to = if ([object]::ReferenceEquals($this, $ctl.SetLangEn)) { 'en' } else { 'zh' }
+        if ($to -eq $script:Lang -or -not (Request-Lang)) { Load-Settings }
+    })
+}
+Apply-Display
+
+# ------------------------------------------------------------
+# 界面自测（/uitest）：给 GitHub 上的自动测试用，在真的 Windows 上把新加的界面功能点一遍
+# ------------------------------------------------------------
+function Invoke-UiTest {
+    $L = New-Object System.Collections.Generic.List[string]
+    $script:uiFail = 0
+    $Error.Clear()
+    $L.Add(("ClearC UI test {0}  {1:yyyy-MM-dd HH:mm:ss}" -f $script:AppVersion, (Get-Date)))
+    # 设置先存一份，测完原样放回去
+    $setBak = $null; try { if (Test-Path -LiteralPath $script:settingsFile) { $setBak = [IO.File]::ReadAllBytes($script:settingsFile) } } catch {}
+    $fast0 = [bool]$ctl.MapFast.IsChecked
+    $step = {
+        param([string]$name, [scriptblock]$body)
+        $e0 = $Error.Count; $why = $null
+        # 检查不通过时 throw 一句说明；代码出了异常也会到这里
+        try { $null = & $body } catch { $why = [string]$_.Exception.Message; if ($_.InvocationInfo -and $_.FullyQualifiedErrorId -ne $why) { $why += ' @ ' + ([string]$_.InvocationInfo.PositionMessage).Split([char]10)[0] } }
+        # 新增的错误里，找不到文件这类（代码里本来就允许的）不算
+        $bad = @(); for ($q = 0; $q -lt [math]::Min($Error.Count - $e0, 50); $q++) {
+            $x = $Error[$q]; $id = if ($x -is [System.Management.Automation.ErrorRecord]) { [string]$x.FullyQualifiedErrorId + ' ' + [string]$x.CategoryInfo.Category } else { [string]$x.GetType().Name }
+            if ($id -notmatch 'NotFound|ObjectNotFound|PathNotFound|ItemNotFound|UnauthorizedAccess|PermissionDenied') { $bad += ([string]$x) + $(if ($x.InvocationInfo) { ' @ ' + ([string]$x.InvocationInfo.PositionMessage).Split([char]10)[0] } else { '' }) }
+        }
+        if (-not $why -and $bad.Count -gt 0) { $why = 'errors: ' + (($bad | Select-Object -First 3) -join ' | ') }
+        if ($why) { $L.Add("FAIL ${name}: $why"); $script:uiFail++ } else { $L.Add("ok   $name") }
+    }
+    $click = { param($b) $b.RaiseEvent((New-Object System.Windows.RoutedEventArgs ([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))) }
+    try {
+        & $step 'every page opens' {
+            foreach ($k in @('clean', 'dup', 'save', 'map', 'moves', 'auto', 'log', 'help', 'settings')) {
+                Show-Page $k; $win.UpdateLayout()
+                if ($ctl[$script:pageList[$k][0]].Visibility -ne 'Visible') { throw "page $k not visible" }
+            }
+        }
+        & $step 'help: back to the top after Feedback' {
+            Show-Page 'help'; $win.UpdateLayout()
+            & $click $ctl.BtnFeedback; $win.UpdateLayout()
+            $down = $ctl.HelpScroll.VerticalOffset
+            & $click $ctl.NavHelp; $win.UpdateLayout()
+            if ($down -le 0) { throw 'Feedback did not scroll down' }
+            if ($ctl.HelpScroll.VerticalOffset -ne 0) { throw ("still at {0} after clicking Help" -f $ctl.HelpScroll.VerticalOffset) }
+        }
+        & $step 'settings page shows the current settings' {
+            Show-Page 'settings'
+            if (-not $ctl.SetMapCheck.IsChecked -and (Get-Flag 'MapCheck')) { throw 'item check box switch not loaded' }
+            if ([bool]$ctl.SetFast.IsChecked -ne [bool]$ctl.MapFast.IsChecked) { throw 'fast scan switches differ' }
+            if ([string]$ctl.SetLangZh.Content -ne '中文' -or [string]$ctl.SetLangEn.Content -ne 'English') { throw 'language names missing' }
+        }
+        & $step 'display switches hide and show' {
+            $pairs = @(@('SetMapCheck', 'MapCkVis'), @('SetMapBar', 'MapBarVis'), @('SetMapPct', 'MapPctVis'), @('SetMapMeta', 'MapMetaVis'), @('SetPageSub', 'SubVis'))
+            foreach ($p in $pairs) {
+                $ctl[$p[0]].IsChecked = $false; & $click $ctl[$p[0]]
+                if ($win.Resources[$p[1]] -ne [System.Windows.Visibility]::Collapsed) { throw "$($p[0]) did not hide $($p[1])" }
+                $ctl[$p[0]].IsChecked = $true; & $click $ctl[$p[0]]
+                if ($win.Resources[$p[1]] -ne [System.Windows.Visibility]::Visible) { throw "$($p[0]) did not show $($p[1]) again" }
+            }
+            $ctl.SetMapFastBtn.IsChecked = $false; & $click $ctl.SetMapFastBtn
+            if ($ctl.MapFast.Visibility -ne 'Collapsed') { throw 'fast scan switch still shown' }
+            $ctl.SetMapFastBtn.IsChecked = $true; & $click $ctl.SetMapFastBtn
+            if ($ctl.Hint.Visibility -ne 'Visible') { throw 'page description hidden' }
+        }
+        & $step 'pages and buttons can be hidden' {
+            foreach ($n in 'SetPageMoves', 'SetPageAuto', 'SetPageLog', 'SetLinkLog') { $ctl[$n].IsChecked = $false; & $click $ctl[$n] }
+            if ($ctl.NavMoves.Visibility -ne 'Collapsed' -or $ctl.NavLog.Visibility -ne 'Collapsed') { throw 'pages still listed' }
+            if ($ctl.NavHeadManage.Visibility -ne 'Collapsed') { throw 'empty group heading still shown' }
+            if ($ctl.BtnLog.Visibility -ne 'Collapsed') { throw 'run log button still shown' }
+            & $click $ctl.BtnSetReset
+            if ($ctl.NavMoves.Visibility -ne 'Visible' -or $ctl.NavHeadManage.Visibility -ne 'Visible' -or $ctl.BtnLog.Visibility -ne 'Visible') { throw 'reset did not show them again' }
+            if (-not $ctl.SetPageMoves.IsChecked) { throw 'reset did not update the switches' }
+        }
+        & $step 'fast scan and low priority switches' {
+            Set-FastScan $false; if (-not [DiskMap]::MftOff -or $ctl.SetFast.IsChecked) { throw 'fast scan off not applied' }
+            Set-FastScan $true; if ([DiskMap]::MftOff -or -not $ctl.MapFast.IsChecked) { throw 'fast scan on not applied' }
+            $ctl.SetLowIo.IsChecked = $true; & $click $ctl.SetLowIo; if (-not [DupFinder]::LowPriority) { throw 'low priority not applied' }
+            $ctl.SetLowIo.IsChecked = $false; & $click $ctl.SetLowIo; if ([DupFinder]::LowPriority) { throw 'low priority not cleared' }
+        }
+        & $step 'appearance change asks first' {
+            $n0 = $script:uiSheets.Count
+            if (Request-Theme $(if ($script:themePref -eq 'dark') { 'light' } else { 'dark' })) { throw 'theme changed without confirmation' }
+            if ($script:uiSheets.Count -le $n0) { throw 'no confirmation asked' }
+        }
+        & $step 'restore points card' { Show-Page 'save'; if (-not [string]$ctl.SaveRpState.Text) { throw 'no state text' } }
+        # 空间地图：用一个小文件夹扫出来的树
+        $tree = [DiskMap]::Scan("$env:SystemRoot\Web", 2)
+        & $step 'space map rows' {
+            [DiskMap]::Use($tree); $script:mapRoot = $tree; $script:mapCur = $tree; $script:mapScanAt = Get-Date; $script:mapHow = 'test'
+            Show-Page 'map'; $ctl.MapViewDirs.IsChecked = $true; Show-MapLevel $tree; $win.UpdateLayout()
+            if ($ctl.MapList.Items.Count -lt 2) { throw ("only {0} rows" -f $ctl.MapList.Items.Count) }
+            if ($ctl.BtnMapAcct.Visibility -ne 'Collapsed') { throw 'space breakdown shown for a folder scan' }
+        }
+        & $step 'item check boxes select rows' {
+            $lv = $ctl.MapList; $lv.UnselectAll(); $win.UpdateLayout()
+            $c0 = $lv.ItemContainerGenerator.ContainerFromIndex(0); $c1 = $lv.ItemContainerGenerator.ContainerFromIndex(1)
+            if (-not $c0 -or -not $c1) { throw 'rows not generated' }
+            $k0 = Find-Visual $c0 ([System.Windows.Controls.CheckBox]); $k1 = Find-Visual $c1 ([System.Windows.Controls.CheckBox])
+            if (-not $k0) { throw 'no check box in the row' }
+            if (-not $k0.IsVisible) { throw 'check box not visible' }
+            $k0.IsChecked = $true; $k1.IsChecked = $true
+            if ($lv.SelectedItems.Count -ne 2) { throw ("{0} selected after ticking 2" -f $lv.SelectedItems.Count) }
+            if ($null -ne $ctl.MapAll.IsChecked) { throw 'select all is not partly checked' }
+            $k0.IsChecked = $false
+            if ($lv.SelectedItems.Count -ne 1) { throw 'unticking did not unselect' }
+            $lv.SelectedItem = $lv.Items[0]; $win.UpdateLayout()
+            if (-not $k0.IsChecked -or $k1.IsChecked) { throw 'check boxes do not follow the selection' }
+            $ctl.SetMapCheck.IsChecked = $false; & $click $ctl.SetMapCheck; $win.UpdateLayout()
+            $hidden = -not $k0.IsVisible
+            $ctl.SetMapCheck.IsChecked = $true; & $click $ctl.SetMapCheck; $win.UpdateLayout()
+            if (-not $hidden) { throw 'switch did not hide the check boxes' }
+        }
+        & $step 'select all' {
+            $lv = $ctl.MapList
+            & $click $ctl.MapAll; if ($lv.SelectedItems.Count -ne $lv.Items.Count -or $ctl.MapAll.IsChecked -ne $true) { throw 'not all selected' }
+            & $click $ctl.MapAll; if ($lv.SelectedItems.Count -ne 0 -or $ctl.MapAll.IsChecked -ne $false) { throw 'not all cleared' }
+        }
+        & $step 'right-drag selects a run of rows' {
+            $lv = $ctl.MapList; $n = $lv.Items.Count
+            if ($n -lt 3) { throw 'too few rows' }
+            if ((Get-RowAt $lv 6) -ne 0) { throw ("row at the top is {0}" -f (Get-RowAt $lv 6)) }
+            $lv.UnselectAll()
+            $d = @{ Lv = $lv; Anchor = 0; Cur = 0; Moved = $false; Ctrl = $false; Base = $null; Cap = $null }; $script:rdrag = $d
+            Start-RightDrag $d; Set-DragRange $d 2
+            if ($lv.SelectedItems.Count -ne 3) { throw ("{0} selected for rows 0-2" -f $lv.SelectedItems.Count) }
+            Set-DragRange $d 1
+            if ($lv.SelectedItems.Count -ne 2) { throw 'dragging back did not shrink the selection' }
+            Stop-RightDrag
+            if ($script:rdrag) { throw 'drag not stopped' }
+            $lv.UnselectAll(); [void]$lv.SelectedItems.Add($lv.Items[$n - 1])
+            $d = @{ Lv = $lv; Anchor = 0; Cur = 0; Moved = $false; Ctrl = $true; Base = $null; Cap = $null }; $script:rdrag = $d
+            Start-RightDrag $d; Set-DragRange $d 1; Stop-RightDrag
+            if ($lv.SelectedItems.Count -ne 3) { throw ("with Ctrl {0} selected, expected 3" -f $lv.SelectedItems.Count) }
+        }
+        & $step 'right-click menu' {
+            $lv = $ctl.MapList; $lv.UnselectAll()
+            if (Update-MapMenu) { throw 'menu would open with nothing selected' }
+            $lv.SelectAll()
+            if (-not (Update-MapMenu)) { throw 'menu would not open' }
+            $lv.ContextMenu.PlacementTarget = $lv; $lv.ContextMenu.IsOpen = $true; $win.UpdateLayout(); $lv.ContextMenu.IsOpen = $false
+            $lv.SelectedItem = $lv.Items[0]; [void](Update-MapMenu)
+            & $click $ctl.MmCopy
+            if ([string]$ctl.MapSel.Text -notmatch '1') { throw ("copy path: {0}" -f $ctl.MapSel.Text) }
+        }
+        & $step 'size on disk notes' {
+            $t = Get-DiskNote 2GB 200MB 1GB $false
+            if ($t -notmatch [regex]::Escape((Fmt 1GB)) -or $t -notmatch [regex]::Escape((Fmt 200MB))) { throw "note: $t" }
+            if (Get-DiskNote 100MB 100MB 0 $false) { throw 'note for an ordinary folder' }
+            $tree.HasDisk = $true; $tree.UniqueSize = $tree.Size; $tree.UniqueDisk = $tree.Size; $tree.MftBytes = 64MB
+            Show-MapLevel $tree
+            if ($ctl.BtnMapAcct.Visibility -ne 'Visible') { throw 'space breakdown link hidden' }
+            $n0 = $script:uiSheets.Count; & $click $ctl.BtnMapAcct
+            if ($script:uiSheets.Count -le $n0 -or $script:uiSheets[$script:uiSheets.Count - 1] -notmatch 'MFT') { throw 'space breakdown not shown' }
+        }
+        & $step 'other map views' {
+            $ctl.MapViewTree.IsChecked = $true; $win.UpdateLayout()
+            $ctl.MapViewFiles.IsChecked = $true; $win.UpdateLayout()
+            $ctl.MapViewGrow.IsChecked = $true; $win.UpdateLayout()
+            if ($ctl.MapAll.IsEnabled) { throw 'select all enabled in the comparison view' }
+            $ctl.MapViewDirs.IsChecked = $true
+        }
+    } catch { $L.Add('FAIL test run: ' + $_.Exception.Message); $script:uiFail++ }
+    finally {
+        try { if ($setBak) { [IO.File]::WriteAllBytes($script:settingsFile, $setBak) } elseif (Test-Path -LiteralPath $script:settingsFile) { Remove-Item -LiteralPath $script:settingsFile -Force } } catch {}
+        try { [DiskMap]::MftOff = -not $fast0; [DupFinder]::LowPriority = ((Get-Setting 'LowIo' '0') -eq '1') } catch {}
+    }
+    $L.Add(("dialogs that would have opened: {0}" -f $script:uiSheets.Count))
+    $L.Add(("summary: {0} failed" -f $script:uiFail))
+    $file = if ($env:CLEANC_REPORT) { [IO.Path]::GetFullPath($env:CLEANC_REPORT) } else { Join-Path $script:appDir 'uitest.txt' }
+    try { [IO.File]::WriteAllText($file, (@($L) -join "`r`n"), (New-Object Text.UTF8Encoding $true)) } catch {}
+    $global:CLEANC_EXIT = [int]$script:uiFail
+    $win.Close()
+}
+
+# ------------------------------------------------------------
 # 定时器：把后台日志搬到界面、刷新进度、检测后台结束
 # ------------------------------------------------------------
 $timer = New-Object System.Windows.Threading.DispatcherTimer
@@ -11400,7 +12354,7 @@ $timer.Add_Tick({
                 if ($r.Node) { [DiskMap]::Detach($r.Node) }
                 else {
                     $pn = [DiskMap]::Find($script:mapRoot, (Split-Path $r.Path -Parent))
-                    if ($pn) { [DiskMap]::DropFile($pn, $r.Size) }
+                    if ($pn) { [DiskMap]::DropFile($pn, $r.Size, $r.Disk) }
                     [DiskMap]::ForgetFile($r.Path)
                 }
             }
@@ -11692,18 +12646,30 @@ $ctl.BtnTheme.Add_Click({
         -Buttons @((T '取消'), (T '跟随系统'), (T '深色'), (T '浅色')) -Primary (T '浅色') -Cancel (T '取消')
     $to = if ($ans -eq (T '浅色')) { 'light' } elseif ($ans -eq (T '深色')) { 'dark' } elseif ($ans -eq (T '跟随系统')) { 'system' } else { '' }
     if (-not $to -or $to -eq $script:themePref) { return }
+    Set-ThemePref $to
+})
+function Set-ThemePref([string]$to) {
     Set-Setting 'Theme' $to
     OpLog '系统设置' (T '切换外观') $to ''
     Restart-App
-})
-# 界面语言切换：存到设置里，关掉本窗口，用新语言重新打开
+}
+# 设置页上点了外观：问一下再换（返回 $false：没换）
+function Request-Theme([string]$to) {
+    if ($to -eq $script:themePref) { return $false }
+    if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return $false }
+    $ok = (T '换')
+    if ((Show-Sheet -Title ((T "换成「{0}」外观？") -f $script:themeNames[$to]) -Text (T '本工具会关闭，然后用新的外观重新打开。') -Buttons @((T '取消'), $ok) -Primary $ok -Cancel (T '取消')) -ne $ok) { return $false }
+    Set-ThemePref $to
+    return $true
+}
+# 界面语言切换：存到设置里，关掉本窗口，用新语言重新打开（返回 $false：没换）
 $ctl.BtnLangText.Text = if ($script:Lang -eq 'en') { '中文' } else { 'English' }
-$ctl.BtnLang.Add_Click({
-    if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return }
+function Request-Lang {
+    if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return $false }
     $to = if ($script:Lang -eq 'en') { 'zh' } else { 'en' }
     if ($to -eq 'en') { $t = '切换为英文界面？'; $x = "本工具会关闭，然后以英文界面重新打开。`n`nClearC will close and reopen in English."; $ok = '切换'; $no = '取消' }
     else { $t = 'Switch to Chinese?'; $x = "ClearC will close and reopen in Chinese.`n`n本工具会关闭，然后以中文界面重新打开。"; $ok = 'Switch'; $no = 'Cancel' }
-    if ((Show-Sheet -Title $t -Text $x -Buttons @($no, $ok) -Primary $ok -Cancel $no) -ne $ok) { return }
+    if ((Show-Sheet -Title $t -Text $x -Buttons @($no, $ok) -Primary $ok -Cancel $no) -ne $ok) { return $false }
     Set-Setting 'Lang' $to
     OpLog '系统设置' (T '切换界面语言') $to ''
     try {
@@ -11711,7 +12677,9 @@ $ctl.BtnLang.Add_Click({
         elseif ($script:selfScript) { Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList ('-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}"' -f $script:selfScript) }
     } catch {}
     $win.Close()
-})
+    return $true
+}
+$ctl.BtnLang.Add_Click({ [void](Request-Lang) })
 $ctl.CleanScroll.Add_ScrollChanged({ Update-CleanMore })
 $ctl.CleanMore.Add_Click({ $ctl.CleanScroll.PageDown() })
 # 第一次打开时先给出安全风险提示，勾选同意后才能使用；同意过就不再弹
@@ -11723,6 +12691,17 @@ $win.Add_ContentRendered({
         $shown = $script:startClock.Elapsed.TotalSeconds
         $proc = 0.0; try { $proc = ((Get-Date) - (Get-Process -Id $PID).StartTime).TotalSeconds } catch {}
         Write-LogFile ((T "启动用时 {0:N1} 秒：准备 {1:N1} 秒，加载界面 {2:N1} 秒，显示 {3:N1} 秒") -f [math]::Max($proc, $shown), $script:tPrep, ($script:tUi - $script:tPrep), ($shown - $script:tUi))
+    }
+    if ($script:uiTest) {
+        if (-not $script:uiStarted) {
+            $script:uiStarted = $true
+            # 万一卡住：两分钟后自己关掉
+            $script:uiWatch = New-Object System.Windows.Threading.DispatcherTimer; $script:uiWatch.Interval = [TimeSpan]::FromMinutes(2)
+            $script:uiWatch.Add_Tick({ $script:uiWatch.Stop(); $global:CLEANC_EXIT = 99; $win.Close() })
+            $script:uiWatch.Start()
+            [void]$win.Dispatcher.BeginInvoke([Action]{ Invoke-UiTest }, [System.Windows.Threading.DispatcherPriority]::ApplicationIdle)
+        }
+        return
     }
     if ($script:riskShown) { return }
     $script:riskShown = $true
@@ -11738,4 +12717,5 @@ $win.Add_ContentRendered({
     Write-LogFile (T '用户已同意安全风险提示')
 })
 $global:CLEANC_UI_SHOWN = $true   # 告诉外层 exe：界面已经正常打开
+if ($script:uiTest) { $win.WindowStartupLocation = 'Manual'; $win.Left = -32000; $win.Top = -32000; $win.ShowActivated = $false; $win.ShowInTaskbar = $false }
 $win.ShowDialog() | Out-Null

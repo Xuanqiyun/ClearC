@@ -14,8 +14,9 @@ $o = @{}
 function Walk($n, $rel) {
     $kids = @(); $links = @()
     foreach ($k in $n.Kids) { $kids += $k.Name; if ($k.IsLink) { $links += $k.Name } else { Walk $k ($rel + '/' + $k.Name) } }
-    $o[$rel] = @{ files = $n.OwnFiles; bytes = $n.Own; dirs = @($kids); links = @($links) }
+    $o[$rel] = @{ files = $n.OwnFiles; bytes = $n.Own; dirs = @($kids); links = @($links); disk = $n.OwnDisk; shared = $n.OwnShared }
 }
 Walk $root ''
+if ($root.HasDisk) { $o['#unique'] = @{ size = $root.UniqueSize; disk = $root.UniqueDisk } }
 ($o | ConvertTo-Json -Depth 5 -Compress) | Set-Content -Path $OutFile -Encoding utf8
 "{0}: {1} folders, {2} files, {3} bytes" -f $(if ($Then) { 'incremental' } else { 'full' }), $o.Count, $root.Files, $root.Size

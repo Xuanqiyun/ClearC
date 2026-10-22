@@ -8,9 +8,9 @@ using System.Text;
 [assembly: AssemblyTitle("腾挪 ClearC")]
 [assembly: AssemblyDescription("C 盘清理和搬家：清理 C 盘、把聊天记录和软件搬到其他盘、查找大文件和重复文件")]
 [assembly: AssemblyProduct("腾挪 ClearC")]
-[assembly: AssemblyVersion("2.6.0.0")]
-[assembly: AssemblyFileVersion("2.6.0.0")]
-[assembly: AssemblyInformationalVersion("2.6")]
+[assembly: AssemblyVersion("2.7.0.0")]
+[assembly: AssemblyFileVersion("2.7.0.0")]
+[assembly: AssemblyInformationalVersion("2.7")]
 [assembly: System.Runtime.Versioning.TargetFramework(".NETFramework,Version=v4.8", FrameworkDisplayName = ".NET Framework 4.8")]
 
 // 启动器：把内置的 PowerShell 程序放进本进程里的 PowerShell 引擎运行（用 Windows 自带的 PowerShell 5.1，不需要另装任何东西）。

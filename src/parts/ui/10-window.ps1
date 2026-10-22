@@ -74,7 +74,7 @@ foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageM
                'BtnMovesRefresh','MovesInfo','MovesList','EmptyMoves','EmptyMovesText',
                'AutoRemindOn','AutoRemindGB','AutoRemindNote','AutoCleanOn','AutoCleanNote','HistInfo','HistChart','HistLast','HistFirst',
                'BtnLogOpenDir','BtnLogRefresh','LogKeep','LogKeepNote','LogCats','LogRange','LogSearch','LogCount','LogList','EmptyLog','EmptyLogText',
-               'BtnLang','BtnLangText','BtnTheme','BtnThemeText','NavHelp','PageHelp','HelpScroll','FeedbackCard','RiskCard','BtnFeedback','BtnCopyWx','BtnCopyDiag','BtnOpenLog','CopyHint','DevWx','BtnSelfTest','BtnCheckUpdate','MapFast','MapChat',
+               'BtnLang','BtnLangText','BtnTheme','BtnThemeText','NavHelp','PageHelp','HelpScroll','FeedbackCard','RiskCard','BtnFeedback','BtnCopyWx','BtnGitHub','BtnIssue','BtnCopyDiag','BtnOpenLog','CopyHint','DevWx','BtnSelfTest','BtnCheckUpdate','MapFast','MapChat',
                'NavClean','NavDup','PageClean','PageDup','AppVer','BtnLog','BtnLogText','BtnLogHide','LogPanel','Dim',
                'CapFree','CapTotal','CapBar','CapReclaim','EmptyClean','EmptyCleanText','EmptyDup','EmptyDupText','SizeCustomRow',
                'DestPick','BtnDestBrowse','DestHint','BtnOneClick','BtnScan','BtnRun','BtnHogs','Hint','List','Summary','Log',
@@ -86,15 +86,22 @@ foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageM
                'Overlay','OvTitle','OvTime','OvBar','OvStep','OvWhat','OvChecklist','OvDetail','OvSubBar','OvPlanBox','OvPlanScroll','OvPlan','OvHide','OvClose','OvNote',
                'BtnKeepNew','BtnKeepOld','BtnPickC','BtnPickNone','DupSummary',
                'CleanScroll','CleanMore','CleanMoreText','CleanOverview','CleanOverviewText',
-               'OvCancel','OpCancel','MovesTabCand','MovesTabDone','CandList','EmptyCand','EmptyCandText','MovesCard','CandStore','BtnCandStore','CandStoreText','CandBar','MovesDest','BtnCandMove','BtnCandAll','BtnCandNone','CandSel','MapViewTree','BtnMapReport','MapTree','BtnMapExport','MapFilter','MapMinSize','MapAge','MapType','MapName','MapUnder') { $ctl[$n] = $win.FindName($n) }
+               'OvCancel','OpCancel','MovesTabCand','MovesTabDone','CandList','EmptyCand','EmptyCandText','MovesCard','CandStore','BtnCandStore','CandStoreText','CandBar','MovesDest','BtnCandMove','BtnCandAll','BtnCandNone','CandSel','MapViewTree','BtnMapReport','MapTree','BtnMapExport','MapFilter','MapMinSize','MapAge','MapType','MapName','MapUnder',
+               'MapAll','BtnMapAcct','MapMenu','MmEnter','MmOpen','MmCopy','MmCompress','MmDelete','NavHeadManage','NavSettings','PageSettings','SetScroll','BtnSetReset',
+               'SetThemeLight','SetThemeDark','SetThemeSystem','SetLangZh','SetLangEn','SetPageDup','SetPageSave','SetPageApps','SetPageMoves','SetPageAuto','SetPageLog',
+               'SetLinkTheme','SetLinkLang','SetLinkFeedback','SetLinkLog','SetPageSub','SetMapCheck','SetMapBar','SetMapPct','SetMapMeta','SetMapDisk','SetMapFastBtn','SetFast','SetLowIo',
+               'SaveRpState','BtnRestoreOpen') { $ctl[$n] = $win.FindName($n) }
+# 右键菜单不在窗口的元素树里：万一按名字找不到，就从菜单里一个个取
+if (-not $ctl.MmDelete -and $ctl.MapList.ContextMenu) { $ctl.MapMenu = $ctl.MapList.ContextMenu; foreach ($it in $ctl.MapMenu.Items) { if ($it.Name) { $ctl[$it.Name] = $it } } }
 
 # ---------- 左侧导航：两页切换 ----------
 $script:pageList = [ordered]@{
     clean = @('PageClean', 'NavClean'); dup = @('PageDup', 'NavDup'); save = @('PageSave', 'NavSave'); map = @('PageMap', 'NavMap'); apps = @('PageApps', 'NavApps')
-    moves = @('PageMoves', 'NavMoves'); auto = @('PageAuto', 'NavAuto'); log = @('PageLog', 'NavLog'); help = @('PageHelp', 'NavHelp')
+    moves = @('PageMoves', 'NavMoves'); auto = @('PageAuto', 'NavAuto'); log = @('PageLog', 'NavLog'); help = @('PageHelp', 'NavHelp'); settings = @('PageSettings', 'NavSettings')
 }
 $script:pageLoaded = @{}
 function Show-Page([string]$key) {
+    $script:curPage = $key
     foreach ($k in $script:pageList.Keys) {
         $on = ($k -eq $key)
         $ctl[$script:pageList[$k][0]].Visibility = if ($on) { 'Visible' } else { 'Collapsed' }
@@ -109,6 +116,7 @@ function Show-Page([string]$key) {
         'moves' { if (-not $script:candScanned) { $script:candPending = $true }; if (-not $script:worker) { Load-Moves } }
         'auto'  { Load-Auto }
         'log'   { Load-Log }
+        'settings' { Load-Settings }
     }
 }
 foreach ($k in $script:pageList.Keys) {
@@ -125,6 +133,16 @@ $ctl.BtnFeedback.Add_Click({
     $ctl.HelpScroll.UpdateLayout()
     $ctl.FeedbackCard.BringIntoView()
 })
+# 点左侧「帮助」总是回到帮助的开头（先点「使用反馈」滚到下面后，帮助已是选中状态，Checked 不会再触发）
+$ctl.NavHelp.Add_Click({ $ctl.HelpScroll.ScrollToTop() })
+$script:projectPage = 'https://github.com/Xuanqiyun/ClearC'
+function Open-Web([string]$url) {
+    # 用资源管理器打开网址：浏览器不会以管理员身份运行
+    try { Start-Process -FilePath "$env:SystemRoot\explorer.exe" -ArgumentList $url; UI-Log ((T "打开网页：{0}") -f $url) }
+    catch { Show-CopyHint ((T "打不开浏览器，请手动访问 {0}") -f $url) }
+}
+$ctl.BtnGitHub.Add_Click({ Open-Web $script:projectPage })
+$ctl.BtnIssue.Add_Click({ Open-Web ($script:projectPage + '/issues') })
 $ctl.BtnCopyWx.Add_Click({
     try { [System.Windows.Clipboard]::SetText($script:devWechat); $ctl.BtnCopyWx.Content = (T '已复制') } catch { $ctl.BtnCopyWx.Content = (T '复制失败，请手动输入') }
 })
@@ -190,6 +208,7 @@ function Show-Sheet {
           [string]$Primary = '', [string]$Cancel = '', [string]$Kind = 'info', [string]$Confirm = '')
     if (-not $Primary) { $Primary = $Buttons[-1] }
     if (-not $Cancel)  { $Cancel = $Buttons[0] }
+    if ($script:uiTest) { $script:uiSheets.Add(("{0}`n{1}" -f $Title, $Text)); return $Cancel }   # 界面自测：不弹对话框，当作点了取消
     $sw = $null
     try { $sw = [Windows.Markup.XamlReader]::Parse([Theme]::Xaml($script:sheetXaml)) } catch { $sw = $null }
     if (-not $sw) {

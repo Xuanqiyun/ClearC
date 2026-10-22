@@ -17,6 +17,10 @@ function Load-Save {
     }
     if ($ctl.SavePfDrive.Items.Count -gt 0) { $ctl.SavePfDrive.SelectedIndex = 0 }
     $ctl.BtnPfMove.IsEnabled = $ctl.SavePfDrive.Items.Count -gt 0
+    $rp = Get-RestoreInfo
+    $ctl.SaveRpState.Text = if (-not $rp.Ok) { (T '当前：读不到还原点的信息') }
+        elseif (-not $rp.On -and $rp.Count -eq 0) { (T '当前：这块盘没有开系统保护，也没有还原点') }
+        else { (T "当前：{0} 个还原点，占 {1}，最多可以用到 {2}") -f $rp.Count, (Fmt $rp.Used), $(if ($rp.Max -le 0 -or $rp.Max -ge 1e18) { (T '没有上限') } else { Fmt $rp.Max }) }
     $h = Get-HiberInfo
     $ctl.SaveHibState.Text = if (-not $h.Exists) { (T '当前：已关闭休眠，没有 hiberfil.sys') } elseif ($h.Reduced) { ((T "当前：精简（只留快速启动），占 {0}") -f $(Fmt $h.Bytes)) } else { ((T "当前：完整休眠，占 {0}") -f $(Fmt $h.Bytes)) }
     $col = New-Object 'System.Collections.ObjectModel.ObservableCollection[VdiskRow]'
@@ -32,6 +36,23 @@ function Load-Save {
     $ctl.VdEmpty.Visibility = if ($col.Count -gt 0) { 'Collapsed' } else { 'Visible' }
 }
 $ctl.BtnSaveRefresh.Add_Click({ Load-Save })
+# 系统还原点（卷影副本）：只看，不删；要调整打开 Windows 自己的「系统保护」
+function Get-RestoreInfo {
+    $r = @{ Ok = $false; On = $false; Count = 0; Used = [double]0; Max = [double]0 }
+    try {
+        $vol = @(Get-CimInstance -ClassName Win32_Volume -Filter ("DriveLetter='{0}'" -f $env:SystemDrive) -ErrorAction Stop)[0]
+        if (-not $vol) { return $r }
+        $r.Ok = $true
+        foreach ($s in @(Get-CimInstance -ClassName Win32_ShadowStorage -ErrorAction Stop)) {
+            if ($s.Volume -and [string]$s.Volume.DeviceID -eq [string]$vol.DeviceID) { $r.On = $true; $r.Used += [double]$s.UsedSpace; $r.Max = [double]$s.MaxSpace }
+        }
+        $r.Count = @(Get-CimInstance -ClassName Win32_ShadowCopy -ErrorAction Stop | Where-Object { [string]$_.VolumeName -eq [string]$vol.DeviceID }).Count
+    } catch {}
+    return $r
+}
+$ctl.BtnRestoreOpen.Add_Click({
+    try { Start-Process -FilePath "$env:SystemRoot\System32\SystemPropertiesProtection.exe" } catch { Show-Sheet -Kind warn -Title (T '打不开系统保护设置') -Text $_.Exception.Message | Out-Null }
+})
 $ctl.BtnGoDup.Add_Click({ Show-Page 'dup' })
 foreach ($b in @($ctl.BtnCosOn, $ctl.BtnCosOff)) {
     $b.Add_Click({

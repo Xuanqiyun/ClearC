@@ -38,7 +38,7 @@ $ctl.BtnMapStop.Add_Click({ [DiskMap]::Cancel = $true; UI-Log (T '空间地图�
 
 function New-MapRow($name, $path, [double]$size, [double]$max, [double]$parent, [bool]$isDir, $node, [string]$meta, [string]$kind) {
     $r = New-Object MapRow
-    $r.Name = $name; $r.Path = $path; $r.Size = [long]$size; $r.SizeText = Fmt $size; $r.IsDir = $isDir; $r.Node = $node; $r.Meta = $meta
+    $r.Name = $name; $r.Path = $path; $r.Size = [long]$size; $r.SizeText = Fmt $size; $r.IsDir = $isDir; $r.Node = $node; $r.Meta = $meta; $r.Disk = -1
     $r.Bar = if ($max -gt 0) { [math]::Max([double]2, 160.0 * $size / $max) } else { 0 }
     if ($size -le 0) { $r.Bar = 0 }
     $r.Pct = if ($parent -gt 0) { "{0:N1}%" -f (100.0 * $size / $parent) } else { '' }
@@ -66,9 +66,19 @@ function Test-ChatPath([string]$path) {
     foreach ($d in $script:chatDirs) { if ($p -ieq $d -or $p.StartsWith($d + '\', [StringComparison]::OrdinalIgnoreCase)) { return $true } }
     return $false
 }
+# 实际占用和硬链接的说明（快速扫描读文件表时才知道；设置里可以关掉）
+function Get-DiskNote([double]$size, [double]$disk, [double]$shared, [bool]$isFile) {
+    $t = ''
+    if ($isFile -and $shared -gt 0) { $t += (T ' · 硬链接：别处还有同一份，删了这个不腾空间') }
+    elseif (-not $isFile -and $shared -ge 32MB -and $shared -ge $size * 0.05) { $t += (T " · 其中 {0} 是硬链接（别处还有同一份）") -f (Fmt $shared) }
+    if ($disk -ge 0 -and ($size - $disk) -ge 32MB -and $disk -lt $size * 0.85) { $t += (T " · 实际只占 {0}") -f (Fmt $disk) }
+    return $t
+}
 function Show-MapLevel($node) {
     if (-not $node) { return }
     $script:mapCur = $node
+    $dn = Get-Flag 'MapDisk'
+    $hasDisk = $dn -and $script:mapRoot -and $script:mapRoot.HasDisk
     $path = $node.FullPath()
     $rows = New-Object System.Collections.Generic.List[MapRow]
     # 只列最大的 500 项（子文件夹和这一层自己的文件放在一起比），其余合成一行：上万项的文件夹（比如 WinSxS）也能马上打开
@@ -103,13 +113,21 @@ function Show-MapLevel($node) {
                 }
             }
             if ($k.Denied) { $meta += (T ' · 部分内容没有权限读取') }
+            if ($hasDisk) { $meta += Get-DiskNote ([double]$k.Size) ([double]$k.Disk) ([double]$k.Shared) $false }
             $row = New-MapRow $k.Name $p $k.Size $max $node.Size $true $k $meta 'dir'
             $row.When = $when; $row.FileCount = [long]$k.Files
+            if ($script:mapRoot.HasDisk) { $row.Disk = [long]$k.Disk }
             [void]$rows.Add($row)
         } else {
             $f = $x.F
-            $row = New-MapRow $f.Name $f.Path $f.Size $max $node.Size $false $null ((T "文件 · 修改于 {0:yyyy-MM-dd}") -f $f.Modified) 'file'
+            $fm = (T "文件 · 修改于 {0:yyyy-MM-dd}") -f $f.Modified
+            $fd = [double]$f.Disk
+            # 目录里记的实际占用看着明显小（压缩、稀疏、只在云端）：再问一次 Windows，以它为准
+            if ($fd -ge 0 -and ([double]$f.Size - $fd) -ge 32MB) { $fd = [double][FsTools]::OnDisk($f.Path) }
+            if ($dn) { $fm += Get-DiskNote ([double]$f.Size) $fd 0 $true }
+            $row = New-MapRow $f.Name $f.Path $f.Size $max $node.Size $false $null $fm 'file'
             $row.When = '{0:yyyy-MM-dd HH:mm}' -f $f.Modified
+            $row.Disk = [long]$fd
             [void]$rows.Add($row)
         }
     }
@@ -122,6 +140,7 @@ function Show-MapLevel($node) {
     $ctl.MapList.ItemsSource = $rows
     $ctl.MapPath.Text = $path
     $ctl.MapInfo.Text = (T "这一层共 {0}，{1:N0} 个文件{2}") -f (Fmt $node.Size), $node.Files, $(if ($script:mapScanAt) { (T " · 扫描于 {0:HH:mm}（{1}）") -f $script:mapScanAt, $script:mapHow } else { '' })
+    $ctl.BtnMapAcct.Visibility = if ($script:mapRoot -and $script:mapRoot.HasDisk) { 'Visible' } else { 'Collapsed' }
     $ctl.BtnMapUp.IsEnabled = ($null -ne $node.Parent)
     $ctl.EmptyMap.Visibility = if ($rows.Count -gt 0) { 'Collapsed' } else { 'Visible' }
     if ($rows.Count -eq 0) { $ctl.EmptyMapText.Text = (T '这个文件夹是空的') }
@@ -282,10 +301,14 @@ function Show-MapFiles {
     else { $res = [DiskMap]::FindFiles($f.Min, $f.Before, $f.Exts, $f.Name, $f.Under, $script:mapFindMax) }
     $max = if ($res.Files.Count -gt 0) { [double]$res.Files[0].Size } else { 0 }
     $tot = if ($script:mapRoot) { [double]$script:mapRoot.Size } else { 0 }
+    $dn = (Get-Flag 'MapDisk') -and $script:mapRoot -and $script:mapRoot.HasDisk
     foreach ($x in $res.Files) {
         $p = $x.Path
-        $row = New-MapRow $x.Name $p $x.Size $max $tot $false $null ((T "{0} · 修改于 {1:yyyy-MM-dd}") -f (Split-Path $p -Parent), $x.Modified) 'file'
+        $fm = (T "{0} · 修改于 {1:yyyy-MM-dd}") -f (Split-Path $p -Parent), $x.Modified
+        if ($dn) { $fm += Get-DiskNote ([double]$x.Size) ([double]$x.Disk) $(if ($x.Shared) { [double]$x.Size } else { 0 }) $true }
+        $row = New-MapRow $x.Name $p $x.Size $max $tot $false $null $fm 'file'
         $row.When = '{0:yyyy-MM-dd HH:mm}' -f $x.Modified
+        $row.Disk = [long]$x.Disk
         # 聊天记录里的文件只看不删：要腾地方就整体搬家
         if ($f.Chat) { $row.Locked = $true; $row.LockTip = (T '聊天记录里的文件只能查看和打开位置；要腾地方，到「搬家管理」把整个聊天记录搬到其他盘') }
         [void]$rows.Add($row)
@@ -302,6 +325,7 @@ function Show-MapFiles {
     }
     $ctl.MapUnder.ToolTip = if ($script:mapCur) { $script:mapCur.FullPath() } else { $null }
     $ctl.BtnMapUp.IsEnabled = $false
+    $ctl.BtnMapAcct.Visibility = 'Collapsed'
     $ctl.EmptyMap.Visibility = if ($rows.Count -gt 0) { 'Collapsed' } else { 'Visible' }
     if ($rows.Count -eq 0) { $ctl.EmptyMapText.Text = (T '没有符合条件的文件，可以把条件放宽一些') }
     $ctl.BtnMapExport.IsEnabled = ($rows.Count -gt 0)
@@ -319,12 +343,13 @@ $ctl.MapChat.Add_Unchecked({ Refresh-MapFiles })
 # 快速扫描（直接读文件表）开关：存在设置里，所有页面统计大小时都按它来
 $ctl.MapFast.IsChecked = ((Get-Setting 'FastScan' '1') -ne '0')
 [DiskMap]::MftOff = -not $ctl.MapFast.IsChecked
-$ctl.MapFast.Add_Click({
-    $on = [bool]$ctl.MapFast.IsChecked
+function Set-FastScan([bool]$on) {
+    $ctl.MapFast.IsChecked = $on; $ctl.SetFast.IsChecked = $on
     [DiskMap]::MftOff = -not $on
     Set-Setting 'FastScan' $(if ($on) { '1' } else { '0' })
     UI-Log $(if ($on) { (T '已打开快速扫描：直接读文件表') } else { (T '已关闭快速扫描：以后逐个文件夹扫描') })
-})
+}
+$ctl.MapFast.Add_Click({ Set-FastScan ([bool]$ctl.MapFast.IsChecked) })
 # 名称：停下打字 0.4 秒后再找，免得每打一个字就刷新一次
 $script:mapNameTimer = New-Object System.Windows.Threading.DispatcherTimer
 $script:mapNameTimer.Interval = [TimeSpan]::FromMilliseconds(400)
@@ -344,6 +369,7 @@ function Set-MapView([string]$v) {
     else {
         $ctl.MapGrow.ItemsSource = $script:growRows
         $ctl.BtnMapUp.IsEnabled = $false
+        $ctl.BtnMapAcct.Visibility = 'Collapsed'
         $has = $script:growRows -and $script:growRows.Count -gt 0
         $ctl.EmptyMap.Visibility = if ($has) { 'Collapsed' } else { 'Visible' }
         $ctl.EmptyMapText.Text = $script:growNote
@@ -358,6 +384,32 @@ $ctl.MapViewTree.Add_Checked({ Set-MapView 'tree' })
 $ctl.MapViewFiles.Add_Checked({ Set-MapView 'files' })
 $ctl.MapViewGrow.Add_Checked({ Set-MapView 'grow' })
 $ctl.BtnMapUp.Add_Click({ if ($script:mapCur -and $script:mapCur.Parent) { Show-MapLevel $script:mapCur.Parent } })
+# 空间明细：已用空间都花在哪，为什么和按文件大小相加对不上（快速扫描读了文件表才有）
+function Show-SpaceAcct {
+    $r = $script:mapRoot
+    if (-not $r -or -not $r.HasDisk) { return }
+    $drive = $r.FullPath()
+    $total = [double]0; $used = [double]0
+    try { $di = New-Object System.IO.DriveInfo $drive; $total = [double]$di.TotalSize; $used = [double]($di.TotalSize - $di.TotalFreeSpace) } catch {}
+    $files = [double]$r.UniqueDisk; $mft = [double]$r.MftBytes
+    $a = New-Object System.Collections.Generic.List[string]
+    $a.Add(((T "· 文件实际占用 {0}：每个文件只算一次，有几个名字的（硬链接）也只算一份") -f (Fmt $files)))
+    $svi = [DiskMap]::Find($r, (Join-Path $drive 'System Volume Information'))
+    if ($svi -and $svi.Disk -ge 100MB) { $a.Add(((T "　其中系统还原点等（System Volume Information）{0}，在「省空间」里可以查看") -f (Fmt ([double]$svi.Disk)))) }
+    $a.Add(((T "· 文件表（MFT）{0}：NTFS 记录每个文件信息的地方，文件越多越大，删了文件也不会变小") -f (Fmt $mft)))
+    $rest = $used - $files - $mft
+    if ($used -gt 0 -and $rest -ge 0) { $a.Add(((T "· 其他 {0}：NTFS 的日志和变更日志、文件夹的索引、Windows 给系统更新预留的空间（保留的存储）等，不是普通文件") -f (Fmt $rest))) }
+    $b = New-Object System.Collections.Generic.List[string]
+    $b.Add(((T "· 按文件大小相加（资源管理器的算法）是 {0}") -f (Fmt ([double]$r.Size))))
+    if ($r.Linked -gt 0) { $b.Add(((T "· 硬链接：{0} 的文件不止一个名字（大多在 WinSxS 和 System32 里），按名字相加会重复算，盘上只有一份") -f (Fmt ([double]$r.Linked)))) }
+    $d = [double]$r.UniqueSize - [double]$r.UniqueDisk
+    if ($d -ge 1MB) { $b.Add(((T "· 压缩、稀疏和只在云端的文件：实际占用比文件大小合计少 {0}（已经扣掉了零头按整块分配多占的部分）") -f (Fmt $d))) }
+    elseif ($d -le -1MB) { $b.Add(((T "· 文件按整块（簇，通常 4 KB）分配，零头也占一整块：实际占用比文件大小合计多 {0}") -f (Fmt (-$d)))) }
+    $text = ((T "{0} 已用 {1}（共 {2}），其中：") -f $drive.TrimEnd('\'), (Fmt $used), (Fmt $total)) + "`n" + ($a -join "`n") + "`n`n" + (T '和「按文件大小相加」的差别：') + "`n" + ($b -join "`n")
+    if ($script:mapScanAt) { $text += "`n`n" + ((T "按 {0:HH:mm} 扫描的结果。") -f $script:mapScanAt) }
+    Show-Sheet -Title (T '空间明细') -Text $text | Out-Null
+}
+$ctl.BtnMapAcct.Add_Click({ Show-SpaceAcct })
 $ctl.MapGrow.Add_MouseDoubleClick({
     $g = $ctl.MapGrow.SelectedItem
     if (-not $g -or -not $script:mapRoot) { return }
@@ -374,6 +426,9 @@ $ctl.MapList.Add_MouseDoubleClick({
     }
 })
 function Update-MapSel {
+    $nAll = $ctl.MapList.Items.Count; $nSel = $ctl.MapList.SelectedItems.Count
+    $ctl.MapAll.IsEnabled = ($script:mapView -ne 'grow') -and $nAll -gt 0
+    $ctl.MapAll.IsChecked = if ($script:mapView -eq 'grow' -or $nSel -eq 0) { $false } elseif ($nSel -ge $nAll) { $true } else { $null }
     $sel = if ($script:mapView -ne 'grow') { @($ctl.MapList.SelectedItems) } else { @() }
     $r = if ($sel.Count -eq 1) { $sel[0] } else { $null }
     $busy = [bool]$script:worker
@@ -381,7 +436,7 @@ function Update-MapSel {
     $ctl.BtnMapOpen.IsEnabled = [bool]$r -and -not $busy
     $ctl.BtnMapDelete.IsEnabled = ($del.Count -gt 0) -and -not $busy
     $ctl.BtnMapCompress.IsEnabled = [bool]$r -and $r.IsDir -and -not $busy -and -not (Get-CompressBlock $r.Path)
-    if ($sel.Count -eq 0) { $ctl.MapSel.Text = (T '选中一行可以打开位置、压缩或删除；按住 Ctrl 或 Shift 可以选多项一起删。系统文件夹、软件安装文件夹、C 盘个人文件夹和搬家后的数据带小锁，不能在这里删。'); return }
+    if ($sel.Count -eq 0) { $ctl.MapSel.Text = (T '选中一行可以打开位置、压缩或删除；勾选前面的方框，或按住 Ctrl、Shift，可以选多项一起删；按住右键上下拖可以一次选中连着的几行。系统文件夹、软件安装文件夹、C 盘个人文件夹和搬家后的数据带小锁，不能在这里删。'); return }
     if ($sel.Count -gt 1) {
         $tot = [double]0; foreach ($x in $sel) { $tot += [double]$x.Size }
         $t = (T "已选 {0} 项，共 {1}") -f $sel.Count, (Fmt $tot)
@@ -390,7 +445,145 @@ function Update-MapSel {
     }
     $ctl.MapSel.Text = if ($r.Locked) { (T "{0}：不能在这里删（{1}）") -f $r.Name, $r.LockTip } else { "{0}  {1}" -f $r.Name, $r.SizeText }
 }
-$ctl.MapList.Add_SelectionChanged({ Update-MapSel })
+$script:bulkSel = $false
+$ctl.MapList.Add_SelectionChanged({ if (-not $script:bulkSel) { Update-MapSel } })
+$ctl.MapAll.Add_Click({
+    $lv = $ctl.MapList
+    if ($lv.Items.Count -gt 0 -and $lv.SelectedItems.Count -ge $lv.Items.Count) { $lv.UnselectAll() } else { $lv.SelectAll() }
+    Update-MapSel
+})
+# ---------- 右键菜单：和下面的按钮做一样的事 ----------
+function Invoke-Btn($b) { if ($b -and $b.IsEnabled) { $b.RaiseEvent((New-Object System.Windows.RoutedEventArgs ([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))) } }
+# 右键菜单打开前：照选中的行设好每一项能不能点（返回 $false：没选中，不弹菜单）
+function Update-MapMenu {
+    $sel = @($ctl.MapList.SelectedItems)
+    if ($sel.Count -eq 0 -or $script:mapView -eq 'grow') { return $false }
+    $one = if ($sel.Count -eq 1) { $sel[0] } else { $null }
+    $ctl.MmEnter.Visibility = if ($one -and $one.IsDir -and $one.Node) { 'Visible' } else { 'Collapsed' }
+    $ctl.MmOpen.IsEnabled = $ctl.BtnMapOpen.IsEnabled
+    $ctl.MmCopy.IsEnabled = (@($sel | Where-Object { $_.Path }).Count -gt 0)
+    $ctl.MmCompress.IsEnabled = $ctl.BtnMapCompress.IsEnabled
+    $ctl.MmDelete.IsEnabled = $ctl.BtnMapDelete.IsEnabled
+    $nd = @($sel | Where-Object { -not $_.Locked -and $_.Size -gt 0 }).Count
+    $ctl.MmDelete.Header = if ($nd -gt 1) { (T "删除选中的 {0} 项…") -f $nd } else { (T '删除…') }
+    return $true
+}
+$ctl.MapList.Add_ContextMenuOpening({ param($s, $e) if (-not (Update-MapMenu)) { $e.Handled = $true } })
+$ctl.MmEnter.Add_Click({ $r = $ctl.MapList.SelectedItem; if ($r -and $r.IsDir -and $r.Node) { if ($script:mapView -ne 'dirs') { $ctl.MapViewDirs.IsChecked = $true }; Show-MapLevel $r.Node } })
+$ctl.MmOpen.Add_Click({ Invoke-Btn $ctl.BtnMapOpen })
+$ctl.MmCompress.Add_Click({ Invoke-Btn $ctl.BtnMapCompress })
+$ctl.MmDelete.Add_Click({ Invoke-Btn $ctl.BtnMapDelete })
+$ctl.MmCopy.Add_Click({
+    $ps = @($ctl.MapList.SelectedItems | Where-Object { $_.Path } | ForEach-Object { [string]$_.Path })
+    if ($ps.Count -gt 0) { try { [System.Windows.Clipboard]::SetText(($ps -join "`r`n")); $ctl.MapSel.Text = (T "已复制 {0} 个路径") -f $ps.Count } catch {} }
+})
+# ---------- 按住右键上下拖：选中连着的几行（像在资源管理器里拉框）；松开后弹出右键菜单 ----------
+# 按住 Ctrl 再拖：在原来选中的基础上加上这一段
+function Find-Visual($root, [type]$t) {
+    $q = New-Object System.Collections.Queue; $q.Enqueue($root)
+    while ($q.Count -gt 0) {
+        $v = $q.Dequeue()
+        if ($v -is $t) { return $v }
+        $n = [System.Windows.Media.VisualTreeHelper]::GetChildrenCount($v)
+        for ($k = 0; $k -lt $n; $k++) { $q.Enqueue([System.Windows.Media.VisualTreeHelper]::GetChild($v, $k)) }
+    }
+    return $null
+}
+# 纵坐标 y 处是第几行（-1 不在任何一行上）。横坐标取中间，行和行之间的缝上下各挪一点再找
+function Get-RowAt($lv, [double]$y) {
+    $h = [double]$lv.ActualHeight; if ($h -le 4) { return -1 }
+    $yy = [math]::Min([math]::Max($y, 2.0), $h - 2.0)
+    foreach ($dy in 0, -3, 3) {
+        $pt = New-Object System.Windows.Point ([math]::Max(30.0, [double]$lv.ActualWidth / 2)), ($yy + $dy)
+        $hit = $lv.InputHitTest($pt)
+        if ($hit -is [System.Windows.DependencyObject]) {
+            $c = $null; try { $c = [System.Windows.Controls.ItemsControl]::ContainerFromElement($lv, $hit) } catch {}
+            if ($c) { return $lv.ItemContainerGenerator.IndexFromContainer($c) }
+        }
+    }
+    # 拖到了最后一行下面的空白处：算最后一行
+    $n = $lv.Items.Count
+    if ($n -gt 0) {
+        $last = $lv.ItemContainerGenerator.ContainerFromIndex($n - 1)
+        if ($last) { try { if ($y -ge $last.TranslatePoint((New-Object System.Windows.Point 0, $last.ActualHeight), $lv).Y) { return $n - 1 } } catch {} }
+    }
+    return -1
+}
+$script:rdrag = $null
+$script:rdragTimer = New-Object System.Windows.Threading.DispatcherTimer
+$script:rdragTimer.Interval = [TimeSpan]::FromMilliseconds(50)
+function Set-DragRange($d, [int]$to) {
+    $lv = $d.Lv; $items = $lv.Items; $n = $items.Count
+    if ($to -lt 0 -or $to -ge $n -or $to -eq $d.Cur -or $d.Anchor -ge $n) { return }
+    $lo = [math]::Min([math]::Min($d.Anchor, $d.Cur), $to); $hi = [math]::Min($n - 1, [math]::Max([math]::Max($d.Anchor, $d.Cur), $to))
+    $a = [math]::Min($d.Anchor, $to); $b = [math]::Max($d.Anchor, $to)
+    $script:bulkSel = $true
+    try {
+        for ($i = $lo; $i -le $hi; $i++) {
+            $it = $items[$i]
+            $want = ($i -ge $a -and $i -le $b) -or ($d.Base -and $d.Base.Contains($it))
+            $has = $lv.SelectedItems.Contains($it)
+            if ($want -and -not $has) { [void]$lv.SelectedItems.Add($it) } elseif ($has -and -not $want) { [void]$lv.SelectedItems.Remove($it) }
+        }
+    } finally { $script:bulkSel = $false }
+    $d.Cur = $to
+    Update-MapSel
+}
+function Start-RightDrag($d) {
+    $lv = $d.Lv
+    if (-not $script:mapScroller) { $script:mapScroller = Find-Visual $lv ([System.Windows.Controls.ScrollViewer]) }
+    # 鼠标交给列表里的滚动区（不是列表本身：列表自己拿着鼠标、左键又没按着时会把鼠标放掉）
+    $d.Cap = if ($script:mapScroller) { $script:mapScroller } else { $lv }
+    $d.Moved = $true
+    [void]$d.Cap.CaptureMouse()
+    if ($d.Ctrl) { $d.Base = New-Object 'System.Collections.Generic.HashSet[object]'; foreach ($x in @($lv.SelectedItems)) { [void]$d.Base.Add($x) } }
+    else {
+        $script:bulkSel = $true
+        try { $lv.SelectedItems.Clear(); [void]$lv.SelectedItems.Add($lv.Items[$d.Anchor]) } finally { $script:bulkSel = $false }
+    }
+    $script:rdragTimer.Start()
+}
+function Stop-RightDrag {
+    $d = $script:rdrag; $script:rdrag = $null
+    $script:rdragTimer.Stop()
+    if ($d -and $d.Moved -and $d.Cap -and $d.Cap.IsMouseCaptured) { $d.Cap.ReleaseMouseCapture() }
+}
+$ctl.MapList.Add_PreviewMouseRightButtonDown({
+    param($s, $e)
+    Stop-RightDrag
+    if (-not ($e.OriginalSource -is [System.Windows.DependencyObject])) { return }
+    $c = $null; try { $c = [System.Windows.Controls.ItemsControl]::ContainerFromElement($s, $e.OriginalSource) } catch {}
+    if (-not $c) { return }
+    $i = $s.ItemContainerGenerator.IndexFromContainer($c)
+    if ($i -lt 0) { return }
+    $ctrl = ([System.Windows.Input.Keyboard]::Modifiers -band [System.Windows.Input.ModifierKeys]::Control) -ne 0
+    $script:rdrag = @{ Lv = $s; Anchor = $i; Cur = $i; Moved = $false; Ctrl = $ctrl; Base = $null; Cap = $null }
+})
+$ctl.MapList.Add_PreviewMouseMove({
+    param($s, $e)
+    $d = $script:rdrag
+    if (-not $d) { return }
+    if ($e.RightButton -ne [System.Windows.Input.MouseButtonState]::Pressed) { Stop-RightDrag; return }
+    $i = Get-RowAt $s ($e.GetPosition($s).Y)
+    if (-not $d.Moved) { if ($i -lt 0 -or $i -eq $d.Anchor) { return }; Start-RightDrag $d }
+    Set-DragRange $d $i
+})
+$ctl.MapList.Add_PreviewMouseRightButtonUp({ Stop-RightDrag })
+$ctl.MapList.Add_LostMouseCapture({ $d = $script:rdrag; if ($d -and $d.Moved -and $d.Cap -and -not $d.Cap.IsMouseCaptured) { $script:rdrag = $null; $script:rdragTimer.Stop() } })
+# 拖到列表上面或下面：自动滚动，边滚边选
+$script:rdragTimer.Add_Tick({
+    $d = $script:rdrag
+    if (-not $d -or -not $d.Moved) { $script:rdragTimer.Stop(); return }
+    if ([System.Windows.Input.Mouse]::RightButton -ne [System.Windows.Input.MouseButtonState]::Pressed) { Stop-RightDrag; return }
+    $lv = $d.Lv; $y = [System.Windows.Input.Mouse]::GetPosition($lv).Y; $h = [double]$lv.ActualHeight
+    if ($y -ge 0 -and $y -le $h) { return }
+    $sv = $script:mapScroller; if (-not $sv) { return }
+    $over = if ($y -lt 0) { -$y } else { $y - $h }
+    $steps = [math]::Min(4, 1 + [int][math]::Floor($over / 30))
+    for ($k = 0; $k -lt $steps; $k++) { if ($y -lt 0) { $sv.LineUp() } else { $sv.LineDown() } }
+    $lv.UpdateLayout()
+    Set-DragRange $d (Get-RowAt $lv $y)
+})
 function Csv-Line([object[]]$cells) {
     (@($cells | ForEach-Object { $s = [string]$_; if ($s -match '[",\r\n]') { '"' + $s.Replace('"', '""') + '"' } else { $s } }) -join ',')
 }
@@ -642,16 +835,30 @@ $ctl.BtnMapDelete.Add_Click({
         if (-not $ok) { Show-Sheet -Kind warn -Title (T '这一项不能删') -Text ("{0}`n`n{1}" -f $r.Path, (T '没有权限打开这个文件夹，看不到里面有什么，不删。')) | Out-Null; return }
     }
     $bytes = [double]0; foreach ($r in $rows) { $bytes += [double]$r.Size }
+    # 快速扫描时知道实际占用和硬链接：说清楚真正能腾出多少
+    $real = ''
+    if ($script:mapRoot -and $script:mapRoot.HasDisk) {
+        $dk = [double]0; $sh = [double]0; $known = $true
+        foreach ($r in $rows) {
+            if ($r.Disk -lt 0) { $known = $false; break }
+            $dk += [double]$r.Disk
+            if ($r.Node) { $sh += [math]::Min([double]$r.Node.Shared, [double]$r.Node.Disk) }
+        }
+        if ($known) {
+            if ($sh -ge 32MB) { $real += ((T "`n`n按快速扫描的结果，实际能腾出 {0} 到 {1}：其中 {2} 是硬链接，同一份文件在别处还有名字，那些名字还在就不会腾出空间。") -f (Fmt ([math]::Max([double]0, $dk - $sh))), (Fmt $dk), (Fmt $sh)) }
+            elseif (($bytes - $dk) -ge 32MB -and $dk -lt $bytes * 0.85) { $real += ((T "`n`n按快速扫描的结果，这些实际只占 {0}（压缩、稀疏或只在云端的文件比文件大小占得少），删掉腾出的是这么多。") -f (Fmt $dk)) }
+        }
+    }
     $how = (T "「移到回收站」可以恢复，但要清空回收站后才真正腾出空间；「永久删除」马上腾出空间，删了就找不回来。")
     $items = $null
     if ($rows.Count -eq 1) {
         $r = $rows[0]
         $kind = if ($r.IsDir) { (T '文件夹') } else { (T '文件') }
         $title = (T "删除这个{0}（{1}）？") -f $kind, $r.SizeText
-        $text = (T "{0}`n`n「移到回收站」可以恢复，但要清空回收站后才真正腾出空间；「永久删除」马上腾出空间，删了就找不回来。") -f $r.Path
+        $text = ((T "{0}`n`n「移到回收站」可以恢复，但要清空回收站后才真正腾出空间；「永久删除」马上腾出空间，删了就找不回来。") -f $r.Path) + $real
     } else {
         $title = (T "删除选中的 {0} 项（{1}）？") -f $rows.Count, (Fmt $bytes)
-        $text = $how
+        $text = $how + $real
         if ($sel.Count -gt $rows.Count) { $text += ((T "`n`n另有 {0} 项带小锁或是链接，不会删。") -f ($sel.Count - $rows.Count)) }
         $items = @($rows | Select-Object -First 40 | ForEach-Object { (T "{0}（{1}）") -f $_.Path, $_.SizeText })
         if ($rows.Count -gt 40) { $items += ((T "……另有 {0} 项") -f ($rows.Count - 40)) }

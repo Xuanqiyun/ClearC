@@ -1198,3 +1198,78 @@ Zoom 装在这里的程序和本地数据。会议录像默认存在「文档」
 微信、QQ、企业微信、飞书、钉钉、Telegram 等聊天记录文件夹里的大文件。这些文件只能查看、打开位置；要腾地方，可以到「搬家管理」把整个聊天记录搬到其他盘。	Large files in the chat data folders of WeChat, QQ, WeCom, Feishu, DingTalk, Telegram and others. These files can only be viewed and located; to free up space, move the whole chat data to another drive on the "Moved folders" page.
 深色界面没能打开，这次用浅色：{0}	The dark interface could not be loaded, using light this time: {0}
 返回的内容里没有版本号	The response did not contain a version number
+打开网页：{0}	Opened web page: {0}
+打不开浏览器，请手动访问 {0}	Couldn't open the browser. Please visit {0} yourself.
+ · 硬链接：别处还有同一份，删了这个不腾空间	 · Hard link: the same file has another name elsewhere, so deleting this frees nothing
+ · 其中 {0} 是硬链接（别处还有同一份）	 · {0} of it is hard links (the same files also exist elsewhere)
+ · 实际只占 {0}	 · only {0} on disk
+· 文件实际占用 {0}：每个文件只算一次，有几个名字的（硬链接）也只算一份	· File data on disk {0}: each file counted once, even if it has several names (hard links)
+　其中系统还原点等（System Volume Information）{0}，在「省空间」里可以查看	   including restore points and the like (System Volume Information) {0}; see "Save space"
+· 文件表（MFT）{0}：NTFS 记录每个文件信息的地方，文件越多越大，删了文件也不会变小	· File table (MFT) {0}: where NTFS keeps a record of every file. It grows with the number of files and doesn't shrink when files are deleted
+· 其他 {0}：NTFS 的日志和变更日志、文件夹的索引、Windows 给系统更新预留的空间（保留的存储）等，不是普通文件	· Other {0}: the NTFS log and change journal, folder indexes, the space Windows reserves for updates (reserved storage) and so on, which are not ordinary files
+· 按文件大小相加（资源管理器的算法）是 {0}	· Adding up file sizes (as File Explorer does) gives {0}
+· 硬链接：{0} 的文件不止一个名字（大多在 WinSxS 和 System32 里），按名字相加会重复算，盘上只有一份	· Hard links: {0} of files have more than one name (mostly in WinSxS and System32). Adding up by name counts them more than once, but there is only one copy on disk
+· 压缩、稀疏和只在云端的文件：实际占用比文件大小合计少 {0}（已经扣掉了零头按整块分配多占的部分）	· Compressed, sparse and cloud-only files: files take {0} less on disk than their combined size (after allowing for the space lost to whole-cluster allocation)
+· 文件按整块（簇，通常 4 KB）分配，零头也占一整块：实际占用比文件大小合计多 {0}	· Files are stored in whole clusters (usually 4 KB), so a partly filled cluster counts in full: files take {0} more on disk than their combined size
+{0} 已用 {1}（共 {2}），其中：	{0}: {1} used of {2}, made up of:
+和「按文件大小相加」的差别：	Compared with adding up file sizes:
+按 {0:HH:mm} 扫描的结果。	Based on the scan at {0:HH:mm}.
+空间明细	Space breakdown
+选中一行可以打开位置、压缩或删除；勾选前面的方框，或按住 Ctrl、Shift，可以选多项一起删；按住右键上下拖可以一次选中连着的几行。系统文件夹、软件安装文件夹、C 盘个人文件夹和搬家后的数据带小锁，不能在这里删。	Select a row to open its location, compress or delete it. Tick the boxes in front, or hold Ctrl or Shift, to select several and delete them together; hold the right mouse button and drag up or down to select a run of rows. System folders, app installation folders, personal folders on C: and moved data have a lock and can't be deleted here.
+删除选中的 {0} 项…	Delete {0} selected items…
+已复制 {0} 个路径	Copied {0} paths
+\n\n按快速扫描的结果，实际能腾出 {0} 到 {1}：其中 {2} 是硬链接，同一份文件在别处还有名字，那些名字还在就不会腾出空间。	\n\nAccording to the fast scan, this frees between {0} and {1}: {2} of it is hard links, files that still have names elsewhere, and their space is freed only once all their names are gone.
+\n\n按快速扫描的结果，这些实际只占 {0}（压缩、稀疏或只在云端的文件比文件大小占得少），删掉腾出的是这么多。	\n\nAccording to the fast scan, these take only {0} on disk (compressed, sparse or cloud-only files take less than their size), so that is how much deleting them frees.
+当前：读不到还原点的信息	Current: restore point information is not available
+当前：这块盘没有开系统保护，也没有还原点	Current: System Protection is off for this drive and there are no restore points
+当前：{0} 个还原点，占 {1}，最多可以用到 {2}	Current: {0} restore points using {1}; the limit is {2}
+没有上限	no limit
+打不开系统保护设置	Couldn't open System Protection
+查重复文件时让着其他程序：已打开	Give way to other programs when finding duplicates: on
+查重复文件时让着其他程序：已关闭	Give way to other programs when finding duplicates: off
+设置：显示内容已恢复默认	Settings: display restored to defaults
+换	Change
+换成「{0}」外观？	Change the appearance to "{0}"?
+本工具会关闭，然后用新的外观重新打开。	ClearC will close and reopen with the new appearance.
+蓝屏、驱动出错（显卡驱动重置等）和程序崩溃时留下的调试文件，只对排查问题的工程师有用	Debug files left by blue screens, driver errors (such as graphics driver resets) and program crashes. Only useful to engineers investigating problems
+恢复默认显示	Restore default display
+打开系统保护设置	Open System Protection
+已用空间都花在哪：文件实际占用、文件表（MFT）、硬链接、压缩和稀疏文件，以及为什么和按文件大小相加对不上	Where the used space goes: file data on disk, the file table (MFT), hard links, compressed and sparse files, and why it differs from adding up file sizes
+页面、按钮、列和说明全部恢复成默认显示。外观、语言和扫描设置不变	Show all pages, buttons, columns and descriptions again. Appearance, language and scan settings stay as they are
+切换语言	Switch language
+外观	Appearance
+选中这一层列出的全部项目；再点一下全部取消	Select everything listed at this level; click again to clear
+在资源管理器里显示	Show in File Explorer
+复制路径	Copy path
+打开文件夹	Open folder
+设置	Settings
+「清理 C 盘」「空间地图」「帮助」和「设置」一直显示。关掉的页面只是不在左侧列出，里面的设置、搬家记录和自动提醒都照旧。	"Clean up C:", "Space map", "Help" and "Settings" are always shown. A hidden page is only left out of the list on the left; its settings, moved folders and reminders keep working.
+关掉只是不在空间地图上显示这个开关；快速扫描本身在下面「扫描和查重」里开关。	Turning this off only hides the switch from the space map; the fast scan itself is turned on or off under "Scanning and duplicates" below.
+占比条	Size bars
+占这一层的百分之几。	The share of this level, in percent.
+右上角的「快速扫描」开关	"Fast scan" switch at the top right
+名字下面的详细信息	Details under the name
+名字右边的蓝色横条，一眼看出谁大。	The blue bar to the right of the name, to see at a glance what is biggest.
+外观和语言	Appearance and language
+外观、语言，以及界面上显示哪些内容。用不上的页面、按钮和说明可以关掉，界面更清爽；随时可以回来打开，不会丢任何设置和记录。	Appearance, language and what the window shows. Pages, buttons and descriptions you don't use can be hidden for a cleaner look; turn them back on here at any time, and no settings or records are lost.
+外观和语言也可以在这一页上面改；「使用反馈」和「运行记录」也在「帮助」页里。	Appearance and language can also be changed at the top of this page; "Feedback" and "Run log" are also on the "Help" page.
+实际占用和硬链接	Size on disk and hard links
+左下角的按钮	Buttons at the bottom left
+左侧显示的页面	Pages on the left
+快速扫描时在名字下面注明：压缩、稀疏和只在云端（OneDrive 等）的文件实际占的盘比文件大小小；WinSxS 这类文件夹里很多文件和系统其他位置是同一份（硬链接），删了也不腾空间。	With the fast scan, note under the name when compressed, sparse and cloud-only (OneDrive and the like) files take less space than their size, and when files in folders such as WinSxS are the same files as elsewhere in Windows (hard links), so deleting them frees nothing.
+扫描和查重	Scanning and duplicates
+换了以后本工具会关闭，再用新的语言打开。	ClearC closes and reopens in the new language after you change it.
+文件个数、最近修改时间、比上次扫描变了多少、链接指向哪里。	Number of files, last modified date, change since the last scan, and where a link points.
+查重复文件时让着其他程序	Give way to other programs when finding duplicates
+每一行前面显示一个复选框，点一下就能多选，不用按住 Ctrl（和资源管理器「查看」里的「项目复选框」一样）。开不开都可以按住右键上下拖，一次选中连着的几行。	Show a check box at the start of each row, so one click adds a row to the selection without holding Ctrl (like "Item check boxes" under "View" in File Explorer). Either way, you can hold the right mouse button and drag up or down to select a run of rows.
+每一页标题下面那行灰色的说明文字。用熟了可以关掉，列表能多显示几行。	The grey line of description under each page title. Once you know your way around, turn it off to fit a few more rows in the lists.
+界面上显示什么	What the window shows
+界面语言	Language
+百分比	Percentages
+直接读取 NTFS 的文件表（MFT），比逐个文件夹查看快得多，还能看出实际占用和硬链接。少数安全软件对直接读盘会提示，可以关掉，改为逐个文件夹扫描。清理、搬家、软件管理统计大小时也按这个设置。	Read the NTFS file table (MFT) directly: much faster than opening every folder, and it also shows size on disk and hard links. A few security programs warn about direct disk reads; turn this off to scan folder by folder instead. Clean up, Moved folders and Apps follow this setting when measuring sizes.
+系统还原点（卷影副本）	Restore points (shadow copies)
+装更新、装驱动之前 Windows 会自动建还原点，系统出问题时可以退回去。还原点放在 C 盘的 System Volume Information 里（空间地图里带小锁的那个文件夹），只记改动过的部分，占的空间有上限，到了上限会自动删掉最旧的。觉得占得多，可以在 Windows 的「系统保护」里点「配置」，调小「最大使用量」，或者删掉这块盘的全部还原点（删了就不能再退回去）。本工具不直接删还原点。	Windows creates restore points automatically before installing updates and drivers, so you can go back if something breaks. They are kept in System Volume Information on C: (the folder with a lock in the space map), store only what changed, and have a size limit; when it is reached, the oldest are deleted automatically. If they take too much space, open Windows' "System Protection", click "Configure" and lower "Max Usage", or delete all restore points for the drive (you can't go back after that). ClearC never deletes restore points itself.
+读文件时用 Windows 的后台模式，磁盘和内存都排在其他程序后面：不拖慢正在用的程序，也不把它们缓存在内存里的数据挤掉。电脑空闲时速度基本不受影响，同时在做别的事时查得慢一些。	Read files in Windows' background mode, behind other programs for both disk and memory: the programs you are using don't slow down, and the data they keep cached in memory isn't pushed out. When the PC is idle the speed is about the same; while you do other things, the search takes longer.
+跟随系统会照 Windows 设置里「选择应用模式」来。换了以后本工具会关闭，再自动打开。	Follow Windows uses the "Choose your app mode" setting. ClearC closes and reopens after you change it.
+页面标题下的说明	Descriptions under page titles
+项目复选框	Item check boxes
