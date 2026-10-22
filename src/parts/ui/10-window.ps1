@@ -87,7 +87,7 @@ foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageM
                'Roots','BtnAddRoot','BtnDupScan','BtnDupStop',
                'FilterExpander','FilterSummary','TypeChips','TypeReset','ExtraExt','SizeChips',
                'SizeMin','SizeMinUnit','SizeMax','SizeMaxUnit','SizeHint','ModeName','ModeContent','SpeedFast','SpeedExact',
-               'DupProgressText','DupList','DupRecycle','DupProtect','BtnDupDelete',
+               'DupProgressText','DupList','DupRecycle','DupProtect','BtnDupDelete','ModeSimilar','SimilarRow','SimStrict','SimNormal','SimLoose','BtnKeepIn','BtnKeepShort','BtnDupMove',
                'OpPanel','OpTime','OpTitle','OpBar','OpSubTime','OpDetail','OpSubBar','Root',
                'Overlay','OvTitle','OvTime','OvBar','OvStep','OvWhat','OvChecklist','OvDetail','OvSubBar','OvPlanBox','OvPlanScroll','OvPlan','OvHide','OvClose','OvNote',
                'BtnKeepNew','BtnKeepOld','BtnPickC','BtnPickNone','DupSummary',
@@ -438,7 +438,7 @@ function End-Op([string]$result, [switch]$KeepCard, [string]$headline = '', $rep
 # 能中途取消的操作。look = 只是查看，不用确认；其余先问一句。
 # 不在这里的（删除单个文件夹、系统压缩、压缩虚拟磁盘、卸载、删除多余副本）要么很快做完，要么停在一半不安全
 $script:cancelModes = @{ scan = 'look'; apps = 'look'; dup = 'look'; map = 'look'
-    run = 'run'; dupdel = 'dupdel'; merge = 'merge'; leftdel = 'leftdel'; fcompress = 'fcompress'; moveback = 'moveback'; vmove = 'move'; appmove = 'move'
+    run = 'run'; dupdel = 'dupdel'; dupmove = 'dupdel'; similar = 'look'; merge = 'merge'; leftdel = 'leftdel'; fcompress = 'fcompress'; moveback = 'moveback'; vmove = 'move'; appmove = 'move'
     movescan = 'look'; movemany = 'movemany'; mapdel = 'dupdel'; selftest = 'look'; odinfo = 'look'; leftovers = 'look'; odfree = 'look'; recent = 'look' }
 $script:cancelUi = ''
 function Update-CancelUi {
@@ -691,8 +691,8 @@ function UI-Busy($b) {
     $ctl.BtnDupScan.IsEnabled = -not $b
     $ctl.BtnAddRoot.IsEnabled = -not $b; $ctl.Roots.IsEnabled = -not $b
     $has = (-not $b) -and ($script:dupRows -ne $null) -and ($script:dupRows.Count -gt 0)
-    foreach ($n in 'BtnKeepNew','BtnKeepOld','BtnPickC','BtnPickNone') { $ctl[$n].IsEnabled = $has }
-    $ctl.BtnDupStop.IsEnabled = $b -and ($sync.Mode -eq 'dup')
+    foreach ($n in 'BtnKeepNew','BtnKeepOld','BtnPickC','BtnPickNone','BtnKeepIn','BtnKeepShort') { $ctl[$n].IsEnabled = $has }
+    $ctl.BtnDupStop.IsEnabled = $b -and ($sync.Mode -eq 'dup' -or $sync.Mode -eq 'similar')
     foreach ($n in 'BtnMapScan','BtnAppsRefresh','BtnMovesRefresh','BtnCosOn','BtnCosOff','BtnPfMove','BtnPfAuto','BtnHibReduced','BtnHibOff','BtnHibFull','BtnFolderCompress','BtnSaveRefresh') { $ctl[$n].IsEnabled = -not $b }
     $ctl.BtnMapStop.IsEnabled = $b -and ($sync.Mode -eq 'map')
     if (-not $b -and $script:pageLoaded.save) { $on = Get-CompactOSOn; $ctl.BtnCosOn.IsEnabled = -not $on; $ctl.BtnCosOff.IsEnabled = $on }

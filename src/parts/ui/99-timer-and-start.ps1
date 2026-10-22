@@ -79,7 +79,20 @@ $timer.Add_Tick({
             Fill-DestChoices
         }
         elseif ($sync.Mode -eq 'hogs') { End-Op (T '完成') }
+        elseif ($sync.Mode -eq 'similar') {
+            $res = $sync.DupResult
+            $cnt = if ($res) { $res.Count } else { 0 }
+            $script:dupSimilar = $true
+            $ctl.DupProgressText.Text = [string]$sync.SimNote
+            End-Op ((T "完成，{0} 组相似照片") -f $cnt)
+            if ($res) { Build-DupRows $res $cnt } else { Build-DupRows @() 0 }
+            if ($script:dupRows -and $script:dupRows.Count -gt 0) {
+                Pick-Dup 'none'
+                UI-Log (T '相似照片不是同一个文件：没有自动勾选。每组第一张是分辨率最高的，看过以后自己勾要处理的；只能放进回收站或归档，不能永久删除，也不能合并。')
+            } elseif (-not $sync.WasCancelled) { $ctl.EmptyDupText.Text = (T '没有找到相似的照片') }
+        }
         elseif ($sync.Mode -eq 'dup') {
+            $script:dupSimilar = $false
             $res = $sync.DupResult
             $cnt = if ($res) { $res.Count } else { 0 }
             $stopped = [DupFinder]::Cancel
@@ -91,7 +104,8 @@ $timer.Add_Tick({
                 UI-Log (T '已自动勾选：每组留最新的一份，其余删除。可以改勾选，或点上面的按钮换一种留法。')
             }
         }
-        elseif ($sync.Mode -eq 'dupdel') {
+        elseif ($sync.Mode -eq 'dupdel' -or $sync.Mode -eq 'dupmove') {
+            $moveMode = ($sync.Mode -eq 'dupmove')
             $gone = @{}
             if ($sync.DupDeleted) { foreach ($p in $sync.DupDeleted) { $gone[$p.ToLowerInvariant()] = $true } }
             $left = New-Object System.Collections.Generic.List[DupGroup]
@@ -104,12 +118,18 @@ $timer.Add_Tick({
             Build-DupRows $left $left.Count
             $nDel = if ($sync.DupDeleted) { $sync.DupDeleted.Count } else { 0 }
             $cardWasOpen = ($ctl.Overlay.Visibility -eq 'Visible')
-            $bin = if ($script:lastRecycle) { (T "`n`n文件在回收站里，清空回收站后才真正释放磁盘空间。") } else { '' }
-            $binShort = if ($script:lastRecycle) { (T '文件在回收站里，清空回收站后才真正释放空间。') } else { '' }
-            $cx = [bool]$sync.WasCancelled
-            End-Op ($(if ($cx) { (T "已中途取消，删除了 {0} 个文件") } else { (T "完成，删除了 {0} 个文件") }) -f $nDel) -KeepCard -headline ($(if ($cx) { (T "已中途取消：删除了 {0} 个重复文件，剩下的没删。{1}") } else { (T "删除了 {0} 个重复文件。{1}") }) -f $nDel, $binShort) -reportLines @(,@((T '没删的（内容和保留的那份不完全相同，或文件被占用）记在左下角的「运行记录」里。'), '#6E6E73', $false))
-            try { [System.Media.SystemSounds]::Asterisk.Play() } catch {}
-            if (-not $cardWasOpen) { $script:pendingDialog = @{ Title = $(if ($cx) { (T '已中途取消') } else { (T '删除完成') }); Kind = 'done'; Text = ((T "删除了 {0} 个重复文件，共用时 {1}。{2}`n`n没删的（内容和保留的那份不完全相同，或文件被占用）记在「运行记录」里。") -f $nDel, (FmtSpan $script:lastElapsed), $bin) } }
+            if ($moveMode) {
+                $cx = [bool]$sync.WasCancelled
+                End-Op ($(if ($cx) { (T "已中途取消，归档了 {0} 个文件") } else { (T "完成，归档了 {0} 个文件") }) -f $nDel)
+                UI-Log ((T "归档完成：{0} 个文件已搬到 {1}") -f $nDel, $sync.DupMoveDest)
+            } else {
+                $bin = if ($script:lastRecycle) { (T "`n`n文件在回收站里，清空回收站后才真正释放磁盘空间。") } else { '' }
+                $binShort = if ($script:lastRecycle) { (T '文件在回收站里，清空回收站后才真正释放空间。') } else { '' }
+                $cx = [bool]$sync.WasCancelled
+                End-Op ($(if ($cx) { (T "已中途取消，删除了 {0} 个文件") } else { (T "完成，删除了 {0} 个文件") }) -f $nDel) -KeepCard -headline ($(if ($cx) { (T "已中途取消：删除了 {0} 个重复文件，剩下的没删。{1}") } else { (T "删除了 {0} 个重复文件。{1}") }) -f $nDel, $binShort) -reportLines @(,@((T '没删的（内容和保留的那份不完全相同，或文件被占用）记在左下角的「运行记录」里。'), '#6E6E73', $false))
+                try { [System.Media.SystemSounds]::Asterisk.Play() } catch {}
+                if (-not $cardWasOpen) { $script:pendingDialog = @{ Title = $(if ($cx) { (T '已中途取消') } else { (T '删除完成') }); Kind = 'done'; Text = ((T "删除了 {0} 个重复文件，共用时 {1}。{2}`n`n没删的（内容和保留的那份不完全相同，或文件被占用）记在「运行记录」里。") -f $nDel, (FmtSpan $script:lastElapsed), $bin) } }
+            }
         }
         elseif ($sync.Mode -eq 'map') {
             $root = $sync.MapResult

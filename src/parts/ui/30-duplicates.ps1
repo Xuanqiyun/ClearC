@@ -206,7 +206,8 @@ foreach ($c in @($ctl.SizeMinUnit, $ctl.SizeMaxUnit)) { $c.Add_SelectionChanged(
 # ---------- 条件摘要：收起面板后也能看到当前条件 ----------
 function Update-FilterSummary {
     if ($null -eq $script:typeAll -or $null -eq $script:sizeCustom) { return }
-    if ($script:typeAll.IsChecked) { $types = (T '全部类型') }
+    if ($ctl.ModeSimilar.IsChecked) { $types = (T '相似照片') }
+    elseif ($script:typeAll.IsChecked) { $types = (T '全部类型') }
     else {
         $names = @($script:chips | Where-Object { $_.Btn.IsChecked } | ForEach-Object { $_.Label })
         $extra = Parse-ExtraExt
@@ -293,7 +294,7 @@ function Build-DupRows($groups, [int]$totalGroups) {
 }
 
 function Update-DupSummary {
-    if (-not $script:dupRows) { $ctl.DupSummary.Text = ''; $ctl.BtnDupDelete.IsEnabled = $false; return }
+    if (-not $script:dupRows) { $ctl.DupSummary.Text = ''; $ctl.BtnDupDelete.IsEnabled = $false; $ctl.BtnDupMove.IsEnabled = $false; return }
     $n = 0; $b = [double]0
     foreach ($r in $script:dupRows) { if ($r.ToDelete) { $n++; $b += $r.Size } }
     $locked = 0; foreach ($r in $script:dupRows) { if (-not $r.CanDelete) { $locked++ } }
@@ -302,7 +303,7 @@ function Update-DupSummary {
         $ctl.DupSummary.Text = ((T "找到 {0} 组重复文件。已勾选 {1} 个，删除后释放 {2}。") -f $script:dupByGroup.Count, $n, (Fmt $b))
         if ($locked -gt 0) { $ctl.DupSummary.Text += ((T " C 盘个人文件夹里的 {0} 个副本受保护，不会删。") -f $locked) }
     }
-    $ctl.BtnDupDelete.IsEnabled = ($n -gt 0) -and (-not $script:worker)
+    $ctl.BtnDupDelete.IsEnabled = ($n -gt 0) -and (-not $script:worker); $ctl.BtnDupMove.IsEnabled = $ctl.BtnDupDelete.IsEnabled
     $ctl.BtnDupMerge.IsEnabled = ($n -gt 0) -and (-not $script:worker)
 }
 
@@ -328,7 +329,11 @@ function Pick-Dup([string]$mode) {
             $notC = @($rows | Where-Object { -not $_.Path.StartsWith("$env:SystemDrive\", [StringComparison]::OrdinalIgnoreCase) })
             if ($notC.Count -gt 0) { $pool = $notC }
         }
-        $keep = @($pool | Sort-Object ModifiedTicks -Descending:($mode -ne 'old'))[0]
+        elseif ($mode -eq 'in' -and $script:keepInDir) {
+            $inside = @($rows | Where-Object { $_.Path.StartsWith($script:keepInDir, [StringComparison]::OrdinalIgnoreCase) })
+            if ($inside.Count -gt 0) { $pool = $inside }
+        }
+        $keep = if ($mode -eq 'short') { @($pool | Sort-Object { $_.Path.Length }, { $_.Path })[0] } else { @($pool | Sort-Object ModifiedTicks -Descending:($mode -ne 'old'))[0] }
         foreach ($r in $rows) { $r.ToDelete = -not [object]::ReferenceEquals($r, $keep) }
     }
     [DupRow]::Dirty = $false
@@ -361,6 +366,17 @@ $ctl.DupProtect.Add_Unchecked({
 $ctl.BtnKeepNew.Add_Click({ Pick-Dup 'new' })
 $ctl.BtnKeepOld.Add_Click({ Pick-Dup 'old' })
 $ctl.BtnPickC.Add_Click({ Pick-Dup 'c' })
+$ctl.BtnKeepShort.Add_Click({ Pick-Dup 'short' })
+$script:keepInDir = ''
+$ctl.BtnKeepIn.Add_Click({
+    $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
+    $dlg.Description = (T '每组优先保留这个文件夹（含子文件夹）里的那份')
+    if ($script:keepInDir) { $dlg.SelectedPath = $script:keepInDir }
+    if ($dlg.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { return }
+    $script:keepInDir = $dlg.SelectedPath.TrimEnd('\') + '\'
+    Pick-Dup 'in'
+    UI-Log ((T "每组优先保留 {0} 里的那份") -f $script:keepInDir)
+})
 $ctl.BtnPickNone.Add_Click({ Pick-Dup 'none' })
 
 # 「打开位置」按钮：在资源管理器里选中这个文件
@@ -372,11 +388,65 @@ $ctl.DupList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickEv
     }
 })
 
+$ctl.ModeSimilar.Add_Checked({ $ctl.SimilarRow.Visibility = 'Visible'; Update-FilterSummary })
+$ctl.ModeSimilar.Add_Unchecked({ $ctl.SimilarRow.Visibility = 'Collapsed'; Update-FilterSummary })
+$script:dupSimilar = $false
+function Start-SimilarScan([string[]]$paths, $range) {
+    if (-not ('PhotoHash' -as [type])) { Show-Sheet -Kind warn -Title (T '这台电脑上用不了相似照片') -Text (T '图片解码组件没有加载成功（运行记录里有原因）。') | Out-Null; return }
+    $dist = if ($ctl.SimStrict.IsChecked) { 4 } elseif ($ctl.SimLoose.IsChecked) { 12 } else { 8 }
+    $script:dupRows = $null; $script:dupByGroup = @{}; $ctl.DupList.ItemsSource = $null
+    $ctl.EmptyDup.Visibility = 'Visible'; $ctl.EmptyDupText.Text = (T '正在找照片…')
+    $ctl.FilterExpander.IsExpanded = $false
+    $sync.Mode = 'similar'; $sync.DupResult = $null; $sync.SimNote = ''
+    Start-Op (T '查找相似照片')
+    $ctl.DupProgressText.Text = (T '正在找照片…')
+    UI-Busy $true
+    UI-Log ((T "开始查找相似照片（相差 {0} 位以内）。位置：{1}") -f $dist, ($paths -join (T '；')))
+    Start-Worker @'
+[PhotoHash]::Cancel = $false
+SetP @{ SubKind = 'none'; Detail = (T '列出照片') }
+$list = [PhotoHash]::Scan([string[]]$arg.Roots, [long]$arg.Min, [long]$arg.Max, 200000)
+$sync.SimSeen = $list.Count
+if ($list.Count -ge 200000) { Log (T '照片太多，只看前 200000 张') }
+SetP @{ SubKind = 'none'; Detail = ((T "算 {0:N0} 张照片的指纹") -f $list.Count); Steps = $list.Count; Step = 0 }
+# 一边算一边报进度：分批
+$batch = New-Object System.Collections.Generic.List[PhotoItem]
+$k = 0
+foreach ($p in $list) {
+    $batch.Add($p); $k++
+    if ($batch.Count -ge 200) { [PhotoHash]::HashAll($batch); $batch.Clear(); SetP @{ Step = $k }; if (Stopping) { break } }
+}
+if ($batch.Count -gt 0 -and -not (Stopping)) { [PhotoHash]::HashAll($batch) }
+$stopped = [bool](Stopping)
+$n = [PhotoHash]::Group($list, [int]$arg.Dist)
+$by = @{}
+foreach ($p in $list) { if ($p.Bad -or $p.Group -lt 0) { continue }; if (-not $by.ContainsKey($p.Group)) { $by[$p.Group] = New-Object System.Collections.Generic.List[PhotoItem] }; $by[$p.Group].Add($p) }
+$groups = New-Object System.Collections.Generic.List[DupGroup]
+foreach ($g in $by.Values) {
+    if ($g.Count -lt 2) { continue }
+    $dg = New-Object DupGroup
+    $big = $g | Sort-Object { $_.Size } -Descending | Select-Object -First 1
+    $dg.Name = (T "相似照片：{0}") -f [IO.Path]::GetFileName($big.Path); $dg.Size = $big.Size; $dg.Verified = $false
+    foreach ($p in ($g | Sort-Object { $_.W * $_.H } -Descending)) {
+        $f = New-Object DupFile
+        $f.Path = $p.Path; $f.Size = $p.Size; $f.Modified = $p.Modified
+        $f.Risk = (T "{0}×{1}，相差 {2} 位。相似不等于相同：先看一眼再决定") -f $p.W, $p.H, ([PhotoHash]::Dist($p.Hash, $big.Hash))
+        $dg.Files.Add($f)
+    }
+    $groups.Add($dg)
+}
+$sorted = @($groups | Sort-Object { $_.Waste } -Descending)
+$sync.DupResult = New-Object System.Collections.Generic.List[DupGroup]
+foreach ($g in $sorted) { $sync.DupResult.Add($g) }
+$sync.SimNote = (T "看了 {0:N0} 张照片，{1:N0} 张读不了，{2} 组相似{3}") -f $list.Count, [PhotoHash]::Failed, $groups.Count, $(if ($stopped) { (T '（中途停止）') } else { '' })
+'@ @{ Roots = [string[]]$paths; Min = [long][math]::Max([double]1, [double]$range.Min); Max = [long]$range.Max; Dist = $dist }
+}
 $ctl.BtnDupScan.Add_Click({
     $paths = @($script:roots | Where-Object { $_.Enabled } | ForEach-Object { $_.Path })
     if (-not $paths) { Show-Sheet -Title (T '还没选查找位置') -Text (T '请在「查找位置」里至少勾选一个文件夹或磁盘。') | Out-Null; $ctl.FilterExpander.IsExpanded = $true; return }
     $range = Get-SizeRange
     if (-not $range.Ok) { Show-Sheet -Kind warn -Title (T '文件大小填写有误') -Text $range.Err | Out-Null; $ctl.FilterExpander.IsExpanded = $true; return }
+    if ($ctl.ModeSimilar.IsChecked) { Start-SimilarScan $paths $range; return }
     $ext = Get-SelectedExt
     $script:dupRows = $null; $script:dupByGroup = @{}; $ctl.DupList.ItemsSource = $null
     $ctl.EmptyDup.Visibility = 'Visible'; $ctl.EmptyDupText.Text = (T '正在查找…')
@@ -419,7 +489,7 @@ if (-not [DupFinder]::UsedFastEnum) { Log (T '提示：快速列举不可用，�
 '@ $arg
 })
 
-$ctl.BtnDupStop.Add_Click({ [DupFinder]::Cancel = $true; UI-Log (T "正在停止...") })
+$ctl.BtnDupStop.Add_Click({ [DupFinder]::Cancel = $true; try { [PhotoHash]::Cancel = $true } catch {}; UI-Log (T "正在停止...") })
 
 $ctl.BtnDupDelete.Add_Click({
     $plan = New-Object System.Collections.ArrayList
@@ -441,8 +511,13 @@ $ctl.BtnDupDelete.Add_Click({
         return
     }
     $recycle = [bool]$ctl.DupRecycle.IsChecked
+    if ($script:dupSimilar -and -not $recycle) {
+        Show-Sheet -Kind warn -Title (T '相似照片只能放进回收站') -Text (T '相似照片不是同一个文件（分辨率、裁剪、压缩都可能不同），删错了没法从另一份恢复，所以只允许放进回收站。已经帮你勾上「放入回收站」。') | Out-Null
+        $ctl.DupRecycle.IsChecked = $true; $recycle = $true
+    }
+    if ($script:dupSimilar) { foreach ($p in $plan) { $p.Similar = $true } }
     $script:lastRecycle = $recycle
-    $msg = (T "每组至少保留一份没勾选的。")
+    $msg = if ($script:dupSimilar) { (T "这些是相似照片，不是同一个文件：每组至少保留一份没勾选的，勾选的放进回收站。") } else { (T "每组至少保留一份没勾选的。") }
     $msg += if ($recycle) { (T "文件会放进回收站，可以恢复；清空回收站后才真正释放空间。") } else { (T "文件会被永久删除，不能恢复。") }
     if ($allChecked) { $msg += ((T "`n`n另有 {0} 组所有副本都被勾选，这些组会跳过。") -f $allChecked) }
     if ($risky)      { $msg += ((T "`n`n其中 {0} 个文件带有「注意」提示（程序目录或微信数据），请确认确实要删。") -f $risky) }
@@ -470,6 +545,7 @@ foreach ($p in $arg.Plan) {
     $kept = $false
     foreach ($k in $p.Keep) {
         $ki = Get-Item -LiteralPath $k -Force -ErrorAction SilentlyContinue
+        if ($p.Similar) { if ($ki) { $kept = $true; break }; continue }   # 相似照片：保留的那份还在就行（大小本来就不同）
         if (-not $ki -or $ki.Length -ne $p.Size) { continue }
         if ($p.Verified) { $kept = $true; break }
         # 抽样判定的组：和保留的那份逐字节比一遍，完全相同才删
