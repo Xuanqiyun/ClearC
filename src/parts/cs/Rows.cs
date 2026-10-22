@@ -41,6 +41,28 @@ public class AppRow : INotifyPropertyChanged {
     public bool OnC { get; set; }
     public bool LocReg { get; set; }
     public bool CanMove { get; set; }
+    // winget 查到的新版本（空 = 没有或还没查）
+    private string _upg = ""; public string Upgrade { get { return _upg; } set { _upg = value; Raise("Upgrade"); Raise("HasUpgrade"); } }
+    public string UpgradeId { get; set; }
+    public bool HasUpgrade { get { return !string.IsNullOrEmpty(_upg); } }
+    void Raise(string n) { PropertyChangedEventHandler h = PropertyChanged; if (h != null) h(this, new PropertyChangedEventArgs(n)); }
+    public event PropertyChangedEventHandler PropertyChanged;
+}
+// 启动项、计划任务、右键菜单扩展：一行一个，能启用 / 禁用
+public class StartRow : INotifyPropertyChanged {
+    public string Kind { get; set; }        // startup / task / shellex
+    public string Name { get; set; }
+    public string Meta { get; set; }
+    public string Detail { get; set; }      // 命令、文件或 dll 的路径
+    public string Open { get; set; }        // 「打开位置」要打开的路径（空 = 不显示按钮）
+    public string Key1 { get; set; }        // startup: StartupApproved 的键   task: 任务路径   shellex: CLSID
+    public string Key2 { get; set; }        // startup: 值名   task: 任务名
+    public bool Ours { get; set; }          // 本工具自己建的任务
+    private bool _on = true;
+    public bool Enabled { get { return _on; } set { _on = value; Raise("Enabled"); Raise("StatusText"); Raise("StatusBrush"); Raise("ToggleText"); } }
+    public string StatusText { get { return _on ? L10n.T("已启用") : L10n.T("已禁用"); } }
+    public string StatusBrush { get { return Theme.F(_on ? "#248A3D" : "#86868B"); } }
+    public string ToggleText { get { return _on ? L10n.T("禁用") : L10n.T("启用"); } }
     void Raise(string n) { PropertyChangedEventHandler h = PropertyChanged; if (h != null) h(this, new PropertyChangedEventArgs(n)); }
     public event PropertyChangedEventHandler PropertyChanged;
 }

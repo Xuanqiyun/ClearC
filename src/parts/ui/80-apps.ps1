@@ -32,6 +32,7 @@ $sync.AppsResult = $out
 '@ $null
 }
 function Filter-Apps {
+    if ($script:appsView -ne 'apps') { return }
     if (-not $script:appRows) { return }
     $q = ([string]$ctl.AppsSearch.Text).Trim()
     $col = New-Object 'System.Collections.ObjectModel.ObservableCollection[AppRow]'
@@ -49,7 +50,7 @@ function Filter-Apps {
 }
 foreach ($c in @($ctl.AppsAll, $ctl.AppsC, $ctl.AppsStore)) { $c.Add_Checked({ Filter-Apps }) }
 $ctl.AppsSearch.Add_TextChanged({ Filter-Apps })
-$ctl.BtnAppsRefresh.Add_Click({ Load-Apps })
+$ctl.BtnAppsRefresh.Add_Click({ $v = Get-AppsView; if ($v -eq 'apps') { Load-Apps } else { $script:startRows.Remove($v); Load-StartRows $v } })
 function Build-AppRows($list) {
     $rows = New-Object System.Collections.Generic.List[AppRow]
     foreach ($a in @($list | Sort-Object { [double]$_.Size } -Descending)) {
@@ -142,6 +143,7 @@ $ctl.AppsList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickE
         if ($r.Location -and (Test-Path -LiteralPath $r.Location)) { Open-Location $r.Location } else { Show-Sheet -Title (T '没有记录安装位置') -Text (T '这个软件的安装程序没有写明装在哪里。') | Out-Null }
         return
     }
+    if ($b.Name -eq 'AppUpgrade') { Start-WingetUpgrade $r.UpgradeId $r.Name; return }
     if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return }
     if ($b.Name -eq 'AppMove') { Start-AppMove $r; return }
     $txt = if ($r.Kind -eq 'store') { (T "从应用商店卸载 {0}（{1}）。") -f $r.Name, $r.SizeText } else { (T "会打开 {0} 自带的卸载程序，按它的提示一步步操作即可。卸载完回到这里点「检查残留」，看看还有没有剩下的文件夹。") -f $r.Name }
@@ -253,4 +255,184 @@ foreach ($x in $arg.Items) {
 $sync.LeftRes = @{ Count = $n; Name = $arg.Name }
 '@ @{ Items = $left; Name = $r.Name }
 })
+
+# ---------- 开机启动 / 计划任务 / 右键菜单：同一个列表，按视图换内容 ----------
+$script:startRows = @{}   # kind -> List[StartRow]
+$script:appsView = 'apps'
+function Get-AppsView { if ($ctl.AppsViewStartup.IsChecked) { 'startup' } elseif ($ctl.AppsViewTasks.IsChecked) { 'task' } elseif ($ctl.AppsViewMenu.IsChecked) { 'shellex' } else { 'apps' } }
+function Show-AppsView {
+    $v = Get-AppsView; $script:appsView = $v
+    $isApps = ($v -eq 'apps')
+    $ctl.AppsList.Visibility = if ($isApps) { 'Visible' } else { 'Collapsed' }
+    $ctl.StartList.Visibility = if ($isApps) { 'Collapsed' } else { 'Visible' }
+    $ctl.AppsFilterBox.Visibility = if ($isApps) { 'Visible' } else { 'Collapsed' }
+    $ctl.BtnAppsUpdates.Visibility = if ($isApps) { 'Visible' } else { 'Collapsed' }
+    if ($isApps) { Filter-Apps; return }
+    if (-not $script:startRows.ContainsKey($v)) { Load-StartRows $v } else { Filter-StartRows }
+}
+function Filter-StartRows {
+    $v = $script:appsView
+    if ($v -eq 'apps' -or -not $script:startRows.ContainsKey($v)) { return }
+    $q = ([string]$ctl.AppsSearch.Text).Trim()
+    $col = New-Object 'System.Collections.ObjectModel.ObservableCollection[StartRow]'
+    foreach ($r in $script:startRows[$v]) {
+        if ($q -and ($r.Name.IndexOf($q, [StringComparison]::OrdinalIgnoreCase) -lt 0) -and ([string]$r.Meta).IndexOf($q, [StringComparison]::OrdinalIgnoreCase) -lt 0 -and ([string]$r.Detail).IndexOf($q, [StringComparison]::OrdinalIgnoreCase) -lt 0) { continue }
+        $col.Add($r)
+    }
+    $ctl.StartList.ItemsSource = $col
+    $on = @($col | Where-Object { $_.Enabled }).Count
+    $ctl.AppsInfo.Text = switch ($v) {
+        'startup' { (T "{0} 个开机启动项，{1} 个已启用") -f $col.Count, $on }
+        'task'    { (T "{0} 个第三方计划任务，{1} 个已启用（Windows 自己的不列）") -f $col.Count, $on }
+        default   { (T "{0} 个第三方右键菜单扩展，{1} 个已启用（系统自带的不列）") -f $col.Count, $on }
+    }
+    $ctl.EmptyApps.Visibility = if ($col.Count -gt 0) { 'Collapsed' } else { 'Visible' }
+    if ($col.Count -eq 0) { $ctl.EmptyAppsText.Text = switch ($v) { 'startup' { (T '没有开机启动项') } 'task' { (T '没有第三方的计划任务') } default { (T '没有第三方的右键菜单扩展') } } }
+}
+function Load-StartRows([string]$kind) {
+    if ($script:worker) { return }
+    $ctl.StartList.ItemsSource = $null
+    $ctl.EmptyApps.Visibility = 'Visible'; $ctl.EmptyAppsText.Text = (T '正在读取…')
+    $sync.Mode = 'startup'; $sync.StartResult = $null; $sync.StartKind = $kind
+    Start-Op $(switch ($kind) { 'startup' { (T '读取开机启动项') } 'task' { (T '读取计划任务') } default { (T '读取右键菜单扩展') } }) -NoCard
+    UI-Busy $true
+    Start-Worker @'
+$k = $arg.Kind
+$sync.StartResult = switch ($k) { 'startup' { @(Get-StartupItems) } 'task' { @(Get-UserTasks) } default { @(Get-ContextMenuItems) } }
+'@ @{ Kind = $kind }
+}
+function Build-StartRows([string]$kind, $list) {
+    $rows = New-Object System.Collections.Generic.List[StartRow]
+    $srcText = @{ HKCU = (T '注册表 · 当前用户'); HKLM = (T '注册表 · 所有用户'); HKLM32 = (T '注册表 · 所有用户 (32 位)'); UserFolder = (T '「启动」文件夹 · 当前用户'); CommonFolder = (T '「启动」文件夹 · 所有用户') }
+    foreach ($x in @($list)) {
+        $r = New-Object StartRow
+        $r.Kind = $kind; $r.Name = [string]$x.Name
+        switch ($kind) {
+            'startup' {
+                $exe = Get-CommandExe ([string]$x.Cmd)
+                $co = Get-FileCompany $exe
+                $r.Meta = (@($srcText[[string]$x.Src], $co) | Where-Object { $_ }) -join ' · '
+                $r.Detail = [string]$x.Cmd
+                $r.Open = if ($exe -and (Test-Path -LiteralPath $exe)) { $exe } else { '' }
+                $r.Key1 = [string]$x.Approved; $r.Key2 = [string]$x.Val
+                $r.Enabled = [bool]$x.Enabled
+            }
+            'task' {
+                $parts = @(); if ($x.Author) { $parts += [string]$x.Author }; $parts += ((T '任务 ') + [string]$x.Path + [string]$x.Name)
+                if ($x.Desc) { $parts += ([string]$x.Desc) }
+                $r.Meta = ($parts -join ' · ')
+                $r.Detail = [string]$x.Cmd
+                $exe = Get-CommandExe ([string]$x.Cmd)
+                $r.Open = if ($exe -and (Test-Path -LiteralPath $exe)) { $exe } else { '' }
+                $r.Key1 = [string]$x.Path; $r.Key2 = [string]$x.Name
+                $r.Ours = [bool]$x.Ours
+                $r.Enabled = ([string]$x.State -ne 'Disabled')
+            }
+            default {
+                $parts = @(); if ($x.Company) { $parts += [string]$x.Company }; $parts += ((T '出现在：') + (@($x.Where) -join (T '、')))
+                $r.Meta = ($parts -join ' · ')
+                $r.Detail = [string]$x.Dll
+                $r.Open = if ($x.Dll -and (Test-Path -LiteralPath $x.Dll)) { [string]$x.Dll } else { '' }
+                $r.Key1 = [string]$x.Clsid
+                $r.Enabled = [bool]$x.Enabled
+            }
+        }
+        $rows.Add($r)
+    }
+    $sorted = New-Object System.Collections.Generic.List[StartRow]
+    foreach ($r in @($rows | Sort-Object { -not $_.Enabled }, Name)) { $sorted.Add($r) }
+    $script:startRows[$kind] = $sorted
+    if ($script:appsView -eq $kind) { Filter-StartRows }
+}
+function Set-StartRow($r, [bool]$on) {
+    try {
+        switch ($r.Kind) {
+            'startup' { Set-StartupEnabled $r.Key1 $r.Key2 $on }
+            'task'    { if ($on) { Enable-ScheduledTask -TaskPath $r.Key1 -TaskName $r.Key2 -ErrorAction Stop | Out-Null } else { Disable-ScheduledTask -TaskPath $r.Key1 -TaskName $r.Key2 -ErrorAction Stop | Out-Null } }
+            default   { Set-ContextMenuEnabled $r.Key1 $on }
+        }
+    } catch { Show-Sheet -Kind warn -Title $(if ($on) { (T '没启用成') } else { (T '没禁用成') }) -Text $_.Exception.Message | Out-Null; return }
+    $r.Enabled = $on
+    $what = switch ($r.Kind) { 'startup' { if ($on) { (T '启用开机启动项') } else { (T '禁用开机启动项') } } 'task' { if ($on) { (T '启用计划任务') } else { (T '禁用计划任务') } } default { if ($on) { (T '启用右键菜单扩展') } else { (T '禁用右键菜单扩展') } } }
+    OpLog '系统设置' $what $r.Name $r.Detail
+    UI-Log ((T "{0}：{1}") -f $what, $r.Name)
+    if ($r.Kind -eq 'shellex') { $ctl.AppsInfo.Text = (T '右键菜单的改动对新打开的资源管理器窗口生效；还没生效的话注销再登录一次') }
+    else { Filter-StartRows }
+}
+foreach ($rb in @($ctl.AppsViewApps, $ctl.AppsViewStartup, $ctl.AppsViewTasks, $ctl.AppsViewMenu)) { $rb.Add_Checked({ Show-AppsView }) }
+$ctl.AppsSearch.Add_TextChanged({ Filter-StartRows })
+$ctl.StartList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent, [System.Windows.RoutedEventHandler]{
+    param($s, $e)
+    $b = $e.OriginalSource
+    if (-not ($b -is [System.Windows.Controls.Button]) -or -not ($b.Tag -is [StartRow])) { return }
+    $r = $b.Tag
+    if ($b.Name -eq 'StartOpen') { if ($r.Open) { Open-Location $r.Open }; return }
+    if ($b.Name -ne 'StartToggle' -or $r.Ours) { return }
+    if ($r.Enabled) {
+        $what = switch ($r.Kind) {
+            'startup' { (T "「{0}」以后开机时不再自动启动。它本身不会被删，随时可以在这里重新启用，也可以在任务管理器的「启动应用」里改。") -f $r.Name }
+            'task'    { (T "计划任务「{0}」会被禁用，到时间不再运行。随时可以在这里重新启用，也可以在「任务计划程序」里改。") -f $r.Name }
+            default   { (T "「{0}」会从资源管理器的右键菜单里去掉（对新打开的窗口生效）。它所属的软件照常使用，随时可以在这里重新启用。") -f $r.Name }
+        }
+        if ((Show-Sheet -Title ((T "禁用「{0}」？") -f $r.Name) -Text $what -Buttons @((T '取消'), (T '禁用')) -Primary (T '禁用') -Cancel (T '取消')) -ne (T '禁用')) { return }
+        Set-StartRow $r $false
+    } else { Set-StartRow $r $true }
+})
+# ---------- 检查新版本（winget）----------
+function Start-WingetCheck {
+    if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return }
+    if (-not (Get-WingetExe)) { Show-Sheet -Kind warn -Title (T '这台电脑没有 winget') -Text (T 'winget 是 Windows 自带的软件包管理器（「应用安装程序」），Windows 10 1809 以后的系统都有。打不开的话，在应用商店里搜「应用安装程序」装一下。') | Out-Null; return }
+    $sync.Mode = 'winget'; $sync.WingetResult = $null
+    Start-Op (T '用 winget 检查新版本') -NoCard; UI-Busy $true
+    $ctl.AppsInfo.Text = (T '正在用 winget 查，要几十秒…')
+    Start-Worker @'
+$sync.WingetResult = Get-WingetUpgrades
+'@ $null
+}
+function Apply-WingetResult($res) {
+    if (-not $res) { return }
+    if ($res.Err) {
+        $msg = switch ($res.Err) { 'nowinget' { (T '这台电脑没有 winget') } 'timeout' { (T 'winget 三分钟都没查完，可能是网络不通') } default { $res.Err } }
+        Show-Sheet -Kind warn -Title (T '没查成') -Text $msg | Out-Null; Filter-Apps; return
+    }
+    $items = @($res.Items)
+    $hit = 0
+    if ($script:appRows) {
+        foreach ($r in $script:appRows) { $r.Upgrade = ''; $r.UpgradeId = '' }
+        $norm = { param($x) (([string]$x).ToLowerInvariant() -replace '[^\p{L}\p{N}]', '') }
+        foreach ($u in $items) {
+            $un = & $norm $u.Name
+            if ($un.Length -lt 2) { continue }
+            foreach ($r in $script:appRows) {
+                if ($r.Upgrade) { continue }
+                $rn = & $norm $r.Name
+                if ($rn -eq $un -or ($un.Length -ge 4 -and $rn.StartsWith($un)) -or ($rn.Length -ge 4 -and $un.StartsWith($rn))) {
+                    $r.Upgrade = [string]$u.Available; $r.UpgradeId = [string]$u.Id
+                    $r.Meta = ($r.Meta -replace '\s*·\s*' + [regex]::Escape((T '可升级到')) + '[^·]*', '') + ' · ' + (T '可升级到') + ' ' + $u.Available
+                    $hit++; break
+                }
+            }
+        }
+    }
+    $script:wingetItems = $items
+    Filter-Apps
+    if ($items.Count -eq 0) { Show-Sheet -Kind done -Title (T '都是最新的') -Text (T 'winget 没有查到有新版本的软件。') | Out-Null; return }
+    $ctl.AppsInfo.Text = (T "winget：{0} 个软件有新版本，其中 {1} 个在列表里标出来了") -f $items.Count, $hit
+    $lines = @($items | ForEach-Object { (T "{0}：{1} → {2}") -f $_.Name, $_.Version, $_.Available })
+    $ans = Show-Sheet -Title ((T "{0} 个软件有新版本") -f $items.Count) -Text (T '列表里有的软件旁边多了「升级」按钮。也可以在终端窗口里一次全部升级：winget 会逐个下载安装，有的安装程序会弹出自己的窗口，照提示点就行。') -Items $lines `
+        -Buttons @((T '好'), (T '在终端里全部升级')) -Primary (T '好') -Cancel (T '好')
+    if ($ans -eq (T '在终端里全部升级')) { Start-WingetUpgrade '' }
+}
+function Start-WingetUpgrade([string]$id, [string]$name = '') {
+    $exe = Get-WingetExe; if (-not $exe) { return }
+    $cmd = if ($id) { ('"{0}" upgrade --id "{1}" --accept-source-agreements --accept-package-agreements' -f $exe, $id) }
+           elseif ($name) { ('"{0}" upgrade --name "{1}" --accept-source-agreements --accept-package-agreements' -f $exe, $name) }
+           else { ('"{0}" upgrade --all --accept-source-agreements --accept-package-agreements' -f $exe) }
+    try {
+        Start-Process -FilePath "$env:SystemRoot\System32\cmd.exe" -ArgumentList ('/k ' + $cmd)
+        OpLog '系统设置' (T '用 winget 升级软件') $(if ($id) { $id } elseif ($name) { $name } else { (T '全部') }) $cmd
+        UI-Log ((T "已在终端里开始升级：{0}") -f $cmd)
+    } catch { Show-Sheet -Kind warn -Title (T '打不开终端') -Text $_.Exception.Message | Out-Null }
+}
+$ctl.BtnAppsUpdates.Add_Click({ Start-WingetCheck })
 

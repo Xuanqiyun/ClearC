@@ -6,7 +6,7 @@
 param()
 
 $ErrorActionPreference = 'SilentlyContinue'
-$script:AppVersion = '2.7'
+$script:AppVersion = '2.8'
 $script:AppBuildStamp = ''   # 构建 exe 时由 build 脚本填上构建时间（UTC）：写进诊断信息和运行记录，反馈问题时好对上是哪一次构建的
 $script:startClock = [Diagnostics.Stopwatch]::StartNew()   # 记下启动各阶段用了多久，写进运行记录
 
@@ -2520,6 +2520,28 @@ public class AppRow : INotifyPropertyChanged {
     public bool OnC { get; set; }
     public bool LocReg { get; set; }
     public bool CanMove { get; set; }
+    // winget 查到的新版本（空 = 没有或还没查）
+    private string _upg = ""; public string Upgrade { get { return _upg; } set { _upg = value; Raise("Upgrade"); Raise("HasUpgrade"); } }
+    public string UpgradeId { get; set; }
+    public bool HasUpgrade { get { return !string.IsNullOrEmpty(_upg); } }
+    void Raise(string n) { PropertyChangedEventHandler h = PropertyChanged; if (h != null) h(this, new PropertyChangedEventArgs(n)); }
+    public event PropertyChangedEventHandler PropertyChanged;
+}
+// 启动项、计划任务、右键菜单扩展：一行一个，能启用 / 禁用
+public class StartRow : INotifyPropertyChanged {
+    public string Kind { get; set; }        // startup / task / shellex
+    public string Name { get; set; }
+    public string Meta { get; set; }
+    public string Detail { get; set; }      // 命令、文件或 dll 的路径
+    public string Open { get; set; }        // 「打开位置」要打开的路径（空 = 不显示按钮）
+    public string Key1 { get; set; }        // startup: StartupApproved 的键   task: 任务路径   shellex: CLSID
+    public string Key2 { get; set; }        // startup: 值名   task: 任务名
+    public bool Ours { get; set; }          // 本工具自己建的任务
+    private bool _on = true;
+    public bool Enabled { get { return _on; } set { _on = value; Raise("Enabled"); Raise("StatusText"); Raise("StatusBrush"); Raise("ToggleText"); } }
+    public string StatusText { get { return _on ? L10n.T("已启用") : L10n.T("已禁用"); } }
+    public string StatusBrush { get { return Theme.F(_on ? "#248A3D" : "#86868B"); } }
+    public string ToggleText { get { return _on ? L10n.T("禁用") : L10n.T("启用"); } }
     void Raise(string n) { PropertyChangedEventHandler h = PropertyChanged; if (h != null) h(this, new PropertyChangedEventArgs(n)); }
     public event PropertyChangedEventHandler PropertyChanged;
 }
@@ -2683,21 +2705,41 @@ function Invoke-Tool([string]$exe, [string[]]$argv, [string]$cwd = '', [double]$
 }
 function IsLink($p) { $i = Get-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue; return [bool]($i -and ($i.Attributes -band [IO.FileAttributes]::ReparsePoint)) }
 
+# 用户在设置里排除的文件夹：清理时一律不碰，估算大小时也不算
+function Get-ExcludeList { ,@((Get-Setting 'Exclude' '') -split '\|' | ForEach-Object { $_.Trim().TrimEnd('\', '/') } | Where-Object { $_ }) }
+function Get-CustomClean { ,@((Get-Setting 'CustomClean' '') -split '\|' | ForEach-Object { $_.Trim().TrimEnd('\', '/') } | Where-Object { $_ }) }
+function Test-Excluded([string]$path, $ex) {
+    if (-not $ex) { return $false }
+    $p = $path.TrimEnd('\', '/'); $sep = [IO.Path]::DirectorySeparatorChar
+    foreach ($x in $ex) { if ($p -ieq $x -or $p.StartsWith($x + $sep, [StringComparison]::OrdinalIgnoreCase)) { return $true } }
+    return $false
+}
+# 这个文件夹里面有没有被排除的位置（有的话不能整个删）
+function Test-HasExcluded([string]$dir, $ex) {
+    if (-not $ex) { return $false }
+    $d = $dir.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+    foreach ($x in $ex) { if ($x.StartsWith($d, [StringComparison]::OrdinalIgnoreCase)) { return $true } }
+    return $false
+}
 # $tree：Get-SysTree 读出的 C 盘文件夹树，有的话文件夹大小直接从树上查（只用于显示和估算）
-function Get-Size([string[]]$paths, [string]$filter, $tree = $null) {
+function Get-Size([string[]]$paths, [string]$filter, $tree = $null, $ex = $null) {
     $sum = [double]0
     foreach ($p in $paths) {
         foreach ($it in (Get-Item -Path $p -Force -ErrorAction SilentlyContinue)) {
+            if ($ex -and (Test-Excluded $it.FullName $ex)) { continue }
             if ($it.PSIsContainer) {
                 if (IsLink $it.FullName) { continue }
                 if ($filter) {
                     $s = (Get-ChildItem -LiteralPath $it.FullName -Filter $filter -File -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
                     if ($s) { $sum += $s }
-                } else { $sum += (Est-Bytes $it.FullName $tree) }
+                } else {
+                    $sum += (Est-Bytes $it.FullName $tree)
+                    if ($ex) { $d = $it.FullName.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar; foreach ($x in $ex) { if ($x.StartsWith($d, [StringComparison]::OrdinalIgnoreCase)) { $sum -= (Est-Bytes $x $tree) } } }
+                }
             } else { $sum += $it.Length }
         }
     }
-    return $sum
+    return [math]::Max([double]0, $sum)
 }
 
 # ---------- 统计得更快 ----------
@@ -2791,18 +2833,22 @@ function Remove-OneDir($d) {
     & "$sys32\cmd.exe" /c rd /s /q "\\?\$($d.FullName)" 2>$null | Out-Null
 }
 function Remove-Contents([string[]]$paths, [string]$filter, [bool]$wholeDir) {
+    $ex = Get-ExcludeList
+    $skipEx = { param($x) Log ((T "  跳过（在设置里排除了）：{0}") -f $x); OpLog '删除' (T '跳过：在设置里排除了') $x '' }
     foreach ($p in $paths) {
         if (Stopping) { return }
         foreach ($it in (Get-Item -Path $p -Force -ErrorAction SilentlyContinue)) {
             if (Stopping) { return }
             if (Test-Personal $it.FullName) { Log ((T "  跳过（在个人文件夹里，不删）：{0}") -f $($it.FullName)); OpLog '删除' (T '跳过：在个人文件夹里，不删') $it.FullName ''; continue }
+            if (Test-Excluded $it.FullName $ex) { & $skipEx $it.FullName; continue }
             if ($it.PSIsContainer) {
-                if ($wholeDir) { Remove-OneDir $it }
+                if ($wholeDir) { if (Test-HasExcluded $it.FullName $ex) { & $skipEx $it.FullName } else { Remove-OneDir $it } }
                 else {
                     $f = if ($filter) { $filter } else { '*' }
                     foreach ($c in @(Get-ChildItem -LiteralPath $it.FullName -Filter $f -Force -ErrorAction SilentlyContinue)) {
                         if (Stopping) { return }
                         if (Test-Personal $c.FullName) { continue }
+                        if ((Test-Excluded $c.FullName $ex) -or ($c.PSIsContainer -and (Test-HasExcluded $c.FullName $ex))) { & $skipEx $c.FullName; continue }
                         if ($c.PSIsContainer) { Remove-OneDir $c } else { Remove-Item -LiteralPath $c.FullName -Force -ErrorAction SilentlyContinue }
                     }
                 }
@@ -2841,35 +2887,164 @@ function PathHasAny([string]$path, $frags) {
     return $false
 }
 
+# ---------- 缓存目录库 ----------
+# 一行一条，字段用 | 隔开：名称 | 路径 | 说明 | 选项。加新条目只要在这里加一行，不用改代码。
+#   路径：多个用 ; 隔开；可以用 %LOCALAPPDATA%、%APPDATA%、%PROGRAMDATA%、%TEMP%、%USERPROFILE%、%SYSTEMROOT%、%SYSTEMDRIVE% 这类变量，
+#         以及 %STEAM%（Steam 的安装目录，从注册表查）；可以用 * 通配一层文件夹；@chromium:<User Data 目录> 展开成 Chromium 系浏览器的各个缓存目录
+#   选项：filter=*.log（只删匹配的文件）  whole（整个文件夹删掉，不只是里面的东西）  confirm（放进「需确认」，默认跳过）  svc=服务,服务（删之前停掉、删完再启动）
+# 只删缓存：不碰 Cookie、历史记录、密码、设置和用户保存的数据。每一条的名称和说明都在翻译表里有英文
+$script:cacheLib = @(
+    '用户临时文件 | %TEMP% | 各软件运行时的临时文件，关掉软件就没用了'
+    '系统临时文件 | %SYSTEMROOT%\Temp | 系统和安装程序的临时文件'
+    'Windows 更新下载缓存 | %SYSTEMROOT%\SoftwareDistribution\Download | 已装完的更新安装包，下次更新会重新下载需要的部分 | svc=wuauserv,bits'
+    '系统升级残留目录 | %SYSTEMDRIVE%\$WINDOWS.~BT;%SYSTEMDRIVE%\$WINDOWS.~WS;%SYSTEMDRIVE%\$GetCurrent | 大版本升级留下的临时目录 | whole'
+    '磁盘检查残留 (found.000) | %SYSTEMDRIVE%\found.* | 磁盘检查（chkdsk）修复时从损坏的文件里抢救出来的碎片，一般都没用 | whole'
+    '崩溃转储与错误报告 | %SYSTEMROOT%\Minidump;%SYSTEMROOT%\MEMORY.DMP;%SYSTEMROOT%\LiveKernelReports;%PROGRAMDATA%\Microsoft\Windows\WER;%LOCALAPPDATA%\Microsoft\Windows\WER;%LOCALAPPDATA%\CrashDumps | 蓝屏、驱动出错（显卡驱动重置等）和程序崩溃时留下的调试文件，只对排查问题的工程师有用'
+    '系统组件日志 | %SYSTEMROOT%\Logs\CBS | Windows 更新的安装日志 | filter=*.log'
+    'Windows 更新日志 | %SYSTEMROOT%\Logs\WindowsUpdate;%PROGRAMDATA%\USOShared\Logs | Windows 更新的跟踪日志（.etl）'
+    '缩略图缓存 | %LOCALAPPDATA%\Microsoft\Windows\Explorer | 文件夹里图片的小预览图，打开文件夹时会重新生成 | filter=thumbcache_*.db'
+    '系统网页缓存 (INetCache) | %LOCALAPPDATA%\Microsoft\Windows\INetCache\IE | Windows 组件和一些软件内嵌的网页浏览留下的缓存'
+    '应用商店软件的临时文件 | %LOCALAPPDATA%\Packages\*\TempState;%LOCALAPPDATA%\Packages\*\AC\INetCache;%LOCALAPPDATA%\Packages\*\AC\Temp | 从应用商店装的软件的临时文件和网页缓存。不碰它们保存的数据和设置'
+    '远程桌面位图缓存 | %LOCALAPPDATA%\Microsoft\Terminal Server Client\Cache | 远程桌面连接时缓存的画面碎片'
+    'DirectX 着色器缓存 | %LOCALAPPDATA%\D3DSCache | Windows 给游戏和软件编译好的着色器，下次用到时会重新生成'
+    'NVIDIA 安装包与着色器缓存 | %PROGRAMDATA%\NVIDIA Corporation\Downloader;%PROGRAMDATA%\NVIDIA Corporation\NV_Cache;%LOCALAPPDATA%\NVIDIA Corporation\NV_Cache;%LOCALAPPDATA%\NVIDIA\DXCache;%LOCALAPPDATA%\NVIDIA\GLCache;%LOCALAPPDATA%\NVIDIA\VkCache;%LOCALAPPDATA%\NVIDIA\OptixCache | 显卡驱动安装包和游戏着色器缓存，游戏首次启动会重建'
+    'AMD 显卡着色器缓存 | %LOCALAPPDATA%\AMD\DxCache;%LOCALAPPDATA%\AMD\DxcCache;%LOCALAPPDATA%\AMD\GLCache;%LOCALAPPDATA%\AMD\VkCache | AMD 显卡给游戏编译的着色器缓存，游戏首次启动会重建'
+    'Intel 显卡着色器缓存 | %LOCALAPPDATA%\Intel\ShaderCache;%PROGRAMDATA%\Intel\ShaderCache | 核显着色器缓存'
+    'Chrome 浏览器缓存 | @chromium:%LOCALAPPDATA%\Google\Chrome\User Data | 网页缓存。请先关闭浏览器。不影响密码、书签、历史记录'
+    'Edge 浏览器缓存 | @chromium:%LOCALAPPDATA%\Microsoft\Edge\User Data | 网页缓存。请先关闭浏览器。不影响密码、书签、历史记录'
+    'Firefox 浏览器缓存 | %LOCALAPPDATA%\Mozilla\Firefox\Profiles\*\cache2;%LOCALAPPDATA%\Mozilla\Firefox\Profiles\*\startupCache;%LOCALAPPDATA%\Mozilla\Firefox\Profiles\*\shader-cache;%LOCALAPPDATA%\Mozilla\Firefox\Profiles\*\jumpListCache;%LOCALAPPDATA%\Mozilla\Firefox\Profiles\*\OfflineCache | 网页缓存。请先关闭浏览器。不影响密码、书签、历史记录'
+    'Brave 浏览器缓存 | @chromium:%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data | 网页缓存。请先关闭浏览器。不影响密码、书签、历史记录'
+    'Vivaldi 浏览器缓存 | @chromium:%LOCALAPPDATA%\Vivaldi\User Data | 网页缓存。请先关闭浏览器。不影响密码、书签、历史记录'
+    'Opera 浏览器缓存 | %LOCALAPPDATA%\Opera Software\Opera*Stable\Cache;%LOCALAPPDATA%\Opera Software\Opera*Stable\Code Cache;%LOCALAPPDATA%\Opera Software\Opera*Stable\GPUCache;%LOCALAPPDATA%\Opera Software\Opera*Stable\Service Worker\CacheStorage | 网页缓存（含 Opera GX）。请先关闭浏览器。不影响密码、书签、历史记录'
+    'Chrome 测试版 / Chromium 缓存 | @chromium:%LOCALAPPDATA%\Google\Chrome Beta\User Data;@chromium:%LOCALAPPDATA%\Google\Chrome Dev\User Data;@chromium:%LOCALAPPDATA%\Google\Chrome SxS\User Data;@chromium:%LOCALAPPDATA%\Chromium\User Data | Chrome Beta、Dev、Canary 和 Chromium 的网页缓存。请先关闭浏览器'
+    '360 浏览器缓存 | @chromium:%APPDATA%\360se6\User Data;@chromium:%LOCALAPPDATA%\360Chrome\Chrome\User Data;@chromium:%LOCALAPPDATA%\360ChromeX\Chrome\User Data | 360 安全浏览器和 360 极速浏览器的网页缓存。请先关闭浏览器。不影响密码、书签、历史记录'
+    'QQ 浏览器缓存 | @chromium:%LOCALAPPDATA%\Tencent\QQBrowser\User Data | 网页缓存。请先关闭浏览器。不影响密码、书签、历史记录'
+    'Steam 着色器与网页缓存 | %STEAM%\steamapps\shadercache;%STEAM%\appcache\httpcache;%STEAM%\dumps;%STEAM%\logs | 游戏的着色器缓存（首次启动会重建）、Steam 商店页面的缓存、崩溃转储和日志。请先退出 Steam。游戏本身不动'
+    'Epic Games 启动器缓存 | %LOCALAPPDATA%\EpicGamesLauncher\Saved\webcache*;%LOCALAPPDATA%\EpicGamesLauncher\Saved\Logs | 启动器的网页缓存和日志。请先退出 Epic Games 启动器。游戏本身不动'
+    'Unity 缓存 | %LOCALAPPDATA%\Unity\cache | Unity 编辑器的资源商店下载和全局光照缓存，需要时会重新下载或生成'
+    'Adobe 媒体缓存 | %APPDATA%\Adobe\Common\Media Cache Files;%APPDATA%\Adobe\Common\Media Cache;%APPDATA%\Adobe\Common\Peak Files | Premiere、After Effects、Audition 导入素材时生成的缓存，打开项目会重新生成。请先关闭 Adobe 软件'
+    'Microsoft Teams (旧版) 缓存 | %APPDATA%\Microsoft\Teams\Cache;%APPDATA%\Microsoft\Teams\Code Cache;%APPDATA%\Microsoft\Teams\GPUCache;%APPDATA%\Microsoft\Teams\Service Worker\CacheStorage;%APPDATA%\Microsoft\Teams\tmp | 旧版 Teams 的网页缓存。请先退出 Teams。不影响登录和聊天记录'
+    'Discord 缓存 | %APPDATA%\discord\Cache;%APPDATA%\discord\Code Cache;%APPDATA%\discord\GPUCache | 看过的图片和视频的缓存。请先退出 Discord（包括托盘图标）。不影响登录'
+    'Slack 缓存 | %APPDATA%\Slack\Cache;%APPDATA%\Slack\Code Cache;%APPDATA%\Slack\GPUCache;%APPDATA%\Slack\Service Worker\CacheStorage | 网页缓存和文件预览。请先退出 Slack。不影响登录'
+    'VS Code 缓存 | %APPDATA%\Code\Cache;%APPDATA%\Code\CachedData;%APPDATA%\Code\Code Cache;%APPDATA%\Code\GPUCache;%APPDATA%\Code\CachedExtensionVSIXs;%APPDATA%\Code\logs | 编辑器的缓存、下载过的扩展安装包和日志。请先关闭 VS Code。不影响设置和扩展'
+    'Cursor 缓存 | %APPDATA%\Cursor\Cache;%APPDATA%\Cursor\CachedData;%APPDATA%\Cursor\Code Cache;%APPDATA%\Cursor\GPUCache;%APPDATA%\Cursor\logs | 编辑器的缓存和日志。请先关闭 Cursor。不影响设置和扩展'
+    'Cursor 状态库备份 | %APPDATA%\Cursor\User\globalStorage\state.vscdb.backup | Cursor 编辑器状态库的备份副本，主文件保留'
+    'Spotify 缓存 | %LOCALAPPDATA%\Spotify\Data;%LOCALAPPDATA%\Spotify\Browser\Cache | 播放过的歌曲的缓存。下载供离线听的歌不在这里。请先退出 Spotify'
+    '网易云音乐缓存 | %LOCALAPPDATA%\NetEase\CloudMusic\Cache | 听过的歌的缓存。下载的歌不在这里。请先退出网易云音乐'
+    'pip 缓存 | %LOCALAPPDATA%\pip\cache | Python 装包时下载的安装包副本，再装时会重新下载'
+    'uv 缓存 | %LOCALAPPDATA%\uv\cache | uv 装 Python 包时的下载缓存，再装时会重新下载'
+    'npm 缓存 | %LOCALAPPDATA%\npm-cache | Node.js 装包时的下载缓存'
+    'Yarn 缓存 | %LOCALAPPDATA%\Yarn\Cache | Yarn 装包时的下载缓存'
+    'NuGet 下载缓存 | %LOCALAPPDATA%\NuGet\v3-cache;%LOCALAPPDATA%\NuGet\http-cache;%LOCALAPPDATA%\NuGet\plugins-cache | .NET 装包时的下载缓存。项目用的包在全局包目录里，不在这里'
+    'Go 编译缓存 | %LOCALAPPDATA%\go-build | Go 的编译结果缓存，下次编译会重新生成'
+    'Rust crate 下载缓存 | %USERPROFILE%\.cargo\registry\cache | cargo 下载过的 crate 压缩包，需要时会重新下载'
+    'Clash Verge 代理日志 | %APPDATA%\io.github.clash-verge-rev.clash-verge-rev\logs;%APPDATA%\clash-verge\logs;%LOCALAPPDATA%\io.github.clash-verge-rev.clash-verge-rev\logs | 代理软件的运行日志，会无限增长。建议在它设置里把日志等级改成 warn'
+    'Intel XTU 超频日志 | %PROGRAMDATA%\Intel\Intel Extreme Tuning Utility\Logs | Intel 超频组件的日志，会无限增长'
+    'Apple 设备系统更新包 | %PROGRAMDATA%\Apple\AMPDevicesAgent\*-Temporary-Files;%APPDATA%\Apple Computer\iTunes\*Software Updates | 给 iPhone/iPad 升级时下载的固件，装完就没用了'
+    'Dell 更新程序缓存 | %PROGRAMDATA%\Dell\DTP;%PROGRAMDATA%\Dell\SupportAssist | 戴尔驱动更新工具下载的安装包'
+    '罗技 Options+ 缓存 | %PROGRAMDATA%\LogiOptionsPlus\cache;%PROGRAMDATA%\LogiOptionsPlus\depots | 罗技驱动的更新包缓存'
+    'NI 安装包缓存 | %PROGRAMDATA%\National Instruments\MDF\ProductCache;%PROGRAMDATA%\National Instruments\NI Package Manager\packages | LabVIEW 等 NI 软件的安装媒体缓存。软件本身不受影响；以后修复或重装时需重新下载 | confirm'
+    'NuGet 全局包目录 | %USERPROFILE%\.nuget\packages | .NET 项目引用的包都放在这里。删了以后打开项目要联网重新还原（Visual Studio 会自动做，但要等一会儿） | confirm'
+    'Gradle 依赖缓存 | %USERPROFILE%\.gradle\caches | Android Studio 和 Gradle 项目下载的依赖。删了下次构建要重新下载，国内网络可能很慢 | confirm'
+    'Maven 本地仓库 | %USERPROFILE%\.m2\repository | Maven 项目下载的依赖。删了下次构建要重新下载 | confirm'
+    'JetBrains IDE 缓存和索引 | %LOCALAPPDATA%\JetBrains\*\caches;%LOCALAPPDATA%\JetBrains\*\index | IntelliJ IDEA、PyCharm 等的缓存和代码索引。删了打开项目要重新索引（几分钟）。请先关闭这些 IDE | confirm'
+    '虚幻引擎派生数据缓存 | %LOCALAPPDATA%\UnrealEngine\Common\DerivedDataCache | Unreal Engine 给项目生成的派生数据，常有几十 GB。删了打开项目要重新生成，很慢 | confirm'
+)
+function Get-SteamPath {
+    try { $p = [string](Get-ItemProperty 'HKCU:\Software\Valve\Steam' -EA SilentlyContinue).SteamPath; if ($p) { return $p.Replace('/', '\').TrimEnd('\') } } catch {}
+    return ''
+}
+function Expand-LibPath([string]$p) {
+    $p = $p.Trim()
+    if ($p.StartsWith('@chromium:')) {
+        $out = @()
+        foreach ($base in (Expand-LibPath $p.Substring(10))) {
+            $out += @("$base\*\Cache", "$base\*\Code Cache", "$base\*\GPUCache", "$base\*\Service Worker\CacheStorage", "$base\*\Service Worker\ScriptCache", "$base\GrShaderCache", "$base\ShaderCache", "$base\DawnCache", "$base\DawnGraphiteCache", "$base\DawnWebGPUCache")
+        }
+        return ,$out
+    }
+    $i = $p.IndexOf('%STEAM%', [StringComparison]::OrdinalIgnoreCase)
+    if ($i -ge 0) { $s = Get-SteamPath; if (-not $s) { return ,@() }; $p = $p.Substring(0, $i) + $s + $p.Substring($i + 7) }
+    return ,@([Environment]::ExpandEnvironmentVariables($p))
+}
+function Get-CacheLibrary {
+    $out = @()
+    foreach ($line in $script:cacheLib) {
+        $l = $line.Trim()
+        if (-not $l -or $l.StartsWith('#')) { continue }
+        $f = $l.Split('|')
+        if ($f.Count -lt 3) { continue }
+        $paths = @()
+        foreach ($p in $f[1].Split(';')) { if ($p.Trim()) { $paths += Expand-LibPath $p } }
+        $x = @{ N = (T $f[0].Trim()); Note = (T $f[2].Trim()); Paths = $paths; Confirm = $false; Whole = $false; Filter = ''; Svc = $null }
+        if ($f.Count -gt 3) {
+            foreach ($o in $f[3].Trim().Split(' ')) {
+                $o = $o.Trim(); if (-not $o) { continue }
+                if ($o -eq 'whole') { $x.Whole = $true }
+                elseif ($o -eq 'confirm') { $x.Confirm = $true }
+                elseif ($o.StartsWith('filter=')) { $x.Filter = $o.Substring(7) }
+                elseif ($o.StartsWith('svc=')) { $x.Svc = @($o.Substring(4).Split(',') | Where-Object { $_ }) }
+            }
+        }
+        $out += $x
+    }
+    return ,$out
+}
+# Windows Installer 留下的孤儿安装包：C:\Windows\Installer 里没有任何已装软件、补丁再引用的 .msi / .msp
+# 判断标准和 PatchCleaner 一样：注册表里每个产品、每个补丁登记的 LocalPackage，再用 Windows Installer 自己的接口问一遍。一个引用都没读到就不敢判断，返回空
+function Get-InstallerOrphans {
+    $dir = Join-Path $env:SystemRoot 'Installer'
+    $files = @(Get-ChildItem -LiteralPath $dir -File -Force -ErrorAction SilentlyContinue | Where-Object { $_.Extension -match '^\.(msi|msp)$' })
+    if ($files.Count -eq 0) { return ,@() }
+    $used = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    foreach ($root in @('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\*\Products\*\InstallProperties', 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\*\Patches\*',
+                           'HKLM:\SOFTWARE\Classes\Installer\Patches\*', 'HKCU:\Software\Microsoft\Installer\Patches\*')) {
+        foreach ($p in @(Get-ItemProperty -Path $root -ErrorAction SilentlyContinue)) { $v = [string]$p.LocalPackage; if ($v) { [void]$used.Add((Split-Path $v -Leaf)) } }
+    }
+    try {
+        $inst = New-Object -ComObject WindowsInstaller.Installer
+        $t = $inst.GetType()
+        foreach ($code in @($t.InvokeMember('Products', 'GetProperty', $null, $inst, $null))) {
+            try { $lp = [string]$t.InvokeMember('ProductInfo', 'GetProperty', $null, $inst, @([string]$code, 'LocalPackage')); if ($lp) { [void]$used.Add((Split-Path $lp -Leaf)) } } catch {}
+            foreach ($args in @(@([string]$code, '', 7, 15), @([string]$code, 's-1-1-0', 3, 15))) {
+                try {
+                    foreach ($pt in @($t.InvokeMember('PatchesEx', 'GetProperty', $null, $inst, $args))) {
+                        try { $lp = [string]$pt.GetType().InvokeMember('PatchProperty', 'GetProperty', $null, $pt, @('LocalPackage')); if ($lp) { [void]$used.Add((Split-Path $lp -Leaf)) } } catch {}
+                    }
+                } catch {}
+            }
+        }
+    } catch {}
+    if ($used.Count -eq 0) { return ,@() }
+    $out = @()
+    $recent = (Get-Date).AddDays(-1)
+    foreach ($f in $files) {
+        if ($used.Contains($f.Name)) { continue }
+        if ($f.LastWriteTime -gt $recent) { continue }   # 刚装的软件，登记可能还没写完
+        $out += $f
+    }
+    return ,$out
+}
+
 # Kind: cache = 缓存类(删除/跳过)   action = 操作类(执行/跳过)   move = 只能搬(搬到其他盘/跳过)   flex = 可搬可删
 function Get-Catalog {
     $docs = [Environment]::GetFolderPath('MyDocuments')
     $desk = [Environment]::GetFolderPath('Desktop')
     $down = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders' -EA SilentlyContinue).'{374DE290-123F-4565-9164-39C4925E467B}'
     if ($down) { $down = [Environment]::ExpandEnvironmentVariables($down) } else { $down = "$env:USERPROFILE\Downloads" }
+    $safeG  = '安全清理（缓存、临时文件、日志，删了程序会自动重建）'
+    $confG  = '需确认（有代价，默认跳过，看清说明再选）'
     $chatG  = '聊天软件的聊天记录（搬到其他盘：聊天记录和文件原样保留，原位置留链接，软件照常使用）'
     $otherG = '其他可搬的文件夹（数据原样保留，原位置留链接，软件照常使用）'
-    $list = @(
-        # ---- 安全清理：缓存 / 临时文件 / 日志，删了程序自动重建 ----
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T '用户临时文件');        Paths=@($env:TEMP); Note=(T '各软件运行时的临时文件，关掉软件就没用了') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T '系统临时文件');        Paths=@('C:\Windows\Temp'); Note=(T '系统和安装程序的临时文件') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Windows 更新下载缓存'); Paths=@('C:\Windows\SoftwareDistribution\Download'); Svc=@('wuauserv','bits'); Note=(T '已装完的更新安装包，下次更新会重新下载需要的部分') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T '系统升级残留目录');    Paths=@('C:\$WINDOWS.~BT','C:\$WINDOWS.~WS','C:\$GetCurrent'); Whole=$true; Note=(T '大版本升级留下的临时目录') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T '崩溃转储与错误报告');  Paths=@('C:\Windows\Minidump','C:\Windows\MEMORY.DMP','C:\Windows\LiveKernelReports','C:\ProgramData\Microsoft\Windows\WER',"$env:LOCALAPPDATA\CrashDumps"); Note=(T '蓝屏、驱动出错（显卡驱动重置等）和程序崩溃时留下的调试文件，只对排查问题的工程师有用') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T '系统组件日志');        Paths=@('C:\Windows\Logs\CBS'); Filter='*.log'; Note=(T 'Windows 更新的安装日志') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T '缩略图缓存');          Paths=@("$env:LOCALAPPDATA\Microsoft\Windows\Explorer"); Filter='thumbcache_*.db'; Note=(T '文件夹里图片的小预览图，打开文件夹时会重新生成') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Chrome 浏览器缓存');   Paths=@("$env:LOCALAPPDATA\Google\Chrome\User Data\*\Cache","$env:LOCALAPPDATA\Google\Chrome\User Data\*\Code Cache","$env:LOCALAPPDATA\Google\Chrome\User Data\*\GPUCache"); Note=(T '网页缓存。请先关闭浏览器。不影响密码、书签、历史记录') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Edge 浏览器缓存');     Paths=@("$env:LOCALAPPDATA\Microsoft\Edge\User Data\*\Cache","$env:LOCALAPPDATA\Microsoft\Edge\User Data\*\Code Cache","$env:LOCALAPPDATA\Microsoft\Edge\User Data\*\GPUCache"); Note=(T '网页缓存。请先关闭浏览器。不影响密码、书签、历史记录') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'pip 缓存');            Paths=@("$env:LOCALAPPDATA\pip\cache"); Note=(T 'Python 装包时下载的安装包副本，再装时会重新下载') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'npm 缓存');            Paths=@("$env:LOCALAPPDATA\npm-cache"); Note=(T 'Node.js 装包时的下载缓存') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Clash Verge 代理日志'); Paths=@("$env:APPDATA\io.github.clash-verge-rev.clash-verge-rev\logs","$env:APPDATA\clash-verge\logs","$env:LOCALAPPDATA\io.github.clash-verge-rev.clash-verge-rev\logs"); Note=(T '代理软件的运行日志，会无限增长。建议在它设置里把日志等级改成 warn') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Intel XTU 超频日志');   Paths=@('C:\ProgramData\Intel\Intel Extreme Tuning Utility\Logs'); Note=(T 'Intel 超频组件的日志，会无限增长') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Apple 设备系统更新包'); Paths=@('C:\ProgramData\Apple\AMPDevicesAgent\*-Temporary-Files',"$env:APPDATA\Apple Computer\iTunes\*Software Updates"); Note=(T '给 iPhone/iPad 升级时下载的固件，装完就没用了') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Dell 更新程序缓存');    Paths=@('C:\ProgramData\Dell\DTP','C:\ProgramData\Dell\SupportAssist'); Note=(T '戴尔驱动更新工具下载的安装包') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T '罗技 Options+ 缓存');   Paths=@('C:\ProgramData\LogiOptionsPlus\cache','C:\ProgramData\LogiOptionsPlus\depots'); Note=(T '罗技驱动的更新包缓存') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'NVIDIA 安装包与着色器缓存'); Paths=@('C:\ProgramData\NVIDIA Corporation\Downloader','C:\ProgramData\NVIDIA Corporation\NV_Cache',"$env:LOCALAPPDATA\NVIDIA\DXCache","$env:LOCALAPPDATA\NVIDIA\GLCache"); Note=(T '显卡驱动安装包和游戏着色器缓存，游戏首次启动会重建') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Intel 显卡着色器缓存'); Paths=@("$env:LOCALAPPDATA\Intel\ShaderCache",'C:\ProgramData\Intel\ShaderCache'); Note=(T '核显着色器缓存') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Cursor 状态库备份');    Paths=@("$env:APPDATA\Cursor\User\globalStorage\state.vscdb.backup"); Note=(T 'Cursor 编辑器状态库的备份副本，主文件保留') }
+    $customG = '自定义清理（你在设置里加的文件夹：删除里面的东西，文件夹本身保留）'
+    $lib = Get-CacheLibrary
+    $list = @()
+    # ---- 安全清理：缓存 / 临时文件 / 日志，删了程序自动重建（目录库里的）----
+    foreach ($x in $lib) {
+        if ($x.Confirm) { continue }
+        $list += @{ G=$safeG; Kind='cache'; Def=(T '删除'); N=$x.N; Paths=$x.Paths; Note=$x.Note; Filter=$x.Filter; Whole=$x.Whole; Svc=$x.Svc }
+    }
+    $list += @(
         @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); N=(T '清空回收站');            Note=(T '回收站里是你以前删掉、但还能找回的文件。清空后就永远找不回了，请先打开回收站确认里面没有要的东西')
            Size={ try { $s = ((New-Object -ComObject Shell.Application).NameSpace(0xA).Items() | Measure-Object -Property Size -Sum).Sum; if ($s) { $s } else { 0 } } catch { 0 } }
            Act ={ Clear-RecycleBin -Force -ErrorAction SilentlyContinue } }
@@ -2878,7 +3053,6 @@ function Get-Catalog {
            Act ={ Delete-DeliveryOptimizationCache -Force -ErrorAction SilentlyContinue } }
 
         # ---- 需确认：有代价 ----
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache';  Def=(T '跳过'); One=(T '删除'); N=(T 'NI 安装包缓存');     Paths=@('C:\ProgramData\National Instruments\MDF\ProductCache','C:\ProgramData\National Instruments\NI Package Manager\packages'); Note=(T 'LabVIEW 等 NI 软件的安装媒体缓存。软件本身不受影响；以后修复或重装时需重新下载') }
         @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache';  Def=(T '跳过'); One=(T '删除'); N='Windows.old';        Paths=@('C:\Windows.old'); Whole=$true; Note=(T '上一版 Windows 的完整副本。删后不能回退到上一版系统（系统升级 10 天后会自动删）')
            Act ={ & "$env:SystemRoot\System32\takeown.exe" /F 'C:\Windows.old' /R /A /D Y | Out-Null; & "$env:SystemRoot\System32\icacls.exe" 'C:\Windows.old' /grant Administrators:F /T /C /Q | Out-Null; Remove-Item 'C:\Windows.old' -Recurse -Force -ErrorAction SilentlyContinue } }
         @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def=(T '跳过'); One=(T '执行'); N=(T '重建 Windows 搜索索引'); Note=(T '搜索索引膨胀时可重建，重建后通常只剩 1 到 2 GB。重建期间（约 1 小时）搜文件会变慢')
@@ -2889,6 +3063,9 @@ function Get-Catalog {
         @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def=(T '跳过'); One=(T '执行'); N=(T '禁用 XTU 超频日志服务'); Note=(T '外星人 Command Center 的 CPU 超频组件，会持续写几 GB 日志。不超频可禁用，AWCC 的风扇和性能档位不受影响')
            Size={ $s = Get-Service XTU3SERVICE -ErrorAction SilentlyContinue; if ($s -and $s.Status -eq 'Running') { -1 } else { 0 } }
            Act ={ Stop-Service XTU3SERVICE -Force -ErrorAction SilentlyContinue; Set-Service XTU3SERVICE -StartupType Disabled -ErrorAction SilentlyContinue } }
+        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T 'Windows Installer 孤儿安装包'); Note=(T 'C:\Windows\Installer 里没有任何已装软件和补丁再引用的安装包（.msi / .msp），多半是软件升级、卸载后留下的。判断方法和 PatchCleaner 一样。删了以后，万一哪个软件修复或卸载时提示找不到安装包，重新下载安装一次即可')
+           Size={ $s = [double]0; foreach ($f in (Get-InstallerOrphans)) { $s += $f.Length }; $s }
+           Act ={ $n = 0; $b = [double]0; foreach ($f in (Get-InstallerOrphans)) { try { Remove-Item -LiteralPath $f.FullName -Force -ErrorAction Stop; $n++; $b += $f.Length } catch { Log ((T "  没删掉：{0}（{1}）") -f $f.FullName, $_.Exception.Message) } }; Log ((T "  Windows Installer 孤儿安装包：删了 {0} 个，{1}") -f $n, (GB $b)) } }
         @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def=(T '跳过'); One=(T '执行'); N=(T 'WinSxS 组件清理 (DISM)'); Note=(T '清掉系统更新替换下来的旧组件，通常能省 2 到 10 GB。耗时 10 到 20 分钟，完成后建议重启'); Last=$true
            Size={ -1 }
            Act ={ & "$env:SystemRoot\System32\Dism.exe" /Online /Cleanup-Image /StartComponentCleanup /ResetBase | Out-Null }; Slow=$true }
@@ -2919,6 +3096,14 @@ function Get-Catalog {
         @{ G=$otherG; Kind='flex'; Def=(T '跳过');    N=(T 'conda 环境 (.conda)');    Paths=@("$env:USERPROFILE\.conda"); Note=(T 'conda 创建的 Python 环境。搬走后照常使用；删了要重建环境') }
         @{ G=$otherG; Kind='flex'; Def=(T '跳过');    N=(T 'pip --user 安装的包');    Paths=@("$env:APPDATA\Python"); Note=(T '用 pip install --user 装的 Python 包。有 conda 的话多半已不用，可删；不确定就搬走') }
     )
+    foreach ($x in $lib) {
+        if (-not $x.Confirm) { continue }
+        $list += @{ G=$confG; Kind='cache'; Def=(T '跳过'); One=(T '删除'); N=$x.N; Paths=$x.Paths; Note=$x.Note; Filter=$x.Filter; Whole=$x.Whole; Svc=$x.Svc }
+    }
+    # ---- 自定义：用户在设置里加的文件夹，删里面的东西 ----
+    foreach ($p in (Get-CustomClean)) {
+        $list += @{ G=$customG; Kind='cache'; Def=(T '删除'); N=(Split-Path $p -Leaf); Paths=@($p); Note=$p; Custom=$true }
+    }
     $apps = Get-ChatApps
     $i = 0
     foreach ($it in $list) {
@@ -2941,7 +3126,7 @@ function Measure-Item($it, $tree = $null) {
         $paths += $p
     }
     if (-not $paths) { return 0 }
-    return Get-Size $paths $it.Filter $tree
+    return Get-Size $paths $it.Filter $tree (Get-ExcludeList)
 }
 
 function Invoke-Delete($it, $res, [switch]$Auto) {
@@ -3254,7 +3439,7 @@ $script:snapDir      = Join-Path $script:appDir '空间快照'
 
 function Get-Setting([string]$k, [string]$def = '') {
     try {
-        if (Test-Path -LiteralPath $script:settingsFile) {
+        if ($script:settingsFile -and (Test-Path -LiteralPath $script:settingsFile)) {
             foreach ($l in [IO.File]::ReadAllLines($script:settingsFile, [Text.Encoding]::UTF8)) {
                 $i = $l.IndexOf('=')
                 if ($i -gt 0 -and $l.Substring(0, $i).Trim() -eq $k) { return $l.Substring($i + 1).Trim() }
@@ -3905,6 +4090,167 @@ function Set-Hiber([string]$mode) {
 # ============================================================
 # 每周自动清理：只做「安全清理」组里默认要删的普通缓存，不搬家、不清空回收站、不停服务
 # ============================================================
+# ---------- 启动项 ----------
+# 和任务管理器「启动」页一样的来源：注册表 Run 项（当前用户、所有用户、32 位）和两个「启动」文件夹。
+# 开关状态记在 Explorer\StartupApproved 里（第一个字节偶数 = 启用，奇数 = 禁用），禁用只是改这个记录，随时能恢复，不删任何东西
+function Get-StartupSources {
+    @(
+        @{ Src = 'HKCU'; Key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run';              Approved = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run' }
+        @{ Src = 'HKLM'; Key = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run';              Approved = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run' }
+        @{ Src = 'HKLM32'; Key = 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run'; Approved = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run32' }
+        @{ Src = 'UserFolder'; Dir = [Environment]::GetFolderPath('Startup');       Approved = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\StartupFolder' }
+        @{ Src = 'CommonFolder'; Dir = [Environment]::GetFolderPath('CommonStartup'); Approved = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\StartupFolder' }
+    )
+}
+function Test-StartupEnabled([string]$approved, [string]$name) {
+    try { $v = (Get-ItemProperty -LiteralPath $approved -Name $name -ErrorAction Stop).$name; if ($v -is [byte[]] -and $v.Length -gt 0) { return (($v[0] % 2) -eq 0) } } catch {}
+    return $true
+}
+function Get-StartupItems {
+    $out = @()
+    foreach ($s in (Get-StartupSources)) {
+        if ($s.Key) {
+            $p = Get-ItemProperty -LiteralPath $s.Key -ErrorAction SilentlyContinue
+            if (-not $p) { continue }
+            foreach ($prop in $p.PSObject.Properties) {
+                if ($prop.Name -like 'PS*') { continue }
+                $cmd = [string]$prop.Value; if (-not $cmd) { continue }
+                $out += @{ Name = $prop.Name; Cmd = $cmd; Src = $s.Src; Approved = $s.Approved; Val = $prop.Name; Enabled = (Test-StartupEnabled $s.Approved $prop.Name) }
+            }
+        } elseif ($s.Dir -and (Test-Path -LiteralPath $s.Dir)) {
+            foreach ($f in @(Get-ChildItem -LiteralPath $s.Dir -File -Force -ErrorAction SilentlyContinue)) {
+                if ($f.Name -ieq 'desktop.ini') { continue }
+                $out += @{ Name = [IO.Path]::GetFileNameWithoutExtension($f.Name); Cmd = $f.FullName; Src = $s.Src; Approved = $s.Approved; Val = $f.Name; Enabled = (Test-StartupEnabled $s.Approved $f.Name) }
+            }
+        }
+    }
+    return ,$out
+}
+function Set-StartupEnabled([string]$approved, [string]$name, [bool]$on) {
+    if (-not (Test-Path -LiteralPath $approved)) { New-Item -Path $approved -Force | Out-Null }
+    $b = New-Object byte[] 12
+    if ($on) { $b[0] = 2 } else { $b[0] = 3; [Array]::Copy([BitConverter]::GetBytes([DateTime]::Now.ToFileTime()), 0, $b, 4, 8) }
+    Set-ItemProperty -LiteralPath $approved -Name $name -Value $b -Type Binary -ErrorAction Stop
+}
+# 从启动命令里取出程序路径（给看发行商和图标用）
+function Get-CommandExe([string]$cmd) {
+    $cmd = $cmd.Trim()
+    if (-not $cmd) { return '' }
+    if ($cmd.StartsWith('"')) { $e = $cmd.IndexOf('"', 1); if ($e -gt 0) { return [Environment]::ExpandEnvironmentVariables($cmd.Substring(1, $e - 1)) } }
+    $m = [regex]::Match($cmd, '(?i)^(.+?\.(exe|cmd|bat|lnk|vbs))(\s|$)')
+    if ($m.Success) { return [Environment]::ExpandEnvironmentVariables($m.Groups[1].Value) }
+    return [Environment]::ExpandEnvironmentVariables($cmd.Split(' ')[0])
+}
+function Get-FileCompany([string]$path) {
+    try { if ($path -and (Test-Path -LiteralPath $path)) { return [string][Diagnostics.FileVersionInfo]::GetVersionInfo($path).CompanyName } } catch {}
+    return ''
+}
+# ---------- 计划任务：只列第三方的（\Microsoft\ 下面的是系统自己的，不动）----------
+function Get-UserTasks {
+    $out = @()
+    $all = @()
+    try { $all = @(Get-ScheduledTask -ErrorAction Stop) } catch { return ,@() }
+    foreach ($t in $all) {
+        if ($t.TaskPath -like '\Microsoft\*') { continue }
+        $cmd = ''
+        foreach ($a in @($t.Actions)) { if ($a.PSObject.Properties['Execute'] -and $a.Execute) { $cmd = ([string]$a.Execute + ' ' + [string]$a.Arguments).Trim(); break } }
+        $out += @{ Name = [string]$t.TaskName; Path = [string]$t.TaskPath; State = [string]$t.State; Author = [string]$t.Author; Desc = [string]$t.Description; Cmd = $cmd; Ours = ([string]$t.TaskPath -eq '\CleanC\') }
+    }
+    return ,$out
+}
+# ---------- 资源管理器右键菜单扩展（shellex）：只列第三方的，禁用是写进 Shell Extensions\Blocked，新开的窗口就不再加载它 ----------
+$script:shellexBlocked = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Shell Extensions\Blocked'
+function Get-ContextMenuItems {
+    $blocked = @{}
+    foreach ($k in @($script:shellexBlocked, 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Shell Extensions\Blocked')) {
+        $p = Get-ItemProperty -LiteralPath $k -ErrorAction SilentlyContinue
+        if ($p) { foreach ($prop in $p.PSObject.Properties) { if ($prop.Name -like '{*}') { $blocked[$prop.Name.ToUpperInvariant()] = $true } } }
+    }
+    $where = [ordered]@{ '*' = (T '文件'); 'AllFilesystemObjects' = (T '文件和文件夹'); 'Directory' = (T '文件夹'); 'Folder' = (T '文件夹'); 'Directory\Background' = (T '文件夹空白处'); 'Drive' = (T '磁盘') }
+    $items = [ordered]@{}
+    foreach ($hive in @('HKLM:\SOFTWARE\Classes', 'HKCU:\Software\Classes')) {
+        foreach ($w in $where.Keys) {
+            $base = "$hive\$w\shellex\ContextMenuHandlers"
+            foreach ($k in @(Get-ChildItem -LiteralPath $base -ErrorAction SilentlyContinue)) {
+                $clsid = ''
+                try { $clsid = [string](Get-ItemProperty -LiteralPath $k.PSPath -ErrorAction Stop).'(default)' } catch {}
+                if (-not $clsid) { $clsid = $k.PSChildName }
+                $clsid = $clsid.Trim()
+                if ($clsid -notmatch '^\{[0-9A-Fa-f-]{36}\}$') { continue }
+                $u = $clsid.ToUpperInvariant()
+                if (-not $items.Contains($u)) {
+                    $name = ''; $dll = ''
+                    foreach ($c in @("HKLM:\SOFTWARE\Classes\CLSID\$clsid", "HKCU:\Software\Classes\CLSID\$clsid", "HKLM:\SOFTWARE\Classes\WOW6432Node\CLSID\$clsid")) {
+                        if (-not (Test-Path -LiteralPath $c)) { continue }
+                        if (-not $name) { try { $name = [string](Get-ItemProperty -LiteralPath $c -ErrorAction Stop).'(default)' } catch {} }
+                        if (-not $dll) { try { $dll = [string](Get-ItemProperty -LiteralPath "$c\InprocServer32" -ErrorAction Stop).'(default)' } catch {} }
+                    }
+                    if ($dll) { $dll = [Environment]::ExpandEnvironmentVariables($dll).Trim('"') }
+                    # 系统自带的（dll 在 Windows 文件夹里）不列
+                    if (-not $dll -or $dll.StartsWith($env:SystemRoot, [StringComparison]::OrdinalIgnoreCase)) { continue }
+                    if (-not $name) { $name = $k.PSChildName }
+                    $items[$u] = @{ Clsid = $clsid; Name = $name; Dll = $dll; Company = (Get-FileCompany $dll); Keys = @($k.PSChildName); Where = @($where[$w]); Enabled = -not $blocked.ContainsKey($u) }
+                } else {
+                    if ($items[$u].Where -notcontains $where[$w]) { $items[$u].Where += $where[$w] }
+                    if ($items[$u].Keys -notcontains $k.PSChildName) { $items[$u].Keys += $k.PSChildName }
+                }
+            }
+        }
+    }
+    return ,@($items.Values)
+}
+function Set-ContextMenuEnabled([string]$clsid, [bool]$on) {
+    foreach ($k in @($script:shellexBlocked, 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Shell Extensions\Blocked')) {
+        if ($on) { Remove-ItemProperty -LiteralPath $k -Name $clsid -ErrorAction SilentlyContinue }
+    }
+    if (-not $on) {
+        if (-not (Test-Path -LiteralPath $script:shellexBlocked)) { New-Item -Path $script:shellexBlocked -Force | Out-Null }
+        New-ItemProperty -LiteralPath $script:shellexBlocked -Name $clsid -Value '' -PropertyType String -Force -ErrorAction Stop | Out-Null
+    }
+}
+# ---------- winget：有哪些软件有新版本。只在用户点的时候运行，只读不改 ----------
+function Get-WingetExe {
+    $c = Get-Command winget.exe -ErrorAction SilentlyContinue
+    if ($c) { return [string]$c.Source }
+    $p = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps\winget.exe'
+    if (Test-Path -LiteralPath $p) { return $p }
+    return ''
+}
+function Get-WingetUpgrades {
+    $exe = Get-WingetExe
+    if (-not $exe) { return @{ Err = 'nowinget'; Items = @() } }
+    $txt = ''
+    try {
+        $psi = New-Object Diagnostics.ProcessStartInfo
+        $psi.FileName = $exe; $psi.Arguments = 'upgrade --include-unknown --accept-source-agreements --disable-interactivity'
+        $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+        $psi.StandardOutputEncoding = [Text.Encoding]::UTF8
+        $p = [Diagnostics.Process]::Start($psi)
+        $txt = $p.StandardOutput.ReadToEnd()
+        if (-not $p.WaitForExit(180000)) { try { $p.Kill() } catch {}; return @{ Err = 'timeout'; Items = @() } }
+    } catch { return @{ Err = $_.Exception.Message; Items = @() } }
+    return @{ Err = ''; Items = @(ConvertFrom-WingetTable $txt); Raw = (($txt -split "`r?`n") | Select-Object -First 60) -join "`n" }
+}
+# winget 打出来的表格：名称 ID 版本 可用 源。从右往左取后四列，剩下的是名称（名称里可以有空格）；被 … 截断的 ID 不要
+function ConvertFrom-WingetTable([string]$txt) {
+    $lines = @($txt -split "`r?`n" | ForEach-Object { ($_ -replace '[\x00-\x08\x0B-\x1F]', '').TrimEnd() })
+    $items = @(); $inTable = $false
+    foreach ($l in $lines) {
+        if ($l -match '^-{8,}\s*$') { $inTable = $true; continue }
+        if (-not $inTable) { continue }
+        if (-not $l.Trim()) { $inTable = $false; continue }
+        if ($l -match '^\d+\s') { $inTable = $false; continue }   # 「N 个升级可用」这一行
+        $tok = @($l.Trim() -split '\s+')
+        if ($tok.Count -lt 5) { continue }
+        $n = $tok.Count
+        $src = $tok[$n - 1]; $avail = $tok[$n - 2]; $ver = $tok[$n - 3]; $id = $tok[$n - 4]
+        $name = ($tok[0..($n - 5)] -join ' ')
+        if ($src -notin @('winget', 'msstore')) { continue }
+        $items += @{ Name = $name; Id = $(if ($id -like '*…*') { '' } else { $id }); Version = $ver; Available = $avail; Source = $src }
+    }
+    return $items
+}
+
 function Invoke-AutoClean {
     $f0 = [double](FreeC); $done = @()
     foreach ($it in (Get-Catalog)) {
@@ -4217,6 +4563,186 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+C 盘上有约 {0} 可以清理	About {0} on C: can be cleaned up
+临时文件、缓存和日志加起来超过了你设定的 {0} GB。打开腾挪 ClearC 清一清？\n（在工具的「自动提醒」页可以改界限或关掉这个提醒）	Temporary files, caches and logs add up to more than the {0} GB you set. Open ClearC to clean them up?\n(You can change the limit or turn off this reminder on the "Reminders" page.)
+{0} 个开机启动项，{1} 个已启用	{0} startup items, {1} enabled
+{0} 个第三方计划任务，{1} 个已启用（Windows 自己的不列）	{0} third-party scheduled tasks, {1} enabled (Windows' own tasks are not listed)
+{0} 个第三方右键菜单扩展，{1} 个已启用（系统自带的不列）	{0} third-party context menu extensions, {1} enabled (built-in ones are not listed)
+没有开机启动项	No startup items
+没有第三方的计划任务	No third-party scheduled tasks
+没有第三方的右键菜单扩展	No third-party context menu extensions
+正在读取…	Reading…
+读取开机启动项	Reading startup items
+读取计划任务	Reading scheduled tasks
+读取右键菜单扩展	Reading context menu extensions
+注册表 · 当前用户	Registry · current user
+注册表 · 所有用户	Registry · all users
+注册表 · 所有用户 (32 位)	Registry · all users (32-bit)
+「启动」文件夹 · 当前用户	Startup folder · current user
+「启动」文件夹 · 所有用户	Startup folder · all users
+任务 	Task 
+出现在：	Shown for: 
+没启用成	Could not enable
+没禁用成	Could not disable
+启用开机启动项	Enable startup item
+禁用开机启动项	Disable startup item
+启用计划任务	Enable scheduled task
+禁用计划任务	Disable scheduled task
+启用右键菜单扩展	Enable context menu extension
+禁用右键菜单扩展	Disable context menu extension
+右键菜单的改动对新打开的资源管理器窗口生效；还没生效的话注销再登录一次	Context menu changes apply to newly opened File Explorer windows; if nothing changes, sign out and back in
+「{0}」以后开机时不再自动启动。它本身不会被删，随时可以在这里重新启用，也可以在任务管理器的「启动应用」里改。	"{0}" will no longer start automatically with Windows. It is not deleted; you can enable it again here at any time, or under "Startup apps" in Task Manager.
+计划任务「{0}」会被禁用，到时间不再运行。随时可以在这里重新启用，也可以在「任务计划程序」里改。	The scheduled task "{0}" will be disabled and no longer run on schedule. You can enable it again here at any time, or in Task Scheduler.
+「{0}」会从资源管理器的右键菜单里去掉（对新打开的窗口生效）。它所属的软件照常使用，随时可以在这里重新启用。	"{0}" will be removed from the File Explorer right-click menu (for newly opened windows). The app it belongs to keeps working, and you can enable it again here at any time.
+禁用「{0}」？	Disable "{0}"?
+禁用	Disable
+启用	Enable
+已启用	Enabled
+已禁用	Disabled
+这台电脑没有 winget	winget is not available on this PC
+winget 是 Windows 自带的软件包管理器（「应用安装程序」），Windows 10 1809 以后的系统都有。打不开的话，在应用商店里搜「应用安装程序」装一下。	winget is the package manager that comes with Windows ("App Installer"), included since Windows 10 1809. If it is missing, search for "App Installer" in the Microsoft Store.
+用 winget 检查新版本	Checking for updates with winget
+正在用 winget 查，要几十秒…	Checking with winget, this takes a while…
+winget 三分钟都没查完，可能是网络不通	winget did not finish within three minutes; the network may be down
+没查成	Check failed
+可升级到	Update available:
+都是最新的	Everything is up to date
+winget 没有查到有新版本的软件。	winget found no apps with a newer version.
+winget：{0} 个软件有新版本，其中 {1} 个在列表里标出来了	winget: {0} apps have a newer version; {1} of them are marked in the list
+{0}：{1} → {2}	{0}: {1} → {2}
+{0} 个软件有新版本	{0} apps have a newer version
+列表里有的软件旁边多了「升级」按钮。也可以在终端窗口里一次全部升级：winget 会逐个下载安装，有的安装程序会弹出自己的窗口，照提示点就行。	Apps that are in the list now have an "Update" button. You can also update them all at once in a terminal window: winget downloads and installs them one by one, and some installers open their own window; just follow the prompts.
+在终端里全部升级	Update all in a terminal
+用 winget 升级软件	Update apps with winget
+已在终端里开始升级：{0}	Update started in a terminal: {0}
+打不开终端	Could not open a terminal
+腾挪 ClearC：定期自动清理临时文件、缓存和日志（不搬家、不清空回收站、不碰个人文件夹）。在工具的「自动提醒」页关掉开关即可删除本任务。	ClearC: periodically cleans up temporary files, caches and logs (no moving, no emptying the Recycle Bin, no personal folders). Turn off the switch on the "Reminders" page of ClearC to delete this task.
+可清理垃圾提醒的界限	Reclaimable junk reminder limit
+不提醒	Off
+自动清理的时间	Automatic cleanup schedule
+清理列表改了，请重新扫描。	The cleanup list changed; please scan again.
+选一个清理时不要碰的文件夹	Choose a folder that cleanup must leave alone
+选一个要清理的文件夹（删里面的东西，文件夹本身保留）	Choose a folder to clean (its contents are deleted; the folder itself is kept)
+这个路径用不了	This path can't be used
+路径里不能有竖线。	The path must not contain a vertical bar.
+这个文件夹不能加进清理列表	This folder can't be added to the cleanup list
+这个文件夹在排除列表里	This folder is in the exclude list
+它在排除的 {0} 里面，先把排除去掉。	It is inside the excluded folder {0}; remove that exclusion first.
+排除文件夹	Exclude folder
+加入清理列表	Add to cleanup list
+取消排除	Remove exclusion
+移出清理列表	Remove from cleanup list
+{0} 个有新版本	{0} with a newer version
+  跳过（在设置里排除了）：{0}	  Skipped (excluded in Settings): {0}
+跳过：在设置里排除了	Skipped: excluded in Settings
+Windows Installer 孤儿安装包	Orphaned Windows Installer packages
+C:\\Windows\\Installer 里没有任何已装软件和补丁再引用的安装包（.msi / .msp），多半是软件升级、卸载后留下的。判断方法和 PatchCleaner 一样。删了以后，万一哪个软件修复或卸载时提示找不到安装包，重新下载安装一次即可	Installer packages (.msi / .msp) in C:\\Windows\\Installer that no installed app or patch refers to any more, usually left behind by upgrades and uninstalls. Detected the same way PatchCleaner does. If an app later complains about a missing package when repairing or uninstalling, download and install it once more
+  没删掉：{0}（{1}）	  Not deleted: {0} ({1})
+  Windows Installer 孤儿安装包：删了 {0} 个，{1}	  Orphaned Windows Installer packages: deleted {0}, {1}
+文件和文件夹	Files and folders
+文件夹空白处	Folder background
+磁盘	Drives
+自定义清理（你在设置里加的文件夹：删除里面的东西，文件夹本身保留）	Custom cleanup (folders you added in Settings: their contents are deleted, the folders themselves are kept)
+升级	Update
+移除	Remove
+自定义清理项…	Custom items…
+在终端窗口里用 winget 升级这个软件，过程和提示都看得见	Update this app with winget in a terminal window, where you can see the progress and prompts
+用 Windows 自带的 winget 查一下装过的软件有没有新版本。只在你点的时候联网，只查不改	Check with Windows' own winget whether installed apps have newer versions. It goes online only when you click, and only looks
+自己加要清理的文件夹，或者排除不想碰的文件夹（在「设置」里）	Add your own folders to clean, or exclude folders that must be left alone (in Settings)
+每周一	Every Monday
+每周二	Every Tuesday
+每周三	Every Wednesday
+每周四	Every Thursday
+每周五	Every Friday
+每周六	Every Saturday
+每周日	Every Sunday
+每天	Every day
+右键菜单	Context menu
+开机启动	Startup
+计划任务	Scheduled tasks
+软件	Apps
+本工具自己的任务，请在「自动提醒」页开关	ClearC's own task; switch it on the "Reminders" page
+C 盘快满或者垃圾攒多了时提醒你，定期自动清一次缓存，并记下空间的变化。两项都默认关闭，打开开关才生效。开启后由 Windows 自己定时运行，不需要一直开着本工具，也不需要开机启动。	Get reminded when C: is nearly full or junk has piled up, clean caches on a schedule, and keep a record of free space over time. Both are off by default. Once on, Windows runs them on schedule; ClearC doesn't need to stay open or start with Windows.
+不用开着本工具。到时间由 Windows 任务计划在后台自动做一遍「安全清理」里的项目：临时文件、各类缓存和日志。不搬家、不清空回收站、不碰任何个人文件夹、不碰你自己加的文件夹，也不会关闭正在运行的软件（被占用的文件直接跳过）。做完在右下角告诉你释放了多少，每一项都记在「操作日志」里。	ClearC doesn't need to be open. At the scheduled time, Windows Task Scheduler runs the items under "Safe to clean" in the background: temporary files, caches and logs. It doesn't move anything, doesn't empty the Recycle Bin, never touches personal folders or the folders you added yourself, and doesn't close running apps (files in use are simply skipped). When done, a notification in the lower-right corner tells you how much was freed, and every item is recorded in the "Activity log".
+中午 12:30（错过了就在下次开机后）	at 12:30 PM (or after the next startup if missed)
+什么时候清理	When to clean
+可以清理的临时文件、缓存和日志超过	When reclaimable temporary files, caches and logs exceed
+定期自动清理	Scheduled cleanup
+排除的文件夹	Excluded folders
+时也提醒（检查时只统计，不删任何东西）	also remind me (the check only measures; nothing is deleted)
+清理列表	Cleanup list
+清理时一律不碰这些文件夹和里面的东西，估算大小时也不算。比如临时文件夹里某个你要留着的子文件夹。	Cleanup never touches these folders or anything inside them, and they are not counted in the estimates. For example, a subfolder of the temp folder you want to keep.
+清理时删掉这些文件夹里的东西，文件夹本身保留。在「清理 C 盘」页单独列成一组，默认选「删除」，每次执行前照样要确认；定期自动清理不碰它们。个人文件夹、系统文件夹和软件的安装文件夹加不进来。	Cleanup deletes the contents of these folders; the folders themselves are kept. They appear as their own group on the "Clean up C:" page with "Delete" selected by default, and you still confirm before every run; scheduled cleanup leaves them alone. Personal folders, system folders and app installation folders can't be added.
+自己加的文件夹	Your own folders
+装过的软件按占用空间从大到小排。装在 C 盘的可以「搬到其他盘」，软件照常使用、不用重装；不用的可以直接卸载，卸载后再检查有没有残留文件夹。开机启动的程序、第三方的计划任务和右键菜单也在这里管。	Installed apps sorted by size, largest first. Apps on C: can be moved to another drive and keep working without reinstalling; apps you don't need can be uninstalled, and leftovers checked afterwards. Startup programs, third-party scheduled tasks and context menu extensions are managed here too.
+还没有加。	None added yet.
+还没有排除。	None excluded yet.
+磁盘检查残留 (found.000)	Disk check leftovers (found.000)
+磁盘检查（chkdsk）修复时从损坏的文件里抢救出来的碎片，一般都没用	Fragments that Disk Check (chkdsk) salvaged from damaged files; almost never useful
+Windows 更新日志	Windows Update logs
+Windows 更新的跟踪日志（.etl）	Trace logs (.etl) of Windows Update
+系统网页缓存 (INetCache)	System web cache (INetCache)
+Windows 组件和一些软件内嵌的网页浏览留下的缓存	Cache left by web content shown inside Windows components and some apps
+应用商店软件的临时文件	Temp files of Store apps
+从应用商店装的软件的临时文件和网页缓存。不碰它们保存的数据和设置	Temporary files and web cache of apps installed from the Microsoft Store; their data and settings are left alone
+远程桌面位图缓存	Remote Desktop bitmap cache
+远程桌面连接时缓存的画面碎片	Fragments of the screen cached by Remote Desktop connections
+DirectX 着色器缓存	DirectX shader cache
+Windows 给游戏和软件编译好的着色器，下次用到时会重新生成	Shaders compiled by Windows for games and apps; regenerated the next time they are needed
+AMD 显卡着色器缓存	AMD shader cache
+AMD 显卡给游戏编译的着色器缓存，游戏首次启动会重建	Shaders compiled by AMD graphics drivers for games; games rebuild them on first launch
+Firefox 浏览器缓存	Firefox browser cache
+Brave 浏览器缓存	Brave browser cache
+Vivaldi 浏览器缓存	Vivaldi browser cache
+Opera 浏览器缓存	Opera browser cache
+网页缓存（含 Opera GX）。请先关闭浏览器。不影响密码、书签、历史记录	Web cache (including Opera GX). Close the browser first. Passwords, bookmarks and history are not affected
+Chrome 测试版 / Chromium 缓存	Chrome Beta / Chromium cache
+Chrome Beta、Dev、Canary 和 Chromium 的网页缓存。请先关闭浏览器	Web cache of Chrome Beta, Dev, Canary and Chromium. Close the browser first
+360 浏览器缓存	360 Browser cache
+360 安全浏览器和 360 极速浏览器的网页缓存。请先关闭浏览器。不影响密码、书签、历史记录	Web cache of 360 Secure Browser and 360 Speed Browser. Close the browser first. Passwords, bookmarks and history are not affected
+QQ 浏览器缓存	QQ Browser cache
+Steam 着色器与网页缓存	Steam shader and web cache
+游戏的着色器缓存（首次启动会重建）、Steam 商店页面的缓存、崩溃转储和日志。请先退出 Steam。游戏本身不动	Shader caches of games (rebuilt on first launch), the cache of Steam store pages, crash dumps and logs. Quit Steam first. Games themselves are left alone
+Epic Games 启动器缓存	Epic Games Launcher cache
+启动器的网页缓存和日志。请先退出 Epic Games 启动器。游戏本身不动	Web cache and logs of the launcher. Quit the Epic Games Launcher first. Games themselves are left alone
+Unity 缓存	Unity cache
+Unity 编辑器的资源商店下载和全局光照缓存，需要时会重新下载或生成	Asset Store downloads and global illumination cache of the Unity editor; downloaded or generated again when needed
+Adobe 媒体缓存	Adobe media cache
+Premiere、After Effects、Audition 导入素材时生成的缓存，打开项目会重新生成。请先关闭 Adobe 软件	Cache generated by Premiere, After Effects and Audition when importing footage; regenerated when you open the project. Close Adobe apps first
+Microsoft Teams (旧版) 缓存	Microsoft Teams (classic) cache
+旧版 Teams 的网页缓存。请先退出 Teams。不影响登录和聊天记录	Web cache of classic Teams. Quit Teams first. Sign-in and chats are not affected
+Discord 缓存	Discord cache
+看过的图片和视频的缓存。请先退出 Discord（包括托盘图标）。不影响登录	Cache of images and videos you have viewed. Quit Discord first (including the tray icon). Sign-in is not affected
+Slack 缓存	Slack cache
+网页缓存和文件预览。请先退出 Slack。不影响登录	Web cache and file previews. Quit Slack first. Sign-in is not affected
+VS Code 缓存	VS Code cache
+编辑器的缓存、下载过的扩展安装包和日志。请先关闭 VS Code。不影响设置和扩展	Editor caches, downloaded extension installers and logs. Close VS Code first. Settings and extensions are not affected
+Cursor 缓存	Cursor cache
+编辑器的缓存和日志。请先关闭 Cursor。不影响设置和扩展	Editor caches and logs. Close Cursor first. Settings and extensions are not affected
+Spotify 缓存	Spotify cache
+播放过的歌曲的缓存。下载供离线听的歌不在这里。请先退出 Spotify	Cache of songs you have played. Songs downloaded for offline listening are not here. Quit Spotify first
+网易云音乐缓存	NetEase Cloud Music cache
+听过的歌的缓存。下载的歌不在这里。请先退出网易云音乐	Cache of songs you have played. Downloaded songs are not here. Quit NetEase Cloud Music first
+uv 缓存	uv cache
+uv 装 Python 包时的下载缓存，再装时会重新下载	Download cache of uv for Python packages; downloaded again when reinstalling
+Yarn 缓存	Yarn cache
+Yarn 装包时的下载缓存	Download cache of Yarn packages
+NuGet 下载缓存	NuGet download cache
+.NET 装包时的下载缓存。项目用的包在全局包目录里，不在这里	Download cache of .NET packages. The packages projects use are in the global packages folder, not here
+Go 编译缓存	Go build cache
+Go 的编译结果缓存，下次编译会重新生成	Cache of Go build results; regenerated on the next build
+Rust crate 下载缓存	Rust crate download cache
+cargo 下载过的 crate 压缩包，需要时会重新下载	Crate archives downloaded by cargo; downloaded again when needed
+NuGet 全局包目录	NuGet global packages folder
+.NET 项目引用的包都放在这里。删了以后打开项目要联网重新还原（Visual Studio 会自动做，但要等一会儿）	Every package referenced by .NET projects is stored here. After deleting, opening a project restores them from the internet (Visual Studio does it automatically, but it takes a while)
+Gradle 依赖缓存	Gradle dependency cache
+Android Studio 和 Gradle 项目下载的依赖。删了下次构建要重新下载，国内网络可能很慢	Dependencies downloaded by Android Studio and Gradle projects. After deleting, the next build downloads them again, which can be slow
+Maven 本地仓库	Maven local repository
+Maven 项目下载的依赖。删了下次构建要重新下载	Dependencies downloaded by Maven projects. After deleting, the next build downloads them again
+JetBrains IDE 缓存和索引	JetBrains IDE caches and indexes
+IntelliJ IDEA、PyCharm 等的缓存和代码索引。删了打开项目要重新索引（几分钟）。请先关闭这些 IDE	Caches and code indexes of IntelliJ IDEA, PyCharm and the like. After deleting, opening a project re-indexes it (a few minutes). Close these IDEs first
+虚幻引擎派生数据缓存	Unreal Engine derived data cache
+Unreal Engine 给项目生成的派生数据，常有几十 GB。删了打开项目要重新生成，很慢	Derived data Unreal Engine generates for projects, often tens of GB. After deleting, opening a project regenerates it, which is slow
 全部展开	Expand all
 全部收起	Collapse all
 安全清理（缓存、临时文件、日志，删了程序会自动重建）	Safe to clean (caches, temporary files and logs, which apps rebuild automatically)
@@ -5455,6 +5981,20 @@ $script:helpEnXaml = @'
                   <TextBlock Style="{StaticResource HelpLead}" Text="Analyze usage"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>Opens the "Space map" and scans drive C:, so you can see which folders and files take up the most space.</Run></TextBlock>
                 </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Which caches are cleaned"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Dozens: Windows' own temporary files, update cache, crash dumps and logs; the web cache of Chrome, Edge, Firefox, Brave, 360, QQ and other browsers; graphics shader caches; Steam and Epic caches; Adobe media cache; the caches of Teams, Discord, Slack, VS Code, Spotify, NetEase Cloud Music and more; and the download caches of pip, npm, NuGet, Go, Rust and other developer tools. Whatever is on your PC shows up after a scan.</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Only caches are deleted; cookies, history, passwords, settings and saved data are left alone.</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Items that are slow to download or regenerate (the NuGet global packages folder, Gradle, Maven, JetBrains indexes, Unreal Engine cache and so on) are under "Needs confirmation" and skipped by default.</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Orphaned Windows Installer packages"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Under "Needs confirmation". Packages in C:\Windows\Installer that no installed app or patch refers to any more, often several GB, detected the same way PatchCleaner does. Skipped by default; read the description before selecting it.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Your own folders and exclusions"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>On the "Settings" page under "Cleanup list" ("Custom items" at the top right of the page takes you there). Folders you add form their own group; their contents are deleted and the folders themselves kept. Excluded folders are never touched and not counted in the estimates.</Run></TextBlock>
+                </StackPanel>
                 <Border Background="#EFF8F1" BorderBrush="#CFE9D6" BorderThickness="1" CornerRadius="10" Padding="14,11,16,12" Margin="0,16,0,0">
                   <DockPanel>
                     <TextBlock DockPanel.Dock="Left" Text="&#xEA18;" FontFamily="{StaticResource Icons}" FontSize="15" Foreground="#248A3D" VerticalAlignment="Top" Margin="0,2,12,0"/>
@@ -5775,6 +6315,23 @@ $script:helpEnXaml = @'
                   <TextBlock Style="{StaticResource HelpLead}" Text="After moving"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>Moved apps appear in "Moved folders", where you can "Move back to C:" at any time. When an app gets a major upgrade later, a few installers will reinstall it on C:; just move it again then.</Run></TextBlock>
                 </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Check for updates"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Uses Windows' own winget to see which installed apps have a newer version; it goes online only when you click. Apps with an update show "Update available" in the list and get an "Update" button, which runs winget in a terminal window so you can see the progress and prompts. You can also update everything at once.</Run></TextBlock>
+                </StackPanel>
+                <DockPanel Margin="0,26,0,0"><TextBlock DockPanel.Dock="Left" Text="Startup, scheduled tasks, context menu" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
+                <StackPanel Margin="0,10,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Startup"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>The same sources as "Startup apps" in Task Manager: the Run keys in the registry and the two Startup folders. After "Disable", the program no longer starts with Windows; it is not deleted and can be enabled again at any time.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Scheduled tasks"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Lists only third-party tasks (Windows' own tasks live in the Microsoft folder and are not listed). A disabled task no longer runs on schedule and can be enabled again at any time. ClearC's own tasks are switched on the "Reminders" page.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Context menu"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Lists only third-party extensions added to the File Explorer right-click menu; built-in ones are not listed. Disabling writes the entry to Windows' "Shell Extensions\Blocked" list and applies to newly opened windows; the app itself keeps working.</Run></TextBlock>
+                </StackPanel>
               </StackPanel>
             </Expander>
             <Expander Style="{StaticResource HelpSection}">
@@ -5829,8 +6386,12 @@ $script:helpEnXaml = @'
                   <TextBlock Style="{StaticResource HelpBody}"><Run>When turned on, ClearC checks drive C: 2 minutes after each sign-in and again at noon every day. If free space falls below the value you set (20 GB by default), a reminder appears at the bottom right of the screen, at most once a day; if there is enough space, nothing is shown.</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
-                  <TextBlock Style="{StaticResource HelpLead}" Text="Weekly cleanup"/>
-                  <TextBlock Style="{StaticResource HelpBody}"><Run>When turned on, temporary files, caches and logs are cleaned up automatically every Sunday. It doesn't move anything, doesn't empty the Recycle Bin and doesn't touch personal folders; files in use are simply skipped.</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Junk reminder"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>You can set a second limit (for example 2 GB): the check also measures the temporary files, caches and logs under "Safe to clean" and reminds you when they exceed it, at most once a day. It only measures; nothing is deleted.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Scheduled cleanup"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>When turned on, temporary files, caches and logs are cleaned up at the time you choose (a day of the week or every day, at 12:30 PM). It doesn't move anything, doesn't empty the Recycle Bin and doesn't touch personal folders or the folders you added yourself; files in use are simply skipped.</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Space on C: over time"/>
@@ -5905,6 +6466,10 @@ $script:helpEnXaml = @'
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Give way to other programs when finding duplicates"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>Files are read in Windows' background mode, behind other programs for both disk and memory, so the programs you are using don't slow down; the search is slower while you are doing other things.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Cleanup list"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Add your own folders to clean (their contents are deleted, the folders themselves kept), or exclude folders that cleanup must leave alone. Personal folders, system folders and app installation folders can't be added.</Run></TextBlock>
                 </StackPanel>
               </StackPanel>
             </Expander>
@@ -5983,6 +6548,12 @@ $script:helpEnXaml = @'
                   <DockPanel Margin="0,0,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Prefetch</Run><Run> records which files programs read when they start, so Windows can open your usual programs faster. It is only a few dozen MB, deleting it makes the next starts slower, and it grows back within days.</Run></TextBlock></DockPanel>
                   <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Memory</Run><Run> is similar: Windows uses free memory to cache files you use often ("Cached" in Task Manager) and hands it over the moment another program needs it, so forcing it empty only slows the PC down.</Run></TextBlock></DockPanel>
                   <TextBlock Style="{StaticResource HelpBody}" Margin="0,8,0,0"><Run>That is why ClearC does neither.</Run></TextBlock>
+                </StackPanel>
+              </Expander>
+              <Expander Style="{StaticResource HelpQ}">
+                <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="Why is there no registry cleaner?"/></Expander.Header>
+                <StackPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>A few stale entries in the registry take no space and cost no speed; Microsoft itself says cleaning the registry has no benefit, while a wrong deletion can break apps or Windows and is hard to fix. So ClearC doesn't do it, for the same reason it doesn't clean Prefetch or "boost memory".</Run></TextBlock>
                 </StackPanel>
               </Expander>
               <Expander Style="{StaticResource HelpQ}">
@@ -6141,10 +6712,26 @@ if ($script:mode -match '(?i)/check') {
     $gb = 20; [void][int]::TryParse((Get-Setting 'RemindGB' '20'), [ref]$gb)
     $free = [double](FreeC)
     $today = (Get-Date).ToString('yyyy-MM-dd')
+    $shown = $false
     if ($free -lt $gb * 1GB -and (Get-Setting 'LastRemind' '') -ne $today) {
-        Set-Setting 'LastRemind' $today
+        Set-Setting 'LastRemind' $today; $shown = $true
         $ans = Show-Toast -Title ((T "C 盘只剩 {0} 了") -f (GB $free)) -Text ((T "低于你设定的 {0} GB。打开腾挪 ClearC，看看能清掉或搬走什么？`n（在工具的「自动提醒」页可以关掉这个提醒）") -f $gb) -Buttons @((T '稍后'), (T '打开腾挪 ClearC'))
         if ($ans -eq (T '打开腾挪 ClearC') -and $env:CLEANC_SELF) { Start-Process -FilePath $env:CLEANC_SELF }
+    }
+    # 可以清理的垃圾超过设定值时也提醒（每天最多一次；只统计「安全清理」里的缓存，不碰任何东西）
+    $jgb = 0; [void][int]::TryParse((Get-Setting 'JunkGB' '0'), [ref]$jgb)
+    if (-not $shown -and $jgb -gt 0 -and (Get-Setting 'LastJunkRemind' '') -ne $today) {
+        try { [Diagnostics.Process]::GetCurrentProcess().PriorityClass = 'BelowNormal' } catch {}
+        $junk = [double]0
+        foreach ($it in (Get-Catalog)) {
+            if ($it.Kind -ne 'cache' -or $it.Def -ne (T '删除') -or $it.Act -or -not ([string]$it.G).StartsWith('安全清理')) { continue }
+            $junk += [double](Measure-Item $it)
+        }
+        if ($junk -ge $jgb * 1GB) {
+            Set-Setting 'LastJunkRemind' $today
+            $ans = Show-Toast -Title ((T "C 盘上有约 {0} 可以清理") -f (GB $junk)) -Text ((T "临时文件、缓存和日志加起来超过了你设定的 {0} GB。打开腾挪 ClearC 清一清？`n（在工具的「自动提醒」页可以改界限或关掉这个提醒）") -f $jgb) -Buttons @((T '稍后'), (T '打开腾挪 ClearC'))
+            if ($ans -eq (T '打开腾挪 ClearC') -and $env:CLEANC_SELF) { Start-Process -FilePath $env:CLEANC_SELF }
+        }
     }
     $global:CLEANC_UI_SHOWN = $true
     return
@@ -7294,6 +7881,7 @@ if ($script:mode -match '(?i)/autoclean') {
 
       <DockPanel Grid.Row="0" Margin="0,0,0,18">
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top" Margin="16,4,0,0">
+          <Button x:Name="BtnCleanCustom" Style="{StaticResource LinkButton}" Content="自定义清理项…" Margin="0,0,14,0" VerticalAlignment="Center" ToolTip="自己加要清理的文件夹，或者排除不想碰的文件夹（在「设置」里）"/>
           <Button x:Name="BtnHogs" Content="分析占用" Margin="0,0,8,0" ToolTip="打开「空间地图」扫描 C 盘，看清哪些文件夹和文件最占地方"/>
           <Button x:Name="BtnScan" Content="扫描"/>
         </StackPanel>
@@ -7907,21 +8495,32 @@ if ($script:mode -match '(?i)/autoclean') {
         <RowDefinition Height="*"/>
       </Grid.RowDefinitions>
       <DockPanel Grid.Row="0" Margin="0,0,0,16">
-        <Button x:Name="BtnAppsRefresh" DockPanel.Dock="Right" Content="刷新" VerticalAlignment="Top" Margin="16,4,0,0"/>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top" Margin="16,4,0,0">
+          <Button x:Name="BtnAppsUpdates" Content="检查新版本" Margin="0,0,8,0" ToolTip="用 Windows 自带的 winget 查一下装过的软件有没有新版本。只在你点的时候联网，只查不改"/>
+          <Button x:Name="BtnAppsRefresh" Content="刷新"/>
+        </StackPanel>
         <StackPanel>
           <TextBlock Text="软件管理" Style="{StaticResource PageTitle}"/>
-          <TextBlock Style="{StaticResource PageSub}" TextWrapping="Wrap" Text="装过的软件按占用空间从大到小排。装在 C 盘的可以「搬到其他盘」，软件照常使用、不用重装；不用的可以直接卸载，卸载后再检查有没有残留文件夹。"/>
+          <TextBlock Style="{StaticResource PageSub}" TextWrapping="Wrap" Text="装过的软件按占用空间从大到小排。装在 C 盘的可以「搬到其他盘」，软件照常使用、不用重装；不用的可以直接卸载，卸载后再检查有没有残留文件夹。开机启动的程序、第三方的计划任务和右键菜单也在这里管。"/>
         </StackPanel>
       </DockPanel>
       <DockPanel Grid.Row="1" Margin="0,0,0,10">
         <Border DockPanel.Dock="Left" Style="{StaticResource SegBox}" VerticalAlignment="Center" Margin="0,0,14,0">
+          <StackPanel Orientation="Horizontal">
+            <RadioButton x:Name="AppsViewApps" GroupName="appsv" Content="软件" IsChecked="True" Style="{StaticResource Seg}"/>
+            <RadioButton x:Name="AppsViewStartup" GroupName="appsv" Content="开机启动" Style="{StaticResource Seg}"/>
+            <RadioButton x:Name="AppsViewTasks" GroupName="appsv" Content="计划任务" Style="{StaticResource Seg}"/>
+            <RadioButton x:Name="AppsViewMenu" GroupName="appsv" Content="右键菜单" Style="{StaticResource Seg}"/>
+          </StackPanel>
+        </Border>
+        <Border x:Name="AppsFilterBox" DockPanel.Dock="Left" Style="{StaticResource SegBox}" VerticalAlignment="Center" Margin="0,0,14,0">
           <StackPanel Orientation="Horizontal">
             <RadioButton x:Name="AppsAll" GroupName="appsf" Content="全部" IsChecked="True" Style="{StaticResource Seg}"/>
             <RadioButton x:Name="AppsC" GroupName="appsf" Content="装在 C 盘的" Style="{StaticResource Seg}"/>
             <RadioButton x:Name="AppsStore" GroupName="appsf" Content="应用商店" Style="{StaticResource Seg}"/>
           </StackPanel>
         </Border>
-        <TextBlock x:Name="AppsInfo" DockPanel.Dock="Right" Style="{StaticResource Caption}" Margin="14,0,0,0"/>
+        <TextBlock x:Name="AppsInfo" DockPanel.Dock="Right" Style="{StaticResource Caption}" Margin="14,0,0,0" TextTrimming="CharacterEllipsis"/>
         <DockPanel>
           <TextBlock DockPanel.Dock="Left" Text="&#xE721;" FontFamily="{StaticResource Icons}" FontSize="12" Foreground="#86868B" VerticalAlignment="Center" Margin="0,0,8,0"/>
           <TextBox x:Name="AppsSearch" MaxWidth="320" HorizontalAlignment="Left" MinWidth="200" ToolTip="按名字或发行商搜索"/>
@@ -7956,6 +8555,8 @@ if ($script:mode -match '(?i)/autoclean') {
                   </StackPanel>
                   <TextBlock Grid.Column="2" Text="{Binding SizeText}" FontWeight="SemiBold" TextAlignment="Right" VerticalAlignment="Center" Margin="0,0,14,0"/>
                   <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="AppUpgrade" Content="升级" Tag="{Binding}" Style="{StaticResource Small}" Foreground="#0066CC" Margin="0,0,6,0" Visibility="Collapsed"
+                            ToolTip="在终端窗口里用 winget 升级这个软件，过程和提示都看得见"/>
                     <Button x:Name="AppOpen" Content="打开位置" Tag="{Binding}" Style="{StaticResource Small}" Margin="0,0,6,0"/>
                     <Button x:Name="AppMove" Content="搬到其他盘" Tag="{Binding}" Style="{StaticResource Small}" Margin="0,0,6,0"
                             ToolTip="把整个安装文件夹搬到其他盘，C 盘原位置留一个链接，软件照常使用，不用重装"/>
@@ -7964,6 +8565,36 @@ if ($script:mode -match '(?i)/autoclean') {
                 </Grid>
                 <DataTemplate.Triggers>
                   <DataTrigger Binding="{Binding CanMove}" Value="False"><Setter TargetName="AppMove" Property="Visibility" Value="Collapsed"/></DataTrigger>
+                  <DataTrigger Binding="{Binding HasUpgrade}" Value="True"><Setter TargetName="AppUpgrade" Property="Visibility" Value="Visible"/></DataTrigger>
+                </DataTemplate.Triggers>
+              </DataTemplate>
+            </ListView.ItemTemplate>
+          </ListView>
+          <!-- 开机启动 / 计划任务 / 右键菜单：同一个列表，按视图换内容 -->
+          <ListView x:Name="StartList" Background="Transparent" BorderThickness="0" ItemContainerStyle="{StaticResource SelRow}" Visibility="Collapsed"
+                    ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
+            <ListView.ItemTemplate>
+              <DataTemplate>
+                <Grid Margin="12,8,10,8">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="80"/>
+                    <ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+                    <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Text="{Binding Meta}" FontSize="11.5" Foreground="#86868B" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                    <TextBlock Text="{Binding Detail}" FontSize="11.5" Foreground="#86868B" TextTrimming="CharacterEllipsis" Margin="0,1,0,0" ToolTip="{Binding Detail}"/>
+                  </StackPanel>
+                  <TextBlock Grid.Column="1" Text="{Binding StatusText}" Foreground="{Binding StatusBrush}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                  <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="StartOpen" Content="打开位置" Tag="{Binding}" Style="{StaticResource Small}" Margin="0,0,6,0"/>
+                    <Button x:Name="StartToggle" Content="{Binding ToggleText}" Tag="{Binding}" Style="{StaticResource Small}" MinWidth="64"/>
+                  </StackPanel>
+                </Grid>
+                <DataTemplate.Triggers>
+                  <DataTrigger Binding="{Binding Open}" Value=""><Setter TargetName="StartOpen" Property="Visibility" Value="Collapsed"/></DataTrigger>
+                  <DataTrigger Binding="{Binding Ours}" Value="True"><Setter TargetName="StartToggle" Property="IsEnabled" Value="False"/><Setter TargetName="StartToggle" Property="ToolTip" Value="本工具自己的任务，请在「自动提醒」页开关"/></DataTrigger>
                 </DataTemplate.Triggers>
               </DataTemplate>
             </ListView.ItemTemplate>
@@ -8078,7 +8709,7 @@ if ($script:mode -match '(?i)/autoclean') {
       <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
         <StackPanel Margin="30,24,30,28" MaxWidth="900" HorizontalAlignment="Left">
           <TextBlock Text="自动提醒" Style="{StaticResource PageTitle}"/>
-          <TextBlock Style="{StaticResource PageSub}" TextWrapping="Wrap" Text="C 盘快满时提醒你，每周自动清一次缓存，并记下空间的变化。两项都默认关闭，打开开关才生效。开启后由 Windows 自己定时运行，不需要一直开着本工具，也不需要开机启动。"/>
+          <TextBlock Style="{StaticResource PageSub}" TextWrapping="Wrap" Text="C 盘快满或者垃圾攒多了时提醒你，定期自动清一次缓存，并记下空间的变化。两项都默认关闭，打开开关才生效。开启后由 Windows 自己定时运行，不需要一直开着本工具，也不需要开机启动。"/>
 
           <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,20,0,0">
             <StackPanel>
@@ -8093,6 +8724,13 @@ if ($script:mode -match '(?i)/autoclean') {
                 </ComboBox>
                 <TextBlock Text="时，在屏幕右下角弹出提醒（每天最多一次）" VerticalAlignment="Center" Margin="10,0,0,0"/>
               </StackPanel>
+              <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                <TextBlock Text="可以清理的临时文件、缓存和日志超过" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <ComboBox x:Name="AutoJunkGB" Width="100">
+                  <ComboBoxItem Content="不提醒"/><ComboBoxItem Content="1 GB"/><ComboBoxItem Content="2 GB"/><ComboBoxItem Content="5 GB"/><ComboBoxItem Content="10 GB"/>
+                </ComboBox>
+                <TextBlock Text="时也提醒（检查时只统计，不删任何东西）" VerticalAlignment="Center" Margin="10,0,0,0"/>
+              </StackPanel>
               <TextBlock x:Name="AutoRemindNote" Style="{StaticResource Body}" Margin="0,12,0,0" Foreground="#6E6E73"/>
             </StackPanel>
           </Border>
@@ -8101,10 +8739,17 @@ if ($script:mode -match '(?i)/autoclean') {
             <StackPanel>
               <DockPanel>
                 <CheckBox x:Name="AutoCleanOn" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center"/>
-                <TextBlock Text="每周自动清理一次" Style="{StaticResource CardHead}" VerticalAlignment="Center"/>
+                <TextBlock Text="定期自动清理" Style="{StaticResource CardHead}" VerticalAlignment="Center"/>
               </DockPanel>
+              <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                <TextBlock Text="什么时候清理" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <ComboBox x:Name="AutoCleanWhen" Width="110">
+                  <ComboBoxItem Content="每周日"/><ComboBoxItem Content="每周一"/><ComboBoxItem Content="每周二"/><ComboBoxItem Content="每周三"/><ComboBoxItem Content="每周四"/><ComboBoxItem Content="每周五"/><ComboBoxItem Content="每周六"/><ComboBoxItem Content="每天"/>
+                </ComboBox>
+                <TextBlock Text="中午 12:30（错过了就在下次开机后）" VerticalAlignment="Center" Margin="10,0,0,0"/>
+              </StackPanel>
               <TextBlock Style="{StaticResource Body}" Margin="0,10,0,0"
-                         Text="不用开着本工具。每周日中午 12:30（错过了就在下次开机后）由 Windows 任务计划在后台自动做一遍「安全清理」里的项目：临时文件、各类缓存和日志。不搬家、不清空回收站、不碰任何个人文件夹，也不会关闭正在运行的软件（被占用的文件直接跳过）。做完在右下角告诉你释放了多少，每一项都记在「操作日志」里。"/>
+                         Text="不用开着本工具。到时间由 Windows 任务计划在后台自动做一遍「安全清理」里的项目：临时文件、各类缓存和日志。不搬家、不清空回收站、不碰任何个人文件夹、不碰你自己加的文件夹，也不会关闭正在运行的软件（被占用的文件直接跳过）。做完在右下角告诉你释放了多少，每一项都记在「操作日志」里。"/>
               <TextBlock x:Name="AutoCleanNote" Style="{StaticResource Body}" Margin="0,10,0,0" Foreground="#6E6E73"/>
             </StackPanel>
           </Border>
@@ -8367,6 +9012,40 @@ if ($script:mode -match '(?i)/autoclean') {
               </DockPanel>
             </StackPanel>
           </Border>
+
+          <Border x:Name="SetCleanCard" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+            <StackPanel>
+              <TextBlock Text="清理列表" Style="{StaticResource CardHead}"/>
+              <TextBlock Text="自己加的文件夹" Style="{StaticResource SetName}" Margin="0,14,0,0"/>
+              <TextBlock Style="{StaticResource SetNote}" Text="清理时删掉这些文件夹里的东西，文件夹本身保留。在「清理 C 盘」页单独列成一组，默认选「删除」，每次执行前照样要确认；定期自动清理不碰它们。个人文件夹、系统文件夹和软件的安装文件夹加不进来。"/>
+              <ItemsControl x:Name="SetCustomList" Margin="0,6,0,0">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <DockPanel Margin="0,4,0,0">
+                      <Button x:Name="SetListRemove" DockPanel.Dock="Right" Content="移除" Tag="{Binding}" Style="{StaticResource LinkButton}" FontSize="12.5" Margin="12,0,0,0"/>
+                      <TextBlock Text="{Binding}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding}"/>
+                    </DockPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock x:Name="SetCustomEmpty" Style="{StaticResource SetNote}" Text="还没有加。" Margin="0,6,0,0"/>
+              <Button x:Name="BtnSetCustomAdd" Content="添加文件夹…" Style="{StaticResource Small}" HorizontalAlignment="Left" Margin="0,8,0,0"/>
+              <TextBlock Text="排除的文件夹" Style="{StaticResource SetName}" Margin="0,20,0,0"/>
+              <TextBlock Style="{StaticResource SetNote}" Text="清理时一律不碰这些文件夹和里面的东西，估算大小时也不算。比如临时文件夹里某个你要留着的子文件夹。"/>
+              <ItemsControl x:Name="SetExcludeList" Margin="0,6,0,0">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <DockPanel Margin="0,4,0,0">
+                      <Button x:Name="SetListRemove" DockPanel.Dock="Right" Content="移除" Tag="{Binding}" Style="{StaticResource LinkButton}" FontSize="12.5" Margin="12,0,0,0"/>
+                      <TextBlock Text="{Binding}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding}"/>
+                    </DockPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock x:Name="SetExcludeEmpty" Style="{StaticResource SetNote}" Text="还没有排除。" Margin="0,6,0,0"/>
+              <Button x:Name="BtnSetExcludeAdd" Content="添加文件夹…" Style="{StaticResource Small}" HorizontalAlignment="Left" Margin="0,8,0,0"/>
+            </StackPanel>
+          </Border>
         </StackPanel>
       </ScrollViewer>
     </Grid>
@@ -8480,6 +9159,20 @@ if ($script:mode -match '(?i)/autoclean') {
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="分析占用"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>打开「空间地图」并扫描 C 盘，看清哪些文件夹和文件最占地方。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="清的是哪些缓存"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>几十种：Windows 自己的临时文件、更新缓存、崩溃转储和日志；Chrome、Edge、Firefox、Brave、360、QQ 等浏览器的网页缓存；显卡的着色器缓存；Steam、Epic 的缓存；Adobe 的媒体缓存；Teams、Discord、Slack、VS Code、Spotify、网易云音乐等软件的缓存；pip、npm、NuGet、Go、Rust 等开发工具的下载缓存。电脑上有哪个，扫描后就列出哪个。</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>只删缓存，不碰 Cookie、历史记录、密码、设置和保存的数据。</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>删了要重新下载、重新生成而且比较慢的（NuGet 全局包、Gradle、Maven、JetBrains 索引、虚幻引擎缓存等）放在「需确认」里，默认跳过。</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Windows Installer 孤儿安装包"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>在「需确认」里。C:\Windows\Installer 里没有任何已装软件和补丁再引用的安装包，常有好几 GB，判断方法和 PatchCleaner 一样。默认跳过，看清说明再选。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="自己加文件夹、排除文件夹"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>在「设置」的「清理列表」里（页面右上角「自定义清理项」直达）。加的文件夹单独列成一组，每次删里面的东西、文件夹本身保留；排除的文件夹清理时一律不碰，估算时也不算。</Run></TextBlock>
                 </StackPanel>
                 <Border Background="#EFF8F1" BorderBrush="#CFE9D6" BorderThickness="1" CornerRadius="10" Padding="14,11,16,12" Margin="0,16,0,0">
                   <DockPanel>
@@ -8801,6 +9494,23 @@ if ($script:mode -match '(?i)/autoclean') {
                   <TextBlock Style="{StaticResource HelpLead}" Text="搬走以后"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>在「搬家管理」里能看到，随时可以「搬回 C 盘」。以后软件大版本升级时，个别安装程序会把它重新装回 C 盘，到时再搬一次即可。</Run></TextBlock>
                 </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="检查新版本"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>用 Windows 自带的 winget 查一下装过的软件有没有新版本，只在你点的时候联网。查到的在列表里标出「可升级到」，旁边多一个「升级」按钮：在终端窗口里用 winget 升级，过程和提示都看得见。也可以一次全部升级。</Run></TextBlock>
+                </StackPanel>
+                <DockPanel Margin="0,26,0,0"><TextBlock DockPanel.Dock="Left" Text="开机启动、计划任务、右键菜单" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
+                <StackPanel Margin="0,10,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="开机启动"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>和任务管理器「启动应用」一样的来源：注册表里的 Run 项和两个「启动」文件夹。点「禁用」以后开机不再自动启动，程序本身不删，随时可以重新启用。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="计划任务"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>只列第三方的计划任务（Windows 自己的在 Microsoft 文件夹里，不列）。禁用后到时间不再运行，随时可以重新启用。本工具自己的任务请在「自动提醒」页开关。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="右键菜单"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>只列第三方装进资源管理器右键菜单的扩展，系统自带的不列。禁用是写进 Windows 的「Shell Extensions\Blocked」，对新打开的窗口生效，软件本身照常用。</Run></TextBlock>
+                </StackPanel>
               </StackPanel>
             </Expander>
             <Expander Style="{StaticResource HelpSection}">
@@ -8855,8 +9565,12 @@ if ($script:mode -match '(?i)/autoclean') {
                   <TextBlock Style="{StaticResource HelpBody}"><Run>打开后，每次登录电脑 2 分钟后、以及每天中午各检查一次 C 盘，低于你设定的值（默认 20 GB）就在屏幕右下角提醒，每天最多一次；空间够就什么都不显示。</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
-                  <TextBlock Style="{StaticResource HelpLead}" Text="每周自动清理"/>
-                  <TextBlock Style="{StaticResource HelpBody}"><Run>打开后，每周日自动清理一次临时文件、缓存和日志。不搬家、不清空回收站、不碰个人文件夹，被占用的文件直接跳过。</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpLead}" Text="垃圾攒多了也提醒"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>可以再设一个界限（比如 2 GB）：检查时顺便统计「安全清理」里的临时文件、缓存和日志，超过就提醒，每天最多一次。只统计，不删任何东西。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="定期自动清理"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>打开后，在你选的时间（每周某一天或每天，中午 12:30）自动清理一次临时文件、缓存和日志。不搬家、不清空回收站、不碰个人文件夹和你自己加的文件夹，被占用的文件直接跳过。</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="C 盘空间变化"/>
@@ -8931,6 +9645,10 @@ if ($script:mode -match '(?i)/autoclean') {
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="查重复文件时让着其他程序"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>读文件时用 Windows 的后台模式，磁盘和内存都排在其他程序后面，不拖慢正在用的程序；同时在做别的事时，查得会慢一些。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="清理列表"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>自己加要清理的文件夹（删里面的东西，文件夹本身保留），或排除清理时不想碰的文件夹。个人文件夹、系统文件夹和软件的安装文件夹加不进来。</Run></TextBlock>
                 </StackPanel>
               </StackPanel>
             </Expander>
@@ -9009,6 +9727,12 @@ if ($script:mode -match '(?i)/autoclean') {
                   <DockPanel Margin="0,0,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Prefetch</Run><Run> 里记的是程序启动时要读哪些文件，Windows 靠它让常用软件打开得更快。一共只有几十 MB，删了下次启动反而变慢，过几天又会长回来。</Run></TextBlock></DockPanel>
                   <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">内存</Run><Run>也一样：Windows 会把空闲的内存拿来缓存常用的文件（任务管理器里的「已缓存」），别的程序要用时马上让出来，强行清空只会让电脑变慢。</Run></TextBlock></DockPanel>
                   <TextBlock Style="{StaticResource HelpBody}" Margin="0,8,0,0"><Run>所以这两样本工具都不做。</Run></TextBlock>
+                </StackPanel>
+              </Expander>
+              <Expander Style="{StaticResource HelpQ}">
+                <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="为什么没有注册表清理？"/></Expander.Header>
+                <StackPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>注册表里多几条没用的记录，既不占空间也不影响速度，微软自己的说法是清理注册表没有收益；清错了反而可能让软件打不开、系统出问题，而且很难修。所以本工具不做，和不清 Prefetch、不做「内存加速」是一个道理。</Run></TextBlock>
                 </StackPanel>
               </Expander>
               <Expander Style="{StaticResource HelpQ}">
@@ -9211,6 +9935,7 @@ foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageM
                'MapDrive','BtnMapStop','BtnMapScan','MapViewDirs','MapViewFiles','MapViewGrow','BtnMapUp','MapPath','MapInfo','MapList','MapGrow','EmptyMap','EmptyMapText','BtnMapOpen','BtnMapCompress','BtnMapDelete','MapSel',
                'SaveScroll','BtnSaveRefresh','BtnCosOff','BtnCosOn','SaveCosState','SavePfState','SavePfDrive','BtnPfMove','BtnPfAuto','SaveHibState','BtnHibReduced','BtnHibOff','BtnHibFull','BtnFolderCompress','SaveFcState','VdList','VdEmpty','BtnGoDup',
                'BtnAppsRefresh','AppsAll','AppsC','AppsStore','AppsInfo','AppsSearch','AppsLeftBox','BtnAppsLeftClose','BtnAppsLeft','AppsLeftText','AppsList','EmptyApps','EmptyAppsText',
+               'BtnAppsUpdates','AppsViewApps','AppsViewStartup','AppsViewTasks','AppsViewMenu','AppsFilterBox','StartList','BtnCleanCustom','AutoJunkGB','AutoCleanWhen','SetCleanCard','SetCustomList','SetCustomEmpty','BtnSetCustomAdd','SetExcludeList','SetExcludeEmpty','BtnSetExcludeAdd',
                'BtnMovesRefresh','MovesInfo','MovesList','EmptyMoves','EmptyMovesText',
                'AutoRemindOn','AutoRemindGB','AutoRemindNote','AutoCleanOn','AutoCleanNote','HistInfo','HistChart','HistLast','HistFirst',
                'BtnLogOpenDir','BtnLogRefresh','LogKeep','LogKeepNote','LogCats','LogRange','LogSearch','LogCount','LogList','EmptyLog','EmptyLogText',
@@ -9953,6 +10678,7 @@ if (-not (Stopping)) { $sync.Sizes = $sizes }
 }
 
 $ctl.BtnScan.Add_Click({ UI-Log (T "开始扫描..."); Do-Scan })
+$ctl.BtnCleanCustom.Add_Click({ Show-Page 'settings'; $ctl.SetScroll.UpdateLayout(); $ctl.SetCleanCard.BringIntoView() })
 
 $ctl.BtnHogs.Add_Click({
     Show-Page 'map'
@@ -12383,6 +13109,7 @@ $sync.AppsResult = $out
 '@ $null
 }
 function Filter-Apps {
+    if ($script:appsView -ne 'apps') { return }
     if (-not $script:appRows) { return }
     $q = ([string]$ctl.AppsSearch.Text).Trim()
     $col = New-Object 'System.Collections.ObjectModel.ObservableCollection[AppRow]'
@@ -12400,7 +13127,7 @@ function Filter-Apps {
 }
 foreach ($c in @($ctl.AppsAll, $ctl.AppsC, $ctl.AppsStore)) { $c.Add_Checked({ Filter-Apps }) }
 $ctl.AppsSearch.Add_TextChanged({ Filter-Apps })
-$ctl.BtnAppsRefresh.Add_Click({ Load-Apps })
+$ctl.BtnAppsRefresh.Add_Click({ $v = Get-AppsView; if ($v -eq 'apps') { Load-Apps } else { $script:startRows.Remove($v); Load-StartRows $v } })
 function Build-AppRows($list) {
     $rows = New-Object System.Collections.Generic.List[AppRow]
     foreach ($a in @($list | Sort-Object { [double]$_.Size } -Descending)) {
@@ -12493,6 +13220,7 @@ $ctl.AppsList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickE
         if ($r.Location -and (Test-Path -LiteralPath $r.Location)) { Open-Location $r.Location } else { Show-Sheet -Title (T '没有记录安装位置') -Text (T '这个软件的安装程序没有写明装在哪里。') | Out-Null }
         return
     }
+    if ($b.Name -eq 'AppUpgrade') { Start-WingetUpgrade $r.UpgradeId $r.Name; return }
     if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return }
     if ($b.Name -eq 'AppMove') { Start-AppMove $r; return }
     $txt = if ($r.Kind -eq 'store') { (T "从应用商店卸载 {0}（{1}）。") -f $r.Name, $r.SizeText } else { (T "会打开 {0} 自带的卸载程序，按它的提示一步步操作即可。卸载完回到这里点「检查残留」，看看还有没有剩下的文件夹。") -f $r.Name }
@@ -12605,6 +13333,186 @@ $sync.LeftRes = @{ Count = $n; Name = $arg.Name }
 '@ @{ Items = $left; Name = $r.Name }
 })
 
+# ---------- 开机启动 / 计划任务 / 右键菜单：同一个列表，按视图换内容 ----------
+$script:startRows = @{}   # kind -> List[StartRow]
+$script:appsView = 'apps'
+function Get-AppsView { if ($ctl.AppsViewStartup.IsChecked) { 'startup' } elseif ($ctl.AppsViewTasks.IsChecked) { 'task' } elseif ($ctl.AppsViewMenu.IsChecked) { 'shellex' } else { 'apps' } }
+function Show-AppsView {
+    $v = Get-AppsView; $script:appsView = $v
+    $isApps = ($v -eq 'apps')
+    $ctl.AppsList.Visibility = if ($isApps) { 'Visible' } else { 'Collapsed' }
+    $ctl.StartList.Visibility = if ($isApps) { 'Collapsed' } else { 'Visible' }
+    $ctl.AppsFilterBox.Visibility = if ($isApps) { 'Visible' } else { 'Collapsed' }
+    $ctl.BtnAppsUpdates.Visibility = if ($isApps) { 'Visible' } else { 'Collapsed' }
+    if ($isApps) { Filter-Apps; return }
+    if (-not $script:startRows.ContainsKey($v)) { Load-StartRows $v } else { Filter-StartRows }
+}
+function Filter-StartRows {
+    $v = $script:appsView
+    if ($v -eq 'apps' -or -not $script:startRows.ContainsKey($v)) { return }
+    $q = ([string]$ctl.AppsSearch.Text).Trim()
+    $col = New-Object 'System.Collections.ObjectModel.ObservableCollection[StartRow]'
+    foreach ($r in $script:startRows[$v]) {
+        if ($q -and ($r.Name.IndexOf($q, [StringComparison]::OrdinalIgnoreCase) -lt 0) -and ([string]$r.Meta).IndexOf($q, [StringComparison]::OrdinalIgnoreCase) -lt 0 -and ([string]$r.Detail).IndexOf($q, [StringComparison]::OrdinalIgnoreCase) -lt 0) { continue }
+        $col.Add($r)
+    }
+    $ctl.StartList.ItemsSource = $col
+    $on = @($col | Where-Object { $_.Enabled }).Count
+    $ctl.AppsInfo.Text = switch ($v) {
+        'startup' { (T "{0} 个开机启动项，{1} 个已启用") -f $col.Count, $on }
+        'task'    { (T "{0} 个第三方计划任务，{1} 个已启用（Windows 自己的不列）") -f $col.Count, $on }
+        default   { (T "{0} 个第三方右键菜单扩展，{1} 个已启用（系统自带的不列）") -f $col.Count, $on }
+    }
+    $ctl.EmptyApps.Visibility = if ($col.Count -gt 0) { 'Collapsed' } else { 'Visible' }
+    if ($col.Count -eq 0) { $ctl.EmptyAppsText.Text = switch ($v) { 'startup' { (T '没有开机启动项') } 'task' { (T '没有第三方的计划任务') } default { (T '没有第三方的右键菜单扩展') } } }
+}
+function Load-StartRows([string]$kind) {
+    if ($script:worker) { return }
+    $ctl.StartList.ItemsSource = $null
+    $ctl.EmptyApps.Visibility = 'Visible'; $ctl.EmptyAppsText.Text = (T '正在读取…')
+    $sync.Mode = 'startup'; $sync.StartResult = $null; $sync.StartKind = $kind
+    Start-Op $(switch ($kind) { 'startup' { (T '读取开机启动项') } 'task' { (T '读取计划任务') } default { (T '读取右键菜单扩展') } }) -NoCard
+    UI-Busy $true
+    Start-Worker @'
+$k = $arg.Kind
+$sync.StartResult = switch ($k) { 'startup' { @(Get-StartupItems) } 'task' { @(Get-UserTasks) } default { @(Get-ContextMenuItems) } }
+'@ @{ Kind = $kind }
+}
+function Build-StartRows([string]$kind, $list) {
+    $rows = New-Object System.Collections.Generic.List[StartRow]
+    $srcText = @{ HKCU = (T '注册表 · 当前用户'); HKLM = (T '注册表 · 所有用户'); HKLM32 = (T '注册表 · 所有用户 (32 位)'); UserFolder = (T '「启动」文件夹 · 当前用户'); CommonFolder = (T '「启动」文件夹 · 所有用户') }
+    foreach ($x in @($list)) {
+        $r = New-Object StartRow
+        $r.Kind = $kind; $r.Name = [string]$x.Name
+        switch ($kind) {
+            'startup' {
+                $exe = Get-CommandExe ([string]$x.Cmd)
+                $co = Get-FileCompany $exe
+                $r.Meta = (@($srcText[[string]$x.Src], $co) | Where-Object { $_ }) -join ' · '
+                $r.Detail = [string]$x.Cmd
+                $r.Open = if ($exe -and (Test-Path -LiteralPath $exe)) { $exe } else { '' }
+                $r.Key1 = [string]$x.Approved; $r.Key2 = [string]$x.Val
+                $r.Enabled = [bool]$x.Enabled
+            }
+            'task' {
+                $parts = @(); if ($x.Author) { $parts += [string]$x.Author }; $parts += ((T '任务 ') + [string]$x.Path + [string]$x.Name)
+                if ($x.Desc) { $parts += ([string]$x.Desc) }
+                $r.Meta = ($parts -join ' · ')
+                $r.Detail = [string]$x.Cmd
+                $exe = Get-CommandExe ([string]$x.Cmd)
+                $r.Open = if ($exe -and (Test-Path -LiteralPath $exe)) { $exe } else { '' }
+                $r.Key1 = [string]$x.Path; $r.Key2 = [string]$x.Name
+                $r.Ours = [bool]$x.Ours
+                $r.Enabled = ([string]$x.State -ne 'Disabled')
+            }
+            default {
+                $parts = @(); if ($x.Company) { $parts += [string]$x.Company }; $parts += ((T '出现在：') + (@($x.Where) -join (T '、')))
+                $r.Meta = ($parts -join ' · ')
+                $r.Detail = [string]$x.Dll
+                $r.Open = if ($x.Dll -and (Test-Path -LiteralPath $x.Dll)) { [string]$x.Dll } else { '' }
+                $r.Key1 = [string]$x.Clsid
+                $r.Enabled = [bool]$x.Enabled
+            }
+        }
+        $rows.Add($r)
+    }
+    $sorted = New-Object System.Collections.Generic.List[StartRow]
+    foreach ($r in @($rows | Sort-Object { -not $_.Enabled }, Name)) { $sorted.Add($r) }
+    $script:startRows[$kind] = $sorted
+    if ($script:appsView -eq $kind) { Filter-StartRows }
+}
+function Set-StartRow($r, [bool]$on) {
+    try {
+        switch ($r.Kind) {
+            'startup' { Set-StartupEnabled $r.Key1 $r.Key2 $on }
+            'task'    { if ($on) { Enable-ScheduledTask -TaskPath $r.Key1 -TaskName $r.Key2 -ErrorAction Stop | Out-Null } else { Disable-ScheduledTask -TaskPath $r.Key1 -TaskName $r.Key2 -ErrorAction Stop | Out-Null } }
+            default   { Set-ContextMenuEnabled $r.Key1 $on }
+        }
+    } catch { Show-Sheet -Kind warn -Title $(if ($on) { (T '没启用成') } else { (T '没禁用成') }) -Text $_.Exception.Message | Out-Null; return }
+    $r.Enabled = $on
+    $what = switch ($r.Kind) { 'startup' { if ($on) { (T '启用开机启动项') } else { (T '禁用开机启动项') } } 'task' { if ($on) { (T '启用计划任务') } else { (T '禁用计划任务') } } default { if ($on) { (T '启用右键菜单扩展') } else { (T '禁用右键菜单扩展') } } }
+    OpLog '系统设置' $what $r.Name $r.Detail
+    UI-Log ((T "{0}：{1}") -f $what, $r.Name)
+    if ($r.Kind -eq 'shellex') { $ctl.AppsInfo.Text = (T '右键菜单的改动对新打开的资源管理器窗口生效；还没生效的话注销再登录一次') }
+    else { Filter-StartRows }
+}
+foreach ($rb in @($ctl.AppsViewApps, $ctl.AppsViewStartup, $ctl.AppsViewTasks, $ctl.AppsViewMenu)) { $rb.Add_Checked({ Show-AppsView }) }
+$ctl.AppsSearch.Add_TextChanged({ Filter-StartRows })
+$ctl.StartList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent, [System.Windows.RoutedEventHandler]{
+    param($s, $e)
+    $b = $e.OriginalSource
+    if (-not ($b -is [System.Windows.Controls.Button]) -or -not ($b.Tag -is [StartRow])) { return }
+    $r = $b.Tag
+    if ($b.Name -eq 'StartOpen') { if ($r.Open) { Open-Location $r.Open }; return }
+    if ($b.Name -ne 'StartToggle' -or $r.Ours) { return }
+    if ($r.Enabled) {
+        $what = switch ($r.Kind) {
+            'startup' { (T "「{0}」以后开机时不再自动启动。它本身不会被删，随时可以在这里重新启用，也可以在任务管理器的「启动应用」里改。") -f $r.Name }
+            'task'    { (T "计划任务「{0}」会被禁用，到时间不再运行。随时可以在这里重新启用，也可以在「任务计划程序」里改。") -f $r.Name }
+            default   { (T "「{0}」会从资源管理器的右键菜单里去掉（对新打开的窗口生效）。它所属的软件照常使用，随时可以在这里重新启用。") -f $r.Name }
+        }
+        if ((Show-Sheet -Title ((T "禁用「{0}」？") -f $r.Name) -Text $what -Buttons @((T '取消'), (T '禁用')) -Primary (T '禁用') -Cancel (T '取消')) -ne (T '禁用')) { return }
+        Set-StartRow $r $false
+    } else { Set-StartRow $r $true }
+})
+# ---------- 检查新版本（winget）----------
+function Start-WingetCheck {
+    if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return }
+    if (-not (Get-WingetExe)) { Show-Sheet -Kind warn -Title (T '这台电脑没有 winget') -Text (T 'winget 是 Windows 自带的软件包管理器（「应用安装程序」），Windows 10 1809 以后的系统都有。打不开的话，在应用商店里搜「应用安装程序」装一下。') | Out-Null; return }
+    $sync.Mode = 'winget'; $sync.WingetResult = $null
+    Start-Op (T '用 winget 检查新版本') -NoCard; UI-Busy $true
+    $ctl.AppsInfo.Text = (T '正在用 winget 查，要几十秒…')
+    Start-Worker @'
+$sync.WingetResult = Get-WingetUpgrades
+'@ $null
+}
+function Apply-WingetResult($res) {
+    if (-not $res) { return }
+    if ($res.Err) {
+        $msg = switch ($res.Err) { 'nowinget' { (T '这台电脑没有 winget') } 'timeout' { (T 'winget 三分钟都没查完，可能是网络不通') } default { $res.Err } }
+        Show-Sheet -Kind warn -Title (T '没查成') -Text $msg | Out-Null; Filter-Apps; return
+    }
+    $items = @($res.Items)
+    $hit = 0
+    if ($script:appRows) {
+        foreach ($r in $script:appRows) { $r.Upgrade = ''; $r.UpgradeId = '' }
+        $norm = { param($x) (([string]$x).ToLowerInvariant() -replace '[^\p{L}\p{N}]', '') }
+        foreach ($u in $items) {
+            $un = & $norm $u.Name
+            if ($un.Length -lt 2) { continue }
+            foreach ($r in $script:appRows) {
+                if ($r.Upgrade) { continue }
+                $rn = & $norm $r.Name
+                if ($rn -eq $un -or ($un.Length -ge 4 -and $rn.StartsWith($un)) -or ($rn.Length -ge 4 -and $un.StartsWith($rn))) {
+                    $r.Upgrade = [string]$u.Available; $r.UpgradeId = [string]$u.Id
+                    $r.Meta = ($r.Meta -replace '\s*·\s*' + [regex]::Escape((T '可升级到')) + '[^·]*', '') + ' · ' + (T '可升级到') + ' ' + $u.Available
+                    $hit++; break
+                }
+            }
+        }
+    }
+    $script:wingetItems = $items
+    Filter-Apps
+    if ($items.Count -eq 0) { Show-Sheet -Kind done -Title (T '都是最新的') -Text (T 'winget 没有查到有新版本的软件。') | Out-Null; return }
+    $ctl.AppsInfo.Text = (T "winget：{0} 个软件有新版本，其中 {1} 个在列表里标出来了") -f $items.Count, $hit
+    $lines = @($items | ForEach-Object { (T "{0}：{1} → {2}") -f $_.Name, $_.Version, $_.Available })
+    $ans = Show-Sheet -Title ((T "{0} 个软件有新版本") -f $items.Count) -Text (T '列表里有的软件旁边多了「升级」按钮。也可以在终端窗口里一次全部升级：winget 会逐个下载安装，有的安装程序会弹出自己的窗口，照提示点就行。') -Items $lines `
+        -Buttons @((T '好'), (T '在终端里全部升级')) -Primary (T '好') -Cancel (T '好')
+    if ($ans -eq (T '在终端里全部升级')) { Start-WingetUpgrade '' }
+}
+function Start-WingetUpgrade([string]$id, [string]$name = '') {
+    $exe = Get-WingetExe; if (-not $exe) { return }
+    $cmd = if ($id) { ('"{0}" upgrade --id "{1}" --accept-source-agreements --accept-package-agreements' -f $exe, $id) }
+           elseif ($name) { ('"{0}" upgrade --name "{1}" --accept-source-agreements --accept-package-agreements' -f $exe, $name) }
+           else { ('"{0}" upgrade --all --accept-source-agreements --accept-package-agreements' -f $exe) }
+    try {
+        Start-Process -FilePath "$env:SystemRoot\System32\cmd.exe" -ArgumentList ('/k ' + $cmd)
+        OpLog '系统设置' (T '用 winget 升级软件') $(if ($id) { $id } elseif ($name) { $name } else { (T '全部') }) $cmd
+        UI-Log ((T "已在终端里开始升级：{0}") -f $cmd)
+    } catch { Show-Sheet -Kind warn -Title (T '打不开终端') -Text $_.Exception.Message | Out-Null }
+}
+$ctl.BtnAppsUpdates.Add_Click({ Start-WingetCheck })
+
 # ------------------------------------------------------------
 # 自动提醒：用 Windows 任务计划，开关打开时创建，关掉时删除
 # ------------------------------------------------------------
@@ -12660,7 +13568,11 @@ function Enable-AutoTask([bool]$isRemind) {
             ('<LogonTrigger><UserId>{USER}</UserId><Delay>PT2M</Delay></LogonTrigger>' +
              '<CalendarTrigger><StartBoundary>2026-01-01T12:00:00</StartBoundary><ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay></CalendarTrigger>'))
     }
-    return (Register-CleanTask $script:taskClean (T '腾挪 ClearC：每周日自动清理一次临时文件、缓存和日志（不搬家、不清空回收站、不碰个人文件夹）。在工具的「自动提醒」页关掉开关即可删除本任务。') '/autoclean' '<CalendarTrigger><StartBoundary>2026-01-04T12:30:00</StartBoundary><ScheduleByWeek><DaysOfWeek><Sunday/></DaysOfWeek><WeeksInterval>1</WeeksInterval></ScheduleByWeek></CalendarTrigger>')
+    $when = Get-Setting 'CleanWhen' 'sun'
+    $days = @{ sun = 'Sunday'; mon = 'Monday'; tue = 'Tuesday'; wed = 'Wednesday'; thu = 'Thursday'; fri = 'Friday'; sat = 'Saturday' }
+    $trig = if ($when -eq 'daily') { '<CalendarTrigger><StartBoundary>2026-01-04T12:30:00</StartBoundary><ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay></CalendarTrigger>' }
+            else { $d = $days[$when]; if (-not $d) { $d = 'Sunday' }; "<CalendarTrigger><StartBoundary>2026-01-04T12:30:00</StartBoundary><ScheduleByWeek><DaysOfWeek><$d/></DaysOfWeek><WeeksInterval>1</WeeksInterval></ScheduleByWeek></CalendarTrigger>" }
+    return (Register-CleanTask $script:taskClean (T '腾挪 ClearC：定期自动清理临时文件、缓存和日志（不搬家、不清空回收站、不碰个人文件夹）。在工具的「自动提醒」页关掉开关即可删除本任务。') '/autoclean' $trig)
 }
 # 打开工具时检查一次：本工具挪了位置、或者任务是旧版本建的（提醒没有「登录后检查」），就按现在的位置和设置重建
 function Repair-AutoTasks {
@@ -12699,6 +13611,10 @@ function Load-Auto {
     $gb = Get-Setting 'RemindGB' '20'
     $idx = [array]::IndexOf(@('10', '20', '30', '50'), $gb); if ($idx -lt 0) { $idx = 1 }
     $ctl.AutoRemindGB.SelectedIndex = $idx
+    $idx = [array]::IndexOf(@('0', '1', '2', '5', '10'), (Get-Setting 'JunkGB' '0')); if ($idx -lt 0) { $idx = 0 }
+    $ctl.AutoJunkGB.SelectedIndex = $idx
+    $idx = [array]::IndexOf(@('sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'daily'), (Get-Setting 'CleanWhen' 'sun')); if ($idx -lt 0) { $idx = 0 }
+    $ctl.AutoCleanWhen.SelectedIndex = $idx
     $where = (T "不用开着本工具，也不用设置开机启动。开启后会在 Windows「任务计划程序」里建一个任务（{0}）：每次登录电脑 2 分钟后、以及每天中午 12 点，Windows 会在后台运行一下本工具（{1}）检查 C 盘，空间够就什么都不显示，查完马上退出。关掉开关就删除这个任务。`n请把本工具放在固定的位置，不要删掉；挪了位置后打开一次，任务会自动改用新位置。")
     $ctl.AutoRemindNote.Text = if ($hasExe) { $where -f $script:taskRemind, $exe } else { (T '只有 exe 版本支持自动提醒。') }
     $moved = ''
@@ -12739,6 +13655,20 @@ $ctl.AutoRemindGB.Add_SelectionChanged({
     $gb = @('10', '20', '30', '50')[[math]::Max(0, $ctl.AutoRemindGB.SelectedIndex)]
     Set-Setting 'RemindGB' $gb
     OpLog '系统设置' (T '空间不足提醒的界限') "$gb GB" ''
+})
+$ctl.AutoJunkGB.Add_SelectionChanged({
+    if ($script:autoSync) { return }
+    $gb = @('0', '1', '2', '5', '10')[[math]::Max(0, $ctl.AutoJunkGB.SelectedIndex)]
+    Set-Setting 'JunkGB' $gb
+    OpLog '系统设置' (T '可清理垃圾提醒的界限') $(if ($gb -eq '0') { (T '不提醒') } else { "$gb GB" }) ''
+})
+# 换了清理的时间：任务开着就按新时间重建
+$ctl.AutoCleanWhen.Add_SelectionChanged({
+    if ($script:autoSync) { return }
+    $w = @('sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'daily')[[math]::Max(0, $ctl.AutoCleanWhen.SelectedIndex)]
+    Set-Setting 'CleanWhen' $w
+    OpLog '系统设置' (T '自动清理的时间') ([string]$ctl.AutoCleanWhen.SelectedItem.Content) ''
+    if (Test-CleanTask $script:taskClean) { $err = Enable-AutoTask $false; if ($err) { Show-Sheet -Kind warn -Title (T '没改成') -Text $err | Out-Null }; Load-Auto }
 })
 foreach ($sw in @($ctl.AutoRemindOn, $ctl.AutoCleanOn)) {
     $sw.Add_Checked({
@@ -12977,6 +13907,53 @@ $ctl.BtnSetReset.Add_Click({
     UI-Log (T '设置：显示内容已恢复默认')
 })
 $ctl.NavSettings.Add_Click({ $ctl.SetScroll.ScrollToTop() })
+# ---------- 清理列表：自己加的文件夹、排除的文件夹 ----------
+function Load-CleanLists {
+    $c = @(Get-CustomClean); $x = @(Get-ExcludeList)
+    $ctl.SetCustomList.ItemsSource = $c; $ctl.SetCustomEmpty.Visibility = if ($c.Count) { 'Collapsed' } else { 'Visible' }
+    $ctl.SetExcludeList.ItemsSource = $x; $ctl.SetExcludeEmpty.Visibility = if ($x.Count) { 'Collapsed' } else { 'Visible' }
+}
+function Save-CleanList([string]$key, [string[]]$items) {
+    Set-Setting $key (($items | Where-Object { $_ }) -join '|')
+    Load-CleanLists
+    # 清理列表变了：扫描结果作废，下次扫描按新的来
+    $script:catalog = Get-Catalog
+    if ($script:rows -and -not $script:worker) { $ctl.Summary.Text = (T '清理列表改了，请重新扫描。') }
+}
+function Add-CleanListFolder([bool]$exclude) {
+    $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
+    $dlg.Description = if ($exclude) { (T '选一个清理时不要碰的文件夹') } else { (T '选一个要清理的文件夹（删里面的东西，文件夹本身保留）') }
+    if ($dlg.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { return }
+    $p = $dlg.SelectedPath.TrimEnd('\')
+    if ($p -match '\|') { Show-Sheet -Kind warn -Title (T '这个路径用不了') -Text (T '路径里不能有竖线。') | Out-Null; return }
+    if (-not $exclude) {
+        $why = Get-DeleteBlock $p
+        if ($why) { Show-Sheet -Kind warn -Title (T '这个文件夹不能加进清理列表') -Text $why | Out-Null; return }
+        foreach ($x in (Get-ExcludeList)) { if ($p -ieq $x -or $p.StartsWith("$x\", [StringComparison]::OrdinalIgnoreCase)) { Show-Sheet -Kind warn -Title (T '这个文件夹在排除列表里') -Text ((T "它在排除的 {0} 里面，先把排除去掉。") -f $x) | Out-Null; return } }
+    }
+    $key = if ($exclude) { 'Exclude' } else { 'CustomClean' }
+    $cur = @(if ($exclude) { Get-ExcludeList } else { Get-CustomClean })
+    if ($cur -contains $p) { return }
+    Save-CleanList $key ($cur + $p)
+    OpLog '系统设置' $(if ($exclude) { (T '排除文件夹') } else { (T '加入清理列表') }) $p ''
+    UI-Log ((T "{0}：{1}") -f $(if ($exclude) { (T '排除文件夹') } else { (T '加入清理列表') }), $p)
+}
+$ctl.BtnSetCustomAdd.Add_Click({ Add-CleanListFolder $false })
+$ctl.BtnSetExcludeAdd.Add_Click({ Add-CleanListFolder $true })
+$removeHandler = [System.Windows.RoutedEventHandler]{
+    param($s, $e)
+    $b = $e.OriginalSource
+    if (-not ($b -is [System.Windows.Controls.Button]) -or $b.Name -ne 'SetListRemove') { return }
+    $p = [string]$b.Tag
+    $exclude = [object]::ReferenceEquals($s, $ctl.SetExcludeList)
+    $key = if ($exclude) { 'Exclude' } else { 'CustomClean' }
+    $cur = @(if ($exclude) { Get-ExcludeList } else { Get-CustomClean })
+    Save-CleanList $key @($cur | Where-Object { $_ -ne $p })
+    OpLog '系统设置' $(if ($exclude) { (T '取消排除') } else { (T '移出清理列表') }) $p ''
+}
+$ctl.SetCustomList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent, $removeHandler)
+$ctl.SetExcludeList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent, $removeHandler)
+Load-CleanLists
 # 外观、语言：和左下角的按钮共用，换了要重新打开本工具
 foreach ($rb in @($ctl.SetThemeLight, $ctl.SetThemeDark, $ctl.SetThemeSystem)) {
     $rb.Add_Checked({
@@ -13121,6 +14098,57 @@ function Invoke-UiTest {
             $n0 = $script:uiSheets.Count
             if (Request-Theme $(if ($script:themePref -eq 'dark') { 'light' } else { 'dark' })) { throw 'theme changed without confirmation' }
             if ($script:uiSheets.Count -le $n0) { throw 'no confirmation asked' }
+        }
+        & $step 'cleanup list: custom and excluded folders' {
+            $d = Join-Path $script:appDir 'uitest-custom'; New-Item -ItemType Directory -Force -Path $d | Out-Null
+            [IO.File]::WriteAllBytes((Join-Path $d 'junk.tmp'), (New-Object byte[] 5000))
+            Save-CleanList 'CustomClean' @($d)
+            if (@($ctl.SetCustomList.ItemsSource).Count -ne 1 -or $ctl.SetCustomEmpty.Visibility -ne 'Collapsed') { throw 'custom list not shown in Settings' }
+            $c = @($catalog | Where-Object { $_.Custom })
+            if ($c.Count -ne 1 -or (Measure-Item $c[0]) -ne 5000) { throw ("catalog has {0} custom entries" -f $c.Count) }
+            Save-CleanList 'Exclude' @($d)
+            if ((Measure-Item $c[0]) -ne 0) { throw 'excluded folder still counted' }
+            Save-CleanList 'Exclude' @(); Save-CleanList 'CustomClean' @()
+            if (@($catalog | Where-Object { $_.Custom }).Count -ne 0 -or $ctl.SetCustomEmpty.Visibility -ne 'Visible') { throw 'custom entry not removed' }
+            Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue
+            & $click $ctl.BtnCleanCustom; $win.UpdateLayout()
+            if ($ctl.PageSettings.Visibility -ne 'Visible') { throw 'link did not open Settings' }
+        }
+        & $step 'reminders: junk limit and cleanup day' {
+            Show-Page 'auto'; $win.UpdateLayout()
+            $ctl.AutoJunkGB.SelectedIndex = 2; if ((Get-Setting 'JunkGB' '0') -ne '2') { throw 'junk limit not saved' }
+            $ctl.AutoCleanWhen.SelectedIndex = 7; if ((Get-Setting 'CleanWhen' '') -ne 'daily') { throw 'cleanup day not saved' }
+            $ctl.AutoCleanWhen.SelectedIndex = 0; $ctl.AutoJunkGB.SelectedIndex = 0
+        }
+        & $step 'apps page: startup, tasks and context menu' {
+            $st = @(Get-StartupItems); $tk = @(Get-UserTasks); $cm = @(Get-ContextMenuItems)
+            Build-StartRows 'startup' $st; Build-StartRows 'task' $tk; Build-StartRows 'shellex' $cm
+            # 列表显示出来（不打开软件页的统计）
+            $script:pageLoaded.apps = $true
+            Show-Page 'apps'; $ctl.AppsViewStartup.IsChecked = $true; $win.UpdateLayout()
+            if ($ctl.StartList.Visibility -ne 'Visible' -or $ctl.AppsList.Visibility -ne 'Collapsed') { throw 'startup view not shown' }
+            if (@($ctl.StartList.ItemsSource).Count -ne $st.Count) { throw ("{0} rows for {1} startup items" -f @($ctl.StartList.ItemsSource).Count, $st.Count) }
+            $ctl.AppsViewTasks.IsChecked = $true; $win.UpdateLayout()
+            if (@($ctl.StartList.ItemsSource).Count -ne $tk.Count) { throw 'task rows differ' }
+            $ctl.AppsViewMenu.IsChecked = $true; $win.UpdateLayout()
+            if (@($ctl.StartList.ItemsSource).Count -ne $cm.Count) { throw 'context menu rows differ' }
+            $ctl.AppsViewApps.IsChecked = $true; $win.UpdateLayout()
+            if ($ctl.AppsList.Visibility -ne 'Visible') { throw 'apps view not back' }
+            # 开关：在 StartupApproved 里写一个假名字，再删掉，不碰真的启动项
+            $ap = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run'
+            Set-StartupEnabled $ap 'ClearC-UiTest' $false
+            if (Test-StartupEnabled $ap 'ClearC-UiTest') { throw 'disable not recorded' }
+            Set-StartupEnabled $ap 'ClearC-UiTest' $true
+            if (-not (Test-StartupEnabled $ap 'ClearC-UiTest')) { throw 'enable not recorded' }
+            Remove-ItemProperty -LiteralPath $ap -Name 'ClearC-UiTest' -ErrorAction SilentlyContinue
+            $script:startRows.Clear()
+            "startup {0}, tasks {1}, context menu {2}" -f $st.Count, $tk.Count, $cm.Count
+        }
+        & $step 'installer orphans are a subset of the cached packages' {
+            $all = @(Get-ChildItem -LiteralPath (Join-Path $env:SystemRoot 'Installer') -File -Force -ErrorAction SilentlyContinue | Where-Object { $_.Extension -match '^\.(msi|msp)$' })
+            $o = @(Get-InstallerOrphans)
+            if ($all.Count -gt 0 -and $o.Count -ge $all.Count) { throw ("all {0} packages look orphaned; the references were not read" -f $all.Count) }
+            "{0} of {1} packages" -f $o.Count, $all.Count
         }
         & $step 'restore points card' {
             Show-Page 'save'
@@ -13382,7 +14410,7 @@ $timer.Add_Tick({
         [DirStat]::Cancel = $false
         if ($sync.WasCancelled) { UI-Log (T '已中途取消。') }
         # 删过、搬过东西以后，逐个扫描得到的旧树不再拿来用（读文件表的结果靠变更日志更新）
-        if (@('scan', 'movescan', 'apps', 'map', 'movesize', 'dup', 'update') -notcontains [string]$sync.Mode) { [DiskMap]::Invalidate() }
+        if (@('scan', 'movescan', 'apps', 'map', 'movesize', 'dup', 'update', 'startup', 'winget') -notcontains [string]$sync.Mode) { [DiskMap]::Invalidate() }
 
         if ($sync.Mode -eq 'scan') {
             if ($sync.WasCancelled -or -not $sync.Sizes) {
@@ -13589,6 +14617,14 @@ $timer.Add_Tick({
         elseif ($sync.Mode -eq 'apps') {
             End-Op $(if ($sync.WasCancelled) { (T '已中途取消，没统计到的软件显示安装时登记的大小') } else { (T '完成') })
             if ($sync.AppsResult) { Build-AppRows $sync.AppsResult } else { $ctl.EmptyAppsText.Text = (T '没读到已安装的软件') }
+        }
+        elseif ($sync.Mode -eq 'startup') {
+            End-Op (T '完成')
+            Build-StartRows ([string]$sync.StartKind) $sync.StartResult
+        }
+        elseif ($sync.Mode -eq 'winget') {
+            End-Op $(if ($sync.WingetResult -and -not $sync.WingetResult.Err) { ((T "{0} 个有新版本") -f @($sync.WingetResult.Items).Count) } else { (T '没查成') })
+            Apply-WingetResult $sync.WingetResult
         }
         elseif ($sync.Mode -eq 'uninst') {
             $x = $sync.UninstRes

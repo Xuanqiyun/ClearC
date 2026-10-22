@@ -95,10 +95,26 @@ if ($script:mode -match '(?i)/check') {
     $gb = 20; [void][int]::TryParse((Get-Setting 'RemindGB' '20'), [ref]$gb)
     $free = [double](FreeC)
     $today = (Get-Date).ToString('yyyy-MM-dd')
+    $shown = $false
     if ($free -lt $gb * 1GB -and (Get-Setting 'LastRemind' '') -ne $today) {
-        Set-Setting 'LastRemind' $today
+        Set-Setting 'LastRemind' $today; $shown = $true
         $ans = Show-Toast -Title ((T "C 盘只剩 {0} 了") -f (GB $free)) -Text ((T "低于你设定的 {0} GB。打开腾挪 ClearC，看看能清掉或搬走什么？`n（在工具的「自动提醒」页可以关掉这个提醒）") -f $gb) -Buttons @((T '稍后'), (T '打开腾挪 ClearC'))
         if ($ans -eq (T '打开腾挪 ClearC') -and $env:CLEANC_SELF) { Start-Process -FilePath $env:CLEANC_SELF }
+    }
+    # 可以清理的垃圾超过设定值时也提醒（每天最多一次；只统计「安全清理」里的缓存，不碰任何东西）
+    $jgb = 0; [void][int]::TryParse((Get-Setting 'JunkGB' '0'), [ref]$jgb)
+    if (-not $shown -and $jgb -gt 0 -and (Get-Setting 'LastJunkRemind' '') -ne $today) {
+        try { [Diagnostics.Process]::GetCurrentProcess().PriorityClass = 'BelowNormal' } catch {}
+        $junk = [double]0
+        foreach ($it in (Get-Catalog)) {
+            if ($it.Kind -ne 'cache' -or $it.Def -ne (T '删除') -or $it.Act -or -not ([string]$it.G).StartsWith('安全清理')) { continue }
+            $junk += [double](Measure-Item $it)
+        }
+        if ($junk -ge $jgb * 1GB) {
+            Set-Setting 'LastJunkRemind' $today
+            $ans = Show-Toast -Title ((T "C 盘上有约 {0} 可以清理") -f (GB $junk)) -Text ((T "临时文件、缓存和日志加起来超过了你设定的 {0} GB。打开腾挪 ClearC 清一清？`n（在工具的「自动提醒」页可以改界限或关掉这个提醒）") -f $jgb) -Buttons @((T '稍后'), (T '打开腾挪 ClearC'))
+            if ($ans -eq (T '打开腾挪 ClearC') -and $env:CLEANC_SELF) { Start-Process -FilePath $env:CLEANC_SELF }
+        }
     }
     $global:CLEANC_UI_SHOWN = $true
     return

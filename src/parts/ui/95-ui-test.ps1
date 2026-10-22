@@ -125,6 +125,57 @@ function Invoke-UiTest {
             if (Request-Theme $(if ($script:themePref -eq 'dark') { 'light' } else { 'dark' })) { throw 'theme changed without confirmation' }
             if ($script:uiSheets.Count -le $n0) { throw 'no confirmation asked' }
         }
+        & $step 'cleanup list: custom and excluded folders' {
+            $d = Join-Path $script:appDir 'uitest-custom'; New-Item -ItemType Directory -Force -Path $d | Out-Null
+            [IO.File]::WriteAllBytes((Join-Path $d 'junk.tmp'), (New-Object byte[] 5000))
+            Save-CleanList 'CustomClean' @($d)
+            if (@($ctl.SetCustomList.ItemsSource).Count -ne 1 -or $ctl.SetCustomEmpty.Visibility -ne 'Collapsed') { throw 'custom list not shown in Settings' }
+            $c = @($catalog | Where-Object { $_.Custom })
+            if ($c.Count -ne 1 -or (Measure-Item $c[0]) -ne 5000) { throw ("catalog has {0} custom entries" -f $c.Count) }
+            Save-CleanList 'Exclude' @($d)
+            if ((Measure-Item $c[0]) -ne 0) { throw 'excluded folder still counted' }
+            Save-CleanList 'Exclude' @(); Save-CleanList 'CustomClean' @()
+            if (@($catalog | Where-Object { $_.Custom }).Count -ne 0 -or $ctl.SetCustomEmpty.Visibility -ne 'Visible') { throw 'custom entry not removed' }
+            Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue
+            & $click $ctl.BtnCleanCustom; $win.UpdateLayout()
+            if ($ctl.PageSettings.Visibility -ne 'Visible') { throw 'link did not open Settings' }
+        }
+        & $step 'reminders: junk limit and cleanup day' {
+            Show-Page 'auto'; $win.UpdateLayout()
+            $ctl.AutoJunkGB.SelectedIndex = 2; if ((Get-Setting 'JunkGB' '0') -ne '2') { throw 'junk limit not saved' }
+            $ctl.AutoCleanWhen.SelectedIndex = 7; if ((Get-Setting 'CleanWhen' '') -ne 'daily') { throw 'cleanup day not saved' }
+            $ctl.AutoCleanWhen.SelectedIndex = 0; $ctl.AutoJunkGB.SelectedIndex = 0
+        }
+        & $step 'apps page: startup, tasks and context menu' {
+            $st = @(Get-StartupItems); $tk = @(Get-UserTasks); $cm = @(Get-ContextMenuItems)
+            Build-StartRows 'startup' $st; Build-StartRows 'task' $tk; Build-StartRows 'shellex' $cm
+            # 列表显示出来（不打开软件页的统计）
+            $script:pageLoaded.apps = $true
+            Show-Page 'apps'; $ctl.AppsViewStartup.IsChecked = $true; $win.UpdateLayout()
+            if ($ctl.StartList.Visibility -ne 'Visible' -or $ctl.AppsList.Visibility -ne 'Collapsed') { throw 'startup view not shown' }
+            if (@($ctl.StartList.ItemsSource).Count -ne $st.Count) { throw ("{0} rows for {1} startup items" -f @($ctl.StartList.ItemsSource).Count, $st.Count) }
+            $ctl.AppsViewTasks.IsChecked = $true; $win.UpdateLayout()
+            if (@($ctl.StartList.ItemsSource).Count -ne $tk.Count) { throw 'task rows differ' }
+            $ctl.AppsViewMenu.IsChecked = $true; $win.UpdateLayout()
+            if (@($ctl.StartList.ItemsSource).Count -ne $cm.Count) { throw 'context menu rows differ' }
+            $ctl.AppsViewApps.IsChecked = $true; $win.UpdateLayout()
+            if ($ctl.AppsList.Visibility -ne 'Visible') { throw 'apps view not back' }
+            # 开关：在 StartupApproved 里写一个假名字，再删掉，不碰真的启动项
+            $ap = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run'
+            Set-StartupEnabled $ap 'ClearC-UiTest' $false
+            if (Test-StartupEnabled $ap 'ClearC-UiTest') { throw 'disable not recorded' }
+            Set-StartupEnabled $ap 'ClearC-UiTest' $true
+            if (-not (Test-StartupEnabled $ap 'ClearC-UiTest')) { throw 'enable not recorded' }
+            Remove-ItemProperty -LiteralPath $ap -Name 'ClearC-UiTest' -ErrorAction SilentlyContinue
+            $script:startRows.Clear()
+            "startup {0}, tasks {1}, context menu {2}" -f $st.Count, $tk.Count, $cm.Count
+        }
+        & $step 'installer orphans are a subset of the cached packages' {
+            $all = @(Get-ChildItem -LiteralPath (Join-Path $env:SystemRoot 'Installer') -File -Force -ErrorAction SilentlyContinue | Where-Object { $_.Extension -match '^\.(msi|msp)$' })
+            $o = @(Get-InstallerOrphans)
+            if ($all.Count -gt 0 -and $o.Count -ge $all.Count) { throw ("all {0} packages look orphaned; the references were not read" -f $all.Count) }
+            "{0} of {1} packages" -f $o.Count, $all.Count
+        }
         & $step 'restore points card' {
             Show-Page 'save'
             $sw = [Diagnostics.Stopwatch]::StartNew()

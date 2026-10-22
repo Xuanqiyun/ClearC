@@ -70,21 +70,41 @@ function Invoke-Tool([string]$exe, [string[]]$argv, [string]$cwd = '', [double]$
 }
 function IsLink($p) { $i = Get-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue; return [bool]($i -and ($i.Attributes -band [IO.FileAttributes]::ReparsePoint)) }
 
+# 用户在设置里排除的文件夹：清理时一律不碰，估算大小时也不算
+function Get-ExcludeList { ,@((Get-Setting 'Exclude' '') -split '\|' | ForEach-Object { $_.Trim().TrimEnd('\', '/') } | Where-Object { $_ }) }
+function Get-CustomClean { ,@((Get-Setting 'CustomClean' '') -split '\|' | ForEach-Object { $_.Trim().TrimEnd('\', '/') } | Where-Object { $_ }) }
+function Test-Excluded([string]$path, $ex) {
+    if (-not $ex) { return $false }
+    $p = $path.TrimEnd('\', '/'); $sep = [IO.Path]::DirectorySeparatorChar
+    foreach ($x in $ex) { if ($p -ieq $x -or $p.StartsWith($x + $sep, [StringComparison]::OrdinalIgnoreCase)) { return $true } }
+    return $false
+}
+# 这个文件夹里面有没有被排除的位置（有的话不能整个删）
+function Test-HasExcluded([string]$dir, $ex) {
+    if (-not $ex) { return $false }
+    $d = $dir.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+    foreach ($x in $ex) { if ($x.StartsWith($d, [StringComparison]::OrdinalIgnoreCase)) { return $true } }
+    return $false
+}
 # $tree：Get-SysTree 读出的 C 盘文件夹树，有的话文件夹大小直接从树上查（只用于显示和估算）
-function Get-Size([string[]]$paths, [string]$filter, $tree = $null) {
+function Get-Size([string[]]$paths, [string]$filter, $tree = $null, $ex = $null) {
     $sum = [double]0
     foreach ($p in $paths) {
         foreach ($it in (Get-Item -Path $p -Force -ErrorAction SilentlyContinue)) {
+            if ($ex -and (Test-Excluded $it.FullName $ex)) { continue }
             if ($it.PSIsContainer) {
                 if (IsLink $it.FullName) { continue }
                 if ($filter) {
                     $s = (Get-ChildItem -LiteralPath $it.FullName -Filter $filter -File -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
                     if ($s) { $sum += $s }
-                } else { $sum += (Est-Bytes $it.FullName $tree) }
+                } else {
+                    $sum += (Est-Bytes $it.FullName $tree)
+                    if ($ex) { $d = $it.FullName.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar; foreach ($x in $ex) { if ($x.StartsWith($d, [StringComparison]::OrdinalIgnoreCase)) { $sum -= (Est-Bytes $x $tree) } } }
+                }
             } else { $sum += $it.Length }
         }
     }
-    return $sum
+    return [math]::Max([double]0, $sum)
 }
 
 # ---------- 统计得更快 ----------
@@ -178,18 +198,22 @@ function Remove-OneDir($d) {
     & "$sys32\cmd.exe" /c rd /s /q "\\?\$($d.FullName)" 2>$null | Out-Null
 }
 function Remove-Contents([string[]]$paths, [string]$filter, [bool]$wholeDir) {
+    $ex = Get-ExcludeList
+    $skipEx = { param($x) Log ((T "  跳过（在设置里排除了）：{0}") -f $x); OpLog '删除' (T '跳过：在设置里排除了') $x '' }
     foreach ($p in $paths) {
         if (Stopping) { return }
         foreach ($it in (Get-Item -Path $p -Force -ErrorAction SilentlyContinue)) {
             if (Stopping) { return }
             if (Test-Personal $it.FullName) { Log ((T "  跳过（在个人文件夹里，不删）：{0}") -f $($it.FullName)); OpLog '删除' (T '跳过：在个人文件夹里，不删') $it.FullName ''; continue }
+            if (Test-Excluded $it.FullName $ex) { & $skipEx $it.FullName; continue }
             if ($it.PSIsContainer) {
-                if ($wholeDir) { Remove-OneDir $it }
+                if ($wholeDir) { if (Test-HasExcluded $it.FullName $ex) { & $skipEx $it.FullName } else { Remove-OneDir $it } }
                 else {
                     $f = if ($filter) { $filter } else { '*' }
                     foreach ($c in @(Get-ChildItem -LiteralPath $it.FullName -Filter $f -Force -ErrorAction SilentlyContinue)) {
                         if (Stopping) { return }
                         if (Test-Personal $c.FullName) { continue }
+                        if ((Test-Excluded $c.FullName $ex) -or ($c.PSIsContainer -and (Test-HasExcluded $c.FullName $ex))) { & $skipEx $c.FullName; continue }
                         if ($c.PSIsContainer) { Remove-OneDir $c } else { Remove-Item -LiteralPath $c.FullName -Force -ErrorAction SilentlyContinue }
                     }
                 }
@@ -228,35 +252,164 @@ function PathHasAny([string]$path, $frags) {
     return $false
 }
 
+# ---------- 缓存目录库 ----------
+# 一行一条，字段用 | 隔开：名称 | 路径 | 说明 | 选项。加新条目只要在这里加一行，不用改代码。
+#   路径：多个用 ; 隔开；可以用 %LOCALAPPDATA%、%APPDATA%、%PROGRAMDATA%、%TEMP%、%USERPROFILE%、%SYSTEMROOT%、%SYSTEMDRIVE% 这类变量，
+#         以及 %STEAM%（Steam 的安装目录，从注册表查）；可以用 * 通配一层文件夹；@chromium:<User Data 目录> 展开成 Chromium 系浏览器的各个缓存目录
+#   选项：filter=*.log（只删匹配的文件）  whole（整个文件夹删掉，不只是里面的东西）  confirm（放进「需确认」，默认跳过）  svc=服务,服务（删之前停掉、删完再启动）
+# 只删缓存：不碰 Cookie、历史记录、密码、设置和用户保存的数据。每一条的名称和说明都在翻译表里有英文
+$script:cacheLib = @(
+    '用户临时文件 | %TEMP% | 各软件运行时的临时文件，关掉软件就没用了'
+    '系统临时文件 | %SYSTEMROOT%\Temp | 系统和安装程序的临时文件'
+    'Windows 更新下载缓存 | %SYSTEMROOT%\SoftwareDistribution\Download | 已装完的更新安装包，下次更新会重新下载需要的部分 | svc=wuauserv,bits'
+    '系统升级残留目录 | %SYSTEMDRIVE%\$WINDOWS.~BT;%SYSTEMDRIVE%\$WINDOWS.~WS;%SYSTEMDRIVE%\$GetCurrent | 大版本升级留下的临时目录 | whole'
+    '磁盘检查残留 (found.000) | %SYSTEMDRIVE%\found.* | 磁盘检查（chkdsk）修复时从损坏的文件里抢救出来的碎片，一般都没用 | whole'
+    '崩溃转储与错误报告 | %SYSTEMROOT%\Minidump;%SYSTEMROOT%\MEMORY.DMP;%SYSTEMROOT%\LiveKernelReports;%PROGRAMDATA%\Microsoft\Windows\WER;%LOCALAPPDATA%\Microsoft\Windows\WER;%LOCALAPPDATA%\CrashDumps | 蓝屏、驱动出错（显卡驱动重置等）和程序崩溃时留下的调试文件，只对排查问题的工程师有用'
+    '系统组件日志 | %SYSTEMROOT%\Logs\CBS | Windows 更新的安装日志 | filter=*.log'
+    'Windows 更新日志 | %SYSTEMROOT%\Logs\WindowsUpdate;%PROGRAMDATA%\USOShared\Logs | Windows 更新的跟踪日志（.etl）'
+    '缩略图缓存 | %LOCALAPPDATA%\Microsoft\Windows\Explorer | 文件夹里图片的小预览图，打开文件夹时会重新生成 | filter=thumbcache_*.db'
+    '系统网页缓存 (INetCache) | %LOCALAPPDATA%\Microsoft\Windows\INetCache\IE | Windows 组件和一些软件内嵌的网页浏览留下的缓存'
+    '应用商店软件的临时文件 | %LOCALAPPDATA%\Packages\*\TempState;%LOCALAPPDATA%\Packages\*\AC\INetCache;%LOCALAPPDATA%\Packages\*\AC\Temp | 从应用商店装的软件的临时文件和网页缓存。不碰它们保存的数据和设置'
+    '远程桌面位图缓存 | %LOCALAPPDATA%\Microsoft\Terminal Server Client\Cache | 远程桌面连接时缓存的画面碎片'
+    'DirectX 着色器缓存 | %LOCALAPPDATA%\D3DSCache | Windows 给游戏和软件编译好的着色器，下次用到时会重新生成'
+    'NVIDIA 安装包与着色器缓存 | %PROGRAMDATA%\NVIDIA Corporation\Downloader;%PROGRAMDATA%\NVIDIA Corporation\NV_Cache;%LOCALAPPDATA%\NVIDIA Corporation\NV_Cache;%LOCALAPPDATA%\NVIDIA\DXCache;%LOCALAPPDATA%\NVIDIA\GLCache;%LOCALAPPDATA%\NVIDIA\VkCache;%LOCALAPPDATA%\NVIDIA\OptixCache | 显卡驱动安装包和游戏着色器缓存，游戏首次启动会重建'
+    'AMD 显卡着色器缓存 | %LOCALAPPDATA%\AMD\DxCache;%LOCALAPPDATA%\AMD\DxcCache;%LOCALAPPDATA%\AMD\GLCache;%LOCALAPPDATA%\AMD\VkCache | AMD 显卡给游戏编译的着色器缓存，游戏首次启动会重建'
+    'Intel 显卡着色器缓存 | %LOCALAPPDATA%\Intel\ShaderCache;%PROGRAMDATA%\Intel\ShaderCache | 核显着色器缓存'
+    'Chrome 浏览器缓存 | @chromium:%LOCALAPPDATA%\Google\Chrome\User Data | 网页缓存。请先关闭浏览器。不影响密码、书签、历史记录'
+    'Edge 浏览器缓存 | @chromium:%LOCALAPPDATA%\Microsoft\Edge\User Data | 网页缓存。请先关闭浏览器。不影响密码、书签、历史记录'
+    'Firefox 浏览器缓存 | %LOCALAPPDATA%\Mozilla\Firefox\Profiles\*\cache2;%LOCALAPPDATA%\Mozilla\Firefox\Profiles\*\startupCache;%LOCALAPPDATA%\Mozilla\Firefox\Profiles\*\shader-cache;%LOCALAPPDATA%\Mozilla\Firefox\Profiles\*\jumpListCache;%LOCALAPPDATA%\Mozilla\Firefox\Profiles\*\OfflineCache | 网页缓存。请先关闭浏览器。不影响密码、书签、历史记录'
+    'Brave 浏览器缓存 | @chromium:%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data | 网页缓存。请先关闭浏览器。不影响密码、书签、历史记录'
+    'Vivaldi 浏览器缓存 | @chromium:%LOCALAPPDATA%\Vivaldi\User Data | 网页缓存。请先关闭浏览器。不影响密码、书签、历史记录'
+    'Opera 浏览器缓存 | %LOCALAPPDATA%\Opera Software\Opera*Stable\Cache;%LOCALAPPDATA%\Opera Software\Opera*Stable\Code Cache;%LOCALAPPDATA%\Opera Software\Opera*Stable\GPUCache;%LOCALAPPDATA%\Opera Software\Opera*Stable\Service Worker\CacheStorage | 网页缓存（含 Opera GX）。请先关闭浏览器。不影响密码、书签、历史记录'
+    'Chrome 测试版 / Chromium 缓存 | @chromium:%LOCALAPPDATA%\Google\Chrome Beta\User Data;@chromium:%LOCALAPPDATA%\Google\Chrome Dev\User Data;@chromium:%LOCALAPPDATA%\Google\Chrome SxS\User Data;@chromium:%LOCALAPPDATA%\Chromium\User Data | Chrome Beta、Dev、Canary 和 Chromium 的网页缓存。请先关闭浏览器'
+    '360 浏览器缓存 | @chromium:%APPDATA%\360se6\User Data;@chromium:%LOCALAPPDATA%\360Chrome\Chrome\User Data;@chromium:%LOCALAPPDATA%\360ChromeX\Chrome\User Data | 360 安全浏览器和 360 极速浏览器的网页缓存。请先关闭浏览器。不影响密码、书签、历史记录'
+    'QQ 浏览器缓存 | @chromium:%LOCALAPPDATA%\Tencent\QQBrowser\User Data | 网页缓存。请先关闭浏览器。不影响密码、书签、历史记录'
+    'Steam 着色器与网页缓存 | %STEAM%\steamapps\shadercache;%STEAM%\appcache\httpcache;%STEAM%\dumps;%STEAM%\logs | 游戏的着色器缓存（首次启动会重建）、Steam 商店页面的缓存、崩溃转储和日志。请先退出 Steam。游戏本身不动'
+    'Epic Games 启动器缓存 | %LOCALAPPDATA%\EpicGamesLauncher\Saved\webcache*;%LOCALAPPDATA%\EpicGamesLauncher\Saved\Logs | 启动器的网页缓存和日志。请先退出 Epic Games 启动器。游戏本身不动'
+    'Unity 缓存 | %LOCALAPPDATA%\Unity\cache | Unity 编辑器的资源商店下载和全局光照缓存，需要时会重新下载或生成'
+    'Adobe 媒体缓存 | %APPDATA%\Adobe\Common\Media Cache Files;%APPDATA%\Adobe\Common\Media Cache;%APPDATA%\Adobe\Common\Peak Files | Premiere、After Effects、Audition 导入素材时生成的缓存，打开项目会重新生成。请先关闭 Adobe 软件'
+    'Microsoft Teams (旧版) 缓存 | %APPDATA%\Microsoft\Teams\Cache;%APPDATA%\Microsoft\Teams\Code Cache;%APPDATA%\Microsoft\Teams\GPUCache;%APPDATA%\Microsoft\Teams\Service Worker\CacheStorage;%APPDATA%\Microsoft\Teams\tmp | 旧版 Teams 的网页缓存。请先退出 Teams。不影响登录和聊天记录'
+    'Discord 缓存 | %APPDATA%\discord\Cache;%APPDATA%\discord\Code Cache;%APPDATA%\discord\GPUCache | 看过的图片和视频的缓存。请先退出 Discord（包括托盘图标）。不影响登录'
+    'Slack 缓存 | %APPDATA%\Slack\Cache;%APPDATA%\Slack\Code Cache;%APPDATA%\Slack\GPUCache;%APPDATA%\Slack\Service Worker\CacheStorage | 网页缓存和文件预览。请先退出 Slack。不影响登录'
+    'VS Code 缓存 | %APPDATA%\Code\Cache;%APPDATA%\Code\CachedData;%APPDATA%\Code\Code Cache;%APPDATA%\Code\GPUCache;%APPDATA%\Code\CachedExtensionVSIXs;%APPDATA%\Code\logs | 编辑器的缓存、下载过的扩展安装包和日志。请先关闭 VS Code。不影响设置和扩展'
+    'Cursor 缓存 | %APPDATA%\Cursor\Cache;%APPDATA%\Cursor\CachedData;%APPDATA%\Cursor\Code Cache;%APPDATA%\Cursor\GPUCache;%APPDATA%\Cursor\logs | 编辑器的缓存和日志。请先关闭 Cursor。不影响设置和扩展'
+    'Cursor 状态库备份 | %APPDATA%\Cursor\User\globalStorage\state.vscdb.backup | Cursor 编辑器状态库的备份副本，主文件保留'
+    'Spotify 缓存 | %LOCALAPPDATA%\Spotify\Data;%LOCALAPPDATA%\Spotify\Browser\Cache | 播放过的歌曲的缓存。下载供离线听的歌不在这里。请先退出 Spotify'
+    '网易云音乐缓存 | %LOCALAPPDATA%\NetEase\CloudMusic\Cache | 听过的歌的缓存。下载的歌不在这里。请先退出网易云音乐'
+    'pip 缓存 | %LOCALAPPDATA%\pip\cache | Python 装包时下载的安装包副本，再装时会重新下载'
+    'uv 缓存 | %LOCALAPPDATA%\uv\cache | uv 装 Python 包时的下载缓存，再装时会重新下载'
+    'npm 缓存 | %LOCALAPPDATA%\npm-cache | Node.js 装包时的下载缓存'
+    'Yarn 缓存 | %LOCALAPPDATA%\Yarn\Cache | Yarn 装包时的下载缓存'
+    'NuGet 下载缓存 | %LOCALAPPDATA%\NuGet\v3-cache;%LOCALAPPDATA%\NuGet\http-cache;%LOCALAPPDATA%\NuGet\plugins-cache | .NET 装包时的下载缓存。项目用的包在全局包目录里，不在这里'
+    'Go 编译缓存 | %LOCALAPPDATA%\go-build | Go 的编译结果缓存，下次编译会重新生成'
+    'Rust crate 下载缓存 | %USERPROFILE%\.cargo\registry\cache | cargo 下载过的 crate 压缩包，需要时会重新下载'
+    'Clash Verge 代理日志 | %APPDATA%\io.github.clash-verge-rev.clash-verge-rev\logs;%APPDATA%\clash-verge\logs;%LOCALAPPDATA%\io.github.clash-verge-rev.clash-verge-rev\logs | 代理软件的运行日志，会无限增长。建议在它设置里把日志等级改成 warn'
+    'Intel XTU 超频日志 | %PROGRAMDATA%\Intel\Intel Extreme Tuning Utility\Logs | Intel 超频组件的日志，会无限增长'
+    'Apple 设备系统更新包 | %PROGRAMDATA%\Apple\AMPDevicesAgent\*-Temporary-Files;%APPDATA%\Apple Computer\iTunes\*Software Updates | 给 iPhone/iPad 升级时下载的固件，装完就没用了'
+    'Dell 更新程序缓存 | %PROGRAMDATA%\Dell\DTP;%PROGRAMDATA%\Dell\SupportAssist | 戴尔驱动更新工具下载的安装包'
+    '罗技 Options+ 缓存 | %PROGRAMDATA%\LogiOptionsPlus\cache;%PROGRAMDATA%\LogiOptionsPlus\depots | 罗技驱动的更新包缓存'
+    'NI 安装包缓存 | %PROGRAMDATA%\National Instruments\MDF\ProductCache;%PROGRAMDATA%\National Instruments\NI Package Manager\packages | LabVIEW 等 NI 软件的安装媒体缓存。软件本身不受影响；以后修复或重装时需重新下载 | confirm'
+    'NuGet 全局包目录 | %USERPROFILE%\.nuget\packages | .NET 项目引用的包都放在这里。删了以后打开项目要联网重新还原（Visual Studio 会自动做，但要等一会儿） | confirm'
+    'Gradle 依赖缓存 | %USERPROFILE%\.gradle\caches | Android Studio 和 Gradle 项目下载的依赖。删了下次构建要重新下载，国内网络可能很慢 | confirm'
+    'Maven 本地仓库 | %USERPROFILE%\.m2\repository | Maven 项目下载的依赖。删了下次构建要重新下载 | confirm'
+    'JetBrains IDE 缓存和索引 | %LOCALAPPDATA%\JetBrains\*\caches;%LOCALAPPDATA%\JetBrains\*\index | IntelliJ IDEA、PyCharm 等的缓存和代码索引。删了打开项目要重新索引（几分钟）。请先关闭这些 IDE | confirm'
+    '虚幻引擎派生数据缓存 | %LOCALAPPDATA%\UnrealEngine\Common\DerivedDataCache | Unreal Engine 给项目生成的派生数据，常有几十 GB。删了打开项目要重新生成，很慢 | confirm'
+)
+function Get-SteamPath {
+    try { $p = [string](Get-ItemProperty 'HKCU:\Software\Valve\Steam' -EA SilentlyContinue).SteamPath; if ($p) { return $p.Replace('/', '\').TrimEnd('\') } } catch {}
+    return ''
+}
+function Expand-LibPath([string]$p) {
+    $p = $p.Trim()
+    if ($p.StartsWith('@chromium:')) {
+        $out = @()
+        foreach ($base in (Expand-LibPath $p.Substring(10))) {
+            $out += @("$base\*\Cache", "$base\*\Code Cache", "$base\*\GPUCache", "$base\*\Service Worker\CacheStorage", "$base\*\Service Worker\ScriptCache", "$base\GrShaderCache", "$base\ShaderCache", "$base\DawnCache", "$base\DawnGraphiteCache", "$base\DawnWebGPUCache")
+        }
+        return ,$out
+    }
+    $i = $p.IndexOf('%STEAM%', [StringComparison]::OrdinalIgnoreCase)
+    if ($i -ge 0) { $s = Get-SteamPath; if (-not $s) { return ,@() }; $p = $p.Substring(0, $i) + $s + $p.Substring($i + 7) }
+    return ,@([Environment]::ExpandEnvironmentVariables($p))
+}
+function Get-CacheLibrary {
+    $out = @()
+    foreach ($line in $script:cacheLib) {
+        $l = $line.Trim()
+        if (-not $l -or $l.StartsWith('#')) { continue }
+        $f = $l.Split('|')
+        if ($f.Count -lt 3) { continue }
+        $paths = @()
+        foreach ($p in $f[1].Split(';')) { if ($p.Trim()) { $paths += Expand-LibPath $p } }
+        $x = @{ N = (T $f[0].Trim()); Note = (T $f[2].Trim()); Paths = $paths; Confirm = $false; Whole = $false; Filter = ''; Svc = $null }
+        if ($f.Count -gt 3) {
+            foreach ($o in $f[3].Trim().Split(' ')) {
+                $o = $o.Trim(); if (-not $o) { continue }
+                if ($o -eq 'whole') { $x.Whole = $true }
+                elseif ($o -eq 'confirm') { $x.Confirm = $true }
+                elseif ($o.StartsWith('filter=')) { $x.Filter = $o.Substring(7) }
+                elseif ($o.StartsWith('svc=')) { $x.Svc = @($o.Substring(4).Split(',') | Where-Object { $_ }) }
+            }
+        }
+        $out += $x
+    }
+    return ,$out
+}
+# Windows Installer 留下的孤儿安装包：C:\Windows\Installer 里没有任何已装软件、补丁再引用的 .msi / .msp
+# 判断标准和 PatchCleaner 一样：注册表里每个产品、每个补丁登记的 LocalPackage，再用 Windows Installer 自己的接口问一遍。一个引用都没读到就不敢判断，返回空
+function Get-InstallerOrphans {
+    $dir = Join-Path $env:SystemRoot 'Installer'
+    $files = @(Get-ChildItem -LiteralPath $dir -File -Force -ErrorAction SilentlyContinue | Where-Object { $_.Extension -match '^\.(msi|msp)$' })
+    if ($files.Count -eq 0) { return ,@() }
+    $used = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    foreach ($root in @('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\*\Products\*\InstallProperties', 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\*\Patches\*',
+                           'HKLM:\SOFTWARE\Classes\Installer\Patches\*', 'HKCU:\Software\Microsoft\Installer\Patches\*')) {
+        foreach ($p in @(Get-ItemProperty -Path $root -ErrorAction SilentlyContinue)) { $v = [string]$p.LocalPackage; if ($v) { [void]$used.Add((Split-Path $v -Leaf)) } }
+    }
+    try {
+        $inst = New-Object -ComObject WindowsInstaller.Installer
+        $t = $inst.GetType()
+        foreach ($code in @($t.InvokeMember('Products', 'GetProperty', $null, $inst, $null))) {
+            try { $lp = [string]$t.InvokeMember('ProductInfo', 'GetProperty', $null, $inst, @([string]$code, 'LocalPackage')); if ($lp) { [void]$used.Add((Split-Path $lp -Leaf)) } } catch {}
+            foreach ($args in @(@([string]$code, '', 7, 15), @([string]$code, 's-1-1-0', 3, 15))) {
+                try {
+                    foreach ($pt in @($t.InvokeMember('PatchesEx', 'GetProperty', $null, $inst, $args))) {
+                        try { $lp = [string]$pt.GetType().InvokeMember('PatchProperty', 'GetProperty', $null, $pt, @('LocalPackage')); if ($lp) { [void]$used.Add((Split-Path $lp -Leaf)) } } catch {}
+                    }
+                } catch {}
+            }
+        }
+    } catch {}
+    if ($used.Count -eq 0) { return ,@() }
+    $out = @()
+    $recent = (Get-Date).AddDays(-1)
+    foreach ($f in $files) {
+        if ($used.Contains($f.Name)) { continue }
+        if ($f.LastWriteTime -gt $recent) { continue }   # 刚装的软件，登记可能还没写完
+        $out += $f
+    }
+    return ,$out
+}
+
 # Kind: cache = 缓存类(删除/跳过)   action = 操作类(执行/跳过)   move = 只能搬(搬到其他盘/跳过)   flex = 可搬可删
 function Get-Catalog {
     $docs = [Environment]::GetFolderPath('MyDocuments')
     $desk = [Environment]::GetFolderPath('Desktop')
     $down = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders' -EA SilentlyContinue).'{374DE290-123F-4565-9164-39C4925E467B}'
     if ($down) { $down = [Environment]::ExpandEnvironmentVariables($down) } else { $down = "$env:USERPROFILE\Downloads" }
+    $safeG  = '安全清理（缓存、临时文件、日志，删了程序会自动重建）'
+    $confG  = '需确认（有代价，默认跳过，看清说明再选）'
     $chatG  = '聊天软件的聊天记录（搬到其他盘：聊天记录和文件原样保留，原位置留链接，软件照常使用）'
     $otherG = '其他可搬的文件夹（数据原样保留，原位置留链接，软件照常使用）'
-    $list = @(
-        # ---- 安全清理：缓存 / 临时文件 / 日志，删了程序自动重建 ----
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T '用户临时文件');        Paths=@($env:TEMP); Note=(T '各软件运行时的临时文件，关掉软件就没用了') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T '系统临时文件');        Paths=@('C:\Windows\Temp'); Note=(T '系统和安装程序的临时文件') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Windows 更新下载缓存'); Paths=@('C:\Windows\SoftwareDistribution\Download'); Svc=@('wuauserv','bits'); Note=(T '已装完的更新安装包，下次更新会重新下载需要的部分') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T '系统升级残留目录');    Paths=@('C:\$WINDOWS.~BT','C:\$WINDOWS.~WS','C:\$GetCurrent'); Whole=$true; Note=(T '大版本升级留下的临时目录') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T '崩溃转储与错误报告');  Paths=@('C:\Windows\Minidump','C:\Windows\MEMORY.DMP','C:\Windows\LiveKernelReports','C:\ProgramData\Microsoft\Windows\WER',"$env:LOCALAPPDATA\CrashDumps"); Note=(T '蓝屏、驱动出错（显卡驱动重置等）和程序崩溃时留下的调试文件，只对排查问题的工程师有用') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T '系统组件日志');        Paths=@('C:\Windows\Logs\CBS'); Filter='*.log'; Note=(T 'Windows 更新的安装日志') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T '缩略图缓存');          Paths=@("$env:LOCALAPPDATA\Microsoft\Windows\Explorer"); Filter='thumbcache_*.db'; Note=(T '文件夹里图片的小预览图，打开文件夹时会重新生成') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Chrome 浏览器缓存');   Paths=@("$env:LOCALAPPDATA\Google\Chrome\User Data\*\Cache","$env:LOCALAPPDATA\Google\Chrome\User Data\*\Code Cache","$env:LOCALAPPDATA\Google\Chrome\User Data\*\GPUCache"); Note=(T '网页缓存。请先关闭浏览器。不影响密码、书签、历史记录') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Edge 浏览器缓存');     Paths=@("$env:LOCALAPPDATA\Microsoft\Edge\User Data\*\Cache","$env:LOCALAPPDATA\Microsoft\Edge\User Data\*\Code Cache","$env:LOCALAPPDATA\Microsoft\Edge\User Data\*\GPUCache"); Note=(T '网页缓存。请先关闭浏览器。不影响密码、书签、历史记录') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'pip 缓存');            Paths=@("$env:LOCALAPPDATA\pip\cache"); Note=(T 'Python 装包时下载的安装包副本，再装时会重新下载') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'npm 缓存');            Paths=@("$env:LOCALAPPDATA\npm-cache"); Note=(T 'Node.js 装包时的下载缓存') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Clash Verge 代理日志'); Paths=@("$env:APPDATA\io.github.clash-verge-rev.clash-verge-rev\logs","$env:APPDATA\clash-verge\logs","$env:LOCALAPPDATA\io.github.clash-verge-rev.clash-verge-rev\logs"); Note=(T '代理软件的运行日志，会无限增长。建议在它设置里把日志等级改成 warn') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Intel XTU 超频日志');   Paths=@('C:\ProgramData\Intel\Intel Extreme Tuning Utility\Logs'); Note=(T 'Intel 超频组件的日志，会无限增长') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Apple 设备系统更新包'); Paths=@('C:\ProgramData\Apple\AMPDevicesAgent\*-Temporary-Files',"$env:APPDATA\Apple Computer\iTunes\*Software Updates"); Note=(T '给 iPhone/iPad 升级时下载的固件，装完就没用了') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Dell 更新程序缓存');    Paths=@('C:\ProgramData\Dell\DTP','C:\ProgramData\Dell\SupportAssist'); Note=(T '戴尔驱动更新工具下载的安装包') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T '罗技 Options+ 缓存');   Paths=@('C:\ProgramData\LogiOptionsPlus\cache','C:\ProgramData\LogiOptionsPlus\depots'); Note=(T '罗技驱动的更新包缓存') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'NVIDIA 安装包与着色器缓存'); Paths=@('C:\ProgramData\NVIDIA Corporation\Downloader','C:\ProgramData\NVIDIA Corporation\NV_Cache',"$env:LOCALAPPDATA\NVIDIA\DXCache","$env:LOCALAPPDATA\NVIDIA\GLCache"); Note=(T '显卡驱动安装包和游戏着色器缓存，游戏首次启动会重建') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Intel 显卡着色器缓存'); Paths=@("$env:LOCALAPPDATA\Intel\ShaderCache",'C:\ProgramData\Intel\ShaderCache'); Note=(T '核显着色器缓存') }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Cursor 状态库备份');    Paths=@("$env:APPDATA\Cursor\User\globalStorage\state.vscdb.backup"); Note=(T 'Cursor 编辑器状态库的备份副本，主文件保留') }
+    $customG = '自定义清理（你在设置里加的文件夹：删除里面的东西，文件夹本身保留）'
+    $lib = Get-CacheLibrary
+    $list = @()
+    # ---- 安全清理：缓存 / 临时文件 / 日志，删了程序自动重建（目录库里的）----
+    foreach ($x in $lib) {
+        if ($x.Confirm) { continue }
+        $list += @{ G=$safeG; Kind='cache'; Def=(T '删除'); N=$x.N; Paths=$x.Paths; Note=$x.Note; Filter=$x.Filter; Whole=$x.Whole; Svc=$x.Svc }
+    }
+    $list += @(
         @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); N=(T '清空回收站');            Note=(T '回收站里是你以前删掉、但还能找回的文件。清空后就永远找不回了，请先打开回收站确认里面没有要的东西')
            Size={ try { $s = ((New-Object -ComObject Shell.Application).NameSpace(0xA).Items() | Measure-Object -Property Size -Sum).Sum; if ($s) { $s } else { 0 } } catch { 0 } }
            Act ={ Clear-RecycleBin -Force -ErrorAction SilentlyContinue } }
@@ -265,7 +418,6 @@ function Get-Catalog {
            Act ={ Delete-DeliveryOptimizationCache -Force -ErrorAction SilentlyContinue } }
 
         # ---- 需确认：有代价 ----
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache';  Def=(T '跳过'); One=(T '删除'); N=(T 'NI 安装包缓存');     Paths=@('C:\ProgramData\National Instruments\MDF\ProductCache','C:\ProgramData\National Instruments\NI Package Manager\packages'); Note=(T 'LabVIEW 等 NI 软件的安装媒体缓存。软件本身不受影响；以后修复或重装时需重新下载') }
         @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache';  Def=(T '跳过'); One=(T '删除'); N='Windows.old';        Paths=@('C:\Windows.old'); Whole=$true; Note=(T '上一版 Windows 的完整副本。删后不能回退到上一版系统（系统升级 10 天后会自动删）')
            Act ={ & "$env:SystemRoot\System32\takeown.exe" /F 'C:\Windows.old' /R /A /D Y | Out-Null; & "$env:SystemRoot\System32\icacls.exe" 'C:\Windows.old' /grant Administrators:F /T /C /Q | Out-Null; Remove-Item 'C:\Windows.old' -Recurse -Force -ErrorAction SilentlyContinue } }
         @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def=(T '跳过'); One=(T '执行'); N=(T '重建 Windows 搜索索引'); Note=(T '搜索索引膨胀时可重建，重建后通常只剩 1 到 2 GB。重建期间（约 1 小时）搜文件会变慢')
@@ -276,6 +428,9 @@ function Get-Catalog {
         @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def=(T '跳过'); One=(T '执行'); N=(T '禁用 XTU 超频日志服务'); Note=(T '外星人 Command Center 的 CPU 超频组件，会持续写几 GB 日志。不超频可禁用，AWCC 的风扇和性能档位不受影响')
            Size={ $s = Get-Service XTU3SERVICE -ErrorAction SilentlyContinue; if ($s -and $s.Status -eq 'Running') { -1 } else { 0 } }
            Act ={ Stop-Service XTU3SERVICE -Force -ErrorAction SilentlyContinue; Set-Service XTU3SERVICE -StartupType Disabled -ErrorAction SilentlyContinue } }
+        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T 'Windows Installer 孤儿安装包'); Note=(T 'C:\Windows\Installer 里没有任何已装软件和补丁再引用的安装包（.msi / .msp），多半是软件升级、卸载后留下的。判断方法和 PatchCleaner 一样。删了以后，万一哪个软件修复或卸载时提示找不到安装包，重新下载安装一次即可')
+           Size={ $s = [double]0; foreach ($f in (Get-InstallerOrphans)) { $s += $f.Length }; $s }
+           Act ={ $n = 0; $b = [double]0; foreach ($f in (Get-InstallerOrphans)) { try { Remove-Item -LiteralPath $f.FullName -Force -ErrorAction Stop; $n++; $b += $f.Length } catch { Log ((T "  没删掉：{0}（{1}）") -f $f.FullName, $_.Exception.Message) } }; Log ((T "  Windows Installer 孤儿安装包：删了 {0} 个，{1}") -f $n, (GB $b)) } }
         @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def=(T '跳过'); One=(T '执行'); N=(T 'WinSxS 组件清理 (DISM)'); Note=(T '清掉系统更新替换下来的旧组件，通常能省 2 到 10 GB。耗时 10 到 20 分钟，完成后建议重启'); Last=$true
            Size={ -1 }
            Act ={ & "$env:SystemRoot\System32\Dism.exe" /Online /Cleanup-Image /StartComponentCleanup /ResetBase | Out-Null }; Slow=$true }
@@ -306,6 +461,14 @@ function Get-Catalog {
         @{ G=$otherG; Kind='flex'; Def=(T '跳过');    N=(T 'conda 环境 (.conda)');    Paths=@("$env:USERPROFILE\.conda"); Note=(T 'conda 创建的 Python 环境。搬走后照常使用；删了要重建环境') }
         @{ G=$otherG; Kind='flex'; Def=(T '跳过');    N=(T 'pip --user 安装的包');    Paths=@("$env:APPDATA\Python"); Note=(T '用 pip install --user 装的 Python 包。有 conda 的话多半已不用，可删；不确定就搬走') }
     )
+    foreach ($x in $lib) {
+        if (-not $x.Confirm) { continue }
+        $list += @{ G=$confG; Kind='cache'; Def=(T '跳过'); One=(T '删除'); N=$x.N; Paths=$x.Paths; Note=$x.Note; Filter=$x.Filter; Whole=$x.Whole; Svc=$x.Svc }
+    }
+    # ---- 自定义：用户在设置里加的文件夹，删里面的东西 ----
+    foreach ($p in (Get-CustomClean)) {
+        $list += @{ G=$customG; Kind='cache'; Def=(T '删除'); N=(Split-Path $p -Leaf); Paths=@($p); Note=$p; Custom=$true }
+    }
     $apps = Get-ChatApps
     $i = 0
     foreach ($it in $list) {
@@ -328,7 +491,7 @@ function Measure-Item($it, $tree = $null) {
         $paths += $p
     }
     if (-not $paths) { return 0 }
-    return Get-Size $paths $it.Filter $tree
+    return Get-Size $paths $it.Filter $tree (Get-ExcludeList)
 }
 
 function Invoke-Delete($it, $res, [switch]$Auto) {
@@ -641,7 +804,7 @@ $script:snapDir      = Join-Path $script:appDir '空间快照'
 
 function Get-Setting([string]$k, [string]$def = '') {
     try {
-        if (Test-Path -LiteralPath $script:settingsFile) {
+        if ($script:settingsFile -and (Test-Path -LiteralPath $script:settingsFile)) {
             foreach ($l in [IO.File]::ReadAllLines($script:settingsFile, [Text.Encoding]::UTF8)) {
                 $i = $l.IndexOf('=')
                 if ($i -gt 0 -and $l.Substring(0, $i).Trim() -eq $k) { return $l.Substring($i + 1).Trim() }
@@ -1292,6 +1455,167 @@ function Set-Hiber([string]$mode) {
 # ============================================================
 # 每周自动清理：只做「安全清理」组里默认要删的普通缓存，不搬家、不清空回收站、不停服务
 # ============================================================
+# ---------- 启动项 ----------
+# 和任务管理器「启动」页一样的来源：注册表 Run 项（当前用户、所有用户、32 位）和两个「启动」文件夹。
+# 开关状态记在 Explorer\StartupApproved 里（第一个字节偶数 = 启用，奇数 = 禁用），禁用只是改这个记录，随时能恢复，不删任何东西
+function Get-StartupSources {
+    @(
+        @{ Src = 'HKCU'; Key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run';              Approved = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run' }
+        @{ Src = 'HKLM'; Key = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run';              Approved = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run' }
+        @{ Src = 'HKLM32'; Key = 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run'; Approved = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run32' }
+        @{ Src = 'UserFolder'; Dir = [Environment]::GetFolderPath('Startup');       Approved = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\StartupFolder' }
+        @{ Src = 'CommonFolder'; Dir = [Environment]::GetFolderPath('CommonStartup'); Approved = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\StartupFolder' }
+    )
+}
+function Test-StartupEnabled([string]$approved, [string]$name) {
+    try { $v = (Get-ItemProperty -LiteralPath $approved -Name $name -ErrorAction Stop).$name; if ($v -is [byte[]] -and $v.Length -gt 0) { return (($v[0] % 2) -eq 0) } } catch {}
+    return $true
+}
+function Get-StartupItems {
+    $out = @()
+    foreach ($s in (Get-StartupSources)) {
+        if ($s.Key) {
+            $p = Get-ItemProperty -LiteralPath $s.Key -ErrorAction SilentlyContinue
+            if (-not $p) { continue }
+            foreach ($prop in $p.PSObject.Properties) {
+                if ($prop.Name -like 'PS*') { continue }
+                $cmd = [string]$prop.Value; if (-not $cmd) { continue }
+                $out += @{ Name = $prop.Name; Cmd = $cmd; Src = $s.Src; Approved = $s.Approved; Val = $prop.Name; Enabled = (Test-StartupEnabled $s.Approved $prop.Name) }
+            }
+        } elseif ($s.Dir -and (Test-Path -LiteralPath $s.Dir)) {
+            foreach ($f in @(Get-ChildItem -LiteralPath $s.Dir -File -Force -ErrorAction SilentlyContinue)) {
+                if ($f.Name -ieq 'desktop.ini') { continue }
+                $out += @{ Name = [IO.Path]::GetFileNameWithoutExtension($f.Name); Cmd = $f.FullName; Src = $s.Src; Approved = $s.Approved; Val = $f.Name; Enabled = (Test-StartupEnabled $s.Approved $f.Name) }
+            }
+        }
+    }
+    return ,$out
+}
+function Set-StartupEnabled([string]$approved, [string]$name, [bool]$on) {
+    if (-not (Test-Path -LiteralPath $approved)) { New-Item -Path $approved -Force | Out-Null }
+    $b = New-Object byte[] 12
+    if ($on) { $b[0] = 2 } else { $b[0] = 3; [Array]::Copy([BitConverter]::GetBytes([DateTime]::Now.ToFileTime()), 0, $b, 4, 8) }
+    Set-ItemProperty -LiteralPath $approved -Name $name -Value $b -Type Binary -ErrorAction Stop
+}
+# 从启动命令里取出程序路径（给看发行商和图标用）
+function Get-CommandExe([string]$cmd) {
+    $cmd = $cmd.Trim()
+    if (-not $cmd) { return '' }
+    if ($cmd.StartsWith('"')) { $e = $cmd.IndexOf('"', 1); if ($e -gt 0) { return [Environment]::ExpandEnvironmentVariables($cmd.Substring(1, $e - 1)) } }
+    $m = [regex]::Match($cmd, '(?i)^(.+?\.(exe|cmd|bat|lnk|vbs))(\s|$)')
+    if ($m.Success) { return [Environment]::ExpandEnvironmentVariables($m.Groups[1].Value) }
+    return [Environment]::ExpandEnvironmentVariables($cmd.Split(' ')[0])
+}
+function Get-FileCompany([string]$path) {
+    try { if ($path -and (Test-Path -LiteralPath $path)) { return [string][Diagnostics.FileVersionInfo]::GetVersionInfo($path).CompanyName } } catch {}
+    return ''
+}
+# ---------- 计划任务：只列第三方的（\Microsoft\ 下面的是系统自己的，不动）----------
+function Get-UserTasks {
+    $out = @()
+    $all = @()
+    try { $all = @(Get-ScheduledTask -ErrorAction Stop) } catch { return ,@() }
+    foreach ($t in $all) {
+        if ($t.TaskPath -like '\Microsoft\*') { continue }
+        $cmd = ''
+        foreach ($a in @($t.Actions)) { if ($a.PSObject.Properties['Execute'] -and $a.Execute) { $cmd = ([string]$a.Execute + ' ' + [string]$a.Arguments).Trim(); break } }
+        $out += @{ Name = [string]$t.TaskName; Path = [string]$t.TaskPath; State = [string]$t.State; Author = [string]$t.Author; Desc = [string]$t.Description; Cmd = $cmd; Ours = ([string]$t.TaskPath -eq '\CleanC\') }
+    }
+    return ,$out
+}
+# ---------- 资源管理器右键菜单扩展（shellex）：只列第三方的，禁用是写进 Shell Extensions\Blocked，新开的窗口就不再加载它 ----------
+$script:shellexBlocked = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Shell Extensions\Blocked'
+function Get-ContextMenuItems {
+    $blocked = @{}
+    foreach ($k in @($script:shellexBlocked, 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Shell Extensions\Blocked')) {
+        $p = Get-ItemProperty -LiteralPath $k -ErrorAction SilentlyContinue
+        if ($p) { foreach ($prop in $p.PSObject.Properties) { if ($prop.Name -like '{*}') { $blocked[$prop.Name.ToUpperInvariant()] = $true } } }
+    }
+    $where = [ordered]@{ '*' = (T '文件'); 'AllFilesystemObjects' = (T '文件和文件夹'); 'Directory' = (T '文件夹'); 'Folder' = (T '文件夹'); 'Directory\Background' = (T '文件夹空白处'); 'Drive' = (T '磁盘') }
+    $items = [ordered]@{}
+    foreach ($hive in @('HKLM:\SOFTWARE\Classes', 'HKCU:\Software\Classes')) {
+        foreach ($w in $where.Keys) {
+            $base = "$hive\$w\shellex\ContextMenuHandlers"
+            foreach ($k in @(Get-ChildItem -LiteralPath $base -ErrorAction SilentlyContinue)) {
+                $clsid = ''
+                try { $clsid = [string](Get-ItemProperty -LiteralPath $k.PSPath -ErrorAction Stop).'(default)' } catch {}
+                if (-not $clsid) { $clsid = $k.PSChildName }
+                $clsid = $clsid.Trim()
+                if ($clsid -notmatch '^\{[0-9A-Fa-f-]{36}\}$') { continue }
+                $u = $clsid.ToUpperInvariant()
+                if (-not $items.Contains($u)) {
+                    $name = ''; $dll = ''
+                    foreach ($c in @("HKLM:\SOFTWARE\Classes\CLSID\$clsid", "HKCU:\Software\Classes\CLSID\$clsid", "HKLM:\SOFTWARE\Classes\WOW6432Node\CLSID\$clsid")) {
+                        if (-not (Test-Path -LiteralPath $c)) { continue }
+                        if (-not $name) { try { $name = [string](Get-ItemProperty -LiteralPath $c -ErrorAction Stop).'(default)' } catch {} }
+                        if (-not $dll) { try { $dll = [string](Get-ItemProperty -LiteralPath "$c\InprocServer32" -ErrorAction Stop).'(default)' } catch {} }
+                    }
+                    if ($dll) { $dll = [Environment]::ExpandEnvironmentVariables($dll).Trim('"') }
+                    # 系统自带的（dll 在 Windows 文件夹里）不列
+                    if (-not $dll -or $dll.StartsWith($env:SystemRoot, [StringComparison]::OrdinalIgnoreCase)) { continue }
+                    if (-not $name) { $name = $k.PSChildName }
+                    $items[$u] = @{ Clsid = $clsid; Name = $name; Dll = $dll; Company = (Get-FileCompany $dll); Keys = @($k.PSChildName); Where = @($where[$w]); Enabled = -not $blocked.ContainsKey($u) }
+                } else {
+                    if ($items[$u].Where -notcontains $where[$w]) { $items[$u].Where += $where[$w] }
+                    if ($items[$u].Keys -notcontains $k.PSChildName) { $items[$u].Keys += $k.PSChildName }
+                }
+            }
+        }
+    }
+    return ,@($items.Values)
+}
+function Set-ContextMenuEnabled([string]$clsid, [bool]$on) {
+    foreach ($k in @($script:shellexBlocked, 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Shell Extensions\Blocked')) {
+        if ($on) { Remove-ItemProperty -LiteralPath $k -Name $clsid -ErrorAction SilentlyContinue }
+    }
+    if (-not $on) {
+        if (-not (Test-Path -LiteralPath $script:shellexBlocked)) { New-Item -Path $script:shellexBlocked -Force | Out-Null }
+        New-ItemProperty -LiteralPath $script:shellexBlocked -Name $clsid -Value '' -PropertyType String -Force -ErrorAction Stop | Out-Null
+    }
+}
+# ---------- winget：有哪些软件有新版本。只在用户点的时候运行，只读不改 ----------
+function Get-WingetExe {
+    $c = Get-Command winget.exe -ErrorAction SilentlyContinue
+    if ($c) { return [string]$c.Source }
+    $p = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps\winget.exe'
+    if (Test-Path -LiteralPath $p) { return $p }
+    return ''
+}
+function Get-WingetUpgrades {
+    $exe = Get-WingetExe
+    if (-not $exe) { return @{ Err = 'nowinget'; Items = @() } }
+    $txt = ''
+    try {
+        $psi = New-Object Diagnostics.ProcessStartInfo
+        $psi.FileName = $exe; $psi.Arguments = 'upgrade --include-unknown --accept-source-agreements --disable-interactivity'
+        $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+        $psi.StandardOutputEncoding = [Text.Encoding]::UTF8
+        $p = [Diagnostics.Process]::Start($psi)
+        $txt = $p.StandardOutput.ReadToEnd()
+        if (-not $p.WaitForExit(180000)) { try { $p.Kill() } catch {}; return @{ Err = 'timeout'; Items = @() } }
+    } catch { return @{ Err = $_.Exception.Message; Items = @() } }
+    return @{ Err = ''; Items = @(ConvertFrom-WingetTable $txt); Raw = (($txt -split "`r?`n") | Select-Object -First 60) -join "`n" }
+}
+# winget 打出来的表格：名称 ID 版本 可用 源。从右往左取后四列，剩下的是名称（名称里可以有空格）；被 … 截断的 ID 不要
+function ConvertFrom-WingetTable([string]$txt) {
+    $lines = @($txt -split "`r?`n" | ForEach-Object { ($_ -replace '[\x00-\x08\x0B-\x1F]', '').TrimEnd() })
+    $items = @(); $inTable = $false
+    foreach ($l in $lines) {
+        if ($l -match '^-{8,}\s*$') { $inTable = $true; continue }
+        if (-not $inTable) { continue }
+        if (-not $l.Trim()) { $inTable = $false; continue }
+        if ($l -match '^\d+\s') { $inTable = $false; continue }   # 「N 个升级可用」这一行
+        $tok = @($l.Trim() -split '\s+')
+        if ($tok.Count -lt 5) { continue }
+        $n = $tok.Count
+        $src = $tok[$n - 1]; $avail = $tok[$n - 2]; $ver = $tok[$n - 3]; $id = $tok[$n - 4]
+        $name = ($tok[0..($n - 5)] -join ' ')
+        if ($src -notin @('winget', 'msstore')) { continue }
+        $items += @{ Name = $name; Id = $(if ($id -like '*…*') { '' } else { $id }); Version = $ver; Available = $avail; Source = $src }
+    }
+    return $items
+}
+
 function Invoke-AutoClean {
     $f0 = [double](FreeC); $done = @()
     foreach ($it in (Get-Catalog)) {

@@ -1104,6 +1104,7 @@
 
       <DockPanel Grid.Row="0" Margin="0,0,0,18">
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top" Margin="16,4,0,0">
+          <Button x:Name="BtnCleanCustom" Style="{StaticResource LinkButton}" Content="自定义清理项…" Margin="0,0,14,0" VerticalAlignment="Center" ToolTip="自己加要清理的文件夹，或者排除不想碰的文件夹（在「设置」里）"/>
           <Button x:Name="BtnHogs" Content="分析占用" Margin="0,0,8,0" ToolTip="打开「空间地图」扫描 C 盘，看清哪些文件夹和文件最占地方"/>
           <Button x:Name="BtnScan" Content="扫描"/>
         </StackPanel>
@@ -1717,21 +1718,32 @@
         <RowDefinition Height="*"/>
       </Grid.RowDefinitions>
       <DockPanel Grid.Row="0" Margin="0,0,0,16">
-        <Button x:Name="BtnAppsRefresh" DockPanel.Dock="Right" Content="刷新" VerticalAlignment="Top" Margin="16,4,0,0"/>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top" Margin="16,4,0,0">
+          <Button x:Name="BtnAppsUpdates" Content="检查新版本" Margin="0,0,8,0" ToolTip="用 Windows 自带的 winget 查一下装过的软件有没有新版本。只在你点的时候联网，只查不改"/>
+          <Button x:Name="BtnAppsRefresh" Content="刷新"/>
+        </StackPanel>
         <StackPanel>
           <TextBlock Text="软件管理" Style="{StaticResource PageTitle}"/>
-          <TextBlock Style="{StaticResource PageSub}" TextWrapping="Wrap" Text="装过的软件按占用空间从大到小排。装在 C 盘的可以「搬到其他盘」，软件照常使用、不用重装；不用的可以直接卸载，卸载后再检查有没有残留文件夹。"/>
+          <TextBlock Style="{StaticResource PageSub}" TextWrapping="Wrap" Text="装过的软件按占用空间从大到小排。装在 C 盘的可以「搬到其他盘」，软件照常使用、不用重装；不用的可以直接卸载，卸载后再检查有没有残留文件夹。开机启动的程序、第三方的计划任务和右键菜单也在这里管。"/>
         </StackPanel>
       </DockPanel>
       <DockPanel Grid.Row="1" Margin="0,0,0,10">
         <Border DockPanel.Dock="Left" Style="{StaticResource SegBox}" VerticalAlignment="Center" Margin="0,0,14,0">
+          <StackPanel Orientation="Horizontal">
+            <RadioButton x:Name="AppsViewApps" GroupName="appsv" Content="软件" IsChecked="True" Style="{StaticResource Seg}"/>
+            <RadioButton x:Name="AppsViewStartup" GroupName="appsv" Content="开机启动" Style="{StaticResource Seg}"/>
+            <RadioButton x:Name="AppsViewTasks" GroupName="appsv" Content="计划任务" Style="{StaticResource Seg}"/>
+            <RadioButton x:Name="AppsViewMenu" GroupName="appsv" Content="右键菜单" Style="{StaticResource Seg}"/>
+          </StackPanel>
+        </Border>
+        <Border x:Name="AppsFilterBox" DockPanel.Dock="Left" Style="{StaticResource SegBox}" VerticalAlignment="Center" Margin="0,0,14,0">
           <StackPanel Orientation="Horizontal">
             <RadioButton x:Name="AppsAll" GroupName="appsf" Content="全部" IsChecked="True" Style="{StaticResource Seg}"/>
             <RadioButton x:Name="AppsC" GroupName="appsf" Content="装在 C 盘的" Style="{StaticResource Seg}"/>
             <RadioButton x:Name="AppsStore" GroupName="appsf" Content="应用商店" Style="{StaticResource Seg}"/>
           </StackPanel>
         </Border>
-        <TextBlock x:Name="AppsInfo" DockPanel.Dock="Right" Style="{StaticResource Caption}" Margin="14,0,0,0"/>
+        <TextBlock x:Name="AppsInfo" DockPanel.Dock="Right" Style="{StaticResource Caption}" Margin="14,0,0,0" TextTrimming="CharacterEllipsis"/>
         <DockPanel>
           <TextBlock DockPanel.Dock="Left" Text="&#xE721;" FontFamily="{StaticResource Icons}" FontSize="12" Foreground="#86868B" VerticalAlignment="Center" Margin="0,0,8,0"/>
           <TextBox x:Name="AppsSearch" MaxWidth="320" HorizontalAlignment="Left" MinWidth="200" ToolTip="按名字或发行商搜索"/>
@@ -1766,6 +1778,8 @@
                   </StackPanel>
                   <TextBlock Grid.Column="2" Text="{Binding SizeText}" FontWeight="SemiBold" TextAlignment="Right" VerticalAlignment="Center" Margin="0,0,14,0"/>
                   <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="AppUpgrade" Content="升级" Tag="{Binding}" Style="{StaticResource Small}" Foreground="#0066CC" Margin="0,0,6,0" Visibility="Collapsed"
+                            ToolTip="在终端窗口里用 winget 升级这个软件，过程和提示都看得见"/>
                     <Button x:Name="AppOpen" Content="打开位置" Tag="{Binding}" Style="{StaticResource Small}" Margin="0,0,6,0"/>
                     <Button x:Name="AppMove" Content="搬到其他盘" Tag="{Binding}" Style="{StaticResource Small}" Margin="0,0,6,0"
                             ToolTip="把整个安装文件夹搬到其他盘，C 盘原位置留一个链接，软件照常使用，不用重装"/>
@@ -1774,6 +1788,36 @@
                 </Grid>
                 <DataTemplate.Triggers>
                   <DataTrigger Binding="{Binding CanMove}" Value="False"><Setter TargetName="AppMove" Property="Visibility" Value="Collapsed"/></DataTrigger>
+                  <DataTrigger Binding="{Binding HasUpgrade}" Value="True"><Setter TargetName="AppUpgrade" Property="Visibility" Value="Visible"/></DataTrigger>
+                </DataTemplate.Triggers>
+              </DataTemplate>
+            </ListView.ItemTemplate>
+          </ListView>
+          <!-- 开机启动 / 计划任务 / 右键菜单：同一个列表，按视图换内容 -->
+          <ListView x:Name="StartList" Background="Transparent" BorderThickness="0" ItemContainerStyle="{StaticResource SelRow}" Visibility="Collapsed"
+                    ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
+            <ListView.ItemTemplate>
+              <DataTemplate>
+                <Grid Margin="12,8,10,8">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="80"/>
+                    <ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+                    <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Text="{Binding Meta}" FontSize="11.5" Foreground="#86868B" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                    <TextBlock Text="{Binding Detail}" FontSize="11.5" Foreground="#86868B" TextTrimming="CharacterEllipsis" Margin="0,1,0,0" ToolTip="{Binding Detail}"/>
+                  </StackPanel>
+                  <TextBlock Grid.Column="1" Text="{Binding StatusText}" Foreground="{Binding StatusBrush}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                  <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="StartOpen" Content="打开位置" Tag="{Binding}" Style="{StaticResource Small}" Margin="0,0,6,0"/>
+                    <Button x:Name="StartToggle" Content="{Binding ToggleText}" Tag="{Binding}" Style="{StaticResource Small}" MinWidth="64"/>
+                  </StackPanel>
+                </Grid>
+                <DataTemplate.Triggers>
+                  <DataTrigger Binding="{Binding Open}" Value=""><Setter TargetName="StartOpen" Property="Visibility" Value="Collapsed"/></DataTrigger>
+                  <DataTrigger Binding="{Binding Ours}" Value="True"><Setter TargetName="StartToggle" Property="IsEnabled" Value="False"/><Setter TargetName="StartToggle" Property="ToolTip" Value="本工具自己的任务，请在「自动提醒」页开关"/></DataTrigger>
                 </DataTemplate.Triggers>
               </DataTemplate>
             </ListView.ItemTemplate>
@@ -1888,7 +1932,7 @@
       <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
         <StackPanel Margin="30,24,30,28" MaxWidth="900" HorizontalAlignment="Left">
           <TextBlock Text="自动提醒" Style="{StaticResource PageTitle}"/>
-          <TextBlock Style="{StaticResource PageSub}" TextWrapping="Wrap" Text="C 盘快满时提醒你，每周自动清一次缓存，并记下空间的变化。两项都默认关闭，打开开关才生效。开启后由 Windows 自己定时运行，不需要一直开着本工具，也不需要开机启动。"/>
+          <TextBlock Style="{StaticResource PageSub}" TextWrapping="Wrap" Text="C 盘快满或者垃圾攒多了时提醒你，定期自动清一次缓存，并记下空间的变化。两项都默认关闭，打开开关才生效。开启后由 Windows 自己定时运行，不需要一直开着本工具，也不需要开机启动。"/>
 
           <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,20,0,0">
             <StackPanel>
@@ -1903,6 +1947,13 @@
                 </ComboBox>
                 <TextBlock Text="时，在屏幕右下角弹出提醒（每天最多一次）" VerticalAlignment="Center" Margin="10,0,0,0"/>
               </StackPanel>
+              <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                <TextBlock Text="可以清理的临时文件、缓存和日志超过" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <ComboBox x:Name="AutoJunkGB" Width="100">
+                  <ComboBoxItem Content="不提醒"/><ComboBoxItem Content="1 GB"/><ComboBoxItem Content="2 GB"/><ComboBoxItem Content="5 GB"/><ComboBoxItem Content="10 GB"/>
+                </ComboBox>
+                <TextBlock Text="时也提醒（检查时只统计，不删任何东西）" VerticalAlignment="Center" Margin="10,0,0,0"/>
+              </StackPanel>
               <TextBlock x:Name="AutoRemindNote" Style="{StaticResource Body}" Margin="0,12,0,0" Foreground="#6E6E73"/>
             </StackPanel>
           </Border>
@@ -1911,10 +1962,17 @@
             <StackPanel>
               <DockPanel>
                 <CheckBox x:Name="AutoCleanOn" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center"/>
-                <TextBlock Text="每周自动清理一次" Style="{StaticResource CardHead}" VerticalAlignment="Center"/>
+                <TextBlock Text="定期自动清理" Style="{StaticResource CardHead}" VerticalAlignment="Center"/>
               </DockPanel>
+              <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                <TextBlock Text="什么时候清理" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <ComboBox x:Name="AutoCleanWhen" Width="110">
+                  <ComboBoxItem Content="每周日"/><ComboBoxItem Content="每周一"/><ComboBoxItem Content="每周二"/><ComboBoxItem Content="每周三"/><ComboBoxItem Content="每周四"/><ComboBoxItem Content="每周五"/><ComboBoxItem Content="每周六"/><ComboBoxItem Content="每天"/>
+                </ComboBox>
+                <TextBlock Text="中午 12:30（错过了就在下次开机后）" VerticalAlignment="Center" Margin="10,0,0,0"/>
+              </StackPanel>
               <TextBlock Style="{StaticResource Body}" Margin="0,10,0,0"
-                         Text="不用开着本工具。每周日中午 12:30（错过了就在下次开机后）由 Windows 任务计划在后台自动做一遍「安全清理」里的项目：临时文件、各类缓存和日志。不搬家、不清空回收站、不碰任何个人文件夹，也不会关闭正在运行的软件（被占用的文件直接跳过）。做完在右下角告诉你释放了多少，每一项都记在「操作日志」里。"/>
+                         Text="不用开着本工具。到时间由 Windows 任务计划在后台自动做一遍「安全清理」里的项目：临时文件、各类缓存和日志。不搬家、不清空回收站、不碰任何个人文件夹、不碰你自己加的文件夹，也不会关闭正在运行的软件（被占用的文件直接跳过）。做完在右下角告诉你释放了多少，每一项都记在「操作日志」里。"/>
               <TextBlock x:Name="AutoCleanNote" Style="{StaticResource Body}" Margin="0,10,0,0" Foreground="#6E6E73"/>
             </StackPanel>
           </Border>
@@ -2177,6 +2235,40 @@
               </DockPanel>
             </StackPanel>
           </Border>
+
+          <Border x:Name="SetCleanCard" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+            <StackPanel>
+              <TextBlock Text="清理列表" Style="{StaticResource CardHead}"/>
+              <TextBlock Text="自己加的文件夹" Style="{StaticResource SetName}" Margin="0,14,0,0"/>
+              <TextBlock Style="{StaticResource SetNote}" Text="清理时删掉这些文件夹里的东西，文件夹本身保留。在「清理 C 盘」页单独列成一组，默认选「删除」，每次执行前照样要确认；定期自动清理不碰它们。个人文件夹、系统文件夹和软件的安装文件夹加不进来。"/>
+              <ItemsControl x:Name="SetCustomList" Margin="0,6,0,0">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <DockPanel Margin="0,4,0,0">
+                      <Button x:Name="SetListRemove" DockPanel.Dock="Right" Content="移除" Tag="{Binding}" Style="{StaticResource LinkButton}" FontSize="12.5" Margin="12,0,0,0"/>
+                      <TextBlock Text="{Binding}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding}"/>
+                    </DockPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock x:Name="SetCustomEmpty" Style="{StaticResource SetNote}" Text="还没有加。" Margin="0,6,0,0"/>
+              <Button x:Name="BtnSetCustomAdd" Content="添加文件夹…" Style="{StaticResource Small}" HorizontalAlignment="Left" Margin="0,8,0,0"/>
+              <TextBlock Text="排除的文件夹" Style="{StaticResource SetName}" Margin="0,20,0,0"/>
+              <TextBlock Style="{StaticResource SetNote}" Text="清理时一律不碰这些文件夹和里面的东西，估算大小时也不算。比如临时文件夹里某个你要留着的子文件夹。"/>
+              <ItemsControl x:Name="SetExcludeList" Margin="0,6,0,0">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <DockPanel Margin="0,4,0,0">
+                      <Button x:Name="SetListRemove" DockPanel.Dock="Right" Content="移除" Tag="{Binding}" Style="{StaticResource LinkButton}" FontSize="12.5" Margin="12,0,0,0"/>
+                      <TextBlock Text="{Binding}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding}"/>
+                    </DockPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock x:Name="SetExcludeEmpty" Style="{StaticResource SetNote}" Text="还没有排除。" Margin="0,6,0,0"/>
+              <Button x:Name="BtnSetExcludeAdd" Content="添加文件夹…" Style="{StaticResource Small}" HorizontalAlignment="Left" Margin="0,8,0,0"/>
+            </StackPanel>
+          </Border>
         </StackPanel>
       </ScrollViewer>
     </Grid>
@@ -2290,6 +2382,20 @@
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="分析占用"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>打开「空间地图」并扫描 C 盘，看清哪些文件夹和文件最占地方。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="清的是哪些缓存"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>几十种：Windows 自己的临时文件、更新缓存、崩溃转储和日志；Chrome、Edge、Firefox、Brave、360、QQ 等浏览器的网页缓存；显卡的着色器缓存；Steam、Epic 的缓存；Adobe 的媒体缓存；Teams、Discord、Slack、VS Code、Spotify、网易云音乐等软件的缓存；pip、npm、NuGet、Go、Rust 等开发工具的下载缓存。电脑上有哪个，扫描后就列出哪个。</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>只删缓存，不碰 Cookie、历史记录、密码、设置和保存的数据。</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>删了要重新下载、重新生成而且比较慢的（NuGet 全局包、Gradle、Maven、JetBrains 索引、虚幻引擎缓存等）放在「需确认」里，默认跳过。</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Windows Installer 孤儿安装包"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>在「需确认」里。C:\Windows\Installer 里没有任何已装软件和补丁再引用的安装包，常有好几 GB，判断方法和 PatchCleaner 一样。默认跳过，看清说明再选。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="自己加文件夹、排除文件夹"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>在「设置」的「清理列表」里（页面右上角「自定义清理项」直达）。加的文件夹单独列成一组，每次删里面的东西、文件夹本身保留；排除的文件夹清理时一律不碰，估算时也不算。</Run></TextBlock>
                 </StackPanel>
                 <Border Background="#EFF8F1" BorderBrush="#CFE9D6" BorderThickness="1" CornerRadius="10" Padding="14,11,16,12" Margin="0,16,0,0">
                   <DockPanel>
@@ -2611,6 +2717,23 @@
                   <TextBlock Style="{StaticResource HelpLead}" Text="搬走以后"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>在「搬家管理」里能看到，随时可以「搬回 C 盘」。以后软件大版本升级时，个别安装程序会把它重新装回 C 盘，到时再搬一次即可。</Run></TextBlock>
                 </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="检查新版本"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>用 Windows 自带的 winget 查一下装过的软件有没有新版本，只在你点的时候联网。查到的在列表里标出「可升级到」，旁边多一个「升级」按钮：在终端窗口里用 winget 升级，过程和提示都看得见。也可以一次全部升级。</Run></TextBlock>
+                </StackPanel>
+                <DockPanel Margin="0,26,0,0"><TextBlock DockPanel.Dock="Left" Text="开机启动、计划任务、右键菜单" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
+                <StackPanel Margin="0,10,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="开机启动"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>和任务管理器「启动应用」一样的来源：注册表里的 Run 项和两个「启动」文件夹。点「禁用」以后开机不再自动启动，程序本身不删，随时可以重新启用。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="计划任务"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>只列第三方的计划任务（Windows 自己的在 Microsoft 文件夹里，不列）。禁用后到时间不再运行，随时可以重新启用。本工具自己的任务请在「自动提醒」页开关。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="右键菜单"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>只列第三方装进资源管理器右键菜单的扩展，系统自带的不列。禁用是写进 Windows 的「Shell Extensions\Blocked」，对新打开的窗口生效，软件本身照常用。</Run></TextBlock>
+                </StackPanel>
               </StackPanel>
             </Expander>
             <Expander Style="{StaticResource HelpSection}">
@@ -2665,8 +2788,12 @@
                   <TextBlock Style="{StaticResource HelpBody}"><Run>打开后，每次登录电脑 2 分钟后、以及每天中午各检查一次 C 盘，低于你设定的值（默认 20 GB）就在屏幕右下角提醒，每天最多一次；空间够就什么都不显示。</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
-                  <TextBlock Style="{StaticResource HelpLead}" Text="每周自动清理"/>
-                  <TextBlock Style="{StaticResource HelpBody}"><Run>打开后，每周日自动清理一次临时文件、缓存和日志。不搬家、不清空回收站、不碰个人文件夹，被占用的文件直接跳过。</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpLead}" Text="垃圾攒多了也提醒"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>可以再设一个界限（比如 2 GB）：检查时顺便统计「安全清理」里的临时文件、缓存和日志，超过就提醒，每天最多一次。只统计，不删任何东西。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="定期自动清理"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>打开后，在你选的时间（每周某一天或每天，中午 12:30）自动清理一次临时文件、缓存和日志。不搬家、不清空回收站、不碰个人文件夹和你自己加的文件夹，被占用的文件直接跳过。</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="C 盘空间变化"/>
@@ -2741,6 +2868,10 @@
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="查重复文件时让着其他程序"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>读文件时用 Windows 的后台模式，磁盘和内存都排在其他程序后面，不拖慢正在用的程序；同时在做别的事时，查得会慢一些。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="清理列表"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>自己加要清理的文件夹（删里面的东西，文件夹本身保留），或排除清理时不想碰的文件夹。个人文件夹、系统文件夹和软件的安装文件夹加不进来。</Run></TextBlock>
                 </StackPanel>
               </StackPanel>
             </Expander>
@@ -2819,6 +2950,12 @@
                   <DockPanel Margin="0,0,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Prefetch</Run><Run> 里记的是程序启动时要读哪些文件，Windows 靠它让常用软件打开得更快。一共只有几十 MB，删了下次启动反而变慢，过几天又会长回来。</Run></TextBlock></DockPanel>
                   <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">内存</Run><Run>也一样：Windows 会把空闲的内存拿来缓存常用的文件（任务管理器里的「已缓存」），别的程序要用时马上让出来，强行清空只会让电脑变慢。</Run></TextBlock></DockPanel>
                   <TextBlock Style="{StaticResource HelpBody}" Margin="0,8,0,0"><Run>所以这两样本工具都不做。</Run></TextBlock>
+                </StackPanel>
+              </Expander>
+              <Expander Style="{StaticResource HelpQ}">
+                <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="为什么没有注册表清理？"/></Expander.Header>
+                <StackPanel>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>注册表里多几条没用的记录，既不占空间也不影响速度，微软自己的说法是清理注册表没有收益；清错了反而可能让软件打不开、系统出问题，而且很难修。所以本工具不做，和不清 Prefetch、不做「内存加速」是一个道理。</Run></TextBlock>
                 </StackPanel>
               </Expander>
               <Expander Style="{StaticResource HelpQ}">

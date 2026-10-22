@@ -75,6 +75,15 @@ function Scan([string]$code) {
     }
 }
 Scan $src
+# 缓存目录库里每一条的名称和说明也要有英文（它们不经过 T '…' 的写法）
+$libText = [regex]::Match($src, '(?s)\$script:cacheLib = @\(\r?\n(.*?)\r?\n\)').Groups[1].Value
+$libN = 0
+foreach ($l in ($libText -split "`r?`n")) {
+    $m = [regex]::Match($l, "^\s*'([^']*)'\s*$"); if (-not $m.Success) { continue }
+    $f = $m.Groups[1].Value.Split('|'); if ($f.Count -lt 3) { Bad "cache library line has fewer than 3 fields: $l"; continue }
+    [void]$keys.Add($f[0].Trim()); [void]$keys.Add($f[2].Trim()); $libN++
+}
+if ($libN -lt 40) { Bad "cache library: only $libN entries parsed" } else { Ok "cache library: $libN entries" }
 $miss = @($keys | Where-Object { -not $dict.ContainsKey($_) })
 if ($miss) { Bad ("{0} strings have no English translation, e.g. {1}" -f $miss.Count, ($miss | Select-Object -First 3) -join ' | ') } else { Ok "$($keys.Count) strings all translated" }
 $fmtBad = 0
