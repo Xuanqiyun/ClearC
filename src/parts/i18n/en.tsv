@@ -237,6 +237,7 @@ WSL 版本太旧	WSL is too old
 {0} °C	{0} °C
 通电 {0:N0} 小时	{0:N0} hours powered on
 读错误 {0:N0} 次	{0:N0} read errors
+读不到磁盘的健康信息（型号、磨损、温度）	Disk health (model, wear, temperature) could not be read
 开始菜单里失效的快捷方式	Broken Start menu shortcuts
 指向的程序已经不在了的快捷方式（只看开始菜单，不碰桌面）。目标在没插着的硬盘上的不算。不占什么空间，只是清爽	Shortcuts whose program no longer exists (Start menu only, the desktop is left alone). Targets on a drive that isn't connected don't count. Takes no space; just tidier
 失效的快捷方式	Broken shortcut

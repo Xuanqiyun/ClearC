@@ -528,7 +528,18 @@ function Get-DiskHealth([string]$drive) {
             }
         } catch {}
         return ($parts -join ' · ')
-    } catch { return '' }
+    } catch {}
+    # 存储模块不可用时退回 WMI：只有型号和状态
+    try {
+        $ld = Get-CimInstance -ClassName Win32_LogicalDisk -Filter ("DeviceID='{0}'" -f $drive.Substring(0, 2)) -ErrorAction Stop
+        foreach ($pt in @(Get-CimAssociatedInstance -InputObject $ld -ResultClassName Win32_DiskPartition -ErrorAction Stop)) {
+            foreach ($dd in @(Get-CimAssociatedInstance -InputObject $pt -ResultClassName Win32_DiskDrive -ErrorAction Stop)) {
+                $st = [string]$dd.Status
+                return (([string]$dd.Model).Trim() + ' · ' + $(if ($st -eq 'OK') { (T '健康状态正常') } else { ((T "健康状态：{0}") -f $st) }))
+            }
+        }
+    } catch {}
+    return ''
 }
 # ---------- Windows 自带的「存储感知」开没开 ----------
 function Get-StorageSenseOn { try { return ([int](Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy' -ErrorAction Stop).'01' -eq 1) } catch { return $false } }
