@@ -108,6 +108,7 @@ function Load-Auto {
     $last = ''
     foreach ($row in (Read-OpLog)) { if ($row.What -in @('每周自动清理完成', (T '每周自动清理完成'))) { $last = (T "上次自动清理：{0}，{1}") -f $row.Time, $row.Detail; break } }
     $ctl.AutoCleanNote.Text = if ($hasExe) { ((T "任务名：{0}。") -f $script:taskClean) + $(if ($last) { "`n$last" } else { '' }) } else { (T '只有 exe 版本支持每周自动清理。') }
+    $ctl.AutoCleanNote.Text += "`n" + $(if (Get-StorageSenseOn) { (T 'Windows 自带的「存储感知」现在是开着的：它也会定期清临时文件和回收站，和这里的自动清理不冲突，只是会各做一遍。') } else { (T 'Windows 自带的「存储感知」现在是关着的（在 Windows 设置 → 系统 → 存储里）。') })
     $script:autoSync = $false
     Draw-History
 }

@@ -71,7 +71,8 @@ foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageM
                'MapDrive','BtnMapStop','BtnMapScan','MapViewDirs','MapViewFiles','MapViewGrow','BtnMapUp','MapPath','MapInfo','MapList','MapGrow','EmptyMap','EmptyMapText','BtnMapOpen','BtnMapCompress','BtnMapDelete','MapSel',
                'SaveScroll','BtnSaveRefresh','BtnCosOff','BtnCosOn','SaveCosState','SavePfState','SavePfDrive','BtnPfMove','BtnPfAuto','SaveHibState','BtnHibReduced','BtnHibOff','BtnHibFull','BtnFolderCompress','SaveFcState','VdList','VdEmpty','BtnGoDup',
                'BtnAppsRefresh','AppsAll','AppsC','AppsStore','AppsInfo','AppsSearch','AppsLeftBox','BtnAppsLeftClose','BtnAppsLeft','AppsLeftText','AppsList','EmptyApps','EmptyAppsText',
-               'BtnAppsUpdates','AppsViewApps','AppsViewStartup','AppsViewTasks','AppsViewMenu','AppsFilterBox','StartList','BtnCleanCustom','AutoJunkGB','AutoCleanWhen','SetCleanCard','SetCustomList','SetCustomEmpty','BtnSetCustomAdd','SetExcludeList','SetExcludeEmpty','BtnSetExcludeAdd',
+               'BtnAppsUpdates','AppsViewApps','AppsViewStartup','AppsViewTasks','AppsViewMenu','AppsViewLeft','AppsFilterBox','StartList','MapDiskHealth',
+               'BtnOdFree','SaveOdState','BtnRsOn','BtnRsOff','SaveRsState','BtnCsAnalyze','BtnCsClean','SaveCsState','BtnDumpSmall','BtnDumpAuto','SaveDumpState','SaveTmpState','SaveTmpDrive','BtnTmpMove','BtnTmpAuto','BtnCleanCustom','AutoJunkGB','AutoCleanWhen','SetCleanCard','SetCustomList','SetCustomEmpty','BtnSetCustomAdd','SetExcludeList','SetExcludeEmpty','BtnSetExcludeAdd',
                'BtnMovesRefresh','MovesInfo','MovesList','EmptyMoves','EmptyMovesText',
                'AutoRemindOn','AutoRemindGB','AutoRemindNote','AutoCleanOn','AutoCleanNote','HistInfo','HistChart','HistLast','HistFirst',
                'BtnLogOpenDir','BtnLogRefresh','LogKeep','LogKeepNote','LogCats','LogRange','LogSearch','LogCount','LogList','EmptyLog','EmptyLogText',
@@ -111,7 +112,7 @@ function Show-Page([string]$key) {
     }
     # 第一次打开某一页时才去读数据
     switch ($key) {
-        'map'   { if (-not $script:pageLoaded.map) { $script:pageLoaded.map = $true; Fill-MapDrives } }
+        'map'   { if (-not $script:pageLoaded.map) { $script:pageLoaded.map = $true; Fill-MapDrives; Start-DiskHealth } }
         'save'  { if (-not $script:pageLoaded.save) { $script:pageLoaded.save = $true; Load-Save } }
         'apps'  { if (-not $script:pageLoaded.apps -and -not $script:worker) { $script:pageLoaded.apps = $true; Load-Apps } }
         'moves' { if (-not $script:candScanned) { $script:candPending = $true }; if (-not $script:worker) { Load-Moves } }
@@ -433,7 +434,7 @@ function End-Op([string]$result, [switch]$KeepCard, [string]$headline = '', $rep
 # 不在这里的（删除单个文件夹、系统压缩、压缩虚拟磁盘、卸载、删除多余副本）要么很快做完，要么停在一半不安全
 $script:cancelModes = @{ scan = 'look'; apps = 'look'; dup = 'look'; map = 'look'
     run = 'run'; dupdel = 'dupdel'; merge = 'merge'; leftdel = 'leftdel'; fcompress = 'fcompress'; moveback = 'moveback'; vmove = 'move'; appmove = 'move'
-    movescan = 'look'; movemany = 'movemany'; mapdel = 'dupdel'; selftest = 'look' }
+    movescan = 'look'; movemany = 'movemany'; mapdel = 'dupdel'; selftest = 'look'; odinfo = 'look'; leftovers = 'look'; odfree = 'look' }
 $script:cancelUi = ''
 function Update-CancelUi {
     $m = [string]$sync.Mode

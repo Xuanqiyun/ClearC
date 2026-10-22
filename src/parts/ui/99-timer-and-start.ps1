@@ -20,6 +20,7 @@ $timer.Add_Tick({
     }
 
     if ($script:worker -and $script:op) { Update-Op }
+    if ($script:odWanted -and -not $script:worker -and $ctl.PageSave.Visibility -eq 'Visible') { $script:odWanted = $false; Start-OneDriveInfo }
     if ($sync.Status -and $script:rows -and $sync.StatusVer -ne $script:statusSeen) {
         $script:statusSeen = $sync.StatusVer
         foreach ($r in $script:rows) {
@@ -37,7 +38,7 @@ $timer.Add_Tick({
         [DirStat]::Cancel = $false
         if ($sync.WasCancelled) { UI-Log (T '已中途取消。') }
         # 删过、搬过东西以后，逐个扫描得到的旧树不再拿来用（读文件表的结果靠变更日志更新）
-        if (@('scan', 'movescan', 'apps', 'map', 'movesize', 'dup', 'update', 'startup', 'winget') -notcontains [string]$sync.Mode) { [DiskMap]::Invalidate() }
+        if (@('scan', 'movescan', 'apps', 'map', 'movesize', 'dup', 'update', 'startup', 'winget', 'odinfo', 'csanalyze', 'leftovers') -notcontains [string]$sync.Mode) { [DiskMap]::Invalidate() }
 
         if ($sync.Mode -eq 'scan') {
             if ($sync.WasCancelled -or -not $sync.Sizes) {
@@ -207,6 +208,33 @@ $timer.Add_Tick({
             End-Op (T '完成')
             if ($x) { $script:pendingDialog = @{ Title = (T '系统压缩完成'); Kind = 'done'; Text = ((T "C 盘可用空间变化：{0}{1}") -f $(if ($x.Delta -ge 0) { (T '多了 ') } else { (T '少了 ') }), (Fmt ([math]::Abs($x.Delta)))) } }
             if ($ctl.PageSave.Visibility -eq 'Visible') { Load-Save }
+        }
+        elseif ($sync.Mode -eq 'odinfo') { End-Op (T '完成'); Show-OneDriveInfo $sync.OdInfo }
+        elseif ($sync.Mode -eq 'odfree') {
+            $x = $sync.OdRes
+            End-Op (T '完成')
+            if ($x) { $script:pendingDialog = @{ Title = (T '已标记为仅在线'); Kind = 'done'; Text = ((T "{0} 个文件（{1}）已改成仅在线{2}。OneDrive 会在后台释放本地空间，要等它同步一会儿。") -f $x.Done, (Fmt $x.Bytes), $(if ($x.Fail) { ((T "，{0} 个没改成（可能正被占用）") -f $x.Fail) } else { '' })) } }
+            $script:odWanted = $true
+        }
+        elseif ($sync.Mode -eq 'csanalyze') {
+            $x = $sync.CsRes
+            End-Op (T '完成')
+            if ($x -and $x.Ok) {
+                $rec = if ($x.Recommended -match '(?i)^(yes|是|true)') { (T '建议清理') } else { (T '不需要清理') }
+                $ctl.SaveCsState.Text = (T "当前：资源管理器显示 {0}，实际 {1}（其中和系统共用的 {2}），可回收的旧组件 {3} 个，上次清理 {4}。Windows 的判断：{5}。") -f $x.Reported, $x.Actual, $x.Shared, $x.Reclaimable, $x.LastCleanup, $rec
+            } else { $ctl.SaveCsState.Text = (T '没分析成。') + $(if ($x) { ' ' + (($x.Out -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -Last 2) -join ' ') } else { '' }) }
+        }
+        elseif ($sync.Mode -eq 'wslmove') {
+            $x = $sync.WslRes
+            End-Op $(if ($x -and $x.Ok) { (T '已搬') } else { (T '没搬成') })
+            if ($x -and $x.Ok) { $script:pendingDialog = @{ Title = (T 'WSL 发行版已搬到其他盘'); Kind = 'done'; Text = (T '照常用 wsl 打开即可。') } }
+            elseif ($x -and $x.Old) { $script:pendingDialog = @{ Title = (T 'WSL 版本太旧'); Kind = 'warn'; Text = ((T "这个 WSL 还没有 --move 命令。在终端里运行 wsl --update 更新 WSL 后再试。`n`n{0}") -f $x.Out) } }
+            elseif ($x) { $script:pendingDialog = @{ Title = (T '没搬成'); Kind = 'warn'; Text = $x.Out } }
+            if ($ctl.PageSave.Visibility -eq 'Visible') { Load-Save }
+        }
+        elseif ($sync.Mode -eq 'leftovers') {
+            End-Op (T '完成')
+            Build-StartRows 'leftover' $sync.LeftoverResult
         }
         elseif ($sync.Mode -eq 'vdisk') {
             $x = $sync.VdRes

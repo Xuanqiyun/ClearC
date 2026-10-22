@@ -156,6 +156,120 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+当前：已开启（通常占 7 GB 左右）	Now: on (usually about 7 GB)
+当前：已关闭	Now: off
+当前：这个版本的 Windows 没有这项（Windows 10 1903 以后才有）	Now: not available on this version of Windows (Windows 10 1903 or later)
+当前：	Now: 
+不保存	none
+完整内存转储（和内存一样大）	complete memory dump (as large as RAM)
+内核内存转储	kernel memory dump
+小内存转储（256 KB）	small memory dump (256 KB)
+自动（通常是内核转储，可能有几 GB）	automatic (usually a kernel dump, can be several GB)
+读不到	unknown
+（注销再登录后生效）	 (takes effect after you sign out and back in)
+系统默认	Windows default
+这台电脑上没有登录 OneDrive。	OneDrive is not signed in on this PC.
+正在统计 OneDrive 文件夹里有多少本地副本…	Measuring the local copies in the OneDrive folder…
+统计 OneDrive 本地副本	Measuring OneDrive local copies
+没统计到。	Could not measure.
+当前：{0}，{1:N0} 个文件；本地有副本的 {2}，已经是仅在线的 {3}	Now: {0}, {1:N0} files; {2} with a local copy, {3} already online-only
+；设了「始终保留在此设备」的 {0}（不动）	; {0} marked "Always keep on this device" (left alone)
+。OneDrive 现在没有运行，改了也要等它启动后才释放	. OneDrive is not running right now; space is freed only after it starts
+把 OneDrive 里的本地副本都改成仅在线？	Make all local copies in OneDrive online-only?
+本地有副本的 {0} 会改成「仅在线」：文件还在云端，资源管理器里照常显示，打开时自动下载。什么都不删。你设了「始终保留在此设备」的文件不动。\n\n改完由 OneDrive 自己在后台释放空间，要等它同步一会儿；断网时打不开这些文件。	{0} of files with a local copy will become "online-only": they stay in the cloud, still show in File Explorer and download when opened. Nothing is deleted. Files you marked "Always keep on this device" are left alone.\n\nOneDrive then frees the space in the background, which takes a while; these files can't be opened while offline.
+改成仅在线	Make online-only
+OneDrive 文件改成仅在线	Make OneDrive files online-only
+重新开启保留的存储？	Turn reserved storage back on?
+关闭保留的存储？	Turn off reserved storage?
+Windows 会重新预留 7 GB 左右给系统更新用。	Windows will again reserve about 7 GB for updates.
+这块空间会还给你。以后更新时 Windows 临时借用空闲空间；C 盘很满时更新可能提示空间不够，再开回来就好。有更新正在安装时改不了。	The space is given back to you. Windows then borrows free space temporarily when updating; if C: is very full, an update may complain about space, and you can turn it back on. It can't be changed while an update is installing.
+开启保留的存储	Turn on reserved storage
+关闭保留的存储	Turn off reserved storage
+保留的存储：已开启	Reserved storage: on
+保留的存储：已关闭	Reserved storage: off
+正在分析（DISM，要一两分钟）…	Analyzing (DISM, a minute or two)…
+分析组件存储	Analyzing the component store
+蓝屏时只保存小转储？	Save only a small dump on a blue screen?
+恢复自动转储？	Restore automatic dumps?
+以后蓝屏只保存 256 KB 的小内存转储（C:\\Windows\\Minidump），够看出是哪个驱动出的问题，不再生成几个 GB 的 MEMORY.DMP。	Blue screens will save only a 256 KB small memory dump (C:\\Windows\\Minidump), enough to tell which driver failed, and no longer a MEMORY.DMP of several GB.
+恢复 Windows 默认的「自动」：蓝屏时可能生成和内存差不多大的 MEMORY.DMP。	Restores the Windows default "Automatic": a blue screen may write a MEMORY.DMP about as large as RAM.
+蓝屏转储类型	Crash dump type
+小内存转储	Small memory dump
+自动	Automatic
+把临时文件夹改到 {0}？	Move the temp folder to {0}?
+当前用户的 TEMP 和 TMP 会指向 {0}。以后新打开的程序把临时文件放在那里，注销再登录（或重启）后对所有程序生效。{1} 必须是一直插着的本机硬盘；个别安装程序对 C 盘以外的临时文件夹不兼容，遇到就点「恢复默认」。	TEMP and TMP for the current user will point to {0}. Newly started programs put their temporary files there; it applies to all programs after you sign out and back in (or restart). {1} must be a local drive that stays connected; a few installers don't work with a temp folder outside C:, and "Restore default" fixes that.
+临时文件夹位置	Temp folder location
+临时文件夹恢复默认？	Restore the default temp folder?
+改回 C 盘用户目录里的 AppData\\Local\\Temp。注销再登录后对所有程序生效。	Changes it back to AppData\\Local\\Temp in your profile on C:. Applies to all programs after you sign out and back in.
+把 WSL 发行版「{0}」搬到其他盘？	Move the WSL distribution "{0}" to another drive?
+用 WSL 自己的命令（wsl --manage {0} --move）把它搬到 {1}，现在 {2}。搬之前会先关闭这个发行版，里面正在运行的程序会被结束，请先保存。搬完照常用 wsl 打开，不用改任何设置。需要 WSL 2.5 以后的版本（wsl --update 可以更新）。	Uses WSL's own command (wsl --manage {0} --move) to move it to {1}; it is {2} now. The distribution is shut down first, so programs running inside it are ended; save your work first. Afterwards open it with wsl as usual, with no settings to change. Needs WSL 2.5 or later (wsl --update updates it).
+搬到其他盘：WSL {0}	Move to another drive: WSL {0}
+{0} 个可能是残留的文件夹，共 {1}。只是猜测：名字对不上任何已装软件、没有程序在用、一个月没动过	{0} folders that may be leftovers, {1} in total. This is a guess: the name matches no installed app, no program is using them, and nothing changed for a month
+没找到像是残留的文件夹	No folders that look like leftovers
+正在找已卸载软件可能留下的文件夹（要看一遍软件数据目录，几十秒）…	Looking for folders left behind by uninstalled apps (goes through the app data folders, takes a while)…
+查找残留文件夹	Looking for leftover folders
+{0} · 最后改动 {1:yyyy-MM-dd}	{0} · last changed {1:yyyy-MM-dd}
+把「{0}」移到回收站？	Move "{0}" to the Recycle Bin?
+{0}（{1}）。这只是猜测：名字对不上任何已装软件、没有程序在用、一个月没动过。先点「打开位置」看一眼里面是什么。移到回收站后还能恢复。	{0} ({1}). This is only a guess: the name matches no installed app, no program is using it, and nothing changed for a month. Click "Open location" first to see what is inside. It can be restored from the Recycle Bin.
+我看过了，这是已卸载软件留下的，删除不会给我带来损失。	I have looked; this was left by an uninstalled app, and deleting it won't cause me any loss.
+不能删	Can't delete
+残留文件夹：移到回收站	Leftover folder: moved to the Recycle Bin
+残留文件夹已移到回收站：{0}	Leftover folder moved to the Recycle Bin: {0}
+没删掉	Not deleted
+可能有程序正在用里面的文件。	A program may be using files inside it.
+Windows 自带的「存储感知」现在是开着的：它也会定期清临时文件和回收站，和这里的自动清理不冲突，只是会各做一遍。	Windows' own Storage Sense is on: it also cleans temporary files and the Recycle Bin on a schedule. It doesn't conflict with the cleanup here; both simply run.
+Windows 自带的「存储感知」现在是关着的（在 Windows 设置 → 系统 → 存储里）。	Windows' own Storage Sense is off (Windows Settings → System → Storage).
+已标记为仅在线	Marked as online-only
+{0} 个文件（{1}）已改成仅在线{2}。OneDrive 会在后台释放本地空间，要等它同步一会儿。	{0} files ({1}) are now online-only{2}. OneDrive frees the local space in the background; give it a while to sync.
+，{0} 个没改成（可能正被占用）	, {0} could not be changed (possibly in use)
+建议清理	cleanup recommended
+不需要清理	no cleanup needed
+当前：资源管理器显示 {0}，实际 {1}（其中和系统共用的 {2}），可回收的旧组件 {3} 个，上次清理 {4}。Windows 的判断：{5}。	Now: File Explorer shows {0}, actual size {1} ({2} of it shared with Windows), {3} reclaimable old packages, last cleanup {4}. Windows' verdict: {5}.
+没分析成。	Analysis failed.
+已搬	Moved
+WSL 发行版已搬到其他盘	WSL distribution moved
+照常用 wsl 打开即可。	Open it with wsl as usual.
+WSL 版本太旧	WSL is too old
+这个 WSL 还没有 --move 命令。在终端里运行 wsl --update 更新 WSL 后再试。\n\n{0}	This WSL doesn't have the --move command yet. Run wsl --update in a terminal, then try again.\n\n{0}
+健康状态正常	healthy
+健康状态：{0}	health: {0}
+已磨损 {0}%	{0}% worn
+{0} °C	{0} °C
+通电 {0:N0} 小时	{0:N0} hours powered on
+读错误 {0:N0} 次	{0:N0} read errors
+开始菜单里失效的快捷方式	Broken Start menu shortcuts
+指向的程序已经不在了的快捷方式（只看开始菜单，不碰桌面）。目标在没插着的硬盘上的不算。不占什么空间，只是清爽	Shortcuts whose program no longer exists (Start menu only, the desktop is left alone). Targets on a drive that isn't connected don't count. Takes no space; just tidier
+失效的快捷方式	Broken shortcut
+  删了 {0} 个失效的快捷方式	  Deleted {0} broken shortcuts
+Windows 事件日志	Windows event logs
+系统、应用程序、安全等日志，排查问题的工程师会看。清空后就查不到以前的记录了，不确定就跳过	System, application, security and other logs that engineers read when investigating problems. Once cleared, earlier records are gone; skip it if unsure
+  清空了 {0} 个事件日志	  Cleared {0} event logs
+Linux 子系统的虚拟磁盘。在 Linux 里删了文件，这个文件不会自动变小，压缩一下就能把空间还给 Windows。也可以整个搬到其他盘（用 WSL 自己的 wsl --manage --move，搬完照常使用）	The virtual disk of the Linux subsystem. Deleting files inside Linux doesn't shrink it; compacting gives the space back to Windows. It can also be moved to another drive as a whole (with WSL's own wsl --manage --move; it works as before afterwards)
+先关闭这个发行版（wsl --terminate）	Shutting down the distribution first (wsl --terminate)
+搬到 {0}（WSL 自己复制，可能要几分钟）	Moving to {0} (WSL copies it; may take a few minutes)
+逐个文件标记	Marking files one by one
+{0} 个文件，{1}	{0} files, {1}
+WSL 发行版搬到其他盘	Move WSL distribution to another drive
+去清理	Go to cleanup
+恢复自动	Restore automatic
+恢复默认	Restore default
+改成小转储	Use small dumps
+重新开启	Turn back on
+残留文件夹	Leftovers
+C:\\Windows\\WinSxS 看着很大，其中很多文件和 System32 是同一份（硬链接），真正能清的是更新替换下来的旧组件。Windows 自己能算出可回收多少、建不建议清理；清理在「清理 C 盘」里的「WinSxS 组件清理 (DISM)」。	C:\\Windows\\WinSxS looks huge, but many of its files are the same files as in System32 (hard links); what can really go is the old components replaced by updates. Windows can work out how much is reclaimable and whether cleanup is advisable; the cleanup itself is "WinSxS component cleanup (DISM)" on the "Clean up C:" page.
+OneDrive 文件改成「仅在线」	Make OneDrive files "online-only"
+Windows 保留的存储	Windows reserved storage
+Windows 给系统更新预留的空间，通常 7 GB 左右，空间明细里的「其他」有一部分就是它。关掉以后这块空间还给你，更新时 Windows 改为临时借用空闲空间；C 盘很满时更新可能提示空间不够，再开回来就好。有更新正在安装时改不了。	Space Windows sets aside for updates, usually about 7 GB; part of "the rest" in the space breakdown is this. Turning it off gives the space back, and Windows borrows free space temporarily when updating; if C: is very full an update may complain about space, and you can turn it back on. It can't be changed while an update is installing.
+WSL、Docker、安卓模拟器、虚拟机的磁盘文件动辄几十 GB，而且在里面删了东西也不会自动变小。压缩能把空出来的部分还给 Windows；WSL 发行版和文件夹形式的可以整个搬到其他盘。	Disk files of WSL, Docker, Android emulators and virtual machines are often tens of GB, and deleting things inside them doesn't shrink them. Compacting gives the freed part back to Windows; WSL distributions and folder-based ones can be moved to another drive as a whole.
+临时文件夹的位置	Temp folder location
+各软件的临时文件默认放在 C 盘的用户目录里。可以改到其他盘，以后的临时文件就不占 C 盘了。改完要注销再登录（或重启）才对所有软件生效；个别安装程序对 C 盘以外的临时文件夹不兼容，遇到就点「恢复默认」。	By default every program's temporary files go into your profile on C:. You can move them to another drive so future temporary files don't take space on C:. Sign out and back in (or restart) for all programs to pick it up; a few installers don't work with a temp folder outside C:, and "Restore default" fixes that.
+同步过的文件本地都留着一份副本。改成「仅在线」后文件还在云端，资源管理器里照常显示，打开时才下载，本地不再占空间。什么都不删。你设了「始终保留在此设备」的文件不动；OneDrive 要开着才会真正释放。	Synced files keep a local copy. Once "online-only", they stay in the cloud, still show in File Explorer, download when opened and take no local space. Nothing is deleted. Files you marked "Always keep on this device" are left alone; OneDrive must be running for the space to be freed.
+点「分析」让 Windows 算一下实际多大、能清多少（要一两分钟）。	Click "Analyze" to let Windows work out the actual size and how much can be cleaned (a minute or two).
+组件存储（WinSxS）	Component store (WinSxS)
+蓝屏时 Windows 会把内存里的内容存成 C:\\Windows\\MEMORY.DMP，「自动」模式下可能和内存一样大，清掉了下次蓝屏又会生成。改成「小内存转储」只存 256 KB 的摘要，够看出是哪个驱动出的问题。随时可以恢复。	On a blue screen Windows writes the memory contents to C:\\Windows\\MEMORY.DMP, which in "Automatic" mode can be as large as RAM and comes back after the next blue screen. "Small memory dump" saves only a 256 KB summary, enough to tell which driver failed. It can be restored at any time.
+蓝屏时保存多大的转储	Crash dump size on a blue screen
+显卡驱动和品牌机驱动安装时解压到 C 盘根目录的文件，装完就没用了。以后要重装驱动再下载一次即可	Files that graphics and OEM driver installers unpack into the root of C:; useless once installed. Download the driver again if you ever need to reinstall it
+驱动安装包解压残留	Unpacked driver installers
 C 盘上有约 {0} 可以清理	About {0} on C: can be cleaned up
 临时文件、缓存和日志加起来超过了你设定的 {0} GB。打开腾挪 ClearC 清一清？\n（在工具的「自动提醒」页可以改界限或关掉这个提醒）	Temporary files, caches and logs add up to more than the {0} GB you set. Open ClearC to clean them up?\n(You can change the limit or turn off this reminder on the "Reminders" page.)
 {0} 个开机启动项，{1} 个已启用	{0} startup items, {1} enabled

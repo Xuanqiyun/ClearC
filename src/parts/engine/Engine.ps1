@@ -308,6 +308,7 @@ $script:cacheLib = @(
     'Apple 设备系统更新包 | %PROGRAMDATA%\Apple\AMPDevicesAgent\*-Temporary-Files;%APPDATA%\Apple Computer\iTunes\*Software Updates | 给 iPhone/iPad 升级时下载的固件，装完就没用了'
     'Dell 更新程序缓存 | %PROGRAMDATA%\Dell\DTP;%PROGRAMDATA%\Dell\SupportAssist | 戴尔驱动更新工具下载的安装包'
     '罗技 Options+ 缓存 | %PROGRAMDATA%\LogiOptionsPlus\cache;%PROGRAMDATA%\LogiOptionsPlus\depots | 罗技驱动的更新包缓存'
+    '驱动安装包解压残留 | %SYSTEMDRIVE%\NVIDIA;%SYSTEMDRIVE%\AMD;%SYSTEMDRIVE%\Intel;%SYSTEMDRIVE%\SWSetup;%SYSTEMDRIVE%\Drivers;%SYSTEMDRIVE%\Dell\Drivers | 显卡驱动和品牌机驱动安装时解压到 C 盘根目录的文件，装完就没用了。以后要重装驱动再下载一次即可 | confirm'
     'NI 安装包缓存 | %PROGRAMDATA%\National Instruments\MDF\ProductCache;%PROGRAMDATA%\National Instruments\NI Package Manager\packages | LabVIEW 等 NI 软件的安装媒体缓存。软件本身不受影响；以后修复或重装时需重新下载 | confirm'
     'NuGet 全局包目录 | %USERPROFILE%\.nuget\packages | .NET 项目引用的包都放在这里。删了以后打开项目要联网重新还原（Visual Studio 会自动做，但要等一会儿） | confirm'
     'Gradle 依赖缓存 | %USERPROFILE%\.gradle\caches | Android Studio 和 Gradle 项目下载的依赖。删了下次构建要重新下载，国内网络可能很慢 | confirm'
@@ -391,6 +392,199 @@ function Get-InstallerOrphans {
     return $out
 }
 
+# ---------- 开始菜单里失效的快捷方式（只看公共和当前用户的开始菜单，不碰桌面）----------
+function Get-BrokenShortcuts {
+    $out = @()
+    $sh = $null
+    try { $sh = New-Object -ComObject WScript.Shell } catch { return @() }
+    foreach ($base in @("$env:ProgramData\Microsoft\Windows\Start Menu", "$env:APPDATA\Microsoft\Windows\Start Menu")) {
+        foreach ($f in @(Get-ChildItem -LiteralPath $base -Filter '*.lnk' -File -Recurse -Force -ErrorAction SilentlyContinue)) {
+            try {
+                $lnk = $sh.CreateShortcut($f.FullName)
+                $t = [string]$lnk.TargetPath
+                if (-not $t) { continue }                                   # 应用商店、MSI 广告式快捷方式没有普通目标，不判断
+                $t = [Environment]::ExpandEnvironmentVariables($t)
+                if ($t -notmatch '^[A-Za-z]:\\') { continue }               # 网络路径、特殊目标不判断
+                $drv = $t.Substring(0, 3)
+                if (-not (Test-Path -LiteralPath $drv)) { continue }       # 盘没插着，不算失效
+                if (Test-Path -LiteralPath $t) { continue }
+                $out += $f
+            } catch {}
+        }
+    }
+    return $out
+}
+# ---------- OneDrive：本地留着副本的文件改成「仅在线」，文件还在云端，本地不占空间 ----------
+function Get-OneDriveFolders {
+    $out = @()
+    foreach ($k in @(Get-ChildItem 'HKCU:\Software\Microsoft\OneDrive\Accounts' -ErrorAction SilentlyContinue)) {
+        $p = [string](Get-ItemProperty -LiteralPath $k.PSPath -ErrorAction SilentlyContinue).UserFolder
+        if ($p -and (Test-Path -LiteralPath $p) -and ($out -notcontains $p.TrimEnd('\'))) { $out += $p.TrimEnd('\') }
+    }
+    if ($env:OneDrive -and (Test-Path -LiteralPath $env:OneDrive) -and ($out -notcontains $env:OneDrive.TrimEnd('\'))) { $out += $env:OneDrive.TrimEnd('\') }
+    return $out
+}
+# 本地有副本 = 没有「访问时下载」属性（0x400000）；pinned（0x80000）= 用户设了「始终保留在此设备」，不动
+function Get-OneDriveInfo {
+    $r = @{ Folders = @(Get-OneDriveFolders); Files = 0; Local = [double]0; Pinned = [double]0; Online = [double]0; Running = $false }
+    try { $r.Running = @(Get-Process -Name OneDrive -ErrorAction SilentlyContinue).Count -gt 0 } catch {}
+    foreach ($d in $r.Folders) {
+        foreach ($f in @([IO.Directory]::EnumerateFiles($d, '*', [IO.SearchOption]::AllDirectories))) {
+            if (Stopping) { break }
+            try {
+                $fi = New-Object IO.FileInfo $f
+                $a = [int]$fi.Attributes
+                if ($a -band 0x400) { continue }                            # 链接
+                $r.Files++
+                if ($a -band 0x400000) { $r.Online += $fi.Length }
+                elseif ($a -band 0x80000) { $r.Pinned += $fi.Length }
+                else { $r.Local += $fi.Length }
+            } catch {}
+        }
+    }
+    return $r
+}
+function Invoke-OneDriveFree($res) {
+    $res.Done = 0; $res.Bytes = [double]0; $res.Fail = 0
+    foreach ($d in (Get-OneDriveFolders)) {
+        foreach ($f in @([IO.Directory]::EnumerateFiles($d, '*', [IO.SearchOption]::AllDirectories))) {
+            if (Stopping) { return }
+            try {
+                $fi = New-Object IO.FileInfo $f
+                $a = [int]$fi.Attributes
+                if (($a -band 0x400) -or ($a -band 0x400000) -or ($a -band 0x80000)) { continue }
+                [IO.File]::SetAttributes($f, [IO.FileAttributes]($a -bor 0x100000))   # +U：告诉 OneDrive 这个文件只要留在云端
+                $res.Done++; $res.Bytes += $fi.Length
+            } catch { $res.Fail++ }
+        }
+    }
+}
+# ---------- Windows 保留的存储（给更新预留的几个 GB）----------
+function Get-ReservedStorageState {
+    try { $s = Get-WindowsReservedStorageState -ErrorAction Stop; return [string]$s.ReservedStorageState } catch {}
+    try {
+        $o = (& "$sys32\Dism.exe" /Online /Get-ReservedStorageState 2>&1 | Out-String)
+        if ($o -match '(?i)disabled|已禁用|未启用') { return 'Disabled' }
+        if ($o -match '(?i)enabled|已启用') { return 'Enabled' }
+    } catch {}
+    return ''
+}
+function Set-ReservedStorage([bool]$on) {
+    try { Set-WindowsReservedStorageState -State $(if ($on) { 'Enabled' } else { 'Disabled' }) -ErrorAction Stop | Out-Null; return '' }
+    catch { $m = $_.Exception.Message }
+    $o = (& "$sys32\Dism.exe" /Online /Set-ReservedStorageState /State:$(if ($on) { 'Enabled' } else { 'Disabled' }) 2>&1 | Out-String)
+    if ($LASTEXITCODE -eq 0) { return '' }
+    return ($m + "`n" + $o).Trim()
+}
+# ---------- 组件存储（WinSxS）分析：DISM 报告实际大小、可回收多少、建不建议清理。各行的顺序固定，按顺序取值，不依赖语言 ----------
+function Get-ComponentStoreInfo {
+    $o = (& "$sys32\Dism.exe" /Online /Cleanup-Image /AnalyzeComponentStore 2>&1 | Out-String)
+    return (ConvertFrom-DismAnalyze $o)
+}
+function ConvertFrom-DismAnalyze([string]$o) {
+    $vals = @()
+    foreach ($l in ($o -split "`r?`n")) {
+        $i = $l.IndexOf(':')
+        if ($i -gt 0 -and $l.Trim() -notmatch '^(Deployment|Version|Image Version|映像版本|部署映像)' -and $l -notmatch '^\s*$') { $vals += $l.Substring($i + 1).Trim() }
+    }
+    # 顺序：资源管理器报告的大小、实际大小、与 Windows 共享、备份和已禁用的功能、缓存和临时数据、上次清理日期、可回收的包、是否建议清理
+    if ($vals.Count -lt 8) { return @{ Ok = $false; Out = $o } }
+    $n = $vals.Count
+    return @{ Ok = $true; Reported = $vals[$n - 8]; Actual = $vals[$n - 7]; Shared = $vals[$n - 6]; Backups = $vals[$n - 5]; Cache = $vals[$n - 4]; LastCleanup = $vals[$n - 3]; Reclaimable = $vals[$n - 2]; Recommended = $vals[$n - 1]; Out = $o }
+}
+# ---------- 蓝屏转储的类型：0 不保存  1 完整内存  2 内核  3 小转储(256 KB)  7 自动 ----------
+function Get-CrashDumpMode { try { return [int](Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl' -ErrorAction Stop).CrashDumpEnabled } catch { return -1 } }
+function Set-CrashDumpMode([int]$mode) { Set-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl' -Name CrashDumpEnabled -Value $mode -Type DWord -ErrorAction Stop }
+# ---------- 当前用户的临时文件夹位置（TEMP / TMP 环境变量）----------
+function Get-UserTemp { try { return [string](Get-ItemProperty 'HKCU:\Environment' -ErrorAction Stop).TEMP } catch { return '' } }
+function Set-UserTemp([string]$path) {
+    $v = if ($path) { $path } else { '%USERPROFILE%\AppData\Local\Temp' }
+    foreach ($n in 'TEMP', 'TMP') { Set-ItemProperty 'HKCU:\Environment' -Name $n -Value $v -Type ExpandString -ErrorAction Stop }
+    # 通知正在运行的程序环境变量变了（新开的程序才会用新位置）
+    try {
+        if (-not ('EnvNotify' -as [type])) { Add-Type -Namespace Win32 -Name EnvNotify -MemberDefinition '[DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)] public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);' }
+        $r = [UIntPtr]::Zero; [void][Win32.EnvNotify]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, 'Environment', 2, 2000, [ref]$r)
+    } catch {}
+}
+# ---------- 磁盘健康：SSD 的磨损、温度、通电时间（只读）----------
+function Get-DiskHealth([string]$drive) {
+    try {
+        $letter = $drive.Substring(0, 1)
+        $part = @(Get-Partition -DriveLetter $letter -ErrorAction Stop)[0]
+        if (-not $part) { return '' }
+        $pd = @(Get-PhysicalDisk -ErrorAction Stop | Where-Object { [string]$_.DeviceId -eq [string]$part.DiskNumber })[0]
+        if (-not $pd) { return '' }
+        $parts = @()
+        $parts += ([string]$pd.FriendlyName).Trim()
+        $mt = [string]$pd.MediaType; if ($mt -and $mt -ne 'Unspecified') { $parts += $mt }
+        $hs = [string]$pd.HealthStatus; if ($hs) { $parts += $(if ($hs -eq 'Healthy') { (T '健康状态正常') } else { ((T "健康状态：{0}") -f $hs) }) }
+        try {
+            $rc = $pd | Get-StorageReliabilityCounter -ErrorAction Stop
+            if ($rc) {
+                if ($rc.Wear -ne $null -and [int]$rc.Wear -ge 0) { $parts += ((T "已磨损 {0}%") -f [int]$rc.Wear) }
+                if ($rc.Temperature -and [int]$rc.Temperature -gt 0) { $parts += ((T "{0} °C") -f [int]$rc.Temperature) }
+                if ($rc.PowerOnHours -and [long]$rc.PowerOnHours -gt 0) { $parts += ((T "通电 {0:N0} 小时") -f [long]$rc.PowerOnHours) }
+                if ($rc.ReadErrorsTotal -and [long]$rc.ReadErrorsTotal -gt 0) { $parts += ((T "读错误 {0:N0} 次") -f [long]$rc.ReadErrorsTotal) }
+            }
+        } catch {}
+        return ($parts -join ' · ')
+    } catch { return '' }
+}
+# ---------- Windows 自带的「存储感知」开没开 ----------
+function Get-StorageSenseOn { try { return ([int](Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy' -ErrorAction Stop).'01' -eq 1) } catch { return $false } }
+# ---------- 已卸载软件可能留下的文件夹：名字对不上任何已装软件、没有程序在用、很久没动过 ----------
+function Get-OrphanFolders($apps) {
+    $norm = { param($x) (([string]$x).ToLowerInvariant() -replace '[^\p{L}\p{N}]', '') }
+    $tokens = New-Object System.Collections.Generic.List[string]
+    $locs = @()
+    foreach ($a in @($apps)) {
+        foreach ($n in @($a.Name, $a.Publisher)) { $t = & $norm $n; if ($t.Length -ge 3) { $tokens.Add($t) } }
+        $l = ([string]$a.Location).TrimEnd('\'); if ($l -and $l.Length -gt 3) { $locs += $l }
+    }
+    $procDirs = @()
+    foreach ($p in @(Get-Process -ErrorAction SilentlyContinue)) { try { if ($p.Path) { $procDirs += (Split-Path $p.Path -Parent) } } catch {} }
+    $procDirs = @($procDirs | Select-Object -Unique)
+    # Windows 和常见组件自己的文件夹，以及发行商的总文件夹：不当残留
+    $known = @('Microsoft','Packages','Temp','Comms','ConnectedDevicesPlatform','D3DSCache','PeerDistRepub','Publishers','VirtualStore','PlaceholderTileLogoFolder','TileDataLayer','CrashDumps','IconCache','OneDrive','Programs','Apps',
+        'Application Data','History','Temporary Internet Files','Microsoft Help','Intel','NVIDIA','AMD','NVIDIA Corporation','Package Cache','ssh','USOPrivate','USOShared','SoftwareDistribution','Windows','WindowsHolographicDevices',
+        'Diagnostics','Desktop','Start Menu','Templates','Documents','Favorites','DSS','dotnet','Common Files','WindowsApps','ModifiableWindowsApps','Windows Defender','Windows Defender Advanced Threat Protection','Windows Mail',
+        'Windows Media Player','Windows Multimedia Platform','Windows NT','Windows Photo Viewer','Windows Portable Devices','Windows Security','Windows Sidebar','Internet Explorer','MSBuild','Reference Assemblies','Uninstall Information',
+        'regid.1991-06.com.microsoft','Tencent','Google','Adobe','Apple','Mozilla','Oracle','Java','Python','Steam','Autodesk','Realtek','Logitech','Razer','Samsung','Lenovo','Dell','HP','ASUS','Acer','Huawei','Xiaomi','JetBrains','Unity','Epic Games',
+        'CleanC','cache','Cache','Logs','log','logs','Local','LocalLow','Roaming','Default','Public','All Users','Default User','.cache','.config','.local','go-build','npm-cache','pip','uv','Yarn','NuGet','pnpm','Docker','docker','WSL','Lxss',
+        'Spotify','Discord','slack','Code','Cursor','Zoom','Notion','Figma','Postman','Obsidian','Typora','Telegram Desktop','ViberPC','Signal','LINE','Kakao','DingTalk','DingDing','Feishu','LarkShell','WXWork','WeMeet','xwechat_files','WeChat Files','Tencent Files','CDriveMoved')
+    $bases = @($env:LOCALAPPDATA, $env:APPDATA, "$env:USERPROFILE\AppData\LocalLow", "$env:SystemDrive\ProgramData", "$env:SystemDrive\Program Files", "$env:SystemDrive\Program Files (x86)", "$env:LOCALAPPDATA\Programs")
+    $cut = (Get-Date).AddDays(-30)
+    $out = @()
+    foreach ($b in $bases) {
+        foreach ($d in @(Get-ChildItem -LiteralPath $b -Directory -Force -ErrorAction SilentlyContinue)) {
+            if (Stopping) { return $out }
+            $name = $d.Name
+            if ($known -contains $name -or $name.StartsWith('.') -or $name -like 'Microsoft*' -or $name -like 'Windows*' -or $name -like '{*}') { continue }
+            if (IsLink $d.FullName) { continue }
+            if ($d.LastWriteTime -gt $cut) { continue }
+            $nn = & $norm $name
+            if ($nn.Length -lt 3) { continue }
+            $hit = $false
+            foreach ($t in $tokens) { if ($nn -eq $t -or ($nn.Length -ge 4 -and $t.Contains($nn)) -or ($t.Length -ge 4 -and $nn.Contains($t))) { $hit = $true; break } }
+            if ($hit) { continue }
+            $full = $d.FullName.TrimEnd('\')
+            foreach ($l in $locs) { if ($l -ieq $full -or $l.StartsWith("$full\", [StringComparison]::OrdinalIgnoreCase) -or $full.StartsWith("$l\", [StringComparison]::OrdinalIgnoreCase)) { $hit = $true; break } }
+            if ($hit) { continue }
+            foreach ($pdir in $procDirs) { if ($pdir -ieq $full -or $pdir.StartsWith("$full\", [StringComparison]::OrdinalIgnoreCase)) { $hit = $true; break } }
+            if ($hit) { continue }
+            if (Get-DeleteBlock $full -Leftover) { continue }
+            # 里面最近改过的文件也算在用（LastWriteTime 只看文件夹本身）
+            $newest = $d.LastWriteTime
+            try { foreach ($f in @(Get-ChildItem -LiteralPath $full -Recurse -File -Force -ErrorAction SilentlyContinue | Select-Object -First 400)) { if ($f.LastWriteTime -gt $newest) { $newest = $f.LastWriteTime } } } catch {}
+            if ($newest -gt $cut) { continue }
+            $bytes = [double](DirBytes $full)
+            if ($bytes -lt 1MB) { continue }
+            $out += @{ Path = $full; Bytes = $bytes; Modified = $newest }
+        }
+    }
+    return $out
+}
+
 # Kind: cache = 缓存类(删除/跳过)   action = 操作类(执行/跳过)   move = 只能搬(搬到其他盘/跳过)   flex = 可搬可删
 function Get-Catalog {
     $docs = [Environment]::GetFolderPath('MyDocuments')
@@ -431,6 +625,12 @@ function Get-Catalog {
         @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T 'Windows Installer 孤儿安装包'); Note=(T 'C:\Windows\Installer 里没有任何已装软件和补丁再引用的安装包（.msi / .msp），多半是软件升级、卸载后留下的。判断方法和 PatchCleaner 一样。删了以后，万一哪个软件修复或卸载时提示找不到安装包，重新下载安装一次即可')
            Size={ $s = [double]0; foreach ($f in (Get-InstallerOrphans)) { $s += $f.Length }; $s }
            Act ={ $n = 0; $b = [double]0; foreach ($f in (Get-InstallerOrphans)) { try { Remove-Item -LiteralPath $f.FullName -Force -ErrorAction Stop; $n++; $b += $f.Length } catch { Log ((T "  没删掉：{0}（{1}）") -f $f.FullName, $_.Exception.Message) } }; Log ((T "  Windows Installer 孤儿安装包：删了 {0} 个，{1}") -f $n, (GB $b)) } }
+        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T '开始菜单里失效的快捷方式'); Note=(T '指向的程序已经不在了的快捷方式（只看开始菜单，不碰桌面）。目标在没插着的硬盘上的不算。不占什么空间，只是清爽')
+           Size={ $s = [double]0; foreach ($f in (Get-BrokenShortcuts)) { $s += $f.Length }; $s }
+           Act ={ $n = 0; foreach ($f in (Get-BrokenShortcuts)) { try { Remove-Item -LiteralPath $f.FullName -Force -ErrorAction Stop; $n++; OpLog '删除' (T '失效的快捷方式') $f.FullName '' } catch {} }; Log ((T "  删了 {0} 个失效的快捷方式") -f $n) } }
+        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T 'Windows 事件日志'); Note=(T '系统、应用程序、安全等日志，排查问题的工程师会看。清空后就查不到以前的记录了，不确定就跳过')
+           Size={ $s = [double]0; foreach ($f in @(Get-ChildItem -LiteralPath "$env:SystemRoot\System32\winevt\Logs" -Filter '*.evtx' -File -Force -ErrorAction SilentlyContinue)) { $s += $f.Length }; $s }
+           Act ={ $n = 0; foreach ($l in @(& "$sys32\wevtutil.exe" el 2>$null)) { if (Stopping) { break }; & "$sys32\wevtutil.exe" cl "$l" 2>$null | Out-Null; if ($LASTEXITCODE -eq 0) { $n++ } }; Log ((T "  清空了 {0} 个事件日志") -f $n) } }
         @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def=(T '跳过'); One=(T '执行'); N=(T 'WinSxS 组件清理 (DISM)'); Note=(T '清掉系统更新替换下来的旧组件，通常能省 2 到 10 GB。耗时 10 到 20 分钟，完成后建议重启'); Last=$true
            Size={ -1 }
            Act ={ & "$env:SystemRoot\System32\Dism.exe" /Online /Cleanup-Image /StartComponentCleanup /ResetBase | Out-Null }; Slow=$true }
@@ -1349,8 +1549,8 @@ function Get-VDisks {
         if (-not $p -or -not $p.BasePath -or ([string]$p.DistributionName) -like 'docker-desktop*') { continue }
         $base = ([string]$p.BasePath) -replace '^\\\\\?\\', ''
         $vh = Join-Path $base 'ext4.vhdx'
-        if (Test-Path -LiteralPath $vh) { [void]$out.Add(@{ Name = ((T "WSL：{0}") -f $($p.DistributionName)); Path = $vh; Kind = 'wsl'; Compact = $true; Move = $false
-            Note = ((T "Linux 子系统的虚拟磁盘。在 Linux 里删了文件，这个文件不会自动变小，压缩一下就能把空间还给 Windows。要换位置可以用命令 wsl --manage {0} --move D:\WSL") -f $($p.DistributionName)) }) }
+        if (Test-Path -LiteralPath $vh) { [void]$out.Add(@{ Name = ((T "WSL：{0}") -f $($p.DistributionName)); Path = $vh; Kind = 'wsl'; Compact = $true; Move = $true; Distro = [string]$p.DistributionName
+            Note = (T 'Linux 子系统的虚拟磁盘。在 Linux 里删了文件，这个文件不会自动变小，压缩一下就能把空间还给 Windows。也可以整个搬到其他盘（用 WSL 自己的 wsl --manage --move，搬完照常使用）') }) }
     }
     foreach ($vh in @("$env:LOCALAPPDATA\Docker\wsl\data\ext4.vhdx", "$env:LOCALAPPDATA\Docker\wsl\disk\docker_data.vhdx", "$env:LOCALAPPDATA\Docker\wsl\main\ext4.vhdx", "$env:LOCALAPPDATA\Docker\wsl\distro\ext4.vhdx")) {
         if (Test-Path -LiteralPath $vh) { [void]$out.Add(@{ Name = (T 'Docker Desktop 数据盘'); Path = $vh; Kind = 'docker'; Compact = $true; Move = $false
@@ -1368,6 +1568,20 @@ function Get-VDisks {
         }
     }
     return ,$out
+}
+# WSL 发行版搬到其他盘：wsl --manage <名字> --move <位置>（WSL 2.5 以后才有；旧的提示先 wsl --update）
+function Invoke-WslMove([string]$distro, [string]$dest, $res) {
+    $res.Ok = $false; $res.Out = ''
+    SetP @{ Detail = (T '先关闭这个发行版（wsl --terminate）') }
+    & "$sys32\wsl.exe" --terminate $distro 2>$null | Out-Null
+    Start-Sleep -Seconds 2
+    New-Item -ItemType Directory -Path $dest -Force | Out-Null
+    SetP @{ Detail = ((T "搬到 {0}（WSL 自己复制，可能要几分钟）") -f $dest) }
+    $o = (& "$sys32\wsl.exe" --manage $distro --move $dest 2>&1 | Out-String)
+    $o = ($o -replace "`0", '').Trim()
+    $res.Out = $o
+    if ($LASTEXITCODE -eq 0) { $res.Ok = $true }
+    elseif ($o -match '(?i)--move|manage|unknown|无效|未知|不正确') { $res.Old = $true }
 }
 function Invoke-CompactVdisk([string]$path, [string]$kind, $res) {
     $res.Ok = $false

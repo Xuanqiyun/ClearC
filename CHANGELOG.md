@@ -8,9 +8,14 @@
 - **自动清理的时间可选**：每周某一天或每天，中午 12:30。
 - **软件管理**新增三个视图：**开机启动**（注册表 Run 项和「启动」文件夹，开关写在 StartupApproved 里，和任务管理器一样）、**计划任务**（只列第三方的）、**右键菜单**（只列第三方的 shellex 扩展，禁用写进 Shell Extensions\Blocked）。都只是禁用，不删任何东西，随时能恢复。
 - **检查新版本（winget）**：用 Windows 自带的 winget 查装过的软件有没有新版本，只在点的时候联网；列表里标出「可升级到」并给「升级」按钮，在终端窗口里升级，过程和提示都看得见。
+- **省空间**新增：OneDrive 同步文件改成「仅在线」（文件留在云端，什么都不删，「始终保留在此设备」的不动）；关掉 / 重新开启 Windows 保留的存储；组件存储（WinSxS）分析，DISM 算出实际大小、可回收多少、建不建议清理；蓝屏只存小转储；当前用户的临时文件夹改到其他盘；WSL 发行版搬到其他盘（`wsl --manage --move`，需要 WSL 2.5 以后）。
+- **清理 C 盘**再加三条需确认项：驱动安装包解压残留（C:\NVIDIA、C:\AMD、C:\Intel、C:\SWSetup、C:\Drivers、C:\Dell\Drivers）、开始菜单里失效的快捷方式（不碰桌面）、Windows 事件日志。
+- **软件管理**加「残留文件夹」视图：找已卸载软件可能留下的文件夹（名字对不上任何已装软件、没有程序在用、一个月没动过、至少 1 MB），只是猜测，看过再移到回收站。
+- **空间地图**标题下显示每块盘的健康状态（型号、HealthStatus，固态硬盘的磨损、温度、通电时间；只读）。
+- **自动提醒**页写明 Windows 自带的「存储感知」开没开。
 - 帮助里加了「为什么没有注册表清理」。
 - 测试：核心逻辑测试覆盖目录库解析、排除、自定义文件夹、winget 表格解析；界面自测覆盖清理列表、提醒设置、三个新视图和孤儿安装包判断；检查里核对目录库每一条都有英文。
-- Cache library as a data table with dozens of new entries (more browsers, shader caches, game launchers, Adobe, Teams, Discord, Slack, VS Code, Spotify, developer tools); orphaned Windows Installer packages (needs confirmation); custom folders and exclusions; a junk-size reminder; a selectable cleanup day; startup items, third-party scheduled tasks and context menu extensions under Apps; "Check for updates" with winget; FAQ on why there is no registry cleaner.
+- Cache library as a data table with dozens of new entries (more browsers, shader caches, game launchers, Adobe, Teams, Discord, Slack, VS Code, Spotify, developer tools); orphaned Windows Installer packages, unpacked driver installers, broken Start menu shortcuts and event logs (all need confirmation); custom folders and exclusions; a junk-size reminder; a selectable cleanup day; startup items, third-party scheduled tasks, context menu extensions and leftover folders under Apps; "Check for updates" with winget; OneDrive online-only, reserved storage, component store analysis, small crash dumps, temp folder location and WSL moves under Save space; disk health in the space map; Storage Sense status under Reminders; FAQ on why there is no registry cleaner.
 
 ## 2.7
 - **空间地图的项目复选框**：每一行前面有复选框（和资源管理器「查看」里的「项目复选框」一样），只有点方框才选中或取消（鼠标移到方框上会变成手形、方框变蓝），单击行的其他地方不会选中，双击文件夹照常往里点；Shift 点是从上次勾的那一行勾到这里，Esc 全部取消，左下角「全选」。右键点一行，菜单只对这一行起作用。在设置里关掉复选框，就照 Windows 列表原来的做法。
