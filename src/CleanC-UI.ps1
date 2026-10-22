@@ -2539,9 +2539,10 @@ public class StartRow : INotifyPropertyChanged {
     public bool Ours { get; set; }          // 本工具自己建的任务
     private bool _on = true;
     public bool Enabled { get { return _on; } set { _on = value; Raise("Enabled"); Raise("StatusText"); Raise("StatusBrush"); Raise("ToggleText"); } }
-    public string StatusText { get { return _on ? L10n.T("已启用") : L10n.T("已禁用"); } }
-    public string StatusBrush { get { return Theme.F(_on ? "#248A3D" : "#86868B"); } }
-    public string ToggleText { get { return _on ? L10n.T("禁用") : L10n.T("启用"); } }
+    public string Size { get; set; }
+    public string StatusText { get { if (Kind == "leftover") return Size ?? ""; return _on ? L10n.T("已启用") : L10n.T("已禁用"); } }
+    public string StatusBrush { get { return Theme.F(Kind == "leftover" ? "#1D1D1F" : (_on ? "#248A3D" : "#86868B")); } }
+    public string ToggleText { get { if (Kind == "leftover") return L10n.T("移到回收站"); return _on ? L10n.T("禁用") : L10n.T("启用"); } }
     void Raise(string n) { PropertyChangedEventHandler h = PropertyChanged; if (h != null) h(this, new PropertyChangedEventArgs(n)); }
     public event PropertyChangedEventHandler PropertyChanged;
 }
@@ -2602,6 +2603,7 @@ public class VdiskRow : INotifyPropertyChanged {
     public string Name { get; set; }
     public string Path { get; set; }
     public string Kind { get; set; }
+    public string Distro { get; set; }
     public string Note { get; set; }
     public bool CanCompact { get; set; }
     public bool CanMove { get; set; }
@@ -2943,6 +2945,7 @@ $script:cacheLib = @(
     'Apple 设备系统更新包 | %PROGRAMDATA%\Apple\AMPDevicesAgent\*-Temporary-Files;%APPDATA%\Apple Computer\iTunes\*Software Updates | 给 iPhone/iPad 升级时下载的固件，装完就没用了'
     'Dell 更新程序缓存 | %PROGRAMDATA%\Dell\DTP;%PROGRAMDATA%\Dell\SupportAssist | 戴尔驱动更新工具下载的安装包'
     '罗技 Options+ 缓存 | %PROGRAMDATA%\LogiOptionsPlus\cache;%PROGRAMDATA%\LogiOptionsPlus\depots | 罗技驱动的更新包缓存'
+    '驱动安装包解压残留 | %SYSTEMDRIVE%\NVIDIA;%SYSTEMDRIVE%\AMD;%SYSTEMDRIVE%\Intel;%SYSTEMDRIVE%\SWSetup;%SYSTEMDRIVE%\Drivers;%SYSTEMDRIVE%\Dell\Drivers | 显卡驱动和品牌机驱动安装时解压到 C 盘根目录的文件，装完就没用了。以后要重装驱动再下载一次即可 | confirm'
     'NI 安装包缓存 | %PROGRAMDATA%\National Instruments\MDF\ProductCache;%PROGRAMDATA%\National Instruments\NI Package Manager\packages | LabVIEW 等 NI 软件的安装媒体缓存。软件本身不受影响；以后修复或重装时需重新下载 | confirm'
     'NuGet 全局包目录 | %USERPROFILE%\.nuget\packages | .NET 项目引用的包都放在这里。删了以后打开项目要联网重新还原（Visual Studio 会自动做，但要等一会儿） | confirm'
     'Gradle 依赖缓存 | %USERPROFILE%\.gradle\caches | Android Studio 和 Gradle 项目下载的依赖。删了下次构建要重新下载，国内网络可能很慢 | confirm'
@@ -3026,6 +3029,199 @@ function Get-InstallerOrphans {
     return $out
 }
 
+# ---------- 开始菜单里失效的快捷方式（只看公共和当前用户的开始菜单，不碰桌面）----------
+function Get-BrokenShortcuts {
+    $out = @()
+    $sh = $null
+    try { $sh = New-Object -ComObject WScript.Shell } catch { return @() }
+    foreach ($base in @("$env:ProgramData\Microsoft\Windows\Start Menu", "$env:APPDATA\Microsoft\Windows\Start Menu")) {
+        foreach ($f in @(Get-ChildItem -LiteralPath $base -Filter '*.lnk' -File -Recurse -Force -ErrorAction SilentlyContinue)) {
+            try {
+                $lnk = $sh.CreateShortcut($f.FullName)
+                $t = [string]$lnk.TargetPath
+                if (-not $t) { continue }                                   # 应用商店、MSI 广告式快捷方式没有普通目标，不判断
+                $t = [Environment]::ExpandEnvironmentVariables($t)
+                if ($t -notmatch '^[A-Za-z]:\\') { continue }               # 网络路径、特殊目标不判断
+                $drv = $t.Substring(0, 3)
+                if (-not (Test-Path -LiteralPath $drv)) { continue }       # 盘没插着，不算失效
+                if (Test-Path -LiteralPath $t) { continue }
+                $out += $f
+            } catch {}
+        }
+    }
+    return $out
+}
+# ---------- OneDrive：本地留着副本的文件改成「仅在线」，文件还在云端，本地不占空间 ----------
+function Get-OneDriveFolders {
+    $out = @()
+    foreach ($k in @(Get-ChildItem 'HKCU:\Software\Microsoft\OneDrive\Accounts' -ErrorAction SilentlyContinue)) {
+        $p = [string](Get-ItemProperty -LiteralPath $k.PSPath -ErrorAction SilentlyContinue).UserFolder
+        if ($p -and (Test-Path -LiteralPath $p) -and ($out -notcontains $p.TrimEnd('\'))) { $out += $p.TrimEnd('\') }
+    }
+    if ($env:OneDrive -and (Test-Path -LiteralPath $env:OneDrive) -and ($out -notcontains $env:OneDrive.TrimEnd('\'))) { $out += $env:OneDrive.TrimEnd('\') }
+    return $out
+}
+# 本地有副本 = 没有「访问时下载」属性（0x400000）；pinned（0x80000）= 用户设了「始终保留在此设备」，不动
+function Get-OneDriveInfo {
+    $r = @{ Folders = @(Get-OneDriveFolders); Files = 0; Local = [double]0; Pinned = [double]0; Online = [double]0; Running = $false }
+    try { $r.Running = @(Get-Process -Name OneDrive -ErrorAction SilentlyContinue).Count -gt 0 } catch {}
+    foreach ($d in $r.Folders) {
+        foreach ($f in @([IO.Directory]::EnumerateFiles($d, '*', [IO.SearchOption]::AllDirectories))) {
+            if (Stopping) { break }
+            try {
+                $fi = New-Object IO.FileInfo $f
+                $a = [int]$fi.Attributes
+                if ($a -band 0x400) { continue }                            # 链接
+                $r.Files++
+                if ($a -band 0x400000) { $r.Online += $fi.Length }
+                elseif ($a -band 0x80000) { $r.Pinned += $fi.Length }
+                else { $r.Local += $fi.Length }
+            } catch {}
+        }
+    }
+    return $r
+}
+function Invoke-OneDriveFree($res) {
+    $res.Done = 0; $res.Bytes = [double]0; $res.Fail = 0
+    foreach ($d in (Get-OneDriveFolders)) {
+        foreach ($f in @([IO.Directory]::EnumerateFiles($d, '*', [IO.SearchOption]::AllDirectories))) {
+            if (Stopping) { return }
+            try {
+                $fi = New-Object IO.FileInfo $f
+                $a = [int]$fi.Attributes
+                if (($a -band 0x400) -or ($a -band 0x400000) -or ($a -band 0x80000)) { continue }
+                [IO.File]::SetAttributes($f, [IO.FileAttributes]($a -bor 0x100000))   # +U：告诉 OneDrive 这个文件只要留在云端
+                $res.Done++; $res.Bytes += $fi.Length
+            } catch { $res.Fail++ }
+        }
+    }
+}
+# ---------- Windows 保留的存储（给更新预留的几个 GB）----------
+function Get-ReservedStorageState {
+    try { $s = Get-WindowsReservedStorageState -ErrorAction Stop; return [string]$s.ReservedStorageState } catch {}
+    try {
+        $o = (& "$sys32\Dism.exe" /Online /Get-ReservedStorageState 2>&1 | Out-String)
+        if ($o -match '(?i)disabled|已禁用|未启用') { return 'Disabled' }
+        if ($o -match '(?i)enabled|已启用') { return 'Enabled' }
+    } catch {}
+    return ''
+}
+function Set-ReservedStorage([bool]$on) {
+    try { Set-WindowsReservedStorageState -State $(if ($on) { 'Enabled' } else { 'Disabled' }) -ErrorAction Stop | Out-Null; return '' }
+    catch { $m = $_.Exception.Message }
+    $o = (& "$sys32\Dism.exe" /Online /Set-ReservedStorageState /State:$(if ($on) { 'Enabled' } else { 'Disabled' }) 2>&1 | Out-String)
+    if ($LASTEXITCODE -eq 0) { return '' }
+    return ($m + "`n" + $o).Trim()
+}
+# ---------- 组件存储（WinSxS）分析：DISM 报告实际大小、可回收多少、建不建议清理。各行的顺序固定，按顺序取值，不依赖语言 ----------
+function Get-ComponentStoreInfo {
+    $o = (& "$sys32\Dism.exe" /Online /Cleanup-Image /AnalyzeComponentStore 2>&1 | Out-String)
+    return (ConvertFrom-DismAnalyze $o)
+}
+function ConvertFrom-DismAnalyze([string]$o) {
+    $vals = @()
+    foreach ($l in ($o -split "`r?`n")) {
+        $i = $l.IndexOf(':')
+        if ($i -gt 0 -and $l.Trim() -notmatch '^(Deployment|Version|Image Version|映像版本|部署映像)' -and $l -notmatch '^\s*$') { $vals += $l.Substring($i + 1).Trim() }
+    }
+    # 顺序：资源管理器报告的大小、实际大小、与 Windows 共享、备份和已禁用的功能、缓存和临时数据、上次清理日期、可回收的包、是否建议清理
+    if ($vals.Count -lt 8) { return @{ Ok = $false; Out = $o } }
+    $n = $vals.Count
+    return @{ Ok = $true; Reported = $vals[$n - 8]; Actual = $vals[$n - 7]; Shared = $vals[$n - 6]; Backups = $vals[$n - 5]; Cache = $vals[$n - 4]; LastCleanup = $vals[$n - 3]; Reclaimable = $vals[$n - 2]; Recommended = $vals[$n - 1]; Out = $o }
+}
+# ---------- 蓝屏转储的类型：0 不保存  1 完整内存  2 内核  3 小转储(256 KB)  7 自动 ----------
+function Get-CrashDumpMode { try { return [int](Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl' -ErrorAction Stop).CrashDumpEnabled } catch { return -1 } }
+function Set-CrashDumpMode([int]$mode) { Set-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl' -Name CrashDumpEnabled -Value $mode -Type DWord -ErrorAction Stop }
+# ---------- 当前用户的临时文件夹位置（TEMP / TMP 环境变量）----------
+function Get-UserTemp { try { return [string](Get-ItemProperty 'HKCU:\Environment' -ErrorAction Stop).TEMP } catch { return '' } }
+function Set-UserTemp([string]$path) {
+    $v = if ($path) { $path } else { '%USERPROFILE%\AppData\Local\Temp' }
+    foreach ($n in 'TEMP', 'TMP') { Set-ItemProperty 'HKCU:\Environment' -Name $n -Value $v -Type ExpandString -ErrorAction Stop }
+    # 通知正在运行的程序环境变量变了（新开的程序才会用新位置）
+    try {
+        if (-not ('EnvNotify' -as [type])) { Add-Type -Namespace Win32 -Name EnvNotify -MemberDefinition '[DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)] public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);' }
+        $r = [UIntPtr]::Zero; [void][Win32.EnvNotify]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, 'Environment', 2, 2000, [ref]$r)
+    } catch {}
+}
+# ---------- 磁盘健康：SSD 的磨损、温度、通电时间（只读）----------
+function Get-DiskHealth([string]$drive) {
+    try {
+        $letter = $drive.Substring(0, 1)
+        $part = @(Get-Partition -DriveLetter $letter -ErrorAction Stop)[0]
+        if (-not $part) { return '' }
+        $pd = @(Get-PhysicalDisk -ErrorAction Stop | Where-Object { [string]$_.DeviceId -eq [string]$part.DiskNumber })[0]
+        if (-not $pd) { return '' }
+        $parts = @()
+        $parts += ([string]$pd.FriendlyName).Trim()
+        $mt = [string]$pd.MediaType; if ($mt -and $mt -ne 'Unspecified') { $parts += $mt }
+        $hs = [string]$pd.HealthStatus; if ($hs) { $parts += $(if ($hs -eq 'Healthy') { (T '健康状态正常') } else { ((T "健康状态：{0}") -f $hs) }) }
+        try {
+            $rc = $pd | Get-StorageReliabilityCounter -ErrorAction Stop
+            if ($rc) {
+                if ($rc.Wear -ne $null -and [int]$rc.Wear -ge 0) { $parts += ((T "已磨损 {0}%") -f [int]$rc.Wear) }
+                if ($rc.Temperature -and [int]$rc.Temperature -gt 0) { $parts += ((T "{0} °C") -f [int]$rc.Temperature) }
+                if ($rc.PowerOnHours -and [long]$rc.PowerOnHours -gt 0) { $parts += ((T "通电 {0:N0} 小时") -f [long]$rc.PowerOnHours) }
+                if ($rc.ReadErrorsTotal -and [long]$rc.ReadErrorsTotal -gt 0) { $parts += ((T "读错误 {0:N0} 次") -f [long]$rc.ReadErrorsTotal) }
+            }
+        } catch {}
+        return ($parts -join ' · ')
+    } catch { return '' }
+}
+# ---------- Windows 自带的「存储感知」开没开 ----------
+function Get-StorageSenseOn { try { return ([int](Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy' -ErrorAction Stop).'01' -eq 1) } catch { return $false } }
+# ---------- 已卸载软件可能留下的文件夹：名字对不上任何已装软件、没有程序在用、很久没动过 ----------
+function Get-OrphanFolders($apps) {
+    $norm = { param($x) (([string]$x).ToLowerInvariant() -replace '[^\p{L}\p{N}]', '') }
+    $tokens = New-Object System.Collections.Generic.List[string]
+    $locs = @()
+    foreach ($a in @($apps)) {
+        foreach ($n in @($a.Name, $a.Publisher)) { $t = & $norm $n; if ($t.Length -ge 3) { $tokens.Add($t) } }
+        $l = ([string]$a.Location).TrimEnd('\'); if ($l -and $l.Length -gt 3) { $locs += $l }
+    }
+    $procDirs = @()
+    foreach ($p in @(Get-Process -ErrorAction SilentlyContinue)) { try { if ($p.Path) { $procDirs += (Split-Path $p.Path -Parent) } } catch {} }
+    $procDirs = @($procDirs | Select-Object -Unique)
+    # Windows 和常见组件自己的文件夹，以及发行商的总文件夹：不当残留
+    $known = @('Microsoft','Packages','Temp','Comms','ConnectedDevicesPlatform','D3DSCache','PeerDistRepub','Publishers','VirtualStore','PlaceholderTileLogoFolder','TileDataLayer','CrashDumps','IconCache','OneDrive','Programs','Apps',
+        'Application Data','History','Temporary Internet Files','Microsoft Help','Intel','NVIDIA','AMD','NVIDIA Corporation','Package Cache','ssh','USOPrivate','USOShared','SoftwareDistribution','Windows','WindowsHolographicDevices',
+        'Diagnostics','Desktop','Start Menu','Templates','Documents','Favorites','DSS','dotnet','Common Files','WindowsApps','ModifiableWindowsApps','Windows Defender','Windows Defender Advanced Threat Protection','Windows Mail',
+        'Windows Media Player','Windows Multimedia Platform','Windows NT','Windows Photo Viewer','Windows Portable Devices','Windows Security','Windows Sidebar','Internet Explorer','MSBuild','Reference Assemblies','Uninstall Information',
+        'regid.1991-06.com.microsoft','Tencent','Google','Adobe','Apple','Mozilla','Oracle','Java','Python','Steam','Autodesk','Realtek','Logitech','Razer','Samsung','Lenovo','Dell','HP','ASUS','Acer','Huawei','Xiaomi','JetBrains','Unity','Epic Games',
+        'CleanC','cache','Cache','Logs','log','logs','Local','LocalLow','Roaming','Default','Public','All Users','Default User','.cache','.config','.local','go-build','npm-cache','pip','uv','Yarn','NuGet','pnpm','Docker','docker','WSL','Lxss',
+        'Spotify','Discord','slack','Code','Cursor','Zoom','Notion','Figma','Postman','Obsidian','Typora','Telegram Desktop','ViberPC','Signal','LINE','Kakao','DingTalk','DingDing','Feishu','LarkShell','WXWork','WeMeet','xwechat_files','WeChat Files','Tencent Files','CDriveMoved')
+    $bases = @($env:LOCALAPPDATA, $env:APPDATA, "$env:USERPROFILE\AppData\LocalLow", "$env:SystemDrive\ProgramData", "$env:SystemDrive\Program Files", "$env:SystemDrive\Program Files (x86)", "$env:LOCALAPPDATA\Programs")
+    $cut = (Get-Date).AddDays(-30)
+    $out = @()
+    foreach ($b in $bases) {
+        foreach ($d in @(Get-ChildItem -LiteralPath $b -Directory -Force -ErrorAction SilentlyContinue)) {
+            if (Stopping) { return $out }
+            $name = $d.Name
+            if ($known -contains $name -or $name.StartsWith('.') -or $name -like 'Microsoft*' -or $name -like 'Windows*' -or $name -like '{*}') { continue }
+            if (IsLink $d.FullName) { continue }
+            if ($d.LastWriteTime -gt $cut) { continue }
+            $nn = & $norm $name
+            if ($nn.Length -lt 3) { continue }
+            $hit = $false
+            foreach ($t in $tokens) { if ($nn -eq $t -or ($nn.Length -ge 4 -and $t.Contains($nn)) -or ($t.Length -ge 4 -and $nn.Contains($t))) { $hit = $true; break } }
+            if ($hit) { continue }
+            $full = $d.FullName.TrimEnd('\')
+            foreach ($l in $locs) { if ($l -ieq $full -or $l.StartsWith("$full\", [StringComparison]::OrdinalIgnoreCase) -or $full.StartsWith("$l\", [StringComparison]::OrdinalIgnoreCase)) { $hit = $true; break } }
+            if ($hit) { continue }
+            foreach ($pdir in $procDirs) { if ($pdir -ieq $full -or $pdir.StartsWith("$full\", [StringComparison]::OrdinalIgnoreCase)) { $hit = $true; break } }
+            if ($hit) { continue }
+            if (Get-DeleteBlock $full -Leftover) { continue }
+            # 里面最近改过的文件也算在用（LastWriteTime 只看文件夹本身）
+            $newest = $d.LastWriteTime
+            try { foreach ($f in @(Get-ChildItem -LiteralPath $full -Recurse -File -Force -ErrorAction SilentlyContinue | Select-Object -First 400)) { if ($f.LastWriteTime -gt $newest) { $newest = $f.LastWriteTime } } } catch {}
+            if ($newest -gt $cut) { continue }
+            $bytes = [double](DirBytes $full)
+            if ($bytes -lt 1MB) { continue }
+            $out += @{ Path = $full; Bytes = $bytes; Modified = $newest }
+        }
+    }
+    return $out
+}
+
 # Kind: cache = 缓存类(删除/跳过)   action = 操作类(执行/跳过)   move = 只能搬(搬到其他盘/跳过)   flex = 可搬可删
 function Get-Catalog {
     $docs = [Environment]::GetFolderPath('MyDocuments')
@@ -3066,6 +3262,12 @@ function Get-Catalog {
         @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T 'Windows Installer 孤儿安装包'); Note=(T 'C:\Windows\Installer 里没有任何已装软件和补丁再引用的安装包（.msi / .msp），多半是软件升级、卸载后留下的。判断方法和 PatchCleaner 一样。删了以后，万一哪个软件修复或卸载时提示找不到安装包，重新下载安装一次即可')
            Size={ $s = [double]0; foreach ($f in (Get-InstallerOrphans)) { $s += $f.Length }; $s }
            Act ={ $n = 0; $b = [double]0; foreach ($f in (Get-InstallerOrphans)) { try { Remove-Item -LiteralPath $f.FullName -Force -ErrorAction Stop; $n++; $b += $f.Length } catch { Log ((T "  没删掉：{0}（{1}）") -f $f.FullName, $_.Exception.Message) } }; Log ((T "  Windows Installer 孤儿安装包：删了 {0} 个，{1}") -f $n, (GB $b)) } }
+        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T '开始菜单里失效的快捷方式'); Note=(T '指向的程序已经不在了的快捷方式（只看开始菜单，不碰桌面）。目标在没插着的硬盘上的不算。不占什么空间，只是清爽')
+           Size={ $s = [double]0; foreach ($f in (Get-BrokenShortcuts)) { $s += $f.Length }; $s }
+           Act ={ $n = 0; foreach ($f in (Get-BrokenShortcuts)) { try { Remove-Item -LiteralPath $f.FullName -Force -ErrorAction Stop; $n++; OpLog '删除' (T '失效的快捷方式') $f.FullName '' } catch {} }; Log ((T "  删了 {0} 个失效的快捷方式") -f $n) } }
+        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T 'Windows 事件日志'); Note=(T '系统、应用程序、安全等日志，排查问题的工程师会看。清空后就查不到以前的记录了，不确定就跳过')
+           Size={ $s = [double]0; foreach ($f in @(Get-ChildItem -LiteralPath "$env:SystemRoot\System32\winevt\Logs" -Filter '*.evtx' -File -Force -ErrorAction SilentlyContinue)) { $s += $f.Length }; $s }
+           Act ={ $n = 0; foreach ($l in @(& "$sys32\wevtutil.exe" el 2>$null)) { if (Stopping) { break }; & "$sys32\wevtutil.exe" cl "$l" 2>$null | Out-Null; if ($LASTEXITCODE -eq 0) { $n++ } }; Log ((T "  清空了 {0} 个事件日志") -f $n) } }
         @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def=(T '跳过'); One=(T '执行'); N=(T 'WinSxS 组件清理 (DISM)'); Note=(T '清掉系统更新替换下来的旧组件，通常能省 2 到 10 GB。耗时 10 到 20 分钟，完成后建议重启'); Last=$true
            Size={ -1 }
            Act ={ & "$env:SystemRoot\System32\Dism.exe" /Online /Cleanup-Image /StartComponentCleanup /ResetBase | Out-Null }; Slow=$true }
@@ -3984,8 +4186,8 @@ function Get-VDisks {
         if (-not $p -or -not $p.BasePath -or ([string]$p.DistributionName) -like 'docker-desktop*') { continue }
         $base = ([string]$p.BasePath) -replace '^\\\\\?\\', ''
         $vh = Join-Path $base 'ext4.vhdx'
-        if (Test-Path -LiteralPath $vh) { [void]$out.Add(@{ Name = ((T "WSL：{0}") -f $($p.DistributionName)); Path = $vh; Kind = 'wsl'; Compact = $true; Move = $false
-            Note = ((T "Linux 子系统的虚拟磁盘。在 Linux 里删了文件，这个文件不会自动变小，压缩一下就能把空间还给 Windows。要换位置可以用命令 wsl --manage {0} --move D:\WSL") -f $($p.DistributionName)) }) }
+        if (Test-Path -LiteralPath $vh) { [void]$out.Add(@{ Name = ((T "WSL：{0}") -f $($p.DistributionName)); Path = $vh; Kind = 'wsl'; Compact = $true; Move = $true; Distro = [string]$p.DistributionName
+            Note = (T 'Linux 子系统的虚拟磁盘。在 Linux 里删了文件，这个文件不会自动变小，压缩一下就能把空间还给 Windows。也可以整个搬到其他盘（用 WSL 自己的 wsl --manage --move，搬完照常使用）') }) }
     }
     foreach ($vh in @("$env:LOCALAPPDATA\Docker\wsl\data\ext4.vhdx", "$env:LOCALAPPDATA\Docker\wsl\disk\docker_data.vhdx", "$env:LOCALAPPDATA\Docker\wsl\main\ext4.vhdx", "$env:LOCALAPPDATA\Docker\wsl\distro\ext4.vhdx")) {
         if (Test-Path -LiteralPath $vh) { [void]$out.Add(@{ Name = (T 'Docker Desktop 数据盘'); Path = $vh; Kind = 'docker'; Compact = $true; Move = $false
@@ -4003,6 +4205,20 @@ function Get-VDisks {
         }
     }
     return ,$out
+}
+# WSL 发行版搬到其他盘：wsl --manage <名字> --move <位置>（WSL 2.5 以后才有；旧的提示先 wsl --update）
+function Invoke-WslMove([string]$distro, [string]$dest, $res) {
+    $res.Ok = $false; $res.Out = ''
+    SetP @{ Detail = (T '先关闭这个发行版（wsl --terminate）') }
+    & "$sys32\wsl.exe" --terminate $distro 2>$null | Out-Null
+    Start-Sleep -Seconds 2
+    New-Item -ItemType Directory -Path $dest -Force | Out-Null
+    SetP @{ Detail = ((T "搬到 {0}（WSL 自己复制，可能要几分钟）") -f $dest) }
+    $o = (& "$sys32\wsl.exe" --manage $distro --move $dest 2>&1 | Out-String)
+    $o = ($o -replace "`0", '').Trim()
+    $res.Out = $o
+    if ($LASTEXITCODE -eq 0) { $res.Ok = $true }
+    elseif ($o -match '(?i)--move|manage|unknown|无效|未知|不正确') { $res.Old = $true }
 }
 function Invoke-CompactVdisk([string]$path, [string]$kind, $res) {
     $res.Ok = $false
@@ -4563,6 +4779,120 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+当前：已开启（通常占 7 GB 左右）	Now: on (usually about 7 GB)
+当前：已关闭	Now: off
+当前：这个版本的 Windows 没有这项（Windows 10 1903 以后才有）	Now: not available on this version of Windows (Windows 10 1903 or later)
+当前：	Now: 
+不保存	none
+完整内存转储（和内存一样大）	complete memory dump (as large as RAM)
+内核内存转储	kernel memory dump
+小内存转储（256 KB）	small memory dump (256 KB)
+自动（通常是内核转储，可能有几 GB）	automatic (usually a kernel dump, can be several GB)
+读不到	unknown
+（注销再登录后生效）	 (takes effect after you sign out and back in)
+系统默认	Windows default
+这台电脑上没有登录 OneDrive。	OneDrive is not signed in on this PC.
+正在统计 OneDrive 文件夹里有多少本地副本…	Measuring the local copies in the OneDrive folder…
+统计 OneDrive 本地副本	Measuring OneDrive local copies
+没统计到。	Could not measure.
+当前：{0}，{1:N0} 个文件；本地有副本的 {2}，已经是仅在线的 {3}	Now: {0}, {1:N0} files; {2} with a local copy, {3} already online-only
+；设了「始终保留在此设备」的 {0}（不动）	; {0} marked "Always keep on this device" (left alone)
+。OneDrive 现在没有运行，改了也要等它启动后才释放	. OneDrive is not running right now; space is freed only after it starts
+把 OneDrive 里的本地副本都改成仅在线？	Make all local copies in OneDrive online-only?
+本地有副本的 {0} 会改成「仅在线」：文件还在云端，资源管理器里照常显示，打开时自动下载。什么都不删。你设了「始终保留在此设备」的文件不动。\n\n改完由 OneDrive 自己在后台释放空间，要等它同步一会儿；断网时打不开这些文件。	{0} of files with a local copy will become "online-only": they stay in the cloud, still show in File Explorer and download when opened. Nothing is deleted. Files you marked "Always keep on this device" are left alone.\n\nOneDrive then frees the space in the background, which takes a while; these files can't be opened while offline.
+改成仅在线	Make online-only
+OneDrive 文件改成仅在线	Make OneDrive files online-only
+重新开启保留的存储？	Turn reserved storage back on?
+关闭保留的存储？	Turn off reserved storage?
+Windows 会重新预留 7 GB 左右给系统更新用。	Windows will again reserve about 7 GB for updates.
+这块空间会还给你。以后更新时 Windows 临时借用空闲空间；C 盘很满时更新可能提示空间不够，再开回来就好。有更新正在安装时改不了。	The space is given back to you. Windows then borrows free space temporarily when updating; if C: is very full, an update may complain about space, and you can turn it back on. It can't be changed while an update is installing.
+开启保留的存储	Turn on reserved storage
+关闭保留的存储	Turn off reserved storage
+保留的存储：已开启	Reserved storage: on
+保留的存储：已关闭	Reserved storage: off
+正在分析（DISM，要一两分钟）…	Analyzing (DISM, a minute or two)…
+分析组件存储	Analyzing the component store
+蓝屏时只保存小转储？	Save only a small dump on a blue screen?
+恢复自动转储？	Restore automatic dumps?
+以后蓝屏只保存 256 KB 的小内存转储（C:\\Windows\\Minidump），够看出是哪个驱动出的问题，不再生成几个 GB 的 MEMORY.DMP。	Blue screens will save only a 256 KB small memory dump (C:\\Windows\\Minidump), enough to tell which driver failed, and no longer a MEMORY.DMP of several GB.
+恢复 Windows 默认的「自动」：蓝屏时可能生成和内存差不多大的 MEMORY.DMP。	Restores the Windows default "Automatic": a blue screen may write a MEMORY.DMP about as large as RAM.
+蓝屏转储类型	Crash dump type
+小内存转储	Small memory dump
+自动	Automatic
+把临时文件夹改到 {0}？	Move the temp folder to {0}?
+当前用户的 TEMP 和 TMP 会指向 {0}。以后新打开的程序把临时文件放在那里，注销再登录（或重启）后对所有程序生效。{1} 必须是一直插着的本机硬盘；个别安装程序对 C 盘以外的临时文件夹不兼容，遇到就点「恢复默认」。	TEMP and TMP for the current user will point to {0}. Newly started programs put their temporary files there; it applies to all programs after you sign out and back in (or restart). {1} must be a local drive that stays connected; a few installers don't work with a temp folder outside C:, and "Restore default" fixes that.
+临时文件夹位置	Temp folder location
+临时文件夹恢复默认？	Restore the default temp folder?
+改回 C 盘用户目录里的 AppData\\Local\\Temp。注销再登录后对所有程序生效。	Changes it back to AppData\\Local\\Temp in your profile on C:. Applies to all programs after you sign out and back in.
+把 WSL 发行版「{0}」搬到其他盘？	Move the WSL distribution "{0}" to another drive?
+用 WSL 自己的命令（wsl --manage {0} --move）把它搬到 {1}，现在 {2}。搬之前会先关闭这个发行版，里面正在运行的程序会被结束，请先保存。搬完照常用 wsl 打开，不用改任何设置。需要 WSL 2.5 以后的版本（wsl --update 可以更新）。	Uses WSL's own command (wsl --manage {0} --move) to move it to {1}; it is {2} now. The distribution is shut down first, so programs running inside it are ended; save your work first. Afterwards open it with wsl as usual, with no settings to change. Needs WSL 2.5 or later (wsl --update updates it).
+搬到其他盘：WSL {0}	Move to another drive: WSL {0}
+{0} 个可能是残留的文件夹，共 {1}。只是猜测：名字对不上任何已装软件、没有程序在用、一个月没动过	{0} folders that may be leftovers, {1} in total. This is a guess: the name matches no installed app, no program is using them, and nothing changed for a month
+没找到像是残留的文件夹	No folders that look like leftovers
+正在找已卸载软件可能留下的文件夹（要看一遍软件数据目录，几十秒）…	Looking for folders left behind by uninstalled apps (goes through the app data folders, takes a while)…
+查找残留文件夹	Looking for leftover folders
+{0} · 最后改动 {1:yyyy-MM-dd}	{0} · last changed {1:yyyy-MM-dd}
+把「{0}」移到回收站？	Move "{0}" to the Recycle Bin?
+{0}（{1}）。这只是猜测：名字对不上任何已装软件、没有程序在用、一个月没动过。先点「打开位置」看一眼里面是什么。移到回收站后还能恢复。	{0} ({1}). This is only a guess: the name matches no installed app, no program is using it, and nothing changed for a month. Click "Open location" first to see what is inside. It can be restored from the Recycle Bin.
+我看过了，这是已卸载软件留下的，删除不会给我带来损失。	I have looked; this was left by an uninstalled app, and deleting it won't cause me any loss.
+不能删	Can't delete
+残留文件夹：移到回收站	Leftover folder: moved to the Recycle Bin
+残留文件夹已移到回收站：{0}	Leftover folder moved to the Recycle Bin: {0}
+没删掉	Not deleted
+可能有程序正在用里面的文件。	A program may be using files inside it.
+Windows 自带的「存储感知」现在是开着的：它也会定期清临时文件和回收站，和这里的自动清理不冲突，只是会各做一遍。	Windows' own Storage Sense is on: it also cleans temporary files and the Recycle Bin on a schedule. It doesn't conflict with the cleanup here; both simply run.
+Windows 自带的「存储感知」现在是关着的（在 Windows 设置 → 系统 → 存储里）。	Windows' own Storage Sense is off (Windows Settings → System → Storage).
+已标记为仅在线	Marked as online-only
+{0} 个文件（{1}）已改成仅在线{2}。OneDrive 会在后台释放本地空间，要等它同步一会儿。	{0} files ({1}) are now online-only{2}. OneDrive frees the local space in the background; give it a while to sync.
+，{0} 个没改成（可能正被占用）	, {0} could not be changed (possibly in use)
+建议清理	cleanup recommended
+不需要清理	no cleanup needed
+当前：资源管理器显示 {0}，实际 {1}（其中和系统共用的 {2}），可回收的旧组件 {3} 个，上次清理 {4}。Windows 的判断：{5}。	Now: File Explorer shows {0}, actual size {1} ({2} of it shared with Windows), {3} reclaimable old packages, last cleanup {4}. Windows' verdict: {5}.
+没分析成。	Analysis failed.
+已搬	Moved
+WSL 发行版已搬到其他盘	WSL distribution moved
+照常用 wsl 打开即可。	Open it with wsl as usual.
+WSL 版本太旧	WSL is too old
+这个 WSL 还没有 --move 命令。在终端里运行 wsl --update 更新 WSL 后再试。\n\n{0}	This WSL doesn't have the --move command yet. Run wsl --update in a terminal, then try again.\n\n{0}
+健康状态正常	healthy
+健康状态：{0}	health: {0}
+已磨损 {0}%	{0}% worn
+{0} °C	{0} °C
+通电 {0:N0} 小时	{0:N0} hours powered on
+读错误 {0:N0} 次	{0:N0} read errors
+开始菜单里失效的快捷方式	Broken Start menu shortcuts
+指向的程序已经不在了的快捷方式（只看开始菜单，不碰桌面）。目标在没插着的硬盘上的不算。不占什么空间，只是清爽	Shortcuts whose program no longer exists (Start menu only, the desktop is left alone). Targets on a drive that isn't connected don't count. Takes no space; just tidier
+失效的快捷方式	Broken shortcut
+  删了 {0} 个失效的快捷方式	  Deleted {0} broken shortcuts
+Windows 事件日志	Windows event logs
+系统、应用程序、安全等日志，排查问题的工程师会看。清空后就查不到以前的记录了，不确定就跳过	System, application, security and other logs that engineers read when investigating problems. Once cleared, earlier records are gone; skip it if unsure
+  清空了 {0} 个事件日志	  Cleared {0} event logs
+Linux 子系统的虚拟磁盘。在 Linux 里删了文件，这个文件不会自动变小，压缩一下就能把空间还给 Windows。也可以整个搬到其他盘（用 WSL 自己的 wsl --manage --move，搬完照常使用）	The virtual disk of the Linux subsystem. Deleting files inside Linux doesn't shrink it; compacting gives the space back to Windows. It can also be moved to another drive as a whole (with WSL's own wsl --manage --move; it works as before afterwards)
+先关闭这个发行版（wsl --terminate）	Shutting down the distribution first (wsl --terminate)
+搬到 {0}（WSL 自己复制，可能要几分钟）	Moving to {0} (WSL copies it; may take a few minutes)
+逐个文件标记	Marking files one by one
+{0} 个文件，{1}	{0} files, {1}
+WSL 发行版搬到其他盘	Move WSL distribution to another drive
+去清理	Go to cleanup
+恢复自动	Restore automatic
+恢复默认	Restore default
+改成小转储	Use small dumps
+重新开启	Turn back on
+残留文件夹	Leftovers
+C:\\Windows\\WinSxS 看着很大，其中很多文件和 System32 是同一份（硬链接），真正能清的是更新替换下来的旧组件。Windows 自己能算出可回收多少、建不建议清理；清理在「清理 C 盘」里的「WinSxS 组件清理 (DISM)」。	C:\\Windows\\WinSxS looks huge, but many of its files are the same files as in System32 (hard links); what can really go is the old components replaced by updates. Windows can work out how much is reclaimable and whether cleanup is advisable; the cleanup itself is "WinSxS component cleanup (DISM)" on the "Clean up C:" page.
+OneDrive 文件改成「仅在线」	Make OneDrive files "online-only"
+Windows 保留的存储	Windows reserved storage
+Windows 给系统更新预留的空间，通常 7 GB 左右，空间明细里的「其他」有一部分就是它。关掉以后这块空间还给你，更新时 Windows 改为临时借用空闲空间；C 盘很满时更新可能提示空间不够，再开回来就好。有更新正在安装时改不了。	Space Windows sets aside for updates, usually about 7 GB; part of "the rest" in the space breakdown is this. Turning it off gives the space back, and Windows borrows free space temporarily when updating; if C: is very full an update may complain about space, and you can turn it back on. It can't be changed while an update is installing.
+WSL、Docker、安卓模拟器、虚拟机的磁盘文件动辄几十 GB，而且在里面删了东西也不会自动变小。压缩能把空出来的部分还给 Windows；WSL 发行版和文件夹形式的可以整个搬到其他盘。	Disk files of WSL, Docker, Android emulators and virtual machines are often tens of GB, and deleting things inside them doesn't shrink them. Compacting gives the freed part back to Windows; WSL distributions and folder-based ones can be moved to another drive as a whole.
+临时文件夹的位置	Temp folder location
+各软件的临时文件默认放在 C 盘的用户目录里。可以改到其他盘，以后的临时文件就不占 C 盘了。改完要注销再登录（或重启）才对所有软件生效；个别安装程序对 C 盘以外的临时文件夹不兼容，遇到就点「恢复默认」。	By default every program's temporary files go into your profile on C:. You can move them to another drive so future temporary files don't take space on C:. Sign out and back in (or restart) for all programs to pick it up; a few installers don't work with a temp folder outside C:, and "Restore default" fixes that.
+同步过的文件本地都留着一份副本。改成「仅在线」后文件还在云端，资源管理器里照常显示，打开时才下载，本地不再占空间。什么都不删。你设了「始终保留在此设备」的文件不动；OneDrive 要开着才会真正释放。	Synced files keep a local copy. Once "online-only", they stay in the cloud, still show in File Explorer, download when opened and take no local space. Nothing is deleted. Files you marked "Always keep on this device" are left alone; OneDrive must be running for the space to be freed.
+点「分析」让 Windows 算一下实际多大、能清多少（要一两分钟）。	Click "Analyze" to let Windows work out the actual size and how much can be cleaned (a minute or two).
+组件存储（WinSxS）	Component store (WinSxS)
+蓝屏时 Windows 会把内存里的内容存成 C:\\Windows\\MEMORY.DMP，「自动」模式下可能和内存一样大，清掉了下次蓝屏又会生成。改成「小内存转储」只存 256 KB 的摘要，够看出是哪个驱动出的问题。随时可以恢复。	On a blue screen Windows writes the memory contents to C:\\Windows\\MEMORY.DMP, which in "Automatic" mode can be as large as RAM and comes back after the next blue screen. "Small memory dump" saves only a 256 KB summary, enough to tell which driver failed. It can be restored at any time.
+蓝屏时保存多大的转储	Crash dump size on a blue screen
+显卡驱动和品牌机驱动安装时解压到 C 盘根目录的文件，装完就没用了。以后要重装驱动再下载一次即可	Files that graphics and OEM driver installers unpack into the root of C:; useless once installed. Download the driver again if you ever need to reinstall it
+驱动安装包解压残留	Unpacked driver installers
 C 盘上有约 {0} 可以清理	About {0} on C: can be cleaned up
 临时文件、缓存和日志加起来超过了你设定的 {0} GB。打开腾挪 ClearC 清一清？\n（在工具的「自动提醒」页可以改界限或关掉这个提醒）	Temporary files, caches and logs add up to more than the {0} GB you set. Open ClearC to clean them up?\n(You can change the limit or turn off this reminder on the "Reminders" page.)
 {0} 个开机启动项，{1} 个已启用	{0} startup items, {1} enabled
@@ -5988,6 +6318,10 @@ $script:helpEnXaml = @'
                   <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Items that are slow to download or regenerate (the NuGet global packages folder, Gradle, Maven, JetBrains indexes, Unreal Engine cache and so on) are under "Needs confirmation" and skipped by default.</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Driver leftovers, broken shortcuts, event logs"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>All under "Needs confirmation" and skipped by default: installer files that graphics and OEM drivers unpack into the root of C:; Start menu shortcuts whose program no longer exists (the desktop is left alone); Windows event logs (engineers read them when investigating problems; skip if unsure).</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Orphaned Windows Installer packages"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>Under "Needs confirmation". Packages in C:\Windows\Installer that no installed app or patch refers to any more, often several GB, detected the same way PatchCleaner does. Skipped by default; read the description before selecting it.</Run></TextBlock>
                 </StackPanel>
@@ -6111,7 +6445,7 @@ $script:helpEnXaml = @'
               <StackPanel>
                 <Grid Margin="0,14,0,0">
                   <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="10"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                   <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource HelpTile}">
                     <StackPanel>
                       <TextBlock Style="{StaticResource HelpLead}" Text="System compression (CompactOS)"/>
@@ -6148,10 +6482,46 @@ $script:helpEnXaml = @'
                       <TextBlock Style="{StaticResource HelpBody}"><Run>WSL and Docker virtual disks don't shrink when you delete files inside them; compacting them gives the space back to Windows. Android emulator and virtual machine folders can be moved to another drive as a whole.</Run></TextBlock>
                     </StackPanel>
                   </Border>
-                  <Border Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="3" Style="{StaticResource HelpTile}">
+                  <Border Grid.Row="6" Grid.Column="0" Style="{StaticResource HelpTile}">
                     <StackPanel>
                       <TextBlock Style="{StaticResource HelpLead}" Text="Merge duplicate files"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>On the "Duplicates" page, click "Merge into one copy". Duplicate files on the same drive then take up the space of just one copy, while the file stays in every location. After merging, editing the file in one location changes it in all the others, so this suits photos, videos and installers you won't change again.</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Row="6" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="OneDrive online-only"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Synced files keep a local copy. Once "online-only" they stay in the cloud, still show in File Explorer and download when opened. Nothing is deleted; files marked "Always keep on this device" are left alone.</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Row="8" Grid.Column="0" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Reserved storage"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>The 7 GB or so Windows sets aside for updates. Turning it off gives the space back; Windows borrows free space when updating, and you can turn it back on at any time.</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Row="8" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Component store analysis"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Lets Windows work out the actual size of WinSxS, how much is reclaimable and whether cleanup is advisable, before you run the DISM cleanup.</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Row="10" Grid.Column="0" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Small crash dumps"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Blue screens save only a 256 KB small dump instead of a MEMORY.DMP of several GB. Enough to tell which driver failed; automatic dumps can be restored at any time.</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Row="10" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Temp folder on another drive"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Points the current user's TEMP to another drive so future temporary files don't take space on C:. Applies after you sign out and back in; restore the default if an installer doesn't like it.</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Row="12" Grid.Column="0" Grid.ColumnSpan="3" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Move WSL to another drive"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Uses WSL's own wsl --manage --move to move a whole distribution; it works as before afterwards. Needs WSL 2.5 or later.</Run></TextBlock>
                     </StackPanel>
                   </Border>
                 </Grid>
@@ -6267,6 +6637,10 @@ $script:helpEnXaml = @'
                   <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>A hard link means the same file also has a name elsewhere, so deleting this name frees nothing.</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Disk health"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>A line under the page title: each drive's model and health status, and for SSDs the wear percentage, temperature and hours powered on (read from Windows' storage reliability counters; read-only).</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Space breakdown"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>Click "Space breakdown" to see how the used space splits into file data, the file table (MFT) and the rest, and why it differs from adding up file sizes. Deleting also tells you how much space you will really get back.</Run></TextBlock>
                 </StackPanel>
@@ -6314,6 +6688,10 @@ $script:helpEnXaml = @'
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="After moving"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>Moved apps appear in "Moved folders", where you can "Move back to C:" at any time. When an app gets a major upgrade later, a few installers will reinstall it on C:; just move it again then.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Leftovers"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Finds folders that uninstalled apps may have left behind: the name matches no installed app, no program is using them, nothing changed for a month, and they are at least 1 MB. It is only a guess, so click "Open location" first; they go to the Recycle Bin and can be restored.</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Check for updates"/>
@@ -6392,6 +6770,10 @@ $script:helpEnXaml = @'
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Scheduled cleanup"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>When turned on, temporary files, caches and logs are cleaned up at the time you choose (a day of the week or every day, at 12:30 PM). It doesn't move anything, doesn't empty the Recycle Bin and doesn't touch personal folders or the folders you added yourself; files in use are simply skipped.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Storage Sense"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>The page says whether Windows' own Storage Sense is on. If it is, it also cleans temporary files and the Recycle Bin on a schedule; it doesn't conflict with the cleanup here, both simply run.</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Space on C: over time"/>
@@ -8235,6 +8617,7 @@ if ($script:mode -match '(?i)/autoclean') {
         <StackPanel>
           <TextBlock Text="空间地图" Style="{StaticResource PageTitle}"/>
           <TextBlock Style="{StaticResource PageSub}" Text="扫描整块盘，看清每个文件夹占了多少。双击文件夹往里点，一层层找到真正的大户。"/>
+          <TextBlock x:Name="MapDiskHealth" Style="{StaticResource Caption}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
         </StackPanel>
       </DockPanel>
       <DockPanel Grid.Row="1" Margin="0,0,0,10">
@@ -8438,11 +8821,82 @@ if ($script:mode -match '(?i)/autoclean') {
             </DockPanel>
           </Border>
 
+          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+            <DockPanel>
+              <Button x:Name="BtnOdFree" DockPanel.Dock="Right" Content="改成仅在线" Style="{StaticResource Primary}" VerticalAlignment="Center" Margin="20,0,0,0" IsEnabled="False"/>
+              <StackPanel>
+                <TextBlock Text="OneDrive 文件改成「仅在线」" Style="{StaticResource CardHead}"/>
+                <TextBlock x:Name="SaveOdState" Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
+                           Text="同步过的文件本地都留着一份副本。改成「仅在线」后文件还在云端，资源管理器里照常显示，打开时才下载，本地不再占空间。什么都不删。你设了「始终保留在此设备」的文件不动；OneDrive 要开着才会真正释放。"/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+
+          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+            <DockPanel>
+              <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="20,0,0,0">
+                <Button x:Name="BtnRsOn" Content="重新开启" Margin="0,0,8,0" IsEnabled="False"/>
+                <Button x:Name="BtnRsOff" Content="关闭" IsEnabled="False"/>
+              </StackPanel>
+              <StackPanel>
+                <TextBlock Text="Windows 保留的存储" Style="{StaticResource CardHead}"/>
+                <TextBlock x:Name="SaveRsState" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
+                <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
+                           Text="Windows 给系统更新预留的空间，通常 7 GB 左右，空间明细里的「其他」有一部分就是它。关掉以后这块空间还给你，更新时 Windows 改为临时借用空闲空间；C 盘很满时更新可能提示空间不够，再开回来就好。有更新正在安装时改不了。"/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+
+          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+            <DockPanel>
+              <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="20,0,0,0">
+                <Button x:Name="BtnCsAnalyze" Content="分析" Style="{StaticResource Primary}" Margin="0,0,8,0"/>
+                <Button x:Name="BtnCsClean" Content="去清理"/>
+              </StackPanel>
+              <StackPanel>
+                <TextBlock Text="组件存储（WinSxS）" Style="{StaticResource CardHead}"/>
+                <TextBlock x:Name="SaveCsState" Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap" Text="点「分析」让 Windows 算一下实际多大、能清多少（要一两分钟）。"/>
+                <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
+                           Text="C:\Windows\WinSxS 看着很大，其中很多文件和 System32 是同一份（硬链接），真正能清的是更新替换下来的旧组件。Windows 自己能算出可回收多少、建不建议清理；清理在「清理 C 盘」里的「WinSxS 组件清理 (DISM)」。"/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+
+          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+            <DockPanel>
+              <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="20,0,0,0">
+                <Button x:Name="BtnDumpSmall" Content="改成小转储" Style="{StaticResource Primary}" Margin="0,0,8,0"/>
+                <Button x:Name="BtnDumpAuto" Content="恢复自动"/>
+              </StackPanel>
+              <StackPanel>
+                <TextBlock Text="蓝屏时保存多大的转储" Style="{StaticResource CardHead}"/>
+                <TextBlock x:Name="SaveDumpState" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
+                <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
+                           Text="蓝屏时 Windows 会把内存里的内容存成 C:\Windows\MEMORY.DMP，「自动」模式下可能和内存一样大，清掉了下次蓝屏又会生成。改成「小内存转储」只存 256 KB 的摘要，够看出是哪个驱动出的问题。随时可以恢复。"/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+
+          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+            <StackPanel>
+              <TextBlock Text="临时文件夹的位置" Style="{StaticResource CardHead}"/>
+              <TextBlock x:Name="SaveTmpState" Style="{StaticResource Caption}" Margin="0,4,0,0" TextTrimming="CharacterEllipsis"/>
+              <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
+                         Text="各软件的临时文件默认放在 C 盘的用户目录里。可以改到其他盘，以后的临时文件就不占 C 盘了。改完要注销再登录（或重启）才对所有软件生效；个别安装程序对 C 盘以外的临时文件夹不兼容，遇到就点「恢复默认」。"/>
+              <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                <ComboBox x:Name="SaveTmpDrive" Width="220" Margin="0,0,8,0"/>
+                <Button x:Name="BtnTmpMove" Content="改到这块盘" Style="{StaticResource Primary}" Margin="0,0,8,0"/>
+                <Button x:Name="BtnTmpAuto" Content="恢复默认"/>
+              </StackPanel>
+            </StackPanel>
+          </Border>
+
           <Border Style="{StaticResource Card}" Padding="24,20,24,14" Margin="0,14,0,0">
             <StackPanel>
               <TextBlock Text="虚拟磁盘、模拟器和虚拟机" Style="{StaticResource CardHead}"/>
               <TextBlock Style="{StaticResource Body}" Margin="0,8,0,4"
-                         Text="WSL、Docker、安卓模拟器、虚拟机的磁盘文件动辄几十 GB，而且在里面删了东西也不会自动变小。压缩能把空出来的部分还给 Windows；文件夹形式的可以整个搬到其他盘。"/>
+                         Text="WSL、Docker、安卓模拟器、虚拟机的磁盘文件动辄几十 GB，而且在里面删了东西也不会自动变小。压缩能把空出来的部分还给 Windows；WSL 发行版和文件夹形式的可以整个搬到其他盘。"/>
               <ItemsControl x:Name="VdList">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate>
@@ -8511,6 +8965,7 @@ if ($script:mode -match '(?i)/autoclean') {
             <RadioButton x:Name="AppsViewStartup" GroupName="appsv" Content="开机启动" Style="{StaticResource Seg}"/>
             <RadioButton x:Name="AppsViewTasks" GroupName="appsv" Content="计划任务" Style="{StaticResource Seg}"/>
             <RadioButton x:Name="AppsViewMenu" GroupName="appsv" Content="右键菜单" Style="{StaticResource Seg}"/>
+            <RadioButton x:Name="AppsViewLeft" GroupName="appsv" Content="残留文件夹" Style="{StaticResource Seg}"/>
           </StackPanel>
         </Border>
         <Border x:Name="AppsFilterBox" DockPanel.Dock="Left" Style="{StaticResource SegBox}" VerticalAlignment="Center" Margin="0,0,14,0">
@@ -8520,7 +8975,7 @@ if ($script:mode -match '(?i)/autoclean') {
             <RadioButton x:Name="AppsStore" GroupName="appsf" Content="应用商店" Style="{StaticResource Seg}"/>
           </StackPanel>
         </Border>
-        <TextBlock x:Name="AppsInfo" DockPanel.Dock="Right" Style="{StaticResource Caption}" Margin="14,0,0,0" TextTrimming="CharacterEllipsis"/>
+        <TextBlock x:Name="AppsInfo" DockPanel.Dock="Right" Style="{StaticResource Caption}" Margin="14,0,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
         <DockPanel>
           <TextBlock DockPanel.Dock="Left" Text="&#xE721;" FontFamily="{StaticResource Icons}" FontSize="12" Foreground="#86868B" VerticalAlignment="Center" Margin="0,0,8,0"/>
           <TextBox x:Name="AppsSearch" MaxWidth="320" HorizontalAlignment="Left" MinWidth="200" ToolTip="按名字或发行商搜索"/>
@@ -9167,6 +9622,10 @@ if ($script:mode -match '(?i)/autoclean') {
                   <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>删了要重新下载、重新生成而且比较慢的（NuGet 全局包、Gradle、Maven、JetBrains 索引、虚幻引擎缓存等）放在「需确认」里，默认跳过。</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="驱动残留、失效快捷方式、事件日志"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>都在「需确认」里，默认跳过：显卡和品牌机驱动解压到 C 盘根目录的安装文件；开始菜单里指向已不存在程序的快捷方式（不碰桌面）；Windows 事件日志（排查问题的工程师会看，不确定就跳过）。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Windows Installer 孤儿安装包"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>在「需确认」里。C:\Windows\Installer 里没有任何已装软件和补丁再引用的安装包，常有好几 GB，判断方法和 PatchCleaner 一样。默认跳过，看清说明再选。</Run></TextBlock>
                 </StackPanel>
@@ -9290,7 +9749,7 @@ if ($script:mode -match '(?i)/autoclean') {
               <StackPanel>
                 <Grid Margin="0,14,0,0">
                   <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="10"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                   <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource HelpTile}">
                     <StackPanel>
                       <TextBlock Style="{StaticResource HelpLead}" Text="系统压缩（CompactOS）"/>
@@ -9327,10 +9786,46 @@ if ($script:mode -match '(?i)/autoclean') {
                       <TextBlock Style="{StaticResource HelpBody}"><Run>WSL、Docker 的虚拟磁盘在里面删了文件也不会自动变小，压缩一下就能把空间还给 Windows；安卓模拟器和虚拟机的文件夹可以整个搬到其他盘。</Run></TextBlock>
                     </StackPanel>
                   </Border>
-                  <Border Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="3" Style="{StaticResource HelpTile}">
+                  <Border Grid.Row="6" Grid.Column="0" Style="{StaticResource HelpTile}">
                     <StackPanel>
                       <TextBlock Style="{StaticResource HelpLead}" Text="合并重复文件"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>在「重复文件」页点「合并为一份」，同一块盘上的重复文件只占一份空间，每个位置的文件都还在。合并后改动其中一个位置，其他位置会跟着变，所以适合不会再改的照片、视频、安装包。</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Row="6" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="OneDrive 改成仅在线"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>同步过的文件本地都留着副本。改成「仅在线」后文件还在云端，资源管理器里照常显示，打开时才下载。什么都不删；设了「始终保留在此设备」的不动。</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Row="8" Grid.Column="0" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="保留的存储"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Windows 给更新预留的 7 GB 左右。关掉就还给你，更新时 Windows 临时借用空闲空间；随时能开回来。</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Row="8" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="组件存储分析"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>让 Windows 算一下 WinSxS 实际多大、能回收多少、建不建议清理，再决定要不要做 DISM 清理。</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Row="10" Grid.Column="0" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="蓝屏小转储"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>蓝屏时只存 256 KB 的小转储，不再生成几个 GB 的 MEMORY.DMP。够看出是哪个驱动出的问题，随时可以恢复自动。</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Row="10" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="临时文件夹改到其他盘"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>当前用户的 TEMP 指向其他盘，以后的临时文件不占 C 盘。注销再登录后生效；个别安装程序不兼容就恢复默认。</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Row="12" Grid.Column="0" Grid.ColumnSpan="3" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="WSL 搬到其他盘"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>用 WSL 自己的 wsl --manage --move 把整个发行版搬走，搬完照常使用。需要 WSL 2.5 以后。</Run></TextBlock>
                     </StackPanel>
                   </Border>
                 </Grid>
@@ -9446,6 +9941,10 @@ if ($script:mode -match '(?i)/autoclean') {
                   <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>硬链接是同一份文件在别处也有名字，删了这个名字不腾空间。</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="磁盘健康"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>页面标题下面一行小字：每块盘的型号、健康状态，固态硬盘还有磨损百分比、温度和通电时间（从 Windows 的存储可靠性计数器读，只读不改）。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="空间明细"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>点「空间明细」，看已用空间分成哪几块：文件实际占用、文件表（MFT）和其他，以及为什么和按文件大小相加对不上。删除时也会写明实际能腾出多少。</Run></TextBlock>
                 </StackPanel>
@@ -9493,6 +9992,10 @@ if ($script:mode -match '(?i)/autoclean') {
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="搬走以后"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>在「搬家管理」里能看到，随时可以「搬回 C 盘」。以后软件大版本升级时，个别安装程序会把它重新装回 C 盘，到时再搬一次即可。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="残留文件夹"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>找已卸载软件可能留下的文件夹：名字对不上任何已装软件、没有程序在用、一个月没动过、至少 1 MB。只是猜测，先点「打开位置」看一眼再决定；移到回收站，能恢复。</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="检查新版本"/>
@@ -9571,6 +10074,10 @@ if ($script:mode -match '(?i)/autoclean') {
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="定期自动清理"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>打开后，在你选的时间（每周某一天或每天，中午 12:30）自动清理一次临时文件、缓存和日志。不搬家、不清空回收站、不碰个人文件夹和你自己加的文件夹，被占用的文件直接跳过。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="存储感知"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>页面上会写明 Windows 自带的「存储感知」开没开。开着的话它也会定期清临时文件和回收站，和这里的自动清理不冲突，只是各做一遍。</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="C 盘空间变化"/>
@@ -9935,7 +10442,8 @@ foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageM
                'MapDrive','BtnMapStop','BtnMapScan','MapViewDirs','MapViewFiles','MapViewGrow','BtnMapUp','MapPath','MapInfo','MapList','MapGrow','EmptyMap','EmptyMapText','BtnMapOpen','BtnMapCompress','BtnMapDelete','MapSel',
                'SaveScroll','BtnSaveRefresh','BtnCosOff','BtnCosOn','SaveCosState','SavePfState','SavePfDrive','BtnPfMove','BtnPfAuto','SaveHibState','BtnHibReduced','BtnHibOff','BtnHibFull','BtnFolderCompress','SaveFcState','VdList','VdEmpty','BtnGoDup',
                'BtnAppsRefresh','AppsAll','AppsC','AppsStore','AppsInfo','AppsSearch','AppsLeftBox','BtnAppsLeftClose','BtnAppsLeft','AppsLeftText','AppsList','EmptyApps','EmptyAppsText',
-               'BtnAppsUpdates','AppsViewApps','AppsViewStartup','AppsViewTasks','AppsViewMenu','AppsFilterBox','StartList','BtnCleanCustom','AutoJunkGB','AutoCleanWhen','SetCleanCard','SetCustomList','SetCustomEmpty','BtnSetCustomAdd','SetExcludeList','SetExcludeEmpty','BtnSetExcludeAdd',
+               'BtnAppsUpdates','AppsViewApps','AppsViewStartup','AppsViewTasks','AppsViewMenu','AppsViewLeft','AppsFilterBox','StartList','MapDiskHealth',
+               'BtnOdFree','SaveOdState','BtnRsOn','BtnRsOff','SaveRsState','BtnCsAnalyze','BtnCsClean','SaveCsState','BtnDumpSmall','BtnDumpAuto','SaveDumpState','SaveTmpState','SaveTmpDrive','BtnTmpMove','BtnTmpAuto','BtnCleanCustom','AutoJunkGB','AutoCleanWhen','SetCleanCard','SetCustomList','SetCustomEmpty','BtnSetCustomAdd','SetExcludeList','SetExcludeEmpty','BtnSetExcludeAdd',
                'BtnMovesRefresh','MovesInfo','MovesList','EmptyMoves','EmptyMovesText',
                'AutoRemindOn','AutoRemindGB','AutoRemindNote','AutoCleanOn','AutoCleanNote','HistInfo','HistChart','HistLast','HistFirst',
                'BtnLogOpenDir','BtnLogRefresh','LogKeep','LogKeepNote','LogCats','LogRange','LogSearch','LogCount','LogList','EmptyLog','EmptyLogText',
@@ -9975,7 +10483,7 @@ function Show-Page([string]$key) {
     }
     # 第一次打开某一页时才去读数据
     switch ($key) {
-        'map'   { if (-not $script:pageLoaded.map) { $script:pageLoaded.map = $true; Fill-MapDrives } }
+        'map'   { if (-not $script:pageLoaded.map) { $script:pageLoaded.map = $true; Fill-MapDrives; Start-DiskHealth } }
         'save'  { if (-not $script:pageLoaded.save) { $script:pageLoaded.save = $true; Load-Save } }
         'apps'  { if (-not $script:pageLoaded.apps -and -not $script:worker) { $script:pageLoaded.apps = $true; Load-Apps } }
         'moves' { if (-not $script:candScanned) { $script:candPending = $true }; if (-not $script:worker) { Load-Moves } }
@@ -10297,7 +10805,7 @@ function End-Op([string]$result, [switch]$KeepCard, [string]$headline = '', $rep
 # 不在这里的（删除单个文件夹、系统压缩、压缩虚拟磁盘、卸载、删除多余副本）要么很快做完，要么停在一半不安全
 $script:cancelModes = @{ scan = 'look'; apps = 'look'; dup = 'look'; map = 'look'
     run = 'run'; dupdel = 'dupdel'; merge = 'merge'; leftdel = 'leftdel'; fcompress = 'fcompress'; moveback = 'moveback'; vmove = 'move'; appmove = 'move'
-    movescan = 'look'; movemany = 'movemany'; mapdel = 'dupdel'; selftest = 'look' }
+    movescan = 'look'; movemany = 'movemany'; mapdel = 'dupdel'; selftest = 'look'; odinfo = 'look'; leftovers = 'look'; odfree = 'look' }
 $script:cancelUi = ''
 function Update-CancelUi {
     $m = [string]$sync.Mode
@@ -11482,6 +11990,33 @@ function Fill-MapDrives {
         if ($it.Tag -ieq $keep) { $ctl.MapDrive.SelectedItem = $it }
     }
     if (-not $ctl.MapDrive.SelectedItem -and $ctl.MapDrive.Items.Count -gt 0) { $ctl.MapDrive.SelectedIndex = 0 }
+}
+# 盘的健康信息（SSD 磨损、温度、通电时间）：在另一个线程里读，读到了写在标题下面
+$script:dhPs = $null
+function Start-DiskHealth {
+    if ($script:dhPs) { return }
+    $ctl.MapDiskHealth.Text = ''
+    $drives = @(Fixed-Drives | ForEach-Object { $_.Name.TrimEnd('\') })
+    if ($drives.Count -eq 0) { return }
+    $code = 'param($drives, $engine) Invoke-Expression $engine; $o = @(); foreach ($d in $drives) { $h = Get-DiskHealth $d; if ($h) { $o += ($d + [char]32 + $h) } }; ,$o'
+    try {
+        $ps = [powershell]::Create()
+        [void]$ps.AddScript($code).AddArgument($drives).AddArgument($engine)
+        $script:dhPs = $ps; $script:dhAr = $ps.BeginInvoke()
+    } catch { $script:dhPs = $null; return }
+    $t = New-Object System.Windows.Threading.DispatcherTimer
+    $t.Interval = [TimeSpan]::FromMilliseconds(400)
+    $t.Add_Tick({
+        if (-not $script:dhPs) { $this.Stop(); return }
+        if (-not $script:dhAr.IsCompleted) { return }
+        $this.Stop()
+        $lines = @()
+        try { $out = $script:dhPs.EndInvoke($script:dhAr); if ($out.Count -gt 0) { $lines = @($out[$out.Count - 1]) } } catch {}
+        try { $script:dhPs.Dispose() } catch {}
+        $script:dhPs = $null
+        $ctl.MapDiskHealth.Text = ($lines -join (T '；'))
+    })
+    $t.Start()
 }
 function Start-MapScan([string]$root) {
     if ($script:worker -or -not $root) { return }
@@ -12925,7 +13460,7 @@ function Load-Save {
     $col = New-Object 'System.Collections.ObjectModel.ObservableCollection[VdiskRow]'
     foreach ($v in (Get-VDisks)) {
         $r = New-Object VdiskRow
-        $r.Name = $v.Name; $r.Path = $v.Path; $r.Kind = $v.Kind; $r.Note = $v.Note; $r.CanCompact = [bool]$v.Compact; $r.CanMove = [bool]$v.Move
+        $r.Name = $v.Name; $r.Path = $v.Path; $r.Kind = $v.Kind; $r.Note = $v.Note; $r.CanCompact = [bool]$v.Compact; $r.CanMove = [bool]$v.Move; if ($v.Distro) { $r.Distro = [string]$v.Distro }
         if (Test-Path -LiteralPath $v.Path -PathType Leaf) { $r.Size = (Get-Item -LiteralPath $v.Path -Force).Length; $r.SizeText = Fmt $r.Size }
         elseif ($script:worker) { $r.SizeText = '—' }
         else { $r.Size = [long](DirBytes $v.Path); $r.SizeText = Fmt $r.Size }
@@ -12933,8 +13468,121 @@ function Load-Save {
     }
     $ctl.VdList.ItemsSource = $col
     $ctl.VdEmpty.Visibility = if ($col.Count -gt 0) { 'Collapsed' } else { 'Visible' }
+    # 保留的存储
+    $rs = Get-ReservedStorageState
+    $ctl.SaveRsState.Text = switch ($rs) { 'Enabled' { (T '当前：已开启（通常占 7 GB 左右）') } 'Disabled' { (T '当前：已关闭') } default { (T '当前：这个版本的 Windows 没有这项（Windows 10 1903 以后才有）') } }
+    $ctl.BtnRsOff.IsEnabled = ($rs -eq 'Enabled'); $ctl.BtnRsOn.IsEnabled = ($rs -eq 'Disabled')
+    # 蓝屏转储
+    $dm = Get-CrashDumpMode
+    $ctl.SaveDumpState.Text = (T '当前：') + $(switch ($dm) { 0 { (T '不保存') } 1 { (T '完整内存转储（和内存一样大）') } 2 { (T '内核内存转储') } 3 { (T '小内存转储（256 KB）') } 7 { (T '自动（通常是内核转储，可能有几 GB）') } default { (T '读不到') } })
+    $ctl.BtnDumpSmall.IsEnabled = ($dm -ne 3 -and $dm -ge 0); $ctl.BtnDumpAuto.IsEnabled = ($dm -ne 7 -and $dm -ge 0)
+    # 临时文件夹
+    $tmp = Get-UserTemp
+    $ctl.SaveTmpState.Text = (T "当前：{0}") -f $(if ($tmp) { $tmp + $(if ($tmp -ne $env:TEMP -and [Environment]::ExpandEnvironmentVariables($tmp) -ne $env:TEMP) { (T '（注销再登录后生效）') } else { '' }) } else { (T '系统默认') })
+    $ctl.SaveTmpDrive.Items.Clear()
+    foreach ($d in (Fixed-Drives -NoSystem)) {
+        $it = New-Object System.Windows.Controls.ComboBoxItem
+        $it.Content = (T "{0}  空闲 {1}") -f $d.Name.TrimEnd('\'), (Fmt $d.AvailableFreeSpace); $it.Tag = $d.Name.TrimEnd('\')
+        [void]$ctl.SaveTmpDrive.Items.Add($it)
+    }
+    if ($ctl.SaveTmpDrive.Items.Count -gt 0) { $ctl.SaveTmpDrive.SelectedIndex = 0 }
+    $ctl.BtnTmpMove.IsEnabled = $ctl.SaveTmpDrive.Items.Count -gt 0
+    $ctl.BtnTmpAuto.IsEnabled = [bool]$tmp -and ([Environment]::ExpandEnvironmentVariables($tmp) -ine "$env:USERPROFILE\AppData\Local\Temp")
+    # OneDrive：文件多，到后台数（等没有后台任务时由定时器开始）
+    $script:odWanted = $true
 }
 $ctl.BtnSaveRefresh.Add_Click({ Load-Save })
+# ---------- OneDrive ----------
+$script:odInfo = $null
+function Start-OneDriveInfo {
+    $folders = @(Get-OneDriveFolders)
+    if ($folders.Count -eq 0) { $ctl.SaveOdState.Text = (T '这台电脑上没有登录 OneDrive。'); $ctl.BtnOdFree.IsEnabled = $false; return }
+    if ($script:worker) { return }
+    $ctl.SaveOdState.Text = (T '正在统计 OneDrive 文件夹里有多少本地副本…'); $ctl.BtnOdFree.IsEnabled = $false
+    $sync.Mode = 'odinfo'; $sync.OdInfo = $null
+    Start-Op (T '统计 OneDrive 本地副本') -NoCard; UI-Busy $true
+    Start-Worker @'
+$sync.OdInfo = Get-OneDriveInfo
+'@ $null
+}
+function Show-OneDriveInfo($i) {
+    $script:odInfo = $i
+    if (-not $i) { $ctl.SaveOdState.Text = (T '没统计到。'); return }
+    $t = (T "当前：{0}，{1:N0} 个文件；本地有副本的 {2}，已经是仅在线的 {3}") -f ($i.Folders -join (T '、')), $i.Files, (Fmt $i.Local), (Fmt $i.Online)
+    if ($i.Pinned -gt 0) { $t += (T "；设了「始终保留在此设备」的 {0}（不动）") -f (Fmt $i.Pinned) }
+    if (-not $i.Running) { $t += (T "。OneDrive 现在没有运行，改了也要等它启动后才释放") }
+    $ctl.SaveOdState.Text = $t
+    $ctl.BtnOdFree.IsEnabled = ($i.Local -gt 0)
+}
+$ctl.BtnOdFree.Add_Click({
+    $i = $script:odInfo
+    if (-not $i -or $script:worker) { return }
+    $ans = Show-Sheet -Title (T '把 OneDrive 里的本地副本都改成仅在线？') -Text ((T "本地有副本的 {0} 会改成「仅在线」：文件还在云端，资源管理器里照常显示，打开时自动下载。什么都不删。你设了「始终保留在此设备」的文件不动。`n`n改完由 OneDrive 自己在后台释放空间，要等它同步一会儿；断网时打不开这些文件。") -f (Fmt $i.Local)) -Buttons @((T '取消'), (T '改成仅在线')) -Primary (T '改成仅在线') -Cancel (T '取消')
+    if ($ans -ne (T '改成仅在线')) { return }
+    $sync.Mode = 'odfree'; $sync.OdRes = $null
+    Start-Op (T 'OneDrive 文件改成仅在线'); UI-Busy $true
+    Start-Worker @'
+SetP @{ Steps = 1; Step = 1; StepName = 'OneDrive'; SubKind = 'none'; Detail = (T '逐个文件标记') }
+$res = @{}; Invoke-OneDriveFree $res; $sync.OdRes = $res
+OpLog '系统设置' (T 'OneDrive 文件改成仅在线') '' ((T "{0} 个文件，{1}") -f $res.Done, (GB $res.Bytes))
+'@ $null
+})
+# ---------- 保留的存储 ----------
+foreach ($b in @($ctl.BtnRsOn, $ctl.BtnRsOff)) {
+    $b.Add_Click({
+        $on = [object]::ReferenceEquals($this, $ctl.BtnRsOn)
+        $t = if ($on) { (T '重新开启保留的存储？') } else { (T '关闭保留的存储？') }
+        $x = if ($on) { (T 'Windows 会重新预留 7 GB 左右给系统更新用。') } else { (T '这块空间会还给你。以后更新时 Windows 临时借用空闲空间；C 盘很满时更新可能提示空间不够，再开回来就好。有更新正在安装时改不了。') }
+        $btn = if ($on) { (T '开启') } else { (T '关闭') }
+        if ((Show-Sheet -Title $t -Text $x -Buttons @((T '取消'), $btn) -Primary $btn -Cancel (T '取消')) -ne $btn) { return }
+        $win.Cursor = [System.Windows.Input.Cursors]::Wait
+        try { $err = Set-ReservedStorage $on } finally { $win.Cursor = $null }
+        if ($err) { Show-Sheet -Kind warn -Title (T '没改成') -Text $err | Out-Null }
+        else { OpLog '系统设置' $(if ($on) { (T '开启保留的存储') } else { (T '关闭保留的存储') }) '' ''; UI-Log $(if ($on) { (T '保留的存储：已开启') } else { (T '保留的存储：已关闭') }) }
+        Load-Save
+    })
+}
+# ---------- 组件存储分析 ----------
+$ctl.BtnCsAnalyze.Add_Click({
+    if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return }
+    $ctl.SaveCsState.Text = (T '正在分析（DISM，要一两分钟）…')
+    $sync.Mode = 'csanalyze'; $sync.CsRes = $null
+    Start-Op (T '分析组件存储') -NoCard; UI-Busy $true
+    Start-Worker @'
+$sync.CsRes = Get-ComponentStoreInfo
+'@ $null
+})
+$ctl.BtnCsClean.Add_Click({ Show-Page 'clean'; if (-not $script:rows -and -not $script:worker) { Do-Scan } })
+# ---------- 蓝屏转储 ----------
+foreach ($b in @($ctl.BtnDumpSmall, $ctl.BtnDumpAuto)) {
+    $b.Add_Click({
+        $small = [object]::ReferenceEquals($this, $ctl.BtnDumpSmall)
+        $t = if ($small) { (T '蓝屏时只保存小转储？') } else { (T '恢复自动转储？') }
+        $x = if ($small) { (T '以后蓝屏只保存 256 KB 的小内存转储（C:\Windows\Minidump），够看出是哪个驱动出的问题，不再生成几个 GB 的 MEMORY.DMP。') } else { (T '恢复 Windows 默认的「自动」：蓝屏时可能生成和内存差不多大的 MEMORY.DMP。') }
+        $btn = (T '好')
+        if ((Show-Sheet -Title $t -Text $x -Buttons @((T '取消'), $btn) -Primary $btn -Cancel (T '取消')) -ne $btn) { return }
+        try { Set-CrashDumpMode $(if ($small) { 3 } else { 7 }) } catch { Show-Sheet -Kind warn -Title (T '没改成') -Text $_.Exception.Message | Out-Null; return }
+        OpLog '系统设置' (T '蓝屏转储类型') $(if ($small) { (T '小内存转储') } else { (T '自动') }) ''
+        Load-Save
+    })
+}
+# ---------- 临时文件夹位置 ----------
+$ctl.BtnTmpMove.Add_Click({
+    $d = [string]$ctl.SaveTmpDrive.SelectedItem.Tag
+    if (-not $d) { return }
+    $p = "$d\Temp"
+    $ans = Show-Sheet -Kind warn -Title ((T "把临时文件夹改到 {0}？") -f $p) -Text ((T "当前用户的 TEMP 和 TMP 会指向 {0}。以后新打开的程序把临时文件放在那里，注销再登录（或重启）后对所有程序生效。{1} 必须是一直插着的本机硬盘；个别安装程序对 C 盘以外的临时文件夹不兼容，遇到就点「恢复默认」。") -f $p, $d) -Buttons @((T '取消'), (T '改到这块盘')) -Primary (T '改到这块盘') -Cancel (T '取消')
+    if ($ans -ne (T '改到这块盘')) { return }
+    try { New-Item -ItemType Directory -Path $p -Force | Out-Null; Set-UserTemp $p } catch { Show-Sheet -Kind warn -Title (T '没改成') -Text $_.Exception.Message | Out-Null; return }
+    OpLog '系统设置' (T '临时文件夹位置') $p ''
+    Load-Save
+})
+$ctl.BtnTmpAuto.Add_Click({
+    if ((Show-Sheet -Title (T '临时文件夹恢复默认？') -Text (T '改回 C 盘用户目录里的 AppData\Local\Temp。注销再登录后对所有程序生效。') -Buttons @((T '取消'), (T '恢复')) -Primary (T '恢复') -Cancel (T '取消')) -ne (T '恢复')) { return }
+    try { Set-UserTemp '' } catch { Show-Sheet -Kind warn -Title (T '没改成') -Text $_.Exception.Message | Out-Null; return }
+    OpLog '系统设置' (T '临时文件夹位置') (T '系统默认') ''
+    Load-Save
+})
 # 系统还原点（卷影副本）：只看，不删；要调整打开 Windows 自己的「系统保护」。
 # 在另一个线程里读（查卷影副本可能要先启动卷影复制服务，要几秒），读好了再填到页面上
 $script:rpQuery = {
@@ -13055,6 +13703,19 @@ $res = @{}; Invoke-CompactVdisk $arg.Path $arg.Kind $res; $sync.VdRes = $res
         'VdMove' {
             $dest = Get-Dest
             if (-not $dest) { Show-Sheet -Kind warn -Title (T '没有可用的搬家目标') -Text (T '请先在「清理 C 盘」页的「搬家目标」里选一块 C 盘以外的硬盘。') | Out-Null; return }
+            if ($r.Kind -eq 'wsl') {
+                $to = Join-Path (Join-Path $dest 'WSL') $r.Distro
+                $ans = Show-Sheet -Title ((T "把 WSL 发行版「{0}」搬到其他盘？") -f $r.Distro) -Text ((T "用 WSL 自己的命令（wsl --manage {0} --move）把它搬到 {1}，现在 {2}。搬之前会先关闭这个发行版，里面正在运行的程序会被结束，请先保存。搬完照常用 wsl 打开，不用改任何设置。需要 WSL 2.5 以后的版本（wsl --update 可以更新）。") -f $r.Distro, $to, $r.SizeText) -Buttons @((T '取消'), (T '搬')) -Primary (T '搬') -Cancel (T '取消')
+                if ($ans -ne (T '搬')) { return }
+                $sync.Mode = 'wslmove'; $sync.WslRes = $null
+                Start-Op ((T "搬到其他盘：WSL {0}") -f $r.Distro); UI-Busy $true
+                Start-Worker @'
+SetP @{ Steps = 1; Step = 1; StepName = $arg.Distro; SubKind = 'slow'; SubStart = (Get-Date); Detail = '' }
+$res = @{}; Invoke-WslMove $arg.Distro $arg.Dest $res; $sync.WslRes = $res
+OpLog '搬运' (T 'WSL 发行版搬到其他盘') $arg.Distro $(if ($res.Ok) { $arg.Dest } else { (T '没搬成：') + $res.Out })
+'@ @{ Distro = $r.Distro; Dest = $to }
+                return
+            }
             $apps = switch -Wildcard ($r.Name) { (T '安卓*') { @('Android 模拟器') } 'VirtualBox*' { @('VirtualBox') } 'VMware*' { @('VMware') } default { @() } }
             $defs = Get-ChatApps; $k = @(); $dd = @()
             foreach ($a in $apps) { $k += $defs[$a].P; $dd += $defs[$a].Dirs }
@@ -13336,7 +13997,7 @@ $sync.LeftRes = @{ Count = $n; Name = $arg.Name }
 # ---------- 开机启动 / 计划任务 / 右键菜单：同一个列表，按视图换内容 ----------
 $script:startRows = @{}   # kind -> List[StartRow]
 $script:appsView = 'apps'
-function Get-AppsView { if ($ctl.AppsViewStartup.IsChecked) { 'startup' } elseif ($ctl.AppsViewTasks.IsChecked) { 'task' } elseif ($ctl.AppsViewMenu.IsChecked) { 'shellex' } else { 'apps' } }
+function Get-AppsView { if ($ctl.AppsViewStartup.IsChecked) { 'startup' } elseif ($ctl.AppsViewTasks.IsChecked) { 'task' } elseif ($ctl.AppsViewMenu.IsChecked) { 'shellex' } elseif ($ctl.AppsViewLeft.IsChecked) { 'leftover' } else { 'apps' } }
 function Show-AppsView {
     $v = Get-AppsView; $script:appsView = $v
     $isApps = ($v -eq 'apps')
@@ -13361,15 +14022,26 @@ function Filter-StartRows {
     $ctl.AppsInfo.Text = switch ($v) {
         'startup' { (T "{0} 个开机启动项，{1} 个已启用") -f $col.Count, $on }
         'task'    { (T "{0} 个第三方计划任务，{1} 个已启用（Windows 自己的不列）") -f $col.Count, $on }
+        'leftover' { $tb = [double]0; foreach ($r in $col) { $tb += [double]$r.Key2 }; (T "{0} 个可能是残留的文件夹，共 {1}。只是猜测：名字对不上任何已装软件、没有程序在用、一个月没动过") -f $col.Count, (Fmt $tb) }
         default   { (T "{0} 个第三方右键菜单扩展，{1} 个已启用（系统自带的不列）") -f $col.Count, $on }
     }
     $ctl.EmptyApps.Visibility = if ($col.Count -gt 0) { 'Collapsed' } else { 'Visible' }
-    if ($col.Count -eq 0) { $ctl.EmptyAppsText.Text = switch ($v) { 'startup' { (T '没有开机启动项') } 'task' { (T '没有第三方的计划任务') } default { (T '没有第三方的右键菜单扩展') } } }
+    if ($col.Count -eq 0) { $ctl.EmptyAppsText.Text = switch ($v) { 'startup' { (T '没有开机启动项') } 'task' { (T '没有第三方的计划任务') } 'leftover' { (T '没找到像是残留的文件夹') } default { (T '没有第三方的右键菜单扩展') } } }
 }
 function Load-StartRows([string]$kind) {
     if ($script:worker) { return }
     $ctl.StartList.ItemsSource = $null
     $ctl.EmptyApps.Visibility = 'Visible'; $ctl.EmptyAppsText.Text = (T '正在读取…')
+    if ($kind -eq 'leftover') {
+        $ctl.EmptyAppsText.Text = (T '正在找已卸载软件可能留下的文件夹（要看一遍软件数据目录，几十秒）…')
+        $sync.Mode = 'leftovers'; $sync.LeftoverResult = $null
+        Start-Op (T '查找残留文件夹') -NoCard; UI-Busy $true
+        Start-Worker @'
+$apps = if ($sync.AppsResult) { $sync.AppsResult } else { Get-InstalledApps }
+$sync.LeftoverResult = @(Get-OrphanFolders $apps)
+'@ $null
+        return
+    }
     $sync.Mode = 'startup'; $sync.StartResult = $null; $sync.StartKind = $kind
     Start-Op $(switch ($kind) { 'startup' { (T '读取开机启动项') } 'task' { (T '读取计划任务') } default { (T '读取右键菜单扩展') } }) -NoCard
     UI-Busy $true
@@ -13394,6 +14066,12 @@ function Build-StartRows([string]$kind, $list) {
                 $r.Key1 = [string]$x.Approved; $r.Key2 = [string]$x.Val
                 $r.Enabled = [bool]$x.Enabled
             }
+            'leftover' {
+                $r.Name = Split-Path ([string]$x.Path) -Leaf
+                $r.Meta = (T "{0} · 最后改动 {1:yyyy-MM-dd}") -f (Fmt ([double]$x.Bytes)), $x.Modified
+                $r.Detail = [string]$x.Path; $r.Open = [string]$x.Path
+                $r.Key1 = [string]$x.Path; $r.Key2 = [string]([double]$x.Bytes); $r.Size = (Fmt ([double]$x.Bytes))
+            }
             'task' {
                 $parts = @(); if ($x.Author) { $parts += [string]$x.Author }; $parts += ((T '任务 ') + [string]$x.Path + [string]$x.Name)
                 if ($x.Desc) { $parts += ([string]$x.Desc) }
@@ -13417,7 +14095,8 @@ function Build-StartRows([string]$kind, $list) {
         $rows.Add($r)
     }
     $sorted = New-Object System.Collections.Generic.List[StartRow]
-    foreach ($r in @($rows | Sort-Object { -not $_.Enabled }, Name)) { $sorted.Add($r) }
+    $ordered = if ($kind -eq 'leftover') { @($rows | Sort-Object { -[double]$_.Key2 }) } else { @($rows | Sort-Object { -not $_.Enabled }, Name) }
+    foreach ($r in $ordered) { $sorted.Add($r) }
     $script:startRows[$kind] = $sorted
     if ($script:appsView -eq $kind) { Filter-StartRows }
 }
@@ -13436,7 +14115,7 @@ function Set-StartRow($r, [bool]$on) {
     if ($r.Kind -eq 'shellex') { $ctl.AppsInfo.Text = (T '右键菜单的改动对新打开的资源管理器窗口生效；还没生效的话注销再登录一次') }
     else { Filter-StartRows }
 }
-foreach ($rb in @($ctl.AppsViewApps, $ctl.AppsViewStartup, $ctl.AppsViewTasks, $ctl.AppsViewMenu)) { $rb.Add_Checked({ Show-AppsView }) }
+foreach ($rb in @($ctl.AppsViewApps, $ctl.AppsViewStartup, $ctl.AppsViewTasks, $ctl.AppsViewMenu, $ctl.AppsViewLeft)) { $rb.Add_Checked({ Show-AppsView }) }
 $ctl.AppsSearch.Add_TextChanged({ Filter-StartRows })
 $ctl.StartList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent, [System.Windows.RoutedEventHandler]{
     param($s, $e)
@@ -13445,6 +14124,19 @@ $ctl.StartList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::Click
     $r = $b.Tag
     if ($b.Name -eq 'StartOpen') { if ($r.Open) { Open-Location $r.Open }; return }
     if ($b.Name -ne 'StartToggle' -or $r.Ours) { return }
+    if ($r.Kind -eq 'leftover') {
+        if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return }
+        $ans = Show-Sheet -Kind danger -Title ((T "把「{0}」移到回收站？") -f $r.Name) -Text ((T "{0}（{1}）。这只是猜测：名字对不上任何已装软件、没有程序在用、一个月没动过。先点「打开位置」看一眼里面是什么。移到回收站后还能恢复。") -f $r.Detail, $r.Size) `
+            -Confirm (T '我看过了，这是已卸载软件留下的，删除不会给我带来损失。') -Buttons @((T '先不删'), (T '移到回收站')) -Primary (T '移到回收站') -Cancel (T '先不删')
+        if ($ans -ne (T '移到回收站')) { return }
+        if (Get-DeleteBlock $r.Detail -Leftover) { Show-Sheet -Kind warn -Title (T '不能删') -Text (Get-DeleteBlock $r.Detail -Leftover) | Out-Null; return }
+        [void][FsTools]::Recycle($r.Detail, [long]$sync.Hwnd)
+        $gone = -not (Test-Path -LiteralPath $r.Detail)
+        OpLog '删除' (T '残留文件夹：移到回收站') $r.Detail $(if ($gone) { $r.Size } else { (T '没删掉，可能被占用') })
+        if ($gone) { $script:startRows['leftover'].Remove($r) | Out-Null; Filter-StartRows; UI-Log ((T "残留文件夹已移到回收站：{0}") -f $r.Detail) }
+        else { Show-Sheet -Kind warn -Title (T '没删掉') -Text (T '可能有程序正在用里面的文件。') | Out-Null }
+        return
+    }
     if ($r.Enabled) {
         $what = switch ($r.Kind) {
             'startup' { (T "「{0}」以后开机时不再自动启动。它本身不会被删，随时可以在这里重新启用，也可以在任务管理器的「启动应用」里改。") -f $r.Name }
@@ -13623,6 +14315,7 @@ function Load-Auto {
     $last = ''
     foreach ($row in (Read-OpLog)) { if ($row.What -in @('每周自动清理完成', (T '每周自动清理完成'))) { $last = (T "上次自动清理：{0}，{1}") -f $row.Time, $row.Detail; break } }
     $ctl.AutoCleanNote.Text = if ($hasExe) { ((T "任务名：{0}。") -f $script:taskClean) + $(if ($last) { "`n$last" } else { '' }) } else { (T '只有 exe 版本支持每周自动清理。') }
+    $ctl.AutoCleanNote.Text += "`n" + $(if (Get-StorageSenseOn) { (T 'Windows 自带的「存储感知」现在是开着的：它也会定期清临时文件和回收站，和这里的自动清理不冲突，只是会各做一遍。') } else { (T 'Windows 自带的「存储感知」现在是关着的（在 Windows 设置 → 系统 → 存储里）。') })
     $script:autoSync = $false
     Draw-History
 }
@@ -14150,6 +14843,47 @@ function Invoke-UiTest {
             if ($all.Count -gt 0 -and $o.Count -ge $all.Count) { throw ("all {0} packages look orphaned; the references were not read" -f $all.Count) }
             "{0} of {1} packages" -f $o.Count, $all.Count
         }
+        & $step 'save space: reserved storage, crash dump, temp folder, OneDrive' {
+            Show-Page 'save'; $win.UpdateLayout()
+            foreach ($n in 'SaveRsState', 'SaveDumpState', 'SaveTmpState') { if (-not [string]$ctl[$n].Text) { throw "$n is empty" } }
+            $dm0 = Get-CrashDumpMode
+            if ($dm0 -ge 0) {
+                Set-CrashDumpMode 3; if ((Get-CrashDumpMode) -ne 3) { throw 'crash dump mode not written' }
+                Set-CrashDumpMode $dm0
+            }
+            $t0 = Get-UserTemp
+            Set-UserTemp "$env:SystemDrive\ClearC-UiTest-Temp"
+            if ((Get-UserTemp) -ne "$env:SystemDrive\ClearC-UiTest-Temp") { throw 'temp folder not written' }
+            Set-UserTemp $t0
+            Remove-Item -LiteralPath "$env:SystemDrive\ClearC-UiTest-Temp" -Recurse -Force -ErrorAction SilentlyContinue
+            $od = Get-OneDriveInfo
+            if ($null -eq $od -or $null -eq $od.Folders) { throw 'OneDrive info missing' }
+            $h = Get-DiskHealth $env:SystemDrive
+            if ($h -isnot [string]) { throw 'disk health is not text' }
+        }
+        & $step 'broken shortcuts and leftover folders are detected' {
+            $sh = New-Object -ComObject WScript.Shell
+            $lnk = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\ClearC-UiTest.lnk'
+            New-Item -ItemType Directory -Force -Path (Split-Path $lnk) | Out-Null
+            $s = $sh.CreateShortcut($lnk); $s.TargetPath = "$env:SystemDrive\ClearC-UiTest-Missing\x.exe"; $s.Save()
+            try {
+                $b = @(Get-BrokenShortcuts)
+                if (@($b | Where-Object { $_.FullName -ieq $lnk }).Count -ne 1) { throw ("broken shortcut not found among {0}" -f $b.Count) }
+            } finally { Remove-Item -LiteralPath $lnk -Force -ErrorAction SilentlyContinue }
+            $d = Join-Path $env:LOCALAPPDATA 'ClearCUiTestOrphan'
+            New-Item -ItemType Directory -Force -Path $d | Out-Null
+            [IO.File]::WriteAllBytes((Join-Path $d 'old.dat'), (New-Object byte[] 2097152))
+            $old = (Get-Date).AddDays(-45)
+            (Get-Item -LiteralPath (Join-Path $d 'old.dat')).LastWriteTime = $old; (Get-Item -LiteralPath $d).LastWriteTime = $old
+            try {
+                $o = @(Get-OrphanFolders @(@{ Name = 'Some App'; Publisher = 'Someone'; Location = 'C:\Program Files\Some App' }))
+                if (@($o | Where-Object { $_.Path -ieq $d }).Count -ne 1) { throw ("orphan folder not found among {0}" -f $o.Count) }
+                Build-StartRows 'leftover' $o
+                $row = @($script:startRows['leftover'] | Where-Object { $_.Detail -ieq $d })[0]
+                if (-not $row -or $row.ToggleText -ne (T '移到回收站') -or -not $row.Size) { throw 'leftover row not built' }
+                $script:startRows.Clear()
+            } finally { Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue }
+        }
         & $step 'restore points card' {
             Show-Page 'save'
             $sw = [Diagnostics.Stopwatch]::StartNew()
@@ -14393,6 +15127,7 @@ $timer.Add_Tick({
     }
 
     if ($script:worker -and $script:op) { Update-Op }
+    if ($script:odWanted -and -not $script:worker -and $ctl.PageSave.Visibility -eq 'Visible') { $script:odWanted = $false; Start-OneDriveInfo }
     if ($sync.Status -and $script:rows -and $sync.StatusVer -ne $script:statusSeen) {
         $script:statusSeen = $sync.StatusVer
         foreach ($r in $script:rows) {
@@ -14410,7 +15145,7 @@ $timer.Add_Tick({
         [DirStat]::Cancel = $false
         if ($sync.WasCancelled) { UI-Log (T '已中途取消。') }
         # 删过、搬过东西以后，逐个扫描得到的旧树不再拿来用（读文件表的结果靠变更日志更新）
-        if (@('scan', 'movescan', 'apps', 'map', 'movesize', 'dup', 'update', 'startup', 'winget') -notcontains [string]$sync.Mode) { [DiskMap]::Invalidate() }
+        if (@('scan', 'movescan', 'apps', 'map', 'movesize', 'dup', 'update', 'startup', 'winget', 'odinfo', 'csanalyze', 'leftovers') -notcontains [string]$sync.Mode) { [DiskMap]::Invalidate() }
 
         if ($sync.Mode -eq 'scan') {
             if ($sync.WasCancelled -or -not $sync.Sizes) {
@@ -14580,6 +15315,33 @@ $timer.Add_Tick({
             End-Op (T '完成')
             if ($x) { $script:pendingDialog = @{ Title = (T '系统压缩完成'); Kind = 'done'; Text = ((T "C 盘可用空间变化：{0}{1}") -f $(if ($x.Delta -ge 0) { (T '多了 ') } else { (T '少了 ') }), (Fmt ([math]::Abs($x.Delta)))) } }
             if ($ctl.PageSave.Visibility -eq 'Visible') { Load-Save }
+        }
+        elseif ($sync.Mode -eq 'odinfo') { End-Op (T '完成'); Show-OneDriveInfo $sync.OdInfo }
+        elseif ($sync.Mode -eq 'odfree') {
+            $x = $sync.OdRes
+            End-Op (T '完成')
+            if ($x) { $script:pendingDialog = @{ Title = (T '已标记为仅在线'); Kind = 'done'; Text = ((T "{0} 个文件（{1}）已改成仅在线{2}。OneDrive 会在后台释放本地空间，要等它同步一会儿。") -f $x.Done, (Fmt $x.Bytes), $(if ($x.Fail) { ((T "，{0} 个没改成（可能正被占用）") -f $x.Fail) } else { '' })) } }
+            $script:odWanted = $true
+        }
+        elseif ($sync.Mode -eq 'csanalyze') {
+            $x = $sync.CsRes
+            End-Op (T '完成')
+            if ($x -and $x.Ok) {
+                $rec = if ($x.Recommended -match '(?i)^(yes|是|true)') { (T '建议清理') } else { (T '不需要清理') }
+                $ctl.SaveCsState.Text = (T "当前：资源管理器显示 {0}，实际 {1}（其中和系统共用的 {2}），可回收的旧组件 {3} 个，上次清理 {4}。Windows 的判断：{5}。") -f $x.Reported, $x.Actual, $x.Shared, $x.Reclaimable, $x.LastCleanup, $rec
+            } else { $ctl.SaveCsState.Text = (T '没分析成。') + $(if ($x) { ' ' + (($x.Out -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -Last 2) -join ' ') } else { '' }) }
+        }
+        elseif ($sync.Mode -eq 'wslmove') {
+            $x = $sync.WslRes
+            End-Op $(if ($x -and $x.Ok) { (T '已搬') } else { (T '没搬成') })
+            if ($x -and $x.Ok) { $script:pendingDialog = @{ Title = (T 'WSL 发行版已搬到其他盘'); Kind = 'done'; Text = (T '照常用 wsl 打开即可。') } }
+            elseif ($x -and $x.Old) { $script:pendingDialog = @{ Title = (T 'WSL 版本太旧'); Kind = 'warn'; Text = ((T "这个 WSL 还没有 --move 命令。在终端里运行 wsl --update 更新 WSL 后再试。`n`n{0}") -f $x.Out) } }
+            elseif ($x) { $script:pendingDialog = @{ Title = (T '没搬成'); Kind = 'warn'; Text = $x.Out } }
+            if ($ctl.PageSave.Visibility -eq 'Visible') { Load-Save }
+        }
+        elseif ($sync.Mode -eq 'leftovers') {
+            End-Op (T '完成')
+            Build-StartRows 'leftover' $sync.LeftoverResult
         }
         elseif ($sync.Mode -eq 'vdisk') {
             $x = $sync.VdRes

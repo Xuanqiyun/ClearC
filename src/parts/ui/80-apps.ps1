@@ -259,7 +259,7 @@ $sync.LeftRes = @{ Count = $n; Name = $arg.Name }
 # ---------- 开机启动 / 计划任务 / 右键菜单：同一个列表，按视图换内容 ----------
 $script:startRows = @{}   # kind -> List[StartRow]
 $script:appsView = 'apps'
-function Get-AppsView { if ($ctl.AppsViewStartup.IsChecked) { 'startup' } elseif ($ctl.AppsViewTasks.IsChecked) { 'task' } elseif ($ctl.AppsViewMenu.IsChecked) { 'shellex' } else { 'apps' } }
+function Get-AppsView { if ($ctl.AppsViewStartup.IsChecked) { 'startup' } elseif ($ctl.AppsViewTasks.IsChecked) { 'task' } elseif ($ctl.AppsViewMenu.IsChecked) { 'shellex' } elseif ($ctl.AppsViewLeft.IsChecked) { 'leftover' } else { 'apps' } }
 function Show-AppsView {
     $v = Get-AppsView; $script:appsView = $v
     $isApps = ($v -eq 'apps')
@@ -284,15 +284,26 @@ function Filter-StartRows {
     $ctl.AppsInfo.Text = switch ($v) {
         'startup' { (T "{0} 个开机启动项，{1} 个已启用") -f $col.Count, $on }
         'task'    { (T "{0} 个第三方计划任务，{1} 个已启用（Windows 自己的不列）") -f $col.Count, $on }
+        'leftover' { $tb = [double]0; foreach ($r in $col) { $tb += [double]$r.Key2 }; (T "{0} 个可能是残留的文件夹，共 {1}。只是猜测：名字对不上任何已装软件、没有程序在用、一个月没动过") -f $col.Count, (Fmt $tb) }
         default   { (T "{0} 个第三方右键菜单扩展，{1} 个已启用（系统自带的不列）") -f $col.Count, $on }
     }
     $ctl.EmptyApps.Visibility = if ($col.Count -gt 0) { 'Collapsed' } else { 'Visible' }
-    if ($col.Count -eq 0) { $ctl.EmptyAppsText.Text = switch ($v) { 'startup' { (T '没有开机启动项') } 'task' { (T '没有第三方的计划任务') } default { (T '没有第三方的右键菜单扩展') } } }
+    if ($col.Count -eq 0) { $ctl.EmptyAppsText.Text = switch ($v) { 'startup' { (T '没有开机启动项') } 'task' { (T '没有第三方的计划任务') } 'leftover' { (T '没找到像是残留的文件夹') } default { (T '没有第三方的右键菜单扩展') } } }
 }
 function Load-StartRows([string]$kind) {
     if ($script:worker) { return }
     $ctl.StartList.ItemsSource = $null
     $ctl.EmptyApps.Visibility = 'Visible'; $ctl.EmptyAppsText.Text = (T '正在读取…')
+    if ($kind -eq 'leftover') {
+        $ctl.EmptyAppsText.Text = (T '正在找已卸载软件可能留下的文件夹（要看一遍软件数据目录，几十秒）…')
+        $sync.Mode = 'leftovers'; $sync.LeftoverResult = $null
+        Start-Op (T '查找残留文件夹') -NoCard; UI-Busy $true
+        Start-Worker @'
+$apps = if ($sync.AppsResult) { $sync.AppsResult } else { Get-InstalledApps }
+$sync.LeftoverResult = @(Get-OrphanFolders $apps)
+'@ $null
+        return
+    }
     $sync.Mode = 'startup'; $sync.StartResult = $null; $sync.StartKind = $kind
     Start-Op $(switch ($kind) { 'startup' { (T '读取开机启动项') } 'task' { (T '读取计划任务') } default { (T '读取右键菜单扩展') } }) -NoCard
     UI-Busy $true
@@ -317,6 +328,12 @@ function Build-StartRows([string]$kind, $list) {
                 $r.Key1 = [string]$x.Approved; $r.Key2 = [string]$x.Val
                 $r.Enabled = [bool]$x.Enabled
             }
+            'leftover' {
+                $r.Name = Split-Path ([string]$x.Path) -Leaf
+                $r.Meta = (T "{0} · 最后改动 {1:yyyy-MM-dd}") -f (Fmt ([double]$x.Bytes)), $x.Modified
+                $r.Detail = [string]$x.Path; $r.Open = [string]$x.Path
+                $r.Key1 = [string]$x.Path; $r.Key2 = [string]([double]$x.Bytes); $r.Size = (Fmt ([double]$x.Bytes))
+            }
             'task' {
                 $parts = @(); if ($x.Author) { $parts += [string]$x.Author }; $parts += ((T '任务 ') + [string]$x.Path + [string]$x.Name)
                 if ($x.Desc) { $parts += ([string]$x.Desc) }
@@ -340,7 +357,8 @@ function Build-StartRows([string]$kind, $list) {
         $rows.Add($r)
     }
     $sorted = New-Object System.Collections.Generic.List[StartRow]
-    foreach ($r in @($rows | Sort-Object { -not $_.Enabled }, Name)) { $sorted.Add($r) }
+    $ordered = if ($kind -eq 'leftover') { @($rows | Sort-Object { -[double]$_.Key2 }) } else { @($rows | Sort-Object { -not $_.Enabled }, Name) }
+    foreach ($r in $ordered) { $sorted.Add($r) }
     $script:startRows[$kind] = $sorted
     if ($script:appsView -eq $kind) { Filter-StartRows }
 }
@@ -359,7 +377,7 @@ function Set-StartRow($r, [bool]$on) {
     if ($r.Kind -eq 'shellex') { $ctl.AppsInfo.Text = (T '右键菜单的改动对新打开的资源管理器窗口生效；还没生效的话注销再登录一次') }
     else { Filter-StartRows }
 }
-foreach ($rb in @($ctl.AppsViewApps, $ctl.AppsViewStartup, $ctl.AppsViewTasks, $ctl.AppsViewMenu)) { $rb.Add_Checked({ Show-AppsView }) }
+foreach ($rb in @($ctl.AppsViewApps, $ctl.AppsViewStartup, $ctl.AppsViewTasks, $ctl.AppsViewMenu, $ctl.AppsViewLeft)) { $rb.Add_Checked({ Show-AppsView }) }
 $ctl.AppsSearch.Add_TextChanged({ Filter-StartRows })
 $ctl.StartList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent, [System.Windows.RoutedEventHandler]{
     param($s, $e)
@@ -368,6 +386,19 @@ $ctl.StartList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::Click
     $r = $b.Tag
     if ($b.Name -eq 'StartOpen') { if ($r.Open) { Open-Location $r.Open }; return }
     if ($b.Name -ne 'StartToggle' -or $r.Ours) { return }
+    if ($r.Kind -eq 'leftover') {
+        if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return }
+        $ans = Show-Sheet -Kind danger -Title ((T "把「{0}」移到回收站？") -f $r.Name) -Text ((T "{0}（{1}）。这只是猜测：名字对不上任何已装软件、没有程序在用、一个月没动过。先点「打开位置」看一眼里面是什么。移到回收站后还能恢复。") -f $r.Detail, $r.Size) `
+            -Confirm (T '我看过了，这是已卸载软件留下的，删除不会给我带来损失。') -Buttons @((T '先不删'), (T '移到回收站')) -Primary (T '移到回收站') -Cancel (T '先不删')
+        if ($ans -ne (T '移到回收站')) { return }
+        if (Get-DeleteBlock $r.Detail -Leftover) { Show-Sheet -Kind warn -Title (T '不能删') -Text (Get-DeleteBlock $r.Detail -Leftover) | Out-Null; return }
+        [void][FsTools]::Recycle($r.Detail, [long]$sync.Hwnd)
+        $gone = -not (Test-Path -LiteralPath $r.Detail)
+        OpLog '删除' (T '残留文件夹：移到回收站') $r.Detail $(if ($gone) { $r.Size } else { (T '没删掉，可能被占用') })
+        if ($gone) { $script:startRows['leftover'].Remove($r) | Out-Null; Filter-StartRows; UI-Log ((T "残留文件夹已移到回收站：{0}") -f $r.Detail) }
+        else { Show-Sheet -Kind warn -Title (T '没删掉') -Text (T '可能有程序正在用里面的文件。') | Out-Null }
+        return
+    }
     if ($r.Enabled) {
         $what = switch ($r.Kind) {
             'startup' { (T "「{0}」以后开机时不再自动启动。它本身不会被删，随时可以在这里重新启用，也可以在任务管理器的「启动应用」里改。") -f $r.Name }

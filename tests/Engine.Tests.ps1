@@ -76,6 +76,11 @@ try {
     Check "winget table parses ($($w.Count) rows)" ($w.Count -eq 3 -and $w[0].Name -eq 'Microsoft Edge' -and $w[0].Id -eq 'Microsoft.Edge' -and $w[0].Available -eq '121.0.5' -and $w[1].Name -eq '腾讯 QQ')
     Check 'winget: truncated id is dropped, name kept' ($w[2].Id -eq '' -and $w[2].Name -like 'Some Very Long*')
     Check 'winget: no table means no rows' (@(ConvertFrom-WingetTable "No installed package found matching input criteria.").Count -eq 0)
+    # DISM 组件存储分析的输出
+    $dism = "Deployment Image Servicing and Management tool`nVersion: 10.0.26100.1`n`nImage Version: 10.0.26100.1`n`n[==========================100.0%==========================]`n`nComponent Store (WinSxS) information:`n`nWindows Explorer Reported Size of Component Store : 9.12 GB`n`nActual Size of Component Store : 8.90 GB`n`n    Shared with Windows : 5.40 GB`n    Backups and Disabled Features : 3.37 GB`n    Cache and Temporary Data : 128.33 MB`n`nDate of Last Cleanup : 2026-09-01 12:00:00`n`nNumber of Reclaimable Packages : 3`nComponent Store Cleanup Recommended : Yes`n`nThe operation completed successfully.`n"
+    $cs = ConvertFrom-DismAnalyze $dism
+    Check 'DISM analysis parses by position' ($cs.Ok -and $cs.Actual -eq '8.90 GB' -and $cs.Reclaimable -eq '3' -and $cs.Recommended -eq 'Yes' -and $cs.Reported -eq '9.12 GB')
+    Check 'DISM analysis: garbage is not Ok' (-not (ConvertFrom-DismAnalyze "Error: 87`nThe parameter is incorrect.").Ok)
     # 启动命令里取程序路径
     Check 'Get-CommandExe handles quotes and arguments' ((Get-CommandExe '"C:\Program Files\App\app.exe" --tray') -eq 'C:\Program Files\App\app.exe' -and (Get-CommandExe 'C:\Tools\x.exe /min') -eq 'C:\Tools\x.exe')
 

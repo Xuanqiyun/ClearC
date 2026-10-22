@@ -60,9 +60,10 @@ public class StartRow : INotifyPropertyChanged {
     public bool Ours { get; set; }          // 本工具自己建的任务
     private bool _on = true;
     public bool Enabled { get { return _on; } set { _on = value; Raise("Enabled"); Raise("StatusText"); Raise("StatusBrush"); Raise("ToggleText"); } }
-    public string StatusText { get { return _on ? L10n.T("已启用") : L10n.T("已禁用"); } }
-    public string StatusBrush { get { return Theme.F(_on ? "#248A3D" : "#86868B"); } }
-    public string ToggleText { get { return _on ? L10n.T("禁用") : L10n.T("启用"); } }
+    public string Size { get; set; }
+    public string StatusText { get { if (Kind == "leftover") return Size ?? ""; return _on ? L10n.T("已启用") : L10n.T("已禁用"); } }
+    public string StatusBrush { get { return Theme.F(Kind == "leftover" ? "#1D1D1F" : (_on ? "#248A3D" : "#86868B")); } }
+    public string ToggleText { get { if (Kind == "leftover") return L10n.T("移到回收站"); return _on ? L10n.T("禁用") : L10n.T("启用"); } }
     void Raise(string n) { PropertyChangedEventHandler h = PropertyChanged; if (h != null) h(this, new PropertyChangedEventArgs(n)); }
     public event PropertyChangedEventHandler PropertyChanged;
 }
@@ -123,6 +124,7 @@ public class VdiskRow : INotifyPropertyChanged {
     public string Name { get; set; }
     public string Path { get; set; }
     public string Kind { get; set; }
+    public string Distro { get; set; }
     public string Note { get; set; }
     public bool CanCompact { get; set; }
     public bool CanMove { get; set; }

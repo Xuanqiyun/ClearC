@@ -1458,6 +1458,7 @@
         <StackPanel>
           <TextBlock Text="空间地图" Style="{StaticResource PageTitle}"/>
           <TextBlock Style="{StaticResource PageSub}" Text="扫描整块盘，看清每个文件夹占了多少。双击文件夹往里点，一层层找到真正的大户。"/>
+          <TextBlock x:Name="MapDiskHealth" Style="{StaticResource Caption}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
         </StackPanel>
       </DockPanel>
       <DockPanel Grid.Row="1" Margin="0,0,0,10">
@@ -1661,11 +1662,82 @@
             </DockPanel>
           </Border>
 
+          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+            <DockPanel>
+              <Button x:Name="BtnOdFree" DockPanel.Dock="Right" Content="改成仅在线" Style="{StaticResource Primary}" VerticalAlignment="Center" Margin="20,0,0,0" IsEnabled="False"/>
+              <StackPanel>
+                <TextBlock Text="OneDrive 文件改成「仅在线」" Style="{StaticResource CardHead}"/>
+                <TextBlock x:Name="SaveOdState" Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
+                           Text="同步过的文件本地都留着一份副本。改成「仅在线」后文件还在云端，资源管理器里照常显示，打开时才下载，本地不再占空间。什么都不删。你设了「始终保留在此设备」的文件不动；OneDrive 要开着才会真正释放。"/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+
+          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+            <DockPanel>
+              <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="20,0,0,0">
+                <Button x:Name="BtnRsOn" Content="重新开启" Margin="0,0,8,0" IsEnabled="False"/>
+                <Button x:Name="BtnRsOff" Content="关闭" IsEnabled="False"/>
+              </StackPanel>
+              <StackPanel>
+                <TextBlock Text="Windows 保留的存储" Style="{StaticResource CardHead}"/>
+                <TextBlock x:Name="SaveRsState" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
+                <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
+                           Text="Windows 给系统更新预留的空间，通常 7 GB 左右，空间明细里的「其他」有一部分就是它。关掉以后这块空间还给你，更新时 Windows 改为临时借用空闲空间；C 盘很满时更新可能提示空间不够，再开回来就好。有更新正在安装时改不了。"/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+
+          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+            <DockPanel>
+              <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="20,0,0,0">
+                <Button x:Name="BtnCsAnalyze" Content="分析" Style="{StaticResource Primary}" Margin="0,0,8,0"/>
+                <Button x:Name="BtnCsClean" Content="去清理"/>
+              </StackPanel>
+              <StackPanel>
+                <TextBlock Text="组件存储（WinSxS）" Style="{StaticResource CardHead}"/>
+                <TextBlock x:Name="SaveCsState" Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap" Text="点「分析」让 Windows 算一下实际多大、能清多少（要一两分钟）。"/>
+                <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
+                           Text="C:\Windows\WinSxS 看着很大，其中很多文件和 System32 是同一份（硬链接），真正能清的是更新替换下来的旧组件。Windows 自己能算出可回收多少、建不建议清理；清理在「清理 C 盘」里的「WinSxS 组件清理 (DISM)」。"/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+
+          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+            <DockPanel>
+              <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="20,0,0,0">
+                <Button x:Name="BtnDumpSmall" Content="改成小转储" Style="{StaticResource Primary}" Margin="0,0,8,0"/>
+                <Button x:Name="BtnDumpAuto" Content="恢复自动"/>
+              </StackPanel>
+              <StackPanel>
+                <TextBlock Text="蓝屏时保存多大的转储" Style="{StaticResource CardHead}"/>
+                <TextBlock x:Name="SaveDumpState" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
+                <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
+                           Text="蓝屏时 Windows 会把内存里的内容存成 C:\Windows\MEMORY.DMP，「自动」模式下可能和内存一样大，清掉了下次蓝屏又会生成。改成「小内存转储」只存 256 KB 的摘要，够看出是哪个驱动出的问题。随时可以恢复。"/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+
+          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+            <StackPanel>
+              <TextBlock Text="临时文件夹的位置" Style="{StaticResource CardHead}"/>
+              <TextBlock x:Name="SaveTmpState" Style="{StaticResource Caption}" Margin="0,4,0,0" TextTrimming="CharacterEllipsis"/>
+              <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
+                         Text="各软件的临时文件默认放在 C 盘的用户目录里。可以改到其他盘，以后的临时文件就不占 C 盘了。改完要注销再登录（或重启）才对所有软件生效；个别安装程序对 C 盘以外的临时文件夹不兼容，遇到就点「恢复默认」。"/>
+              <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                <ComboBox x:Name="SaveTmpDrive" Width="220" Margin="0,0,8,0"/>
+                <Button x:Name="BtnTmpMove" Content="改到这块盘" Style="{StaticResource Primary}" Margin="0,0,8,0"/>
+                <Button x:Name="BtnTmpAuto" Content="恢复默认"/>
+              </StackPanel>
+            </StackPanel>
+          </Border>
+
           <Border Style="{StaticResource Card}" Padding="24,20,24,14" Margin="0,14,0,0">
             <StackPanel>
               <TextBlock Text="虚拟磁盘、模拟器和虚拟机" Style="{StaticResource CardHead}"/>
               <TextBlock Style="{StaticResource Body}" Margin="0,8,0,4"
-                         Text="WSL、Docker、安卓模拟器、虚拟机的磁盘文件动辄几十 GB，而且在里面删了东西也不会自动变小。压缩能把空出来的部分还给 Windows；文件夹形式的可以整个搬到其他盘。"/>
+                         Text="WSL、Docker、安卓模拟器、虚拟机的磁盘文件动辄几十 GB，而且在里面删了东西也不会自动变小。压缩能把空出来的部分还给 Windows；WSL 发行版和文件夹形式的可以整个搬到其他盘。"/>
               <ItemsControl x:Name="VdList">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate>
@@ -1734,6 +1806,7 @@
             <RadioButton x:Name="AppsViewStartup" GroupName="appsv" Content="开机启动" Style="{StaticResource Seg}"/>
             <RadioButton x:Name="AppsViewTasks" GroupName="appsv" Content="计划任务" Style="{StaticResource Seg}"/>
             <RadioButton x:Name="AppsViewMenu" GroupName="appsv" Content="右键菜单" Style="{StaticResource Seg}"/>
+            <RadioButton x:Name="AppsViewLeft" GroupName="appsv" Content="残留文件夹" Style="{StaticResource Seg}"/>
           </StackPanel>
         </Border>
         <Border x:Name="AppsFilterBox" DockPanel.Dock="Left" Style="{StaticResource SegBox}" VerticalAlignment="Center" Margin="0,0,14,0">
@@ -1743,7 +1816,7 @@
             <RadioButton x:Name="AppsStore" GroupName="appsf" Content="应用商店" Style="{StaticResource Seg}"/>
           </StackPanel>
         </Border>
-        <TextBlock x:Name="AppsInfo" DockPanel.Dock="Right" Style="{StaticResource Caption}" Margin="14,0,0,0" TextTrimming="CharacterEllipsis"/>
+        <TextBlock x:Name="AppsInfo" DockPanel.Dock="Right" Style="{StaticResource Caption}" Margin="14,0,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
         <DockPanel>
           <TextBlock DockPanel.Dock="Left" Text="&#xE721;" FontFamily="{StaticResource Icons}" FontSize="12" Foreground="#86868B" VerticalAlignment="Center" Margin="0,0,8,0"/>
           <TextBox x:Name="AppsSearch" MaxWidth="320" HorizontalAlignment="Left" MinWidth="200" ToolTip="按名字或发行商搜索"/>
@@ -2390,6 +2463,10 @@
                   <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>删了要重新下载、重新生成而且比较慢的（NuGet 全局包、Gradle、Maven、JetBrains 索引、虚幻引擎缓存等）放在「需确认」里，默认跳过。</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="驱动残留、失效快捷方式、事件日志"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>都在「需确认」里，默认跳过：显卡和品牌机驱动解压到 C 盘根目录的安装文件；开始菜单里指向已不存在程序的快捷方式（不碰桌面）；Windows 事件日志（排查问题的工程师会看，不确定就跳过）。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Windows Installer 孤儿安装包"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>在「需确认」里。C:\Windows\Installer 里没有任何已装软件和补丁再引用的安装包，常有好几 GB，判断方法和 PatchCleaner 一样。默认跳过，看清说明再选。</Run></TextBlock>
                 </StackPanel>
@@ -2513,7 +2590,7 @@
               <StackPanel>
                 <Grid Margin="0,14,0,0">
                   <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="10"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                   <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource HelpTile}">
                     <StackPanel>
                       <TextBlock Style="{StaticResource HelpLead}" Text="系统压缩（CompactOS）"/>
@@ -2550,10 +2627,46 @@
                       <TextBlock Style="{StaticResource HelpBody}"><Run>WSL、Docker 的虚拟磁盘在里面删了文件也不会自动变小，压缩一下就能把空间还给 Windows；安卓模拟器和虚拟机的文件夹可以整个搬到其他盘。</Run></TextBlock>
                     </StackPanel>
                   </Border>
-                  <Border Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="3" Style="{StaticResource HelpTile}">
+                  <Border Grid.Row="6" Grid.Column="0" Style="{StaticResource HelpTile}">
                     <StackPanel>
                       <TextBlock Style="{StaticResource HelpLead}" Text="合并重复文件"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>在「重复文件」页点「合并为一份」，同一块盘上的重复文件只占一份空间，每个位置的文件都还在。合并后改动其中一个位置，其他位置会跟着变，所以适合不会再改的照片、视频、安装包。</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Row="6" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="OneDrive 改成仅在线"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>同步过的文件本地都留着副本。改成「仅在线」后文件还在云端，资源管理器里照常显示，打开时才下载。什么都不删；设了「始终保留在此设备」的不动。</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Row="8" Grid.Column="0" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="保留的存储"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Windows 给更新预留的 7 GB 左右。关掉就还给你，更新时 Windows 临时借用空闲空间；随时能开回来。</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Row="8" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="组件存储分析"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>让 Windows 算一下 WinSxS 实际多大、能回收多少、建不建议清理，再决定要不要做 DISM 清理。</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Row="10" Grid.Column="0" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="蓝屏小转储"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>蓝屏时只存 256 KB 的小转储，不再生成几个 GB 的 MEMORY.DMP。够看出是哪个驱动出的问题，随时可以恢复自动。</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Row="10" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="临时文件夹改到其他盘"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>当前用户的 TEMP 指向其他盘，以后的临时文件不占 C 盘。注销再登录后生效；个别安装程序不兼容就恢复默认。</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Row="12" Grid.Column="0" Grid.ColumnSpan="3" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="WSL 搬到其他盘"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>用 WSL 自己的 wsl --manage --move 把整个发行版搬走，搬完照常使用。需要 WSL 2.5 以后。</Run></TextBlock>
                     </StackPanel>
                   </Border>
                 </Grid>
@@ -2669,6 +2782,10 @@
                   <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>硬链接是同一份文件在别处也有名字，删了这个名字不腾空间。</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="磁盘健康"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>页面标题下面一行小字：每块盘的型号、健康状态，固态硬盘还有磨损百分比、温度和通电时间（从 Windows 的存储可靠性计数器读，只读不改）。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="空间明细"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>点「空间明细」，看已用空间分成哪几块：文件实际占用、文件表（MFT）和其他，以及为什么和按文件大小相加对不上。删除时也会写明实际能腾出多少。</Run></TextBlock>
                 </StackPanel>
@@ -2716,6 +2833,10 @@
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="搬走以后"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>在「搬家管理」里能看到，随时可以「搬回 C 盘」。以后软件大版本升级时，个别安装程序会把它重新装回 C 盘，到时再搬一次即可。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="残留文件夹"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>找已卸载软件可能留下的文件夹：名字对不上任何已装软件、没有程序在用、一个月没动过、至少 1 MB。只是猜测，先点「打开位置」看一眼再决定；移到回收站，能恢复。</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="检查新版本"/>
@@ -2794,6 +2915,10 @@
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="定期自动清理"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>打开后，在你选的时间（每周某一天或每天，中午 12:30）自动清理一次临时文件、缓存和日志。不搬家、不清空回收站、不碰个人文件夹和你自己加的文件夹，被占用的文件直接跳过。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="存储感知"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>页面上会写明 Windows 自带的「存储感知」开没开。开着的话它也会定期清临时文件和回收站，和这里的自动清理不冲突，只是各做一遍。</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="C 盘空间变化"/>

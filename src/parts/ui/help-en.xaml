@@ -115,6 +115,10 @@
                   <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Items that are slow to download or regenerate (the NuGet global packages folder, Gradle, Maven, JetBrains indexes, Unreal Engine cache and so on) are under "Needs confirmation" and skipped by default.</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Driver leftovers, broken shortcuts, event logs"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>All under "Needs confirmation" and skipped by default: installer files that graphics and OEM drivers unpack into the root of C:; Start menu shortcuts whose program no longer exists (the desktop is left alone); Windows event logs (engineers read them when investigating problems; skip if unsure).</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Orphaned Windows Installer packages"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>Under "Needs confirmation". Packages in C:\Windows\Installer that no installed app or patch refers to any more, often several GB, detected the same way PatchCleaner does. Skipped by default; read the description before selecting it.</Run></TextBlock>
                 </StackPanel>
@@ -238,7 +242,7 @@
               <StackPanel>
                 <Grid Margin="0,14,0,0">
                   <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="10"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                   <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource HelpTile}">
                     <StackPanel>
                       <TextBlock Style="{StaticResource HelpLead}" Text="System compression (CompactOS)"/>
@@ -275,10 +279,46 @@
                       <TextBlock Style="{StaticResource HelpBody}"><Run>WSL and Docker virtual disks don't shrink when you delete files inside them; compacting them gives the space back to Windows. Android emulator and virtual machine folders can be moved to another drive as a whole.</Run></TextBlock>
                     </StackPanel>
                   </Border>
-                  <Border Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="3" Style="{StaticResource HelpTile}">
+                  <Border Grid.Row="6" Grid.Column="0" Style="{StaticResource HelpTile}">
                     <StackPanel>
                       <TextBlock Style="{StaticResource HelpLead}" Text="Merge duplicate files"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>On the "Duplicates" page, click "Merge into one copy". Duplicate files on the same drive then take up the space of just one copy, while the file stays in every location. After merging, editing the file in one location changes it in all the others, so this suits photos, videos and installers you won't change again.</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Row="6" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="OneDrive online-only"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Synced files keep a local copy. Once "online-only" they stay in the cloud, still show in File Explorer and download when opened. Nothing is deleted; files marked "Always keep on this device" are left alone.</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Row="8" Grid.Column="0" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Reserved storage"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>The 7 GB or so Windows sets aside for updates. Turning it off gives the space back; Windows borrows free space when updating, and you can turn it back on at any time.</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Row="8" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Component store analysis"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Lets Windows work out the actual size of WinSxS, how much is reclaimable and whether cleanup is advisable, before you run the DISM cleanup.</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Row="10" Grid.Column="0" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Small crash dumps"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Blue screens save only a 256 KB small dump instead of a MEMORY.DMP of several GB. Enough to tell which driver failed; automatic dumps can be restored at any time.</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Row="10" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Temp folder on another drive"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Points the current user's TEMP to another drive so future temporary files don't take space on C:. Applies after you sign out and back in; restore the default if an installer doesn't like it.</Run></TextBlock>
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Row="12" Grid.Column="0" Grid.ColumnSpan="3" Style="{StaticResource HelpTile}">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Move WSL to another drive"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Uses WSL's own wsl --manage --move to move a whole distribution; it works as before afterwards. Needs WSL 2.5 or later.</Run></TextBlock>
                     </StackPanel>
                   </Border>
                 </Grid>
@@ -394,6 +434,10 @@
                   <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>A hard link means the same file also has a name elsewhere, so deleting this name frees nothing.</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Disk health"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>A line under the page title: each drive's model and health status, and for SSDs the wear percentage, temperature and hours powered on (read from Windows' storage reliability counters; read-only).</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Space breakdown"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>Click "Space breakdown" to see how the used space splits into file data, the file table (MFT) and the rest, and why it differs from adding up file sizes. Deleting also tells you how much space you will really get back.</Run></TextBlock>
                 </StackPanel>
@@ -441,6 +485,10 @@
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="After moving"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>Moved apps appear in "Moved folders", where you can "Move back to C:" at any time. When an app gets a major upgrade later, a few installers will reinstall it on C:; just move it again then.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Leftovers"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Finds folders that uninstalled apps may have left behind: the name matches no installed app, no program is using them, nothing changed for a month, and they are at least 1 MB. It is only a guess, so click "Open location" first; they go to the Recycle Bin and can be restored.</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Check for updates"/>
@@ -519,6 +567,10 @@
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Scheduled cleanup"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>When turned on, temporary files, caches and logs are cleaned up at the time you choose (a day of the week or every day, at 12:30 PM). It doesn't move anything, doesn't empty the Recycle Bin and doesn't touch personal folders or the folders you added yourself; files in use are simply skipped.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Storage Sense"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>The page says whether Windows' own Storage Sense is on. If it is, it also cleans temporary files and the Recycle Bin on a schedule; it doesn't conflict with the cleanup here, both simply run.</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Space on C: over time"/>

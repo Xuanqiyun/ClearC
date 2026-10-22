@@ -176,6 +176,47 @@ function Invoke-UiTest {
             if ($all.Count -gt 0 -and $o.Count -ge $all.Count) { throw ("all {0} packages look orphaned; the references were not read" -f $all.Count) }
             "{0} of {1} packages" -f $o.Count, $all.Count
         }
+        & $step 'save space: reserved storage, crash dump, temp folder, OneDrive' {
+            Show-Page 'save'; $win.UpdateLayout()
+            foreach ($n in 'SaveRsState', 'SaveDumpState', 'SaveTmpState') { if (-not [string]$ctl[$n].Text) { throw "$n is empty" } }
+            $dm0 = Get-CrashDumpMode
+            if ($dm0 -ge 0) {
+                Set-CrashDumpMode 3; if ((Get-CrashDumpMode) -ne 3) { throw 'crash dump mode not written' }
+                Set-CrashDumpMode $dm0
+            }
+            $t0 = Get-UserTemp
+            Set-UserTemp "$env:SystemDrive\ClearC-UiTest-Temp"
+            if ((Get-UserTemp) -ne "$env:SystemDrive\ClearC-UiTest-Temp") { throw 'temp folder not written' }
+            Set-UserTemp $t0
+            Remove-Item -LiteralPath "$env:SystemDrive\ClearC-UiTest-Temp" -Recurse -Force -ErrorAction SilentlyContinue
+            $od = Get-OneDriveInfo
+            if ($null -eq $od -or $null -eq $od.Folders) { throw 'OneDrive info missing' }
+            $h = Get-DiskHealth $env:SystemDrive
+            if ($h -isnot [string]) { throw 'disk health is not text' }
+        }
+        & $step 'broken shortcuts and leftover folders are detected' {
+            $sh = New-Object -ComObject WScript.Shell
+            $lnk = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\ClearC-UiTest.lnk'
+            New-Item -ItemType Directory -Force -Path (Split-Path $lnk) | Out-Null
+            $s = $sh.CreateShortcut($lnk); $s.TargetPath = "$env:SystemDrive\ClearC-UiTest-Missing\x.exe"; $s.Save()
+            try {
+                $b = @(Get-BrokenShortcuts)
+                if (@($b | Where-Object { $_.FullName -ieq $lnk }).Count -ne 1) { throw ("broken shortcut not found among {0}" -f $b.Count) }
+            } finally { Remove-Item -LiteralPath $lnk -Force -ErrorAction SilentlyContinue }
+            $d = Join-Path $env:LOCALAPPDATA 'ClearCUiTestOrphan'
+            New-Item -ItemType Directory -Force -Path $d | Out-Null
+            [IO.File]::WriteAllBytes((Join-Path $d 'old.dat'), (New-Object byte[] 2097152))
+            $old = (Get-Date).AddDays(-45)
+            (Get-Item -LiteralPath (Join-Path $d 'old.dat')).LastWriteTime = $old; (Get-Item -LiteralPath $d).LastWriteTime = $old
+            try {
+                $o = @(Get-OrphanFolders @(@{ Name = 'Some App'; Publisher = 'Someone'; Location = 'C:\Program Files\Some App' }))
+                if (@($o | Where-Object { $_.Path -ieq $d }).Count -ne 1) { throw ("orphan folder not found among {0}" -f $o.Count) }
+                Build-StartRows 'leftover' $o
+                $row = @($script:startRows['leftover'] | Where-Object { $_.Detail -ieq $d })[0]
+                if (-not $row -or $row.ToggleText -ne (T '移到回收站') -or -not $row.Size) { throw 'leftover row not built' }
+                $script:startRows.Clear()
+            } finally { Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue }
+        }
         & $step 'restore points card' {
             Show-Page 'save'
             $sw = [Diagnostics.Stopwatch]::StartNew()

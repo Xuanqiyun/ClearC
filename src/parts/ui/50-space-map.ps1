@@ -14,6 +14,33 @@ function Fill-MapDrives {
     }
     if (-not $ctl.MapDrive.SelectedItem -and $ctl.MapDrive.Items.Count -gt 0) { $ctl.MapDrive.SelectedIndex = 0 }
 }
+# 盘的健康信息（SSD 磨损、温度、通电时间）：在另一个线程里读，读到了写在标题下面
+$script:dhPs = $null
+function Start-DiskHealth {
+    if ($script:dhPs) { return }
+    $ctl.MapDiskHealth.Text = ''
+    $drives = @(Fixed-Drives | ForEach-Object { $_.Name.TrimEnd('\') })
+    if ($drives.Count -eq 0) { return }
+    $code = 'param($drives, $engine) Invoke-Expression $engine; $o = @(); foreach ($d in $drives) { $h = Get-DiskHealth $d; if ($h) { $o += ($d + [char]32 + $h) } }; ,$o'
+    try {
+        $ps = [powershell]::Create()
+        [void]$ps.AddScript($code).AddArgument($drives).AddArgument($engine)
+        $script:dhPs = $ps; $script:dhAr = $ps.BeginInvoke()
+    } catch { $script:dhPs = $null; return }
+    $t = New-Object System.Windows.Threading.DispatcherTimer
+    $t.Interval = [TimeSpan]::FromMilliseconds(400)
+    $t.Add_Tick({
+        if (-not $script:dhPs) { $this.Stop(); return }
+        if (-not $script:dhAr.IsCompleted) { return }
+        $this.Stop()
+        $lines = @()
+        try { $out = $script:dhPs.EndInvoke($script:dhAr); if ($out.Count -gt 0) { $lines = @($out[$out.Count - 1]) } } catch {}
+        try { $script:dhPs.Dispose() } catch {}
+        $script:dhPs = $null
+        $ctl.MapDiskHealth.Text = ($lines -join (T '；'))
+    })
+    $t.Start()
+}
 function Start-MapScan([string]$root) {
     if ($script:worker -or -not $root) { return }
     $di = $null; try { $di = New-Object System.IO.DriveInfo $root } catch {}
