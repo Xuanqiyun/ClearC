@@ -39,7 +39,7 @@ function Start-DiskHealth {
         if ($script:dhErr) { Write-LogFile ('disk health: ' + $script:dhErr) }
         try { $script:dhPs.Dispose() } catch {}
         $script:dhPs = $null
-        $ctl.MapDiskHealth.Text = ($lines -join (T '；'))
+        $ctl.MapDiskHealth.Text = if ($lines.Count -gt 0) { ($lines -join (T '；')) } else { (T '读不到磁盘的健康信息（型号、磨损、温度）') }
     })
     $t.Start()
 }

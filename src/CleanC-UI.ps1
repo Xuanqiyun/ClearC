@@ -3165,7 +3165,18 @@ function Get-DiskHealth([string]$drive) {
             }
         } catch {}
         return ($parts -join ' · ')
-    } catch { return '' }
+    } catch {}
+    # 存储模块不可用时退回 WMI：只有型号和状态
+    try {
+        $ld = Get-CimInstance -ClassName Win32_LogicalDisk -Filter ("DeviceID='{0}'" -f $drive.Substring(0, 2)) -ErrorAction Stop
+        foreach ($pt in @(Get-CimAssociatedInstance -InputObject $ld -ResultClassName Win32_DiskPartition -ErrorAction Stop)) {
+            foreach ($dd in @(Get-CimAssociatedInstance -InputObject $pt -ResultClassName Win32_DiskDrive -ErrorAction Stop)) {
+                $st = [string]$dd.Status
+                return (([string]$dd.Model).Trim() + ' · ' + $(if ($st -eq 'OK') { (T '健康状态正常') } else { ((T "健康状态：{0}") -f $st) }))
+            }
+        }
+    } catch {}
+    return ''
 }
 # ---------- Windows 自带的「存储感知」开没开 ----------
 function Get-StorageSenseOn { try { return ([int](Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy' -ErrorAction Stop).'01' -eq 1) } catch { return $false } }
@@ -4860,6 +4871,7 @@ WSL 版本太旧	WSL is too old
 {0} °C	{0} °C
 通电 {0:N0} 小时	{0:N0} hours powered on
 读错误 {0:N0} 次	{0:N0} read errors
+读不到磁盘的健康信息（型号、磨损、温度）	Disk health (model, wear, temperature) could not be read
 开始菜单里失效的快捷方式	Broken Start menu shortcuts
 指向的程序已经不在了的快捷方式（只看开始菜单，不碰桌面）。目标在没插着的硬盘上的不算。不占什么空间，只是清爽	Shortcuts whose program no longer exists (Start menu only, the desktop is left alone). Targets on a drive that isn't connected don't count. Takes no space; just tidier
 失效的快捷方式	Broken shortcut
@@ -12016,7 +12028,7 @@ function Start-DiskHealth {
         if ($script:dhErr) { Write-LogFile ('disk health: ' + $script:dhErr) }
         try { $script:dhPs.Dispose() } catch {}
         $script:dhPs = $null
-        $ctl.MapDiskHealth.Text = ($lines -join (T '；'))
+        $ctl.MapDiskHealth.Text = if ($lines.Count -gt 0) { ($lines -join (T '；')) } else { (T '读不到磁盘的健康信息（型号、磨损、温度）') }
     })
     $t.Start()
 }
