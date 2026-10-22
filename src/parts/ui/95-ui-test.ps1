@@ -146,6 +146,52 @@ function Invoke-UiTest {
                 if ($lv.SelectedItems.Count -ne 0) { throw 'Esc did not clear the ticks' }
             }
         }
+        & $step 'real mouse: click, double-click, check box' {
+            # 用真的鼠标点（SetCursorPos + mouse_event）。窗口先挪到屏幕上、放在最前面；这台机器收不到模拟的鼠标就跳过
+            if (-not ('UiInput' -as [type])) { Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class UiInput { [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y); [DllImport("user32.dll")] public static extern void mouse_event(uint f, uint dx, uint dy, uint d, UIntPtr e); }' }
+            $pump = { param([int]$ms) $sw = [Diagnostics.Stopwatch]::StartNew(); while ($sw.ElapsedMilliseconds -lt $ms) { $f = New-Object System.Windows.Threading.DispatcherFrame; [void]$win.Dispatcher.BeginInvoke([Action]{ $f.Continue = $false }, [System.Windows.Threading.DispatcherPriority]::Background); [System.Windows.Threading.Dispatcher]::PushFrame($f); Start-Sleep -Milliseconds 15 } }
+            $at = { param($el, [int]$times)
+                $pt = $el.PointToScreen((New-Object System.Windows.Point ([double]$el.ActualWidth / 2), ([double]$el.ActualHeight / 2)))
+                [void][UiInput]::SetCursorPos([int]$pt.X, [int]$pt.Y); Start-Sleep -Milliseconds 80; & $pump 120
+                for ($q = 0; $q -lt $times; $q++) { [UiInput]::mouse_event(2, 0, 0, 0, [UIntPtr]::Zero); Start-Sleep -Milliseconds 25; [UiInput]::mouse_event(4, 0, 0, 0, [UIntPtr]::Zero); Start-Sleep -Milliseconds 40 }
+                & $pump 500
+            }
+            $lv = $ctl.MapList
+            $x0 = $win.Left; $y0 = $win.Top
+            try {
+                $win.Left = 0; $win.Top = 0; $win.Topmost = $true; $win.Activate() | Out-Null; & $pump 400
+                Show-MapLevel $tree; $lv.UnselectAll(); $win.UpdateLayout(); & $pump 200
+                $k0 = Find-Visual ($lv.ItemContainerGenerator.ContainerFromIndex(0)) ([System.Windows.Controls.CheckBox])
+                & $at $k0 1
+                if ($lv.SelectedItems.Count -ne 1) { $L.Add('       (real mouse input does not reach the window on this machine; skipped)'); return }
+                if (-not $k0.IsMouseOver) { throw 'the pointer on the check box is not seen as over it' }
+                $t1 = Find-Visual ($lv.ItemContainerGenerator.ContainerFromIndex(1)) ([System.Windows.Controls.TextBlock])
+                & $at $t1 1
+                if ($lv.SelectedItems.Count -ne 1) { throw ("a click on a row's name changed the selection to {0}" -f $lv.SelectedItems.Count) }
+                & $at $k0 2
+                if ($lv.SelectedItems.Count -ne 1 -or -not [object]::ReferenceEquals($script:mapCur, $tree)) { throw 'a double click on the check box did something else than tick twice' }
+                $di = -1; for ($q = 0; $q -lt $lv.Items.Count; $q++) { $r = $lv.Items[$q]; if ($r.IsDir -and $r.Node) { $di = $q; break } }
+                if ($di -lt 0) { throw 'no folder row to double-click' }
+                $lv.ScrollIntoView($lv.Items[$di]); $win.UpdateLayout(); & $pump 200
+                $want = $lv.Items[$di].Node
+                $td = Find-Visual ($lv.ItemContainerGenerator.ContainerFromIndex($di)) ([System.Windows.Controls.TextBlock])
+                & $at $td 2
+                if (-not [object]::ReferenceEquals($script:mapCur, $want)) { throw ("double-click did not open the folder (now at {0})" -f $script:mapCur.FullPath()) }
+                # 关掉复选框再试一次：单击选中，双击照样进
+                Show-MapLevel $tree; $win.Resources['MapCkVis'] = [System.Windows.Visibility]::Collapsed; $lv.UnselectAll(); $win.UpdateLayout(); & $pump 200
+                $t1 = Find-Visual ($lv.ItemContainerGenerator.ContainerFromIndex(1)) ([System.Windows.Controls.TextBlock])
+                & $at $t1 1
+                if ($lv.SelectedItems.Count -ne 1) { throw 'without check boxes a click does not select the row' }
+                $lv.ScrollIntoView($lv.Items[$di]); $win.UpdateLayout(); & $pump 200
+                $td = Find-Visual ($lv.ItemContainerGenerator.ContainerFromIndex($di)) ([System.Windows.Controls.TextBlock])
+                & $at $td 2
+                if (-not [object]::ReferenceEquals($script:mapCur, $want)) { throw 'without check boxes double-click did not open the folder' }
+            } finally {
+                $win.Resources['MapCkVis'] = [System.Windows.Visibility]::Visible
+                $win.Topmost = $false; $win.Left = $x0; $win.Top = $y0
+                Show-MapLevel $tree; $lv.UnselectAll(); $win.UpdateLayout()
+            }
+        }
         & $step 'select all' {
             $lv = $ctl.MapList
             & $click $ctl.MapAll; if ($lv.SelectedItems.Count -ne $lv.Items.Count -or $ctl.MapAll.IsChecked -ne $true) { throw 'not all selected' }
