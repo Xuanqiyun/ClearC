@@ -118,22 +118,28 @@ function Invoke-UiTest {
             & $click $ctl.MapAll; if ($lv.SelectedItems.Count -ne $lv.Items.Count -or $ctl.MapAll.IsChecked -ne $true) { throw 'not all selected' }
             & $click $ctl.MapAll; if ($lv.SelectedItems.Count -ne 0 -or $ctl.MapAll.IsChecked -ne $false) { throw 'not all cleared' }
         }
-        & $step 'right-drag selects a run of rows' {
+        & $step 'left and right drag select a run of rows' {
             $lv = $ctl.MapList; $n = $lv.Items.Count
             if ($n -lt 3) { throw 'too few rows' }
             if ((Get-RowAt $lv 6) -ne 0) { throw ("row at the top is {0}" -f (Get-RowAt $lv 6)) }
             $lv.UnselectAll()
-            $d = @{ Lv = $lv; Anchor = 0; Cur = 0; Moved = $false; Ctrl = $false; Base = $null; Cap = $null }; $script:rdrag = $d
-            Start-RightDrag $d; Set-DragRange $d 2
-            if ($lv.SelectedItems.Count -ne 3) { throw ("{0} selected for rows 0-2" -f $lv.SelectedItems.Count) }
-            Set-DragRange $d 1
-            if ($lv.SelectedItems.Count -ne 2) { throw 'dragging back did not shrink the selection' }
-            Stop-RightDrag
-            if ($script:rdrag) { throw 'drag not stopped' }
-            $lv.UnselectAll(); [void]$lv.SelectedItems.Add($lv.Items[$n - 1])
-            $d = @{ Lv = $lv; Anchor = 0; Cur = 0; Moved = $false; Ctrl = $true; Base = $null; Cap = $null }; $script:rdrag = $d
-            Start-RightDrag $d; Set-DragRange $d 1; Stop-RightDrag
-            if ($lv.SelectedItems.Count -ne 3) { throw ("with Ctrl {0} selected, expected 3" -f $lv.SelectedItems.Count) }
+            foreach ($btn in 'Right', 'Left') {
+                $lv.UnselectAll()
+                $d = @{ Lv = $lv; Anchor = 0; Cur = 0; Moved = $false; Ctrl = $false; Base = $null; Cap = $null; Button = $btn }; $script:rdrag = $d
+                Start-RowDrag $d; Set-DragRange $d 2
+                if ($lv.SelectedItems.Count -ne 3) { throw ("{0}: {1} selected for rows 0-2" -f $btn, $lv.SelectedItems.Count) }
+                Set-DragRange $d 1
+                if ($lv.SelectedItems.Count -ne 2) { throw "${btn}: dragging back did not shrink the selection" }
+                Stop-RowDrag
+                if ($script:rdrag) { throw "${btn}: drag not stopped" }
+                $lv.UnselectAll(); [void]$lv.SelectedItems.Add($lv.Items[$n - 1])
+                $d = @{ Lv = $lv; Anchor = 0; Cur = 0; Moved = $false; Ctrl = $true; Base = $null; Cap = $null; Button = $btn }; $script:rdrag = $d
+                Start-RowDrag $d; Set-DragRange $d 1; Stop-RowDrag
+                if ($lv.SelectedItems.Count -ne 3) { throw ("{0} with Ctrl: {1} selected, expected 3" -f $btn, $lv.SelectedItems.Count) }
+            }
+            $c0 = $lv.ItemContainerGenerator.ContainerFromIndex(0); $k0 = Find-Visual $c0 ([System.Windows.Controls.CheckBox]); $t0 = Find-Visual $c0 ([System.Windows.Controls.TextBlock])
+            if (-not (Test-InCheckBox $lv (Find-Visual $k0 ([System.Windows.Controls.Border])))) { throw 'a press on the check box would start a drag' }
+            if ($t0 -and (Test-InCheckBox $lv $t0)) { throw 'a press on the name is taken for the check box' }
         }
         & $step 'right-click menu' {
             $lv = $ctl.MapList; $lv.UnselectAll()

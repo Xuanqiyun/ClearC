@@ -436,7 +436,7 @@ function Update-MapSel {
     $ctl.BtnMapOpen.IsEnabled = [bool]$r -and -not $busy
     $ctl.BtnMapDelete.IsEnabled = ($del.Count -gt 0) -and -not $busy
     $ctl.BtnMapCompress.IsEnabled = [bool]$r -and $r.IsDir -and -not $busy -and -not (Get-CompressBlock $r.Path)
-    if ($sel.Count -eq 0) { $ctl.MapSel.Text = (T '选中一行可以打开位置、压缩或删除；勾选前面的方框，或按住 Ctrl、Shift，可以选多项一起删；按住右键上下拖可以一次选中连着的几行。系统文件夹、软件安装文件夹、C 盘个人文件夹和搬家后的数据带小锁，不能在这里删。'); return }
+    if ($sel.Count -eq 0) { $ctl.MapSel.Text = (T '选中一行可以打开位置、压缩或删除；勾选前面的方框，或按住 Ctrl、Shift，可以选多项一起删；按住鼠标（左键或右键）上下拖可以一次选中连着的几行。系统文件夹、软件安装文件夹、C 盘个人文件夹和搬家后的数据带小锁，不能在这里删。'); return }
     if ($sel.Count -gt 1) {
         $tot = [double]0; foreach ($x in $sel) { $tot += [double]$x.Size }
         $t = (T "已选 {0} 项，共 {1}") -f $sel.Count, (Fmt $tot)
@@ -477,7 +477,7 @@ $ctl.MmCopy.Add_Click({
     $ps = @($ctl.MapList.SelectedItems | Where-Object { $_.Path } | ForEach-Object { [string]$_.Path })
     if ($ps.Count -gt 0) { try { [System.Windows.Clipboard]::SetText(($ps -join "`r`n")); $ctl.MapSel.Text = (T "已复制 {0} 个路径") -f $ps.Count } catch {} }
 })
-# ---------- 按住右键上下拖：选中连着的几行（像在资源管理器里拉框）；松开后弹出右键菜单 ----------
+# ---------- 按住鼠标（左键或右键）上下拖：选中连着的几行（像在资源管理器里拉框）；右键拖的话松开后弹出右键菜单 ----------
 # 按住 Ctrl 再拖：在原来选中的基础上加上这一段
 function Find-Visual($root, [type]$t) {
     $q = New-Object System.Collections.Queue; $q.Enqueue($root)
@@ -529,10 +529,10 @@ function Set-DragRange($d, [int]$to) {
     $d.Cur = $to
     Update-MapSel
 }
-function Start-RightDrag($d) {
+function Start-RowDrag($d) {
     $lv = $d.Lv
     if (-not $script:mapScroller) { $script:mapScroller = Find-Visual $lv ([System.Windows.Controls.ScrollViewer]) }
-    # 鼠标交给列表里的滚动区（不是列表本身：列表自己拿着鼠标、左键又没按着时会把鼠标放掉）
+    # 鼠标交给列表里的滚动区，不交给列表本身：列表自己拿着鼠标时，右键拖会被它放掉，左键拖它会把选中改成鼠标下面的那一行
     $d.Cap = if ($script:mapScroller) { $script:mapScroller } else { $lv }
     $d.Moved = $true
     [void]$d.Cap.CaptureMouse()
@@ -543,38 +543,58 @@ function Start-RightDrag($d) {
     }
     $script:rdragTimer.Start()
 }
-function Stop-RightDrag {
+function Stop-RowDrag {
     $d = $script:rdrag; $script:rdrag = $null
     $script:rdragTimer.Stop()
     if ($d -and $d.Moved -and $d.Cap -and $d.Cap.IsMouseCaptured) { $d.Cap.ReleaseMouseCapture() }
 }
-$ctl.MapList.Add_PreviewMouseRightButtonDown({
-    param($s, $e)
-    Stop-RightDrag
+function Get-DragButton($d) { if ($d.Button -eq 'Left') { [System.Windows.Input.Mouse]::LeftButton } else { [System.Windows.Input.Mouse]::RightButton } }
+# 按下的地方在不在行前面的复选框上（在的话交给复选框，不拖选）
+function Test-InCheckBox($lv, $el) {
+    try {
+        for ($v = $el; $v -and -not [object]::ReferenceEquals($v, $lv); $v = [System.Windows.Media.VisualTreeHelper]::GetParent($v)) {
+            if ($v -is [System.Windows.Controls.CheckBox]) { return $true }
+            if ($v -is [System.Windows.Controls.ListViewItem]) { return $false }
+        }
+    } catch {}
+    return $false
+}
+# 按下：记下从哪一行开始；真正拖到别的行才算拖选（只是点一下照常）
+function Begin-RowDrag($s, $e, [string]$button) {
+    Stop-RowDrag
     if (-not ($e.OriginalSource -is [System.Windows.DependencyObject])) { return }
+    $mods = [System.Windows.Input.Keyboard]::Modifiers
+    # 左键按着 Shift：Windows 列表自己就会从上次点的那一行选到这里，不用管
+    if ($button -eq 'Left' -and ($mods -band [System.Windows.Input.ModifierKeys]::Shift)) { return }
+    if ($button -eq 'Left' -and (Test-InCheckBox $s $e.OriginalSource)) { return }
     $c = $null; try { $c = [System.Windows.Controls.ItemsControl]::ContainerFromElement($s, $e.OriginalSource) } catch {}
     if (-not $c) { return }
     $i = $s.ItemContainerGenerator.IndexFromContainer($c)
     if ($i -lt 0) { return }
-    $ctrl = ([System.Windows.Input.Keyboard]::Modifiers -band [System.Windows.Input.ModifierKeys]::Control) -ne 0
-    $script:rdrag = @{ Lv = $s; Anchor = $i; Cur = $i; Moved = $false; Ctrl = $ctrl; Base = $null; Cap = $null }
-})
+    $ctrl = ($mods -band [System.Windows.Input.ModifierKeys]::Control) -ne 0
+    $script:rdrag = @{ Lv = $s; Anchor = $i; Cur = $i; Moved = $false; Ctrl = $ctrl; Base = $null; Cap = $null; Button = $button }
+}
+$ctl.MapList.Add_PreviewMouseLeftButtonDown({ param($s, $e) Begin-RowDrag $s $e 'Left' })
+$ctl.MapList.Add_PreviewMouseRightButtonDown({ param($s, $e) Begin-RowDrag $s $e 'Right' })
 $ctl.MapList.Add_PreviewMouseMove({
     param($s, $e)
     $d = $script:rdrag
     if (-not $d) { return }
-    if ($e.RightButton -ne [System.Windows.Input.MouseButtonState]::Pressed) { Stop-RightDrag; return }
+    $st = if ($d.Button -eq 'Left') { $e.LeftButton } else { $e.RightButton }
+    if ($st -ne [System.Windows.Input.MouseButtonState]::Pressed) { Stop-RowDrag; return }
     $i = Get-RowAt $s ($e.GetPosition($s).Y)
-    if (-not $d.Moved) { if ($i -lt 0 -or $i -eq $d.Anchor) { return }; Start-RightDrag $d }
+    if (-not $d.Moved) { if ($i -lt 0 -or $i -eq $d.Anchor) { return }; Start-RowDrag $d }
     Set-DragRange $d $i
 })
-$ctl.MapList.Add_PreviewMouseRightButtonUp({ Stop-RightDrag })
-$ctl.MapList.Add_LostMouseCapture({ $d = $script:rdrag; if ($d -and $d.Moved -and $d.Cap -and -not $d.Cap.IsMouseCaptured) { $script:rdrag = $null; $script:rdragTimer.Stop() } })
+$ctl.MapList.Add_PreviewMouseLeftButtonUp({ if ($script:rdrag -and $script:rdrag.Button -eq 'Left') { Stop-RowDrag } })
+$ctl.MapList.Add_PreviewMouseRightButtonUp({ if ($script:rdrag -and $script:rdrag.Button -eq 'Right') { Stop-RowDrag } })
+# 拖选中鼠标被别处拿走了（比如切到别的窗口）：停下。列表把鼠标交出来时也会收到这个，那时不算
+$ctl.MapList.Add_LostMouseCapture({ param($s, $e) $d = $script:rdrag; if ($d -and $d.Moved -and $d.Cap -and [object]::ReferenceEquals($e.OriginalSource, $d.Cap)) { $script:rdrag = $null; $script:rdragTimer.Stop() } })
 # 拖到列表上面或下面：自动滚动，边滚边选
 $script:rdragTimer.Add_Tick({
     $d = $script:rdrag
     if (-not $d -or -not $d.Moved) { $script:rdragTimer.Stop(); return }
-    if ([System.Windows.Input.Mouse]::RightButton -ne [System.Windows.Input.MouseButtonState]::Pressed) { Stop-RightDrag; return }
+    if ((Get-DragButton $d) -ne [System.Windows.Input.MouseButtonState]::Pressed) { Stop-RowDrag; return }
     $lv = $d.Lv; $y = [System.Windows.Input.Mouse]::GetPosition($lv).Y; $h = [double]$lv.ActualHeight
     if ($y -ge 0 -and $y -le $h) { return }
     $sv = $script:mapScroller; if (-not $sv) { return }

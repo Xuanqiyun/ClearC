@@ -1428,7 +1428,7 @@
         </StackPanel>
         <CheckBox x:Name="MapAll" DockPanel.Dock="Left" Content="全选" Visibility="{DynamicResource MapCkVis}" VerticalAlignment="Center" Margin="18,0,12,0" ToolTip="选中这一层列出的全部项目；再点一下全部取消"/>
         <TextBlock x:Name="MapSel" VerticalAlignment="Center" TextWrapping="Wrap" Foreground="#6E6E73" Margin="2,0,16,0"
-                   Text="选中一行可以打开位置、压缩或删除；勾选前面的方框，或按住 Ctrl、Shift，可以选多项一起删；按住右键上下拖可以一次选中连着的几行。系统文件夹、软件安装文件夹、C 盘个人文件夹和搬家后的数据带小锁，不能在这里删。"/>
+                   Text="选中一行可以打开位置、压缩或删除；勾选前面的方框，或按住 Ctrl、Shift，可以选多项一起删；按住鼠标（左键或右键）上下拖可以一次选中连着的几行。系统文件夹、软件安装文件夹、C 盘个人文件夹和搬家后的数据带小锁，不能在这里删。"/>
       </DockPanel>
     </Grid>
 
@@ -1968,7 +1968,7 @@
                 <CheckBox x:Name="SetMapCheck" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
                 <StackPanel>
                   <TextBlock Text="项目复选框" Style="{StaticResource SetName}"/>
-                  <TextBlock Style="{StaticResource SetNote}" Text="每一行前面显示一个复选框，点一下就能多选，不用按住 Ctrl（和资源管理器「查看」里的「项目复选框」一样）。开不开都可以按住右键上下拖，一次选中连着的几行。"/>
+                  <TextBlock Style="{StaticResource SetNote}" Text="每一行前面显示一个复选框，点一下就能多选，不用按住 Ctrl（和资源管理器「查看」里的「项目复选框」一样）。开不开都可以按住鼠标（左键或右键）上下拖，一次选中连着的几行。"/>
                 </StackPanel>
               </DockPanel>
               <DockPanel Margin="0,16,0,0">
@@ -2244,7 +2244,7 @@
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
-                <TextBlock Style="{StaticResource HelpPara}"><Run>选中一行可以</Run><Run FontWeight="SemiBold">打开位置</Run><Run>、</Run><Run FontWeight="SemiBold">压缩（不删文件）</Run><Run>或</Run><Run FontWeight="SemiBold">删除</Run><Run>。勾选每一行前面的方框（和资源管理器的「项目复选框」一样），或按住 Ctrl、Shift，可以选多项一起删；</Run><Run FontWeight="SemiBold">按住右键上下拖</Run><Run>可以一次选中连着的几行，松开后弹出右键菜单。删除时可以选「移到回收站」（能恢复）或「永久删除」（立刻腾出空间），都要先勾选确认。</Run></TextBlock>
+                <TextBlock Style="{StaticResource HelpPara}"><Run>选中一行可以</Run><Run FontWeight="SemiBold">打开位置</Run><Run>、</Run><Run FontWeight="SemiBold">压缩（不删文件）</Run><Run>或</Run><Run FontWeight="SemiBold">删除</Run><Run>。勾选每一行前面的方框（和资源管理器的「项目复选框」一样），或按住 Ctrl、Shift，可以选多项一起删；</Run><Run FontWeight="SemiBold">按住鼠标左键或右键上下拖</Run><Run>可以一次选中连着的几行，用右键拖的话松开后弹出右键菜单。删除时可以选「移到回收站」（能恢复）或「永久删除」（立刻腾出空间），都要先勾选确认。</Run></TextBlock>
               </DockPanel>
               <DockPanel Margin="0,8,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
