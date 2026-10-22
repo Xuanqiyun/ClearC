@@ -1,4 +1,4 @@
-# 核心逻辑的测试（不打开界面）：在临时文件夹里建一棵小树，检查统计大小、查找、树上查大小、空间地图的辅助函数、深色配色。
+﻿# 核心逻辑的测试（不打开界面）：在临时文件夹里建一棵小树，检查统计大小、查找、树上查大小、空间地图的辅助函数、深色配色。
 # Windows PowerShell 5.1 和 PowerShell 7 都能跑（Linux 上也行）。用法：pwsh tests/Engine.Tests.ps1
 param([string]$Script = (Join-Path $PSScriptRoot '../src/CleanC-UI.ps1'))
 $ErrorActionPreference = 'Stop'

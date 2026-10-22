@@ -2706,8 +2706,8 @@ function Invoke-Tool([string]$exe, [string[]]$argv, [string]$cwd = '', [double]$
 function IsLink($p) { $i = Get-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue; return [bool]($i -and ($i.Attributes -band [IO.FileAttributes]::ReparsePoint)) }
 
 # 用户在设置里排除的文件夹：清理时一律不碰，估算大小时也不算
-function Get-ExcludeList { ,@((Get-Setting 'Exclude' '') -split '\|' | ForEach-Object { $_.Trim().TrimEnd('\', '/') } | Where-Object { $_ }) }
-function Get-CustomClean { ,@((Get-Setting 'CustomClean' '') -split '\|' | ForEach-Object { $_.Trim().TrimEnd('\', '/') } | Where-Object { $_ }) }
+function Get-ExcludeList { @((Get-Setting 'Exclude' '') -split '\|' | ForEach-Object { $_.Trim().TrimEnd('\', '/') } | Where-Object { $_ }) }
+function Get-CustomClean { @((Get-Setting 'CustomClean' '') -split '\|' | ForEach-Object { $_.Trim().TrimEnd('\', '/') } | Where-Object { $_ }) }
 function Test-Excluded([string]$path, $ex) {
     if (-not $ex) { return $false }
     $p = $path.TrimEnd('\', '/'); $sep = [IO.Path]::DirectorySeparatorChar
@@ -2995,7 +2995,7 @@ function Get-CacheLibrary {
 function Get-InstallerOrphans {
     $dir = Join-Path $env:SystemRoot 'Installer'
     $files = @(Get-ChildItem -LiteralPath $dir -File -Force -ErrorAction SilentlyContinue | Where-Object { $_.Extension -match '^\.(msi|msp)$' })
-    if ($files.Count -eq 0) { return ,@() }
+    if ($files.Count -eq 0) { return @() }
     $used = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
     foreach ($root in @('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\*\Products\*\InstallProperties', 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\*\Patches\*',
                            'HKLM:\SOFTWARE\Classes\Installer\Patches\*', 'HKCU:\Software\Microsoft\Installer\Patches\*')) {
@@ -3015,7 +3015,7 @@ function Get-InstallerOrphans {
             }
         }
     } catch {}
-    if ($used.Count -eq 0) { return ,@() }
+    if ($used.Count -eq 0) { return @() }
     $out = @()
     $recent = (Get-Date).AddDays(-1)
     foreach ($f in $files) {
@@ -3023,7 +3023,7 @@ function Get-InstallerOrphans {
         if ($f.LastWriteTime -gt $recent) { continue }   # 刚装的软件，登记可能还没写完
         $out += $f
     }
-    return ,$out
+    return $out
 }
 
 # Kind: cache = 缓存类(删除/跳过)   action = 操作类(执行/跳过)   move = 只能搬(搬到其他盘/跳过)   flex = 可搬可删
@@ -4124,7 +4124,7 @@ function Get-StartupItems {
             }
         }
     }
-    return ,$out
+    return $out
 }
 function Set-StartupEnabled([string]$approved, [string]$name, [bool]$on) {
     if (-not (Test-Path -LiteralPath $approved)) { New-Item -Path $approved -Force | Out-Null }
@@ -4149,14 +4149,14 @@ function Get-FileCompany([string]$path) {
 function Get-UserTasks {
     $out = @()
     $all = @()
-    try { $all = @(Get-ScheduledTask -ErrorAction Stop) } catch { return ,@() }
+    try { $all = @(Get-ScheduledTask -ErrorAction Stop) } catch { return @() }
     foreach ($t in $all) {
         if ($t.TaskPath -like '\Microsoft\*') { continue }
         $cmd = ''
         foreach ($a in @($t.Actions)) { if ($a.PSObject.Properties['Execute'] -and $a.Execute) { $cmd = ([string]$a.Execute + ' ' + [string]$a.Arguments).Trim(); break } }
         $out += @{ Name = [string]$t.TaskName; Path = [string]$t.TaskPath; State = [string]$t.State; Author = [string]$t.Author; Desc = [string]$t.Description; Cmd = $cmd; Ours = ([string]$t.TaskPath -eq '\CleanC\') }
     }
-    return ,$out
+    return $out
 }
 # ---------- 资源管理器右键菜单扩展（shellex）：只列第三方的，禁用是写进 Shell Extensions\Blocked，新开的窗口就不再加载它 ----------
 $script:shellexBlocked = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Shell Extensions\Blocked'
@@ -4197,7 +4197,7 @@ function Get-ContextMenuItems {
             }
         }
     }
-    return ,@($items.Values)
+    return @($items.Values)
 }
 function Set-ContextMenuEnabled([string]$clsid, [bool]$on) {
     foreach ($k in @($script:shellexBlocked, 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Shell Extensions\Blocked')) {
