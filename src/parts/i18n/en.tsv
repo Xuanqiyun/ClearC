@@ -156,6 +156,20 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+正在读取各块盘的健康信息…	Reading the health of each drive…
+读不到型号和健康信息	Model and health could not be read
+已用 {0} / 共 {1}（{2:N0}%），剩 {3}	{0} used of {1} ({2:N0}%), {3} free
+健康	Healthy
+健康状态未知	Health unknown
+磨损 {0}%	{0}% worn
+点一下选这块盘。	Click to choose this drive.
+温度：45 °C 以下正常，60 °C 以上偏高，长期高温会缩短固态硬盘寿命。	Temperature: below 45 °C is normal, above 60 °C is high; sustained heat shortens an SSD's life.
+磨损：固态硬盘已用掉的写入寿命，到 100% 厂商就不保了；10% 以下很新，50% 以上要开始考虑备份。	Wear: how much of the SSD's rated write life is used up; at 100% the maker no longer guarantees it. Below 10% is nearly new; above 50%, start thinking about backups.
+读错误 {0:N0} 次，有读错误请尽快备份。	{0:N0} read errors; with read errors, back up soon.
+这些数据从 Windows 的存储可靠性计数器读，只读不改；有的硬盘不报温度或磨损。	Read from Windows' storage reliability counters, read-only; some drives don't report temperature or wear.
+这台电脑的存储模块读不到这块盘的信息。	The storage module on this PC can't read this drive's information.
+磁盘健康卡片	Disk health cards
+页面上方每块盘一张卡片：用了多少、健康状态，固态硬盘还有温度、磨损和通电时间。只读，不改任何东西。	One card per drive at the top of the page: how much is used, health status, and for SSDs temperature, wear and hours powered on. Read-only; nothing is changed.
 当前：已开启（通常占 7 GB 左右）	Now: on (usually about 7 GB)
 当前：已关闭	Now: off
 当前：这个版本的 Windows 没有这项（Windows 10 1903 以后才有）	Now: not available on this version of Windows (Windows 10 1903 or later)

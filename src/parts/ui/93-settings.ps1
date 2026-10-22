@@ -5,7 +5,7 @@
 $script:optPages = [ordered]@{ dup = 'SetPageDup'; save = 'SetPageSave'; apps = 'SetPageApps'; moves = 'SetPageMoves'; auto = 'SetPageAuto'; log = 'SetPageLog' }
 $script:optLinks = [ordered]@{ theme = @('SetLinkTheme', 'BtnTheme'); lang = @('SetLinkLang', 'BtnLang'); feedback = @('SetLinkFeedback', 'BtnFeedback'); log = @('SetLinkLog', 'BtnLog') }
 # 开关：设置里的名字 → 设置页上的开关（默认都开）
-$script:optSwitches = [ordered]@{ PageSub = 'SetPageSub'; MapCheck = 'SetMapCheck'; MapBar = 'SetMapBar'; MapPct = 'SetMapPct'; MapMeta = 'SetMapMeta'; MapDisk = 'SetMapDisk'; MapFastBtn = 'SetMapFastBtn' }
+$script:optSwitches = [ordered]@{ PageSub = 'SetPageSub'; MapCheck = 'SetMapCheck'; MapBar = 'SetMapBar'; MapPct = 'SetMapPct'; MapMeta = 'SetMapMeta'; MapDisk = 'SetMapDisk'; MapFastBtn = 'SetMapFastBtn'; MapHealth = 'SetMapHealth' }
 function Get-Flag([string]$k) { (Get-Setting $k '1') -ne '0' }
 function Get-HiddenSet([string]$k) { $h = @{}; foreach ($x in ((Get-Setting $k '') -split ',')) { $x = $x.Trim(); if ($x) { $h[$x] = $true } }; return $h }
 function Apply-Display {
@@ -15,6 +15,7 @@ function Apply-Display {
     $win.Resources['MapBarVis'] = & $vis (Get-Flag 'MapBar')
     $win.Resources['MapPctVis'] = & $vis (Get-Flag 'MapPct')
     $win.Resources['MapMetaVis'] = & $vis (Get-Flag 'MapMeta')
+    $win.Resources['MapHealthVis'] = & $vis (Get-Flag 'MapHealth')
     $ctl.MapFast.Visibility = & $vis (Get-Flag 'MapFastBtn')
     $hp = Get-HiddenSet 'HidePages'
     foreach ($k in $script:optPages.Keys) { $ctl[$script:pageList[$k][1]].Visibility = & $vis (-not $hp.ContainsKey($k)) }

@@ -2612,6 +2612,27 @@ public class VdiskRow : INotifyPropertyChanged {
     void Raise(string n) { PropertyChangedEventHandler h = PropertyChanged; if (h != null) h(this, new PropertyChangedEventArgs(n)); }
     public event PropertyChangedEventHandler PropertyChanged;
 }
+// 空间地图顶部的磁盘卡片：用量条、温度、磨损、健康状态，颜色按档位
+public class DiskCard {
+    public string Letter { get; set; }
+    public string Model { get; set; }
+    public string UsedText { get; set; }
+    public double UsedPct { get; set; }
+    public double BarW { get; set; }        // 用量条已用部分的宽度（像素）
+    public string TempText { get; set; }
+    public string WearText { get; set; }
+    public string HealthText { get; set; }
+    public string HoursText { get; set; }
+    public string Tip { get; set; }
+    public bool HasTemp { get { return !string.IsNullOrEmpty(TempText); } }
+    public bool HasWear { get { return !string.IsNullOrEmpty(WearText); } }
+    public bool HasHours { get { return !string.IsNullOrEmpty(HoursText); } }
+    string _bar = "#0071E3"; public string BarBrush { get { return Theme.B(_bar); } set { _bar = value; } }
+    string _tf = "#248A3D", _tb = "#E5F4E9"; public string TempFg { get { return Theme.F(_tf); } set { _tf = value; } } public string TempBg { get { return Theme.B(_tb); } set { _tb = value; } }
+    string _wf = "#248A3D", _wb = "#E5F4E9"; public string WearFg { get { return Theme.F(_wf); } set { _wf = value; } } public string WearBg { get { return Theme.B(_wb); } set { _wb = value; } }
+    string _hf = "#248A3D", _hb = "#E5F4E9"; public string HealthFg { get { return Theme.F(_hf); } set { _hf = value; } } public string HealthBg { get { return Theme.B(_hb); } set { _hb = value; } }
+    string _stripe = "#248A3D"; public string Stripe { get { return Theme.B(_stripe); } set { _stripe = value; } }
+}
 public class HistBar {
     public double H { get; set; }
     public string Label { get; set; }
@@ -3144,39 +3165,56 @@ function Set-UserTemp([string]$path) {
     } catch {}
 }
 # ---------- 磁盘健康：SSD 的磨损、温度、通电时间（只读）----------
-function Get-DiskHealth([string]$drive) {
+# 返回 @{ Ok; Model; Media; Health（Healthy / Warning / …）; Wear（-1 = 不知道）; Temp（0 = 不知道）; Hours; ReadErrors }
+function Get-DiskHealthInfo([string]$drive) {
+    $r = @{ Ok = $false; Model = ''; Media = ''; Health = ''; Wear = -1; Temp = 0; Hours = [long]0; ReadErrors = [long]0 }
     try {
         $letter = $drive.Substring(0, 1)
         $part = @(Get-Partition -DriveLetter $letter -ErrorAction Stop)[0]
-        if (-not $part) { return '' }
-        $pd = @(Get-PhysicalDisk -ErrorAction Stop | Where-Object { [string]$_.DeviceId -eq [string]$part.DiskNumber })[0]
-        if (-not $pd) { return '' }
-        $parts = @()
-        $parts += ([string]$pd.FriendlyName).Trim()
-        $mt = [string]$pd.MediaType; if ($mt -and $mt -ne 'Unspecified') { $parts += $mt }
-        $hs = [string]$pd.HealthStatus; if ($hs) { $parts += $(if ($hs -eq 'Healthy') { (T '健康状态正常') } else { ((T "健康状态：{0}") -f $hs) }) }
-        try {
-            $rc = $pd | Get-StorageReliabilityCounter -ErrorAction Stop
-            if ($rc) {
-                if ($rc.Wear -ne $null -and [int]$rc.Wear -ge 0) { $parts += ((T "已磨损 {0}%") -f [int]$rc.Wear) }
-                if ($rc.Temperature -and [int]$rc.Temperature -gt 0) { $parts += ((T "{0} °C") -f [int]$rc.Temperature) }
-                if ($rc.PowerOnHours -and [long]$rc.PowerOnHours -gt 0) { $parts += ((T "通电 {0:N0} 小时") -f [long]$rc.PowerOnHours) }
-                if ($rc.ReadErrorsTotal -and [long]$rc.ReadErrorsTotal -gt 0) { $parts += ((T "读错误 {0:N0} 次") -f [long]$rc.ReadErrorsTotal) }
+        if ($part) {
+            $pd = @(Get-PhysicalDisk -ErrorAction Stop | Where-Object { [string]$_.DeviceId -eq [string]$part.DiskNumber })[0]
+            if ($pd) {
+                $r.Ok = $true
+                $r.Model = ([string]$pd.FriendlyName).Trim()
+                $mt = [string]$pd.MediaType; if ($mt -and $mt -ne 'Unspecified') { $r.Media = $mt }
+                $r.Health = [string]$pd.HealthStatus
+                try {
+                    $rc = $pd | Get-StorageReliabilityCounter -ErrorAction Stop
+                    if ($rc) {
+                        if ($rc.Wear -ne $null -and [int]$rc.Wear -ge 0) { $r.Wear = [int]$rc.Wear }
+                        if ($rc.Temperature -and [int]$rc.Temperature -gt 0) { $r.Temp = [int]$rc.Temperature }
+                        if ($rc.PowerOnHours -and [long]$rc.PowerOnHours -gt 0) { $r.Hours = [long]$rc.PowerOnHours }
+                        if ($rc.ReadErrorsTotal -and [long]$rc.ReadErrorsTotal -gt 0) { $r.ReadErrors = [long]$rc.ReadErrorsTotal }
+                    }
+                } catch {}
+                return $r
             }
-        } catch {}
-        return ($parts -join ' · ')
+        }
     } catch {}
     # 存储模块不可用时退回 WMI：只有型号和状态
     try {
         $ld = Get-CimInstance -ClassName Win32_LogicalDisk -Filter ("DeviceID='{0}'" -f $drive.Substring(0, 2)) -ErrorAction Stop
         foreach ($pt in @(Get-CimAssociatedInstance -InputObject $ld -ResultClassName Win32_DiskPartition -ErrorAction Stop)) {
             foreach ($dd in @(Get-CimAssociatedInstance -InputObject $pt -ResultClassName Win32_DiskDrive -ErrorAction Stop)) {
-                $st = [string]$dd.Status
-                return (([string]$dd.Model).Trim() + ' · ' + $(if ($st -eq 'OK') { (T '健康状态正常') } else { ((T "健康状态：{0}") -f $st) }))
+                $r.Ok = $true; $r.Model = ([string]$dd.Model).Trim(); $r.Health = $(if ([string]$dd.Status -eq 'OK') { 'Healthy' } else { [string]$dd.Status })
+                return $r
             }
         }
     } catch {}
-    return ''
+    return $r
+}
+function Get-DiskHealth([string]$drive) {
+    $h = Get-DiskHealthInfo $drive
+    if (-not $h.Ok) { return '' }
+    $parts = @()
+    if ($h.Model) { $parts += $h.Model }
+    if ($h.Media) { $parts += $h.Media }
+    if ($h.Health) { $parts += $(if ($h.Health -eq 'Healthy') { (T '健康状态正常') } else { ((T "健康状态：{0}") -f $h.Health) }) }
+    if ($h.Wear -ge 0) { $parts += ((T "已磨损 {0}%") -f $h.Wear) }
+    if ($h.Temp -gt 0) { $parts += ((T "{0} °C") -f $h.Temp) }
+    if ($h.Hours -gt 0) { $parts += ((T "通电 {0:N0} 小时") -f $h.Hours) }
+    if ($h.ReadErrors -gt 0) { $parts += ((T "读错误 {0:N0} 次") -f $h.ReadErrors) }
+    return ($parts -join ' · ')
 }
 # ---------- Windows 自带的「存储感知」开没开 ----------
 function Get-StorageSenseOn { try { return ([int](Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy' -ErrorAction Stop).'01' -eq 1) } catch { return $false } }
@@ -4790,6 +4828,20 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+正在读取各块盘的健康信息…	Reading the health of each drive…
+读不到型号和健康信息	Model and health could not be read
+已用 {0} / 共 {1}（{2:N0}%），剩 {3}	{0} used of {1} ({2:N0}%), {3} free
+健康	Healthy
+健康状态未知	Health unknown
+磨损 {0}%	{0}% worn
+点一下选这块盘。	Click to choose this drive.
+温度：45 °C 以下正常，60 °C 以上偏高，长期高温会缩短固态硬盘寿命。	Temperature: below 45 °C is normal, above 60 °C is high; sustained heat shortens an SSD's life.
+磨损：固态硬盘已用掉的写入寿命，到 100% 厂商就不保了；10% 以下很新，50% 以上要开始考虑备份。	Wear: how much of the SSD's rated write life is used up; at 100% the maker no longer guarantees it. Below 10% is nearly new; above 50%, start thinking about backups.
+读错误 {0:N0} 次，有读错误请尽快备份。	{0:N0} read errors; with read errors, back up soon.
+这些数据从 Windows 的存储可靠性计数器读，只读不改；有的硬盘不报温度或磨损。	Read from Windows' storage reliability counters, read-only; some drives don't report temperature or wear.
+这台电脑的存储模块读不到这块盘的信息。	The storage module on this PC can't read this drive's information.
+磁盘健康卡片	Disk health cards
+页面上方每块盘一张卡片：用了多少、健康状态，固态硬盘还有温度、磨损和通电时间。只读，不改任何东西。	One card per drive at the top of the page: how much is used, health status, and for SSDs temperature, wear and hours powered on. Read-only; nothing is changed.
 当前：已开启（通常占 7 GB 左右）	Now: on (usually about 7 GB)
 当前：已关闭	Now: off
 当前：这个版本的 Windows 没有这项（Windows 10 1903 以后才有）	Now: not available on this version of Windows (Windows 10 1903 or later)
@@ -6649,8 +6701,8 @@ $script:helpEnXaml = @'
                   <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>A hard link means the same file also has a name elsewhere, so deleting this name frees nothing.</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
-                  <TextBlock Style="{StaticResource HelpLead}" Text="Disk health"/>
-                  <TextBlock Style="{StaticResource HelpBody}"><Run>A line under the page title: each drive's model and health status, and for SSDs the wear percentage, temperature and hours powered on (read from Windows' storage reliability counters; read-only).</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Disk health cards"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>One card per drive at the top of the page: a usage bar, health status, and for SSDs temperature, wear and hours powered on, colored by level (green normal, amber worth watching, red a problem). Click a card to choose that drive. Read from Windows' storage reliability counters, read-only; it can be turned off in Settings.</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Space breakdown"/>
@@ -7180,6 +7232,7 @@ if ($script:mode -match '(?i)/autoclean') {
     <Visibility x:Key="MapBarVis">Visible</Visibility>
     <Visibility x:Key="MapPctVis">Visible</Visibility>
     <Visibility x:Key="MapMetaVis">Visible</Visibility>
+    <Visibility x:Key="MapHealthVis">Visible</Visibility>
     <Visibility x:Key="SubVis">Visible</Visibility>
     <!-- 配色：浅灰底 #F5F5F7、白色卡片、正文 #1D1D1F、次要文字 #6E6E73、分隔线 #E5E5EA、唯一的强调色是蓝 #0071E3，红色只给删除 -->
     <FontFamily x:Key="Icons">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
@@ -8615,6 +8668,7 @@ if ($script:mode -match '(?i)/autoclean') {
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
         <RowDefinition Height="*"/>
         <RowDefinition Height="Auto"/>
       </Grid.RowDefinitions>
@@ -8629,10 +8683,49 @@ if ($script:mode -match '(?i)/autoclean') {
         <StackPanel>
           <TextBlock Text="空间地图" Style="{StaticResource PageTitle}"/>
           <TextBlock Style="{StaticResource PageSub}" Text="扫描整块盘，看清每个文件夹占了多少。双击文件夹往里点，一层层找到真正的大户。"/>
-          <TextBlock x:Name="MapDiskHealth" Style="{StaticResource Caption}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
         </StackPanel>
       </DockPanel>
-      <DockPanel Grid.Row="1" Margin="0,0,0,10">
+      <!-- 每块盘一张卡片：用量条、温度、磨损、健康状态。颜色按档位：绿正常、橙要留意、红有问题 -->
+      <Border x:Name="MapHealthBox" Grid.Row="1" Margin="0,0,0,12" Visibility="{DynamicResource MapHealthVis}">
+        <StackPanel>
+          <ItemsControl x:Name="MapHealth">
+            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Border Style="{StaticResource Card}" Width="300" Margin="0,0,12,8" Padding="0" Cursor="Hand" ToolTip="{Binding Tip}" Tag="{Binding}">
+                  <DockPanel>
+                    <Border DockPanel.Dock="Left" Width="5" Background="{Binding Stripe}" CornerRadius="12,0,0,12"/>
+                    <StackPanel Margin="14,10,14,10">
+                      <DockPanel>
+                        <TextBlock DockPanel.Dock="Left" Text="{Binding Letter}" FontSize="17" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBlock Text="{Binding Model}" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                      </DockPanel>
+                      <Grid Margin="0,8,0,0" Height="6">
+                        <Border Background="#EBEBF0" CornerRadius="3"/>
+                        <Border Background="{Binding BarBrush}" CornerRadius="3" HorizontalAlignment="Left" Width="{Binding BarW}"/>
+                      </Grid>
+                      <TextBlock Text="{Binding UsedText}" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
+                      <WrapPanel Margin="0,8,0,0">
+                        <Border Background="{Binding HealthBg}" CornerRadius="6" Padding="7,2" Margin="0,0,6,4"><TextBlock Text="{Binding HealthText}" FontSize="11.5" FontWeight="SemiBold" Foreground="{Binding HealthFg}"/></Border>
+                        <Border x:Name="TempChip" Background="{Binding TempBg}" CornerRadius="6" Padding="7,2" Margin="0,0,6,4"><TextBlock Text="{Binding TempText}" FontSize="11.5" FontWeight="SemiBold" Foreground="{Binding TempFg}"/></Border>
+                        <Border x:Name="WearChip" Background="{Binding WearBg}" CornerRadius="6" Padding="7,2" Margin="0,0,6,4"><TextBlock Text="{Binding WearText}" FontSize="11.5" FontWeight="SemiBold" Foreground="{Binding WearFg}"/></Border>
+                        <TextBlock x:Name="HoursText" Text="{Binding HoursText}" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="2,0,0,4"/>
+                      </WrapPanel>
+                    </StackPanel>
+                  </DockPanel>
+                </Border>
+                <DataTemplate.Triggers>
+                  <DataTrigger Binding="{Binding HasTemp}" Value="False"><Setter TargetName="TempChip" Property="Visibility" Value="Collapsed"/></DataTrigger>
+                  <DataTrigger Binding="{Binding HasWear}" Value="False"><Setter TargetName="WearChip" Property="Visibility" Value="Collapsed"/></DataTrigger>
+                  <DataTrigger Binding="{Binding HasHours}" Value="False"><Setter TargetName="HoursText" Property="Visibility" Value="Collapsed"/></DataTrigger>
+                </DataTemplate.Triggers>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <TextBlock x:Name="MapHealthNote" Style="{StaticResource Caption}" Text="正在读取各块盘的健康信息…"/>
+        </StackPanel>
+      </Border>
+      <DockPanel Grid.Row="2" Margin="0,0,0,10">
         <Border DockPanel.Dock="Right" Style="{StaticResource SegBox}" VerticalAlignment="Center">
           <StackPanel Orientation="Horizontal">
             <RadioButton x:Name="MapViewDirs" GroupName="mapview" Content="文件夹" IsChecked="True" Style="{StaticResource Seg}"/>
@@ -8664,7 +8757,7 @@ if ($script:mode -match '(?i)/autoclean') {
         </DockPanel>
       </DockPanel>
       <!-- 找文件的条件：只在「找文件」时显示 -->
-      <WrapPanel x:Name="MapFilter" Grid.Row="2" Margin="0,0,0,10" Visibility="Collapsed">
+      <WrapPanel x:Name="MapFilter" Grid.Row="3" Margin="0,0,0,10" Visibility="Collapsed">
         <StackPanel Orientation="Horizontal" Margin="0,2,18,2">
           <TextBlock Text="大小至少" VerticalAlignment="Center" Foreground="#6E6E73" Margin="0,0,8,0"/>
           <ComboBox x:Name="MapMinSize" Width="96" SelectedIndex="2">
@@ -8701,7 +8794,7 @@ if ($script:mode -match '(?i)/autoclean') {
         <CheckBox x:Name="MapChat" Content="只找聊天软件里的" VerticalAlignment="Center" Margin="0,2,0,2"
                   ToolTip="微信、QQ、企业微信、飞书、钉钉、Telegram 等聊天记录文件夹里的大文件。这些文件只能查看、打开位置；要腾地方，可以到「搬家管理」把整个聊天记录搬到其他盘。"/>
       </WrapPanel>
-      <Border Grid.Row="3" Style="{StaticResource Card}" Padding="0,6,0,6">
+      <Border Grid.Row="4" Style="{StaticResource Card}" Padding="0,6,0,6">
         <Grid>
           <Canvas x:Name="MapTree" Margin="10,4,10,4" ClipToBounds="True" Background="White" Visibility="Collapsed"/>
           <ListView x:Name="MapList" Background="Transparent" BorderThickness="0" ItemTemplate="{StaticResource MapRowTpl}" ItemContainerStyle="{StaticResource SelRow}" SelectionMode="Extended"
@@ -8741,7 +8834,7 @@ if ($script:mode -match '(?i)/autoclean') {
           </StackPanel>
         </Grid>
       </Border>
-      <DockPanel Grid.Row="4" Margin="0,14,0,0">
+      <DockPanel Grid.Row="5" Margin="0,14,0,0">
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
           <Button x:Name="BtnMapOpen" Content="打开位置" Margin="0,0,8,0" IsEnabled="False"/>
           <Button x:Name="BtnMapCompress" Content="压缩（不删文件）" Margin="0,0,8,0" IsEnabled="False"
@@ -9451,6 +9544,13 @@ if ($script:mode -match '(?i)/autoclean') {
                 </StackPanel>
               </DockPanel>
               <DockPanel Margin="0,16,0,0">
+                <CheckBox x:Name="SetMapHealth" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                <StackPanel>
+                  <TextBlock Text="磁盘健康卡片" Style="{StaticResource SetName}"/>
+                  <TextBlock Style="{StaticResource SetNote}" Text="页面上方每块盘一张卡片：用了多少、健康状态，固态硬盘还有温度、磨损和通电时间。只读，不改任何东西。"/>
+                </StackPanel>
+              </DockPanel>
+              <DockPanel Margin="0,16,0,0">
                 <CheckBox x:Name="SetMapFastBtn" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
                 <StackPanel>
                   <TextBlock Text="右上角的「快速扫描」开关" Style="{StaticResource SetName}"/>
@@ -9953,8 +10053,8 @@ if ($script:mode -match '(?i)/autoclean') {
                   <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>硬链接是同一份文件在别处也有名字，删了这个名字不腾空间。</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
-                  <TextBlock Style="{StaticResource HelpLead}" Text="磁盘健康"/>
-                  <TextBlock Style="{StaticResource HelpBody}"><Run>页面标题下面一行小字：每块盘的型号、健康状态，固态硬盘还有磨损百分比、温度和通电时间（从 Windows 的存储可靠性计数器读，只读不改）。</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpLead}" Text="磁盘健康卡片"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>页面上方每块盘一张卡片：用量条、健康状态，固态硬盘还有温度、磨损和通电时间，按档位标色（绿正常、橙要留意、红有问题）。点卡片就选中这块盘。数据从 Windows 的存储可靠性计数器读，只读不改；在「设置」里可以关掉。</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="空间明细"/>
@@ -10454,7 +10554,7 @@ foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageM
                'MapDrive','BtnMapStop','BtnMapScan','MapViewDirs','MapViewFiles','MapViewGrow','BtnMapUp','MapPath','MapInfo','MapList','MapGrow','EmptyMap','EmptyMapText','BtnMapOpen','BtnMapCompress','BtnMapDelete','MapSel',
                'SaveScroll','BtnSaveRefresh','BtnCosOff','BtnCosOn','SaveCosState','SavePfState','SavePfDrive','BtnPfMove','BtnPfAuto','SaveHibState','BtnHibReduced','BtnHibOff','BtnHibFull','BtnFolderCompress','SaveFcState','VdList','VdEmpty','BtnGoDup',
                'BtnAppsRefresh','AppsAll','AppsC','AppsStore','AppsInfo','AppsSearch','AppsLeftBox','BtnAppsLeftClose','BtnAppsLeft','AppsLeftText','AppsList','EmptyApps','EmptyAppsText',
-               'BtnAppsUpdates','AppsViewApps','AppsViewStartup','AppsViewTasks','AppsViewMenu','AppsViewLeft','AppsFilterBox','StartList','MapDiskHealth',
+               'BtnAppsUpdates','AppsViewApps','AppsViewStartup','AppsViewTasks','AppsViewMenu','AppsViewLeft','AppsFilterBox','StartList','MapHealthBox','MapHealth','MapHealthNote','SetMapHealth',
                'BtnOdFree','SaveOdState','BtnRsOn','BtnRsOff','SaveRsState','BtnCsAnalyze','BtnCsClean','SaveCsState','BtnDumpSmall','BtnDumpAuto','SaveDumpState','SaveTmpState','SaveTmpDrive','BtnTmpMove','BtnTmpAuto','BtnCleanCustom','AutoJunkGB','AutoCleanWhen','SetCleanCard','SetCustomList','SetCustomEmpty','BtnSetCustomAdd','SetExcludeList','SetExcludeEmpty','BtnSetExcludeAdd',
                'BtnMovesRefresh','MovesInfo','MovesList','EmptyMoves','EmptyMovesText',
                'AutoRemindOn','AutoRemindGB','AutoRemindNote','AutoCleanOn','AutoCleanNote','HistInfo','HistChart','HistLast','HistFirst',
@@ -12007,10 +12107,10 @@ function Fill-MapDrives {
 $script:dhPs = $null
 function Start-DiskHealth {
     if ($script:dhPs) { return }
-    $ctl.MapDiskHealth.Text = ''
+    $ctl.MapHealthNote.Text = (T '正在读取各块盘的健康信息…'); $ctl.MapHealthNote.Visibility = 'Visible'
     $drives = @(Fixed-Drives | ForEach-Object { $_.Name.TrimEnd('\') })
     if ($drives.Count -eq 0) { return }
-    $code = 'param($drives, $engine) Invoke-Expression $engine; $o = @(); foreach ($d in $drives) { $h = Get-DiskHealth $d; if ($h) { $o += ($d + [char]32 + $h) } }; ,$o'
+    $code = 'param($drives, $engine) Invoke-Expression $engine; $o = @(); foreach ($d in $drives) { $h = Get-DiskHealthInfo $d; $h.Drive = $d; $o += $h }; ,$o'
     try {
         $ps = [powershell]::Create()
         [void]$ps.AddScript($code).AddArgument($drives).AddArgument($engine)
@@ -12028,10 +12128,69 @@ function Start-DiskHealth {
         if ($script:dhErr) { Write-LogFile ('disk health: ' + $script:dhErr) }
         try { $script:dhPs.Dispose() } catch {}
         $script:dhPs = $null
-        $ctl.MapDiskHealth.Text = if ($lines.Count -gt 0) { ($lines -join (T '；')) } else { (T '读不到磁盘的健康信息（型号、磨损、温度）') }
+        Show-DiskHealth $lines
     })
     $t.Start()
 }
+# 每块盘一张卡片。档位：温度 45 度以下绿、60 以下橙、再高红；磨损 10% 以下绿、50% 以下橙；用量 85% 以上橙、95% 以上红
+function Show-DiskHealth($list) {
+    $col = New-Object 'System.Collections.ObjectModel.ObservableCollection[DiskCard]'
+    $green = @('#1D7A35', '#E5F4E9'); $amber = @('#995700', '#FFF1DB'); $red = @('#C0101C', '#FDEBEC'); $grey = @('#6E6E73', '#F0F0F3')
+    foreach ($h in @($list)) {
+        if (-not $h -or -not $h.Drive) { continue }
+        $c = New-Object DiskCard
+        $c.Letter = [string]$h.Drive
+        $c.Model = if ($h.Ok -and $h.Model) { $h.Model + $(if ($h.Media) { ' · ' + $h.Media } else { '' }) } else { (T '读不到型号和健康信息') }
+        $used = [double]0; $total = [double]0
+        try { $di = New-Object System.IO.DriveInfo ([string]$h.Drive + '\'); $total = [double]$di.TotalSize; $used = $total - [double]$di.AvailableFreeSpace } catch {}
+        $pct = if ($total -gt 0) { 100.0 * $used / $total } else { 0 }
+        $c.UsedPct = $pct; $c.BarW = [math]::Round(266.0 * $pct / 100.0)
+        $c.UsedText = (T "已用 {0} / 共 {1}（{2:N0}%），剩 {3}") -f (Fmt $used), (Fmt $total), $pct, (Fmt ($total - $used))
+        $c.BarBrush = if ($pct -ge 95) { '#FF3B30' } elseif ($pct -ge 85) { '#FF9F0A' } else { '#0071E3' }
+        $worst = 0   # 0 绿 1 橙 2 红
+        if ($h.Ok -and $h.Health) {
+            $okh = ($h.Health -eq 'Healthy')
+            $c.HealthText = if ($okh) { (T '健康') } else { ((T "健康状态：{0}") -f $h.Health) }
+            $tone = if ($okh) { $green } else { $red }; if (-not $okh) { $worst = 2 }
+        } else { $c.HealthText = (T '健康状态未知'); $tone = $grey }
+        $c.HealthFg = $tone[0]; $c.HealthBg = $tone[1]
+        if ($h.Ok -and $h.Temp -gt 0) {
+            $c.TempText = (T "{0} °C") -f $h.Temp
+            $tone = if ($h.Temp -gt 60) { $red } elseif ($h.Temp -gt 45) { $amber } else { $green }
+            if ($h.Temp -gt 60) { $worst = [math]::Max($worst, 2) } elseif ($h.Temp -gt 45) { $worst = [math]::Max($worst, 1) }
+            $c.TempFg = $tone[0]; $c.TempBg = $tone[1]
+        }
+        if ($h.Ok -and $h.Wear -ge 0) {
+            $c.WearText = (T "磨损 {0}%") -f $h.Wear
+            $tone = if ($h.Wear -gt 50) { $red } elseif ($h.Wear -gt 10) { $amber } else { $green }
+            if ($h.Wear -gt 50) { $worst = [math]::Max($worst, 2) } elseif ($h.Wear -gt 10) { $worst = [math]::Max($worst, 1) }
+            $c.WearFg = $tone[0]; $c.WearBg = $tone[1]
+        }
+        if ($h.Ok -and $h.Hours -gt 0) { $c.HoursText = (T "通电 {0:N0} 小时") -f $h.Hours }
+        $c.Stripe = if (-not $h.Ok) { '#C7C7CC' } elseif ($worst -eq 2) { '#FF3B30' } elseif ($worst -eq 1) { '#FF9F0A' } else { '#34C759' }
+        $tip = @((T '点一下选这块盘。'))
+        if ($h.Ok) {
+            $tip += (T '温度：45 °C 以下正常，60 °C 以上偏高，长期高温会缩短固态硬盘寿命。')
+            $tip += (T '磨损：固态硬盘已用掉的写入寿命，到 100% 厂商就不保了；10% 以下很新，50% 以上要开始考虑备份。')
+            if ($h.ReadErrors -gt 0) { $tip += ((T "读错误 {0:N0} 次，有读错误请尽快备份。") -f $h.ReadErrors) }
+            $tip += (T '这些数据从 Windows 的存储可靠性计数器读，只读不改；有的硬盘不报温度或磨损。')
+        } else { $tip += (T '这台电脑的存储模块读不到这块盘的信息。') }
+        $c.Tip = ($tip -join "`n")
+        $col.Add($c)
+    }
+    $ctl.MapHealth.ItemsSource = $col
+    $ctl.MapHealthNote.Visibility = if ($col.Count -gt 0) { 'Collapsed' } else { 'Visible' }
+    if ($col.Count -eq 0) { $ctl.MapHealthNote.Text = (T '读不到磁盘的健康信息（型号、磨损、温度）') }
+}
+# 点卡片 = 选这块盘
+$ctl.MapHealth.AddHandler([System.Windows.UIElement]::MouseLeftButtonUpEvent, [System.Windows.Input.MouseButtonEventHandler]{
+    param($s, $e)
+    $el = $e.OriginalSource
+    while ($el -and -not ($el -is [System.Windows.Controls.Border] -and $el.Tag -is [DiskCard])) { $el = [System.Windows.Media.VisualTreeHelper]::GetParent($el) }
+    if (-not $el) { return }
+    $letter = [string]$el.Tag.Letter
+    foreach ($it in $ctl.MapDrive.Items) { if (([string]$it.Tag).StartsWith($letter, [StringComparison]::OrdinalIgnoreCase)) { $ctl.MapDrive.SelectedItem = $it } }
+})
 function Start-MapScan([string]$root) {
     if ($script:worker -or -not $root) { return }
     $di = $null; try { $di = New-Object System.IO.DriveInfo $root } catch {}
@@ -14555,7 +14714,7 @@ $sync.DupMerged = $done
 $script:optPages = [ordered]@{ dup = 'SetPageDup'; save = 'SetPageSave'; apps = 'SetPageApps'; moves = 'SetPageMoves'; auto = 'SetPageAuto'; log = 'SetPageLog' }
 $script:optLinks = [ordered]@{ theme = @('SetLinkTheme', 'BtnTheme'); lang = @('SetLinkLang', 'BtnLang'); feedback = @('SetLinkFeedback', 'BtnFeedback'); log = @('SetLinkLog', 'BtnLog') }
 # 开关：设置里的名字 → 设置页上的开关（默认都开）
-$script:optSwitches = [ordered]@{ PageSub = 'SetPageSub'; MapCheck = 'SetMapCheck'; MapBar = 'SetMapBar'; MapPct = 'SetMapPct'; MapMeta = 'SetMapMeta'; MapDisk = 'SetMapDisk'; MapFastBtn = 'SetMapFastBtn' }
+$script:optSwitches = [ordered]@{ PageSub = 'SetPageSub'; MapCheck = 'SetMapCheck'; MapBar = 'SetMapBar'; MapPct = 'SetMapPct'; MapMeta = 'SetMapMeta'; MapDisk = 'SetMapDisk'; MapFastBtn = 'SetMapFastBtn'; MapHealth = 'SetMapHealth' }
 function Get-Flag([string]$k) { (Get-Setting $k '1') -ne '0' }
 function Get-HiddenSet([string]$k) { $h = @{}; foreach ($x in ((Get-Setting $k '') -split ',')) { $x = $x.Trim(); if ($x) { $h[$x] = $true } }; return $h }
 function Apply-Display {
@@ -14565,6 +14724,7 @@ function Apply-Display {
     $win.Resources['MapBarVis'] = & $vis (Get-Flag 'MapBar')
     $win.Resources['MapPctVis'] = & $vis (Get-Flag 'MapPct')
     $win.Resources['MapMetaVis'] = & $vis (Get-Flag 'MapMeta')
+    $win.Resources['MapHealthVis'] = & $vis (Get-Flag 'MapHealth')
     $ctl.MapFast.Visibility = & $vis (Get-Flag 'MapFastBtn')
     $hp = Get-HiddenSet 'HidePages'
     foreach ($k in $script:optPages.Keys) { $ctl[$script:pageList[$k][1]].Visibility = & $vis (-not $hp.ContainsKey($k)) }
@@ -14898,13 +15058,19 @@ function Invoke-UiTest {
                 $script:startRows.Clear()
             } finally { Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue }
         }
-        & $step 'disk health line fills in' {
+        & $step 'disk health cards fill in' {
             $script:pageLoaded.map = $true; Fill-MapDrives
             Show-Page 'map'; $win.UpdateLayout()
             Start-DiskHealth
             if (-not (& $waitUi { -not $script:dhPs } 60000)) { throw 'disk health did not finish' }
-            if (-not [string]$ctl.MapDiskHealth.Text) { throw ('disk health line is empty; ' + [string]$script:dhErr + ' / direct: ' + (Get-DiskHealth $env:SystemDrive)) }
-            [string]$ctl.MapDiskHealth.Text
+            $cards = @($ctl.MapHealth.ItemsSource)
+            if ($cards.Count -eq 0) { throw ('no disk cards; ' + [string]$script:dhErr + ' / direct: ' + (Get-DiskHealth $env:SystemDrive)) }
+            if (-not $cards[0].HealthText -or -not $cards[0].UsedText -or $cards[0].Model -eq (T '读不到型号和健康信息')) { throw ('card not filled: ' + $cards[0].Model + ' / ' + $cards[0].HealthText) }
+            & $snap $ctl.MapHealthBox 'disk-cards' 2
+            $ctl.SetMapHealth.IsChecked = $false; & $click $ctl.SetMapHealth; $win.UpdateLayout()
+            $hidden = $ctl.MapHealthBox.Visibility -ne 'Visible'
+            $ctl.SetMapHealth.IsChecked = $true; & $click $ctl.SetMapHealth; $win.UpdateLayout()
+            if (-not $hidden) { throw 'switch did not hide the disk cards' }
         }
         & $step 'restore points card' {
             Show-Page 'save'

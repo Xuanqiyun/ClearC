@@ -507,39 +507,56 @@ function Set-UserTemp([string]$path) {
     } catch {}
 }
 # ---------- 磁盘健康：SSD 的磨损、温度、通电时间（只读）----------
-function Get-DiskHealth([string]$drive) {
+# 返回 @{ Ok; Model; Media; Health（Healthy / Warning / …）; Wear（-1 = 不知道）; Temp（0 = 不知道）; Hours; ReadErrors }
+function Get-DiskHealthInfo([string]$drive) {
+    $r = @{ Ok = $false; Model = ''; Media = ''; Health = ''; Wear = -1; Temp = 0; Hours = [long]0; ReadErrors = [long]0 }
     try {
         $letter = $drive.Substring(0, 1)
         $part = @(Get-Partition -DriveLetter $letter -ErrorAction Stop)[0]
-        if (-not $part) { return '' }
-        $pd = @(Get-PhysicalDisk -ErrorAction Stop | Where-Object { [string]$_.DeviceId -eq [string]$part.DiskNumber })[0]
-        if (-not $pd) { return '' }
-        $parts = @()
-        $parts += ([string]$pd.FriendlyName).Trim()
-        $mt = [string]$pd.MediaType; if ($mt -and $mt -ne 'Unspecified') { $parts += $mt }
-        $hs = [string]$pd.HealthStatus; if ($hs) { $parts += $(if ($hs -eq 'Healthy') { (T '健康状态正常') } else { ((T "健康状态：{0}") -f $hs) }) }
-        try {
-            $rc = $pd | Get-StorageReliabilityCounter -ErrorAction Stop
-            if ($rc) {
-                if ($rc.Wear -ne $null -and [int]$rc.Wear -ge 0) { $parts += ((T "已磨损 {0}%") -f [int]$rc.Wear) }
-                if ($rc.Temperature -and [int]$rc.Temperature -gt 0) { $parts += ((T "{0} °C") -f [int]$rc.Temperature) }
-                if ($rc.PowerOnHours -and [long]$rc.PowerOnHours -gt 0) { $parts += ((T "通电 {0:N0} 小时") -f [long]$rc.PowerOnHours) }
-                if ($rc.ReadErrorsTotal -and [long]$rc.ReadErrorsTotal -gt 0) { $parts += ((T "读错误 {0:N0} 次") -f [long]$rc.ReadErrorsTotal) }
+        if ($part) {
+            $pd = @(Get-PhysicalDisk -ErrorAction Stop | Where-Object { [string]$_.DeviceId -eq [string]$part.DiskNumber })[0]
+            if ($pd) {
+                $r.Ok = $true
+                $r.Model = ([string]$pd.FriendlyName).Trim()
+                $mt = [string]$pd.MediaType; if ($mt -and $mt -ne 'Unspecified') { $r.Media = $mt }
+                $r.Health = [string]$pd.HealthStatus
+                try {
+                    $rc = $pd | Get-StorageReliabilityCounter -ErrorAction Stop
+                    if ($rc) {
+                        if ($rc.Wear -ne $null -and [int]$rc.Wear -ge 0) { $r.Wear = [int]$rc.Wear }
+                        if ($rc.Temperature -and [int]$rc.Temperature -gt 0) { $r.Temp = [int]$rc.Temperature }
+                        if ($rc.PowerOnHours -and [long]$rc.PowerOnHours -gt 0) { $r.Hours = [long]$rc.PowerOnHours }
+                        if ($rc.ReadErrorsTotal -and [long]$rc.ReadErrorsTotal -gt 0) { $r.ReadErrors = [long]$rc.ReadErrorsTotal }
+                    }
+                } catch {}
+                return $r
             }
-        } catch {}
-        return ($parts -join ' · ')
+        }
     } catch {}
     # 存储模块不可用时退回 WMI：只有型号和状态
     try {
         $ld = Get-CimInstance -ClassName Win32_LogicalDisk -Filter ("DeviceID='{0}'" -f $drive.Substring(0, 2)) -ErrorAction Stop
         foreach ($pt in @(Get-CimAssociatedInstance -InputObject $ld -ResultClassName Win32_DiskPartition -ErrorAction Stop)) {
             foreach ($dd in @(Get-CimAssociatedInstance -InputObject $pt -ResultClassName Win32_DiskDrive -ErrorAction Stop)) {
-                $st = [string]$dd.Status
-                return (([string]$dd.Model).Trim() + ' · ' + $(if ($st -eq 'OK') { (T '健康状态正常') } else { ((T "健康状态：{0}") -f $st) }))
+                $r.Ok = $true; $r.Model = ([string]$dd.Model).Trim(); $r.Health = $(if ([string]$dd.Status -eq 'OK') { 'Healthy' } else { [string]$dd.Status })
+                return $r
             }
         }
     } catch {}
-    return ''
+    return $r
+}
+function Get-DiskHealth([string]$drive) {
+    $h = Get-DiskHealthInfo $drive
+    if (-not $h.Ok) { return '' }
+    $parts = @()
+    if ($h.Model) { $parts += $h.Model }
+    if ($h.Media) { $parts += $h.Media }
+    if ($h.Health) { $parts += $(if ($h.Health -eq 'Healthy') { (T '健康状态正常') } else { ((T "健康状态：{0}") -f $h.Health) }) }
+    if ($h.Wear -ge 0) { $parts += ((T "已磨损 {0}%") -f $h.Wear) }
+    if ($h.Temp -gt 0) { $parts += ((T "{0} °C") -f $h.Temp) }
+    if ($h.Hours -gt 0) { $parts += ((T "通电 {0:N0} 小时") -f $h.Hours) }
+    if ($h.ReadErrors -gt 0) { $parts += ((T "读错误 {0:N0} 次") -f $h.ReadErrors) }
+    return ($parts -join ' · ')
 }
 # ---------- Windows 自带的「存储感知」开没开 ----------
 function Get-StorageSenseOn { try { return ([int](Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy' -ErrorAction Stop).'01' -eq 1) } catch { return $false } }
