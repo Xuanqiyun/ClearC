@@ -1,22 +1,29 @@
 # 更新记录
 
-## 2.8
-- **三种使用模式**：普通用户、工程师、开发者和 IT，功能一级比一级多。第一次打开时问一句（老版本升上来的也会问一次），之后在「设置」最上面随时换，左下角版本号下面写着当前模式，点一下就到设置。换模式只改显示，不丢任何设置和记录。普通用户：清理 C 盘、省空间、空间地图、软件管理、帮助，清理列表里只有常见的缓存和临时文件。工程师：再加上重复文件、搬家管理、自动提醒、操作日志，以及各页的进阶功能（找文件、和上次比、导出、压缩；页面文件、还原点、压缩文件夹、虚拟磁盘、合并重复；开机启动、残留文件夹、检查新版本、搬到其他盘；开发工具缓存、驱动残留）。开发者和 IT：全部功能（计划任务、右键菜单、保留的存储、组件存储、蓝屏转储、临时文件夹位置、自定义清理列表、快速扫描开关、空间明细、检查扫描功能、运行记录，以及 Installer 孤儿安装包、事件日志等项目）。开发者：目录库每条可以写 `pro` / `expert` 选项，代码里的条目用 `Lvl`；清理页按当前模式决定列什么，自动清理不受影响。
-- **缓存目录库**：清理项改成一张表（`$script:cacheLib`，一行一条：名称、路径、说明、选项），加条目不用改代码。新增几十条：Firefox、Brave、Vivaldi、Opera、Chrome 测试版、360、QQ 浏览器的网页缓存（Chromium 系统一按 `@chromium:` 展开）；DirectX、AMD 显卡着色器缓存；Windows 更新日志、磁盘检查残留、应用商店软件的临时文件、系统网页缓存、远程桌面位图缓存；Steam 着色器与网页缓存（安装目录从注册表查）、Epic 启动器缓存、Unity 缓存；Adobe 媒体缓存、旧版 Teams、Discord、Slack、VS Code、Cursor、Spotify、网易云音乐的缓存；uv、Yarn、NuGet、Go、Rust 的下载缓存。删了要重新下载或重新生成、比较慢的（NuGet 全局包、Gradle、Maven、JetBrains 索引、虚幻引擎缓存）放进「需确认」，默认跳过。只删缓存，不碰 Cookie、历史记录、密码和保存的数据。
-- **Windows Installer 孤儿安装包**（需确认，默认跳过）：`C:\Windows\Installer` 里没有任何已装软件和补丁再引用的 .msi / .msp，判断方法和 PatchCleaner 一样（注册表登记的 LocalPackage 加 Windows Installer 接口）；一个引用都没读到就不判断，一天内改过的文件不算。
-- **自己加文件夹、排除文件夹**：设置里的「清理列表」。加的文件夹在清理页单独成组，删里面的东西、文件夹本身保留；排除的文件夹清理时一律不碰，估算时也不算。清理页右上角「自定义清理项」直达。
-- **垃圾攒多了也提醒**：自动提醒里可以设一个界限，定时检查时顺便统计「安全清理」里的缓存，超过就提醒（每天最多一次，只统计不删）。
-- **自动清理的时间可选**：每周某一天或每天，中午 12:30。
-- **软件管理**新增三个视图：**开机启动**（注册表 Run 项和「启动」文件夹，开关写在 StartupApproved 里，和任务管理器一样）、**计划任务**（只列第三方的）、**右键菜单**（只列第三方的 shellex 扩展，禁用写进 Shell Extensions\Blocked）。都只是禁用，不删任何东西，随时能恢复。
-- **检查新版本（winget）**：用 Windows 自带的 winget 查装过的软件有没有新版本，只在点的时候联网；列表里标出「可升级到」并给「升级」按钮，在终端窗口里升级，过程和提示都看得见。
-- **省空间**新增：OneDrive 同步文件改成「仅在线」（文件留在云端，什么都不删，「始终保留在此设备」的不动）；关掉 / 重新开启 Windows 保留的存储；组件存储（WinSxS）分析，DISM 算出实际大小、可回收多少、建不建议清理；蓝屏只存小转储；当前用户的临时文件夹改到其他盘；WSL 发行版搬到其他盘（`wsl --manage --move`，需要 WSL 2.5 以后）。
-- **清理 C 盘**再加三条需确认项：驱动安装包解压残留（C:\NVIDIA、C:\AMD、C:\Intel、C:\SWSetup、C:\Drivers、C:\Dell\Drivers）、开始菜单里失效的快捷方式（不碰桌面）、Windows 事件日志。
-- **软件管理**加「残留文件夹」视图：找已卸载软件可能留下的文件夹（名字对不上任何已装软件、没有程序在用、一个月没动过、至少 1 MB），只是猜测，看过再移到回收站。
-- **空间地图**上方每块盘一张健康卡片：用量条、健康状态，固态硬盘的温度、磨损、通电时间，按档位标色（绿、橙、红），点卡片选盘；只读，设置里可以关掉。
-- **自动提醒**页写明 Windows 自带的「存储感知」开没开。
-- 帮助里加了「为什么没有注册表清理」。
-- 测试：核心逻辑测试覆盖目录库解析、排除、自定义文件夹、winget 表格解析；界面自测覆盖清理列表、提醒设置、三个新视图和孤儿安装包判断；检查里核对目录库每一条都有英文。
-- Cache library as a data table with dozens of new entries (more browsers, shader caches, game launchers, Adobe, Teams, Discord, Slack, VS Code, Spotify, developer tools); orphaned Windows Installer packages, unpacked driver installers, broken Start menu shortcuts and event logs (all need confirmation); custom folders and exclusions; a junk-size reminder; a selectable cleanup day; startup items, third-party scheduled tasks, context menu extensions and leftover folders under Apps; "Check for updates" with winget; OneDrive online-only, reserved storage, component store analysis, small crash dumps, temp folder location and WSL moves under Save space; disk health in the space map; Storage Sense status under Reminders; FAQ on why there is no registry cleaner.
+## 3.0
+- **三种使用模式**：普通用户、工程师、开发者和 IT。双击打开默认是普通用户模式，不弹窗；在「设置」最上面随时换，左下角版本号下面写着当前模式。换模式只改显示，不丢设置和记录。
+- **系统健康**页（只看不改）：硬件卡片（CPU 负载 / 频率 / 性能计数器判断降频 / ACPI 温度，内存已用 / 提交 / 硬错误 / WHEA 内存错误，每块盘 SMART 健康 / 温度 / 磨损 / 读错误 / 通电时间，电池设计容量 / 满充容量 / 循环次数，显卡占用 / 显存 / 驱动，Windows 开机时长 / 等待重启 / 最近更新 / 有问题的设备），读不到的明说读不到，不用估算冒充；开机用时和拖慢开机的程序（诊断-性能日志 100 / 101）；蓝屏和崩溃：自己解析 Minidump（DUMP_HEADER64 + TRIAGE_DUMP64：错误码、参数、驱动表、异常地址落在哪个驱动、栈上出现的驱动），最近 30 天的意外关机 / 蓝屏记录 / WHEA / 磁盘 / NTFS 事件和最近装的驱动，sfc / DISM 分成「检查（只看）」和「修复（会改，先确认）」；活动监控：开着时每 3 秒采样，按程序合并看 CPU、内存、写入速度、本次监控写入、启动以来写入，不装服务；Windows 事件：最近 7 天严重和错误事件按来源归并。
+- **空间地图**：顶部概览（已用 / 总量、百分比，系统与软件、个人文件、可清理的缓存、其他、剩余的分段条）；方块图和列表一起显示并联动（点方块选中行、Ctrl 多选，选中的行在方块图上描边，双击进入）；「按类型」把全盘文件按扩展名分成十类（文件表里也数，不只 1 MB 以上的），双击一类到「找文件」；「找文件」最多 1000 个，按大小或修改时间排序，按所有者筛选，NTFS 压缩过的写明压缩后大小；「最近改动」读变更日志（USN）列出最近 1 / 3 / 7 / 30 天新建、改写的文件最集中的文件夹；「和上次比」的快照带日期保留（每盘最多 40 份），可以选和 1 / 3 / 7 / 30 天前或最早的比，并用一句话说清已用空间多了多少、主要在哪（Docker 数据、WSL 发行版、浏览器缓存、Windows 更新、某个文件夹……）。
+- **分级清理**：安全清理、谨慎清理（浏览器缓存、缩略图、着色器、下载缓存：默认也清，单独成组，执行前单独列出）、需确认（默认跳过）、受保护（一律不碰）；确认对话框里「看文件清单」列出最大的 60 项、完整清单存成文本；设置里「删除时先放进回收站」（成批放，太大的由系统问；自动清理不受影响）；操作日志记每一项删前删后的剩余空间；需确认新增「驱动存储里的旧版驱动包」（Get-WindowsDriver 找同一驱动有更新版本的旧包，pnputil 删，不加 /force，启动必需的不碰；开发者和 IT）。
+- **重复文件**：「相似照片」（9×8 灰度 dHash，几乎一样 4 位 / 相似 8 位 / 大致相似 12 位，按分辨率排序、写明尺寸和相差位数，不自动勾选，只能进回收站或归档，不能永久删除、不能合并）；留法新增「留某个文件夹里的」「留路径最短的」；「归档勾选的」不删，搬到选定文件夹下按盘符和原路径放。
+- **安全规则测试** `tests/Safety.Tests.ps1`（Linux 和 Windows 的 CI 都跑）：个人文件夹不删、链接不跟进、系统目录拦截、目录库路径合规、自动清理只碰安全项、逐字节比对、pnputil 不加 /force，以及源码锁（回收站标志、不删还原点、不清注册表、计划任务不用 SYSTEM、Stop-Process 只在关聊天软件处、rd /s 调用点数过等）。
+- 开发者：`Start-BgEngine` 在后台线程跑引擎代码并回调；`FileCats`（扩展名分类）、`DiskMap.RecentDirs`（变更日志汇总）、`DumpInfo`（转储解析）、`PhotoHash`（相似照片）、`FsTools.Owner / IsCompressed / RecycleMany`；目录库选项 `careful`。
+- 2.8 的改动（未单独发布）并入本版：
+  - **缓存目录库**：清理项改成一张表（`$script:cacheLib`，一行一条：名称、路径、说明、选项），加条目不用改代码。新增几十条：Firefox、Brave、Vivaldi、Opera、Chrome 测试版、360、QQ 浏览器的网页缓存（Chromium 系统一按 `@chromium:` 展开）；DirectX、AMD 显卡着色器缓存；Windows 更新日志、磁盘检查残留、应用商店软件的临时文件、系统网页缓存、远程桌面位图缓存；Steam 着色器与网页缓存（安装目录从注册表查）、Epic 启动器缓存、Unity 缓存；Adobe 媒体缓存、旧版 Teams、Discord、Slack、VS Code、Cursor、Spotify、网易云音乐的缓存；uv、Yarn、NuGet、Go、Rust 的下载缓存。删了要重新下载或重新生成、比较慢的（NuGet 全局包、Gradle、Maven、JetBrains 索引、虚幻引擎缓存）放进「需确认」，默认跳过。只删缓存，不碰 Cookie、历史记录、密码和保存的数据。
+  - **Windows Installer 孤儿安装包**（需确认，默认跳过）：`C:\Windows\Installer` 里没有任何已装软件和补丁再引用的 .msi / .msp，判断方法和 PatchCleaner 一样（注册表登记的 LocalPackage 加 Windows Installer 接口）；一个引用都没读到就不判断，一天内改过的文件不算。
+  - **自己加文件夹、排除文件夹**：设置里的「清理列表」。加的文件夹在清理页单独成组，删里面的东西、文件夹本身保留；排除的文件夹清理时一律不碰，估算时也不算。清理页右上角「自定义清理项」直达。
+  - **垃圾攒多了也提醒**：自动提醒里可以设一个界限，定时检查时顺便统计「安全清理」里的缓存，超过就提醒（每天最多一次，只统计不删）。
+  - **自动清理的时间可选**：每周某一天或每天，中午 12:30。
+  - **软件管理**新增三个视图：**开机启动**（注册表 Run 项和「启动」文件夹，开关写在 StartupApproved 里，和任务管理器一样）、**计划任务**（只列第三方的）、**右键菜单**（只列第三方的 shellex 扩展，禁用写进 Shell Extensions\Blocked）。都只是禁用，不删任何东西，随时能恢复。
+  - **检查新版本（winget）**：用 Windows 自带的 winget 查装过的软件有没有新版本，只在点的时候联网；列表里标出「可升级到」并给「升级」按钮，在终端窗口里升级，过程和提示都看得见。
+  - **省空间**新增：OneDrive 同步文件改成「仅在线」（文件留在云端，什么都不删，「始终保留在此设备」的不动）；关掉 / 重新开启 Windows 保留的存储；组件存储（WinSxS）分析，DISM 算出实际大小、可回收多少、建不建议清理；蓝屏只存小转储；当前用户的临时文件夹改到其他盘；WSL 发行版搬到其他盘（`wsl --manage --move`，需要 WSL 2.5 以后）。
+  - **清理 C 盘**再加三条需确认项：驱动安装包解压残留（C:\NVIDIA、C:\AMD、C:\Intel、C:\SWSetup、C:\Drivers、C:\Dell\Drivers）、开始菜单里失效的快捷方式（不碰桌面）、Windows 事件日志。
+  - **软件管理**加「残留文件夹」视图：找已卸载软件可能留下的文件夹（名字对不上任何已装软件、没有程序在用、一个月没动过、至少 1 MB），只是猜测，看过再移到回收站。
+  - **空间地图**上方每块盘一张健康卡片：用量条、健康状态，固态硬盘的温度、磨损、通电时间，按档位标色（绿、橙、红），点卡片选盘；只读，设置里可以关掉。
+  - **自动提醒**页写明 Windows 自带的「存储感知」开没开。
+  - 帮助里加了「为什么没有注册表清理」。
+  - 测试：核心逻辑测试覆盖目录库解析、排除、自定义文件夹、winget 表格解析；界面自测覆盖清理列表、提醒设置、三个新视图和孤儿安装包判断；检查里核对目录库每一条都有英文。
+  - Cache library as a data table with dozens of new entries (more browsers, shader caches, game launchers, Adobe, Teams, Discord, Slack, VS Code, Spotify, developer tools); orphaned Windows Installer packages, unpacked driver installers, broken Start menu shortcuts and event logs (all need confirmation); custom folders and exclusions; a junk-size reminder; a selectable cleanup day; startup items, third-party scheduled tasks, context menu extensions and leftover folders under Apps; "Check for updates" with winget; OneDrive online-only, reserved storage, component store analysis, small crash dumps, temp folder location and WSL moves under Save space; disk health in the space map; Storage Sense status under Reminders; FAQ on why there is no registry cleaner.
 
 ## 2.7
 - **空间地图的项目复选框**：每一行前面有复选框（和资源管理器「查看」里的「项目复选框」一样），只有点方框才选中或取消（鼠标移到方框上会变成手形、方框变蓝），单击行的其他地方不会选中，双击文件夹照常往里点；Shift 点是从上次勾的那一行勾到这里，Esc 全部取消，左下角「全选」。右键点一行，菜单只对这一行起作用。在设置里关掉复选框，就照 Windows 列表原来的做法。
