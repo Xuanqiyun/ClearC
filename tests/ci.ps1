@@ -21,9 +21,11 @@ Step 'engine tests (PS 5.1)' { powershell -NoProfile -ExecutionPolicy Bypass -Fi
 Step 'build exe' { powershell -NoProfile -ExecutionPolicy Bypass -File build\build.ps1 }
 if (Test-Path out\ClearC.exe) {
     # 界面自测：照常打开窗口（放在屏幕外），把界面功能点一遍，对话框都当作点了取消，做完自己关掉。
-    # 跑两遍：先照这台测试机的显示语言（英文）、浅色，再在设置里写上中文、深色跑一遍（测完设置原样放回）。注释标题里不能有逗号
+    # 跑三遍：先照这台测试机的显示语言（英文）、浅色，再在设置里写上中文浅色、中文深色各跑一遍（测完设置原样放回）。注释标题里不能有逗号
+    # 每一遍都给 README 拍几张截图（CLEANC_SHOTS=1：真的扫一遍这台测试机的 C 盘，只统计不删），和报告一起上传
+    $env:CLEANC_SHOTS = '1'
     $setFile = Join-Path $env:LOCALAPPDATA 'CleanC\settings.txt'
-    foreach ($run in @(@{ Title = 'UI test'; Set = ''; Report = 'uitest.txt' }, @{ Title = 'UI test (zh dark)'; Set = "Lang=zh`r`nTheme=dark`r`n"; Report = 'uitest-zh-dark.txt' })) {
+    foreach ($run in @(@{ Title = 'UI test'; Set = ''; Report = 'uitest.txt' }, @{ Title = 'UI test (zh)'; Set = "Lang=zh`r`nTheme=light`r`n"; Report = 'uitest-zh.txt' }, @{ Title = 'UI test (zh dark)'; Set = "Lang=zh`r`nTheme=dark`r`n"; Report = 'uitest-zh-dark.txt' })) {
         $setBak = $null; if (Test-Path $setFile) { $setBak = [IO.File]::ReadAllBytes($setFile) }
         if ($run.Set) { New-Item -ItemType Directory -Force (Split-Path $setFile) | Out-Null; [IO.File]::WriteAllText($setFile, $run.Set) }
         $env:CLEANC_REPORT = Join-Path $PWD ('out\' + $run.Report)   # 不设 CLEANC_TEST：那会让启动器不用 STA 线程，WPF 窗口打不开
@@ -40,6 +42,7 @@ if (Test-Path out\ClearC.exe) {
         }
         if ($run.Set) { if ($setBak) { [IO.File]::WriteAllBytes($setFile, $setBak) } else { Remove-Item -LiteralPath $setFile -ErrorAction SilentlyContinue } }
     }
+    $env:CLEANC_SHOTS = ''
     $env:CLEANC_QUIET = '1'; $env:CLEANC_REPORT = Join-Path $PWD 'out\selftest.txt'
     $p = Start-Process -FilePath .\out\ClearC.exe -ArgumentList '/selftest' -Wait -PassThru
     $lines = @(); if (Test-Path $env:CLEANC_REPORT) { $lines = @(Get-Content $env:CLEANC_REPORT -Encoding UTF8) }

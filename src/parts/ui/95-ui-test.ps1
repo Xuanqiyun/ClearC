@@ -23,9 +23,16 @@ function Invoke-UiTest {
         if ($why) { $L.Add("FAIL ${name}: $why"); $script:uiFail++ } else { $L.Add("ok   $name") }
     }
     $click = { param($b) $b.RaiseEvent((New-Object System.Windows.RoutedEventArgs ([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))) }
+    $waitUi = {
+        param([scriptblock]$cond, [int]$ms)
+        $sw = [Diagnostics.Stopwatch]::StartNew()
+        do { $f = New-Object System.Windows.Threading.DispatcherFrame; [void]$win.Dispatcher.BeginInvoke([Action]{ $f.Continue = $false }, [System.Windows.Threading.DispatcherPriority]::Background); [System.Windows.Threading.Dispatcher]::PushFrame($f); Start-Sleep -Milliseconds 50 }
+        while (-not (& $cond) -and $sw.ElapsedMilliseconds -lt $ms)
+        [bool](& $cond)
+    }
     # 把一块界面整块画成 PNG，放在报告旁边（GitHub 上的自动测试会一起上传，方便看排版）；画不出来只记一笔，不算失败
     $snap = {
-        param($el, [string]$name)
+        param($el, [string]$name, [double]$scale = 1)
         try {
             $el.UpdateLayout()
             $w = [math]::Ceiling($el.ActualWidth); $h = [math]::Ceiling($el.ActualHeight)
@@ -35,7 +42,7 @@ function Invoke-UiTest {
             $vb.ViewboxUnits = [System.Windows.Media.BrushMappingMode]::Absolute; $vb.Viewbox = $r
             $dv = New-Object System.Windows.Media.DrawingVisual
             $dc = $dv.RenderOpen(); $dc.DrawRectangle($win.Background, $null, $r); $dc.DrawRectangle($vb, $null, $r); $dc.Close()
-            $bmp = New-Object System.Windows.Media.Imaging.RenderTargetBitmap ([int]$w), ([int]$h), 96, 96, ([System.Windows.Media.PixelFormats]::Pbgra32)
+            $bmp = New-Object System.Windows.Media.Imaging.RenderTargetBitmap ([int]($w * $scale)), ([int]($h * $scale)), (96 * $scale), (96 * $scale), ([System.Windows.Media.PixelFormats]::Pbgra32)
             $bmp.Render($dv)
             $enc = New-Object System.Windows.Media.Imaging.PngBitmapEncoder
             $enc.Frames.Add([System.Windows.Media.Imaging.BitmapFrame]::Create($bmp))
@@ -292,6 +299,36 @@ function Invoke-UiTest {
             $ctl.MapViewTree.IsChecked = $true
             if ($ctl.MapAll.IsEnabled) { throw 'select all enabled in the treemap' }
             $ctl.MapViewDirs.IsChecked = $true
+        }
+        if ($env:CLEANC_SHOTS -eq '1') {
+            & $step 'screenshots for the README' {
+                $root = $win.Content
+                $shot = { param([string]$n) $win.UpdateLayout(); [void](& $waitUi { $false } 300); & $snap $root ('shot-' + $n) 2 }
+                # 清理 C 盘：真的扫一遍（只统计大小，不删东西）
+                Show-Page 'clean'; & $click $ctl.BtnScan
+                if (-not (& $waitUi { -not $script:worker } 150000)) { throw 'cleanup scan did not finish' }
+                if (-not $script:rows) { throw 'cleanup scan found nothing' }
+                $ctl.OpPanel.Visibility = 'Collapsed'; & $shot 'clean'
+                # 空间地图：扫整个 C 盘
+                Show-Page 'map'; $ctl.MapViewDirs.IsChecked = $true
+                foreach ($it in $ctl.MapDrive.Items) { if ([string]$it.Tag -ieq "$env:SystemDrive\") { $ctl.MapDrive.SelectedItem = $it } }
+                Start-MapScan "$env:SystemDrive\"
+                if (-not (& $waitUi { -not $script:worker } 120000)) { throw 'space map scan did not finish' }
+                if (-not $script:mapRoot -or [object]::ReferenceEquals($script:mapRoot, $tree)) { throw 'space map has no scan of the drive' }
+                $ctl.OpPanel.Visibility = 'Collapsed'; & $shot 'map'
+                $ctl.MapViewTree.IsChecked = $true; & $shot 'map-tree'
+                $ctl.MapViewDirs.IsChecked = $true
+                Show-Page 'save'; $ctl.SaveScroll.ScrollToTop(); & $shot 'save'
+                Show-Page 'dup'; & $shot 'dup'
+                Show-Page 'settings'; & $shot 'settings'
+                # 帮助：收起时的样子，再展开「空间地图」一节
+                Show-Page 'help'; $ctl.HelpScroll.ScrollToTop(); & $shot 'help'
+                $sec = @(Get-HelpSections)[3]
+                $sec.IsExpanded = $true; [void](& $waitUi { $false } 400)
+                $y = $sec.TransformToAncestor($ctl.HelpScroll.Content).Transform((New-Object System.Windows.Point 0, 0)).Y
+                $ctl.HelpScroll.ScrollToVerticalOffset([math]::Max(0, $y - 16)); & $shot 'help-map'
+                $sec.IsExpanded = $false; $ctl.HelpScroll.ScrollToTop(); Show-Page 'clean'
+            }
         }
     } catch { $L.Add('FAIL test run: ' + $_.Exception.Message); $script:uiFail++ }
     finally {
