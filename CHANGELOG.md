@@ -14,6 +14,7 @@
 - **帮助页重新排版**：每个功能一张卡片，默认收起，标题下一行写着这一节讲什么，点开再看；右上角「全部展开」。条目改成粗体小标题加一两行说明，长段落拆成小点；操作方式、搬家状态做成对照表，搬家过程画成步骤条，要特别留意的（不删个人文件夹、别动 CDriveMoved）单独框出来。常见问题一行一个，点开看答案。新增「设置」一节。
 - 修正：点「使用反馈」后再点「帮助」，回不到帮助的开头。
 - 修正：英文界面里，清理列表的分组标题显示成了中文。自动清理的说明里组名写成了「可以放心删」，改成和列表一致的「安全清理」。
+- 修正：窗口矮的时候（比如笔记本 150% 缩放），左侧栏最下面的「设置」被挤掉看不到，现在这一栏可以上下滚动；空间地图里的「空间明细」不再被「导出报告」按钮挡住。
 - 测试：自检也核对实际占用和硬链接；新增 `ClearC.exe /uitest`，在真的 Windows 上把界面功能点一遍（英文浅色、中文深色各跑一遍，帮助页存一张截图）；NTFS 镜像测试也比实际占用、硬链接和压缩文件夹。
 - Item check boxes, left- or right-button drag selection and a right-click menu in the space map; a Settings page that hides pages, buttons, descriptions and columns you don't use; size on disk and hard links from the file table, with a "Space breakdown" of the used space; restore point usage on "Save space"; low-priority duplicate search; LiveKernelReports cleanup; Feedback now points only to GitHub (the WeChat ID was removed); fixed Help not returning to the top after Feedback; a redesigned Help page with collapsible sections, short headed items, tables and callouts; clean-up group titles now translated in English; `/uitest` for automated UI tests (English light and Chinese dark).
 
