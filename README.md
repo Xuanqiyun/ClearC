@@ -26,6 +26,27 @@
 
 界面支持**中文和英文**、**浅色和深色**，在「设置」里或左侧栏底部的「English / 中文」「外观」切换。「帮助」页里可以**检查新版本**（只在点的时候联网），以及**检查扫描功能**：在你的电脑上核对快速扫描是否准确，结果可以发给开发者。
 
+## 界面截图
+
+<p align="center"><img src="docs/screenshots/clean.png" width="860" alt="清理 C 盘：扫描后分组列出可以处理的项目"></p>
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/map.png" width="100%" alt="空间地图"><br><sub>空间地图：一层层看是哪些文件夹占了空间，每行前面有复选框</sub></td>
+    <td width="50%"><img src="docs/screenshots/map-tree.png" width="100%" alt="空间地图的方块图"><br><sub>方块图：方块越大，占的空间越多</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/save.png" width="100%" alt="省空间"><br><sub>省空间：系统压缩、页面文件、休眠文件、还原点，不删文件</sub></td>
+    <td><img src="docs/screenshots/settings.png" width="100%" alt="设置"><br><sub>设置：外观、语言，以及界面上显示什么</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/help.png" width="100%" alt="帮助"><br><sub>帮助：每个功能一张卡片，点开看说明</sub></td>
+    <td><img src="docs/screenshots/dark.png" width="100%" alt="深色模式"><br><sub>深色模式</sub></td>
+  </tr>
+</table>
+
+截图是 GitHub 上的自动测试机拍的（界面自测时顺便扫一遍那台机器的 C 盘，只统计不删），所以文件夹和大小是测试机上的，和普通电脑不太一样。
+
 ## 安全原则
 
 - **个人文件夹里的东西一律不删**：桌面、文档、下载、图片、视频、音乐、收藏夹、OneDrive，包括这台电脑上其他账户的个人文件夹和「公用」文件夹。即使误选也会自动跳过。
@@ -95,7 +116,7 @@ tests/                   测试，见下面
 | 直接读文件表、按改动增量更新 | Linux，root，装 ntfs-3g 和 PowerShell 7 | `sudo bash tests/ntfs/run.sh`：用 mkntfs 和 ntfs-3g 做出真的 NTFS 镜像（硬链接、稀疏文件、碎片、备用数据流、很深的路径、各种簇大小），和挂载后逐个文件夹数出来的结果对比。ntfs-3g 建的符号链接是普通文件，和 Windows 不同，所以允许差几处 |
 | 深色模式的对比度 | 任何装了 PowerShell 和 Python 的系统 | `bash tests/theme/run.sh`：算每段文字和底色的对比度（近似） |
 | 在真的 Windows 上核对快速扫描 | Windows | 程序里「帮助」→「检查扫描功能」；或者 `ClearC.exe /selftest`，结果在 `%LOCALAPPDATA%\CleanC\selftest.txt`（设置环境变量 `CLEANC_REPORT` 可以改位置，`CLEANC_QUIET=1` 不弹提示），退出码是不通过的项数。也核对实际占用（稀疏、NTFS 压缩、系统压缩、硬链接）和 Windows 自己报的是否一致 |
-| 界面功能 | Windows | `ClearC.exe /uitest`：打开窗口（放在屏幕外），把各页、设置开关、项目复选框、右键拖选、右键菜单、空间明细点一遍，对话框都当作点了取消，做完自己关掉；结果在 `%LOCALAPPDATA%\CleanC\uitest.txt`（`CLEANC_REPORT` 可以改），退出码是不通过的项数。测完设置原样放回 |
+| 界面功能 | Windows | `ClearC.exe /uitest`：打开窗口（放在屏幕外），把各页、设置开关、项目复选框、右键拖选、右键菜单、空间明细点一遍，对话框都当作点了取消，做完自己关掉；结果在 `%LOCALAPPDATA%\CleanC\uitest.txt`（`CLEANC_REPORT` 可以改），退出码是不通过的项数。测完设置原样放回。设置 `CLEANC_SHOTS=1` 时还会真的扫一遍 C 盘（只统计不删），把几页界面存成 PNG 放在报告旁边；GitHub 上的自动测试用英文浅色、中文浅色、中文深色各跑一遍，README 里的截图就是这样来的 |
 
 ### 代码签名
 
@@ -114,18 +135,6 @@ GitHub 在国内下载慢的话，可以在 [Gitee](https://gitee.com/) 建一�
 - `%LOCALAPPDATA%\CleanC\`：设置（settings.txt）、C 盘空间记录（history.txt）、操作日志、空间地图快照。
 - 各盘的 `CDriveMoved\`：搬到其他盘的数据。
 - 任务计划程序里的 `CleanC` 文件夹：只在打开自动提醒或每周清理时才会创建，关掉开关就删除。
-- <img width="1509" height="970" alt="image" src="https://github.com/user-attachments/assets/39907aed-ba40-4885-bc80-381db17b7348" />
-<img width="1525" height="976" alt="image" src="https://github.com/user-attachments/assets/25cf0dfc-011b-4311-91b6-cb299468f394" />
-<img width="1516" height="960" alt="image" src="https://github.com/user-attachments/assets/64d37cf8-ae32-4be6-ac40-bcc38cde5d77" />
-<img width="1529" height="981" alt="image" src="https://github.com/user-attachments/assets/c317aaa8-6581-43bf-a4c3-697f699398ac" />
-<img width="1526" height="986" alt="image" src="https://github.com/user-attachments/assets/7ca6d454-f5ff-4fdc-846e-a8df708666c5" />
-
-
-
-
-
-
-
 
 ## 安全风险提示
 
@@ -155,6 +164,16 @@ ClearC (Chinese name 腾挪, "make room") frees up space on drive C: on Windows 
 - **Safety rules.** Personal folders (Desktop, Documents, Downloads…) are never deleted, every deletion needs an explicit confirmation, and system locations are blocked. Long operations can be cancelled at any time and stop at a safe point.
 
 The interface is available in English and Chinese, light and dark. Switch on the "Settings" page or with "English / 中文" and "Appearance" at the bottom of the sidebar; "Settings" also hides pages, buttons, descriptions and space-map columns you don't use; the first launch follows the Windows display language. The Help page can check for updates (only when you click it) and run "Check scanning", which verifies the fast scan on your PC and produces a report you can send to the developer (also `ClearC.exe /selftest`; `ClearC.exe /uitest` clicks through the interface for automated testing).
+
+<table>
+  <tr>
+    <td width="33%"><img src="docs/screenshots/clean-en.png" width="100%" alt="Clean up C:"><br><sub>Clean up C:</sub></td>
+    <td width="33%"><img src="docs/screenshots/map-en.png" width="100%" alt="Space map"><br><sub>Space map</sub></td>
+    <td width="33%"><img src="docs/screenshots/help-en.png" width="100%" alt="Help"><br><sub>Help</sub></td>
+  </tr>
+</table>
+
+The screenshots are taken by the automated UI test on a GitHub test machine, so the folders and sizes are that machine's.
 
 Developers: the source is split by function under `src/parts/` and merged into `src/CleanC-UI.ps1` by `build/merge.ps1`; tests are in `tests/` (checks, engine tests, real NTFS image tests on Linux, dark-mode contrast). `build/build.ps1` signs the exe when a certificate is configured.
 
