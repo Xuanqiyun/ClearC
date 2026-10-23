@@ -28,7 +28,7 @@ function Load-Moves {
 $tot = [double]0; $n = 0
 foreach ($r in $arg.Rows) {
     if (-not (Test-Path -LiteralPath $r.Dst)) { continue }
-    $b = DirBytes $r.Dst
+    $b = Est-Bytes $r.Dst (Get-DriveTree $r.Dst)   # 目标盘的文件表读一次，所有搬走的文件夹都从里面查
     $r.Size = [long]$b; $r.SizeText = GB $b
     if ($r.State -eq 'ok') { $tot += $b; $n++ }
 }

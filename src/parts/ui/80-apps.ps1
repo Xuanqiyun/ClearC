@@ -15,6 +15,8 @@ $i = 0
 SetP @{ Steps = $out.Count + 1; Step = 1; StepName = (T '读取 C 盘的文件表') }
 $tree = Get-SysTree
 $generic = @($env:SystemRoot, "$env:SystemDrive\Program Files", "$env:SystemDrive\Program Files (x86)", "$env:SystemDrive\ProgramData", $env:LOCALAPPDATA, $env:APPDATA, "$env:LOCALAPPDATA\Programs")
+# 装在别的盘上的：同一块盘上有两个以上，就读那块盘的文件表一次（比一个一个文件夹统计快得多）
+$far = @{}; foreach ($a in $out) { $l = [string]$a.Location; if ($l.Length -gt 3 -and $l[1] -eq ':' -and $l.Substring(0, 2) -ine $env:SystemDrive) { $far[$l.Substring(0, 1).ToUpperInvariant()] = [int]$far[$l.Substring(0, 1).ToUpperInvariant()] + 1 } }
 $stopped = $false
 foreach ($a in $out) {
     $i++
@@ -23,7 +25,9 @@ foreach ($a in $out) {
     SetP @{ Steps = $out.Count + 1; Step = $i + 1; StepName = $a.Name; SubKind = 'none' }
     $loc = $a.Location
     if ($loc -and $loc.Length -gt 3 -and ($generic -notcontains $loc) -and (Test-Path -LiteralPath $loc -PathType Container)) {
-        $b = Est-Bytes $loc $tree
+        $dt = $tree
+        if ($loc[1] -eq ':' -and $loc.Substring(0, 2) -ine $env:SystemDrive) { $dt = if ([int]$far[$loc.Substring(0, 1).ToUpperInvariant()] -ge 2) { Get-DriveTree $loc } else { $null } }
+        $b = Est-Bytes $loc $dt
         if (Stopping) { $stopped = $true; continue }
         if ($b -gt 0) { $a.Size = $b; $a.Measured = $true }
     }
@@ -308,7 +312,8 @@ function Load-StartRows([string]$kind) {
         Start-Op (T '查找残留文件夹') -NoCard; UI-Busy $true
         Start-Worker @'
 $apps = if ($sync.AppsResult) { $sync.AppsResult } else { Get-InstalledApps }
-$sync.LeftoverResult = @(Get-OrphanFolders $apps)
+$tree = Get-SysTree
+$sync.LeftoverResult = @(Get-OrphanFolders $apps $tree)
 '@ $null
         return
     }

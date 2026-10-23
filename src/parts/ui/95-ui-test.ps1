@@ -60,32 +60,26 @@ function Invoke-UiTest {
                 if ($ctl[$script:pageList[$k][0]].Visibility -ne 'Visible') { throw "page $k not visible" }
             }
         }
-        & $step 'help: back to the top after Feedback' {
+        & $step 'help: contents list on the left, only the picked item on the right' {
             Show-Page 'help'; $win.UpdateLayout()
+            $navs = @($ctl.HelpNav.Children | Where-Object { $_ -is [System.Windows.Controls.RadioButton] })
+            if ($navs.Count -lt 13 -or $script:helpPanes.Count -ne $navs.Count) { throw ('{0} items in the contents, {1} panes' -f $navs.Count, $script:helpPanes.Count) }
+            if (@($ctl.HelpNav.Children | Where-Object { $_ -is [System.Windows.Controls.TextBlock] }).Count -lt 4) { throw 'no group headings in the contents' }
+            $navs[4].IsChecked = $true; $win.UpdateLayout()
+            $vis = @($script:helpPanes.Values | Where-Object { $_.Pane.Visibility -eq 'Visible' })
+            if ($vis.Count -ne 1 -or -not [object]::ReferenceEquals($vis[0].Nav, $navs[4])) { throw 'more than one item shown, or not the one picked' }
+            & $snap $ctl.PageHelp 'help'
+            $was = $script:helpPane
+            & $click $ctl.BtnHelpNext; if ($script:helpPane -eq $was -or -not $navs[5].IsChecked) { throw 'next did not move on' }
+            & $click $ctl.BtnHelpPrev; if ($script:helpPane -ne $was) { throw 'previous did not come back' }
+            # 左下角「使用反馈」直接打开反馈那一项；再点「帮助」回到原来在看的那一项
             & $click $ctl.BtnFeedback; $win.UpdateLayout()
-            $down = $ctl.HelpScroll.VerticalOffset
+            if ($ctl.FeedbackCard.Visibility -ne 'Visible' -or $script:helpPane -ne 'fb') { throw 'Feedback did not open its item' }
             & $click $ctl.NavHelp; $win.UpdateLayout()
-            if ($down -le 0) { throw 'Feedback did not scroll down' }
-            if ($ctl.HelpScroll.VerticalOffset -ne 0) { throw ("still at {0} after clicking Help" -f $ctl.HelpScroll.VerticalOffset) }
-        }
-        & $step 'help: sections fold and unfold' {
-            Show-Page 'help'; $win.UpdateLayout()
-            $all = Get-HelpSections
-            if ($all.Count -lt 8) { throw ('only {0} sections' -f $all.Count) }
-            if (@($all | Where-Object { $_.IsExpanded }).Count) { throw 'sections should start folded' }
-            $h0 = $ctl.HelpScroll.ExtentHeight
-            & $snap $ctl.HelpScroll.Content 'help'
-            & $click $ctl.BtnHelpExpand; $win.UpdateLayout()
-            & $snap $ctl.HelpScroll.Content 'help-open'
-            if (@($all | Where-Object { -not $_.IsExpanded }).Count) { throw 'Expand all left some sections folded' }
-            if ([string]$ctl.BtnHelpExpand.Content -ne (T '全部收起')) { throw ('button says {0} after expanding' -f $ctl.BtnHelpExpand.Content) }
-            if ($ctl.HelpScroll.ExtentHeight -le $h0 + 2000) { throw ('page grew only from {0} to {1}' -f $h0, $ctl.HelpScroll.ExtentHeight) }
-            & $click $ctl.BtnHelpExpand; $win.UpdateLayout()
-            if (@($all | Where-Object { $_.IsExpanded }).Count) { throw 'Collapse all left some sections open' }
-            $q = @($ctl.HelpFaq.Children)[0]
-            $q.IsExpanded = $true; $win.UpdateLayout()
-            if ([string]$ctl.BtnHelpExpand.Content -ne (T '全部展开')) { throw 'a question changed the sections button' }
-            $q.IsExpanded = $false; $ctl.HelpScroll.ScrollToTop(); $win.UpdateLayout()
+            if ($script:helpPane -ne $was -or $ctl.HelpScroll.VerticalOffset -ne 0) { throw ('Help went to {0}, not back to {1}' -f $script:helpPane, $was) }
+            foreach ($k in @($script:helpPanes.Keys)) { Select-HelpPane $k -NoRemember; $win.UpdateLayout(); if ($script:helpPanes[$k].Pane.ActualHeight -lt 60) { throw "item $k looks empty" } }
+            $q = @($ctl.HelpFaq.Children)[0]; Select-HelpPane 'faq' -NoRemember; $q.IsExpanded = $true; $win.UpdateLayout(); $q.IsExpanded = $false
+            Select-HelpPane $was
         }
         & $step 'settings page shows the current settings' {
             Show-Page 'settings'
@@ -913,13 +907,10 @@ function Invoke-UiTest {
                 Show-Page 'save'; $ctl.SaveScroll.ScrollToTop(); & $shot 'save'
                 Show-Page 'dup'; & $shot 'dup'
                 Show-Page 'settings'; & $shot 'settings'
-                # 帮助：收起时的样子，再展开「空间地图」一节
-                Show-Page 'help'; $ctl.HelpScroll.ScrollToTop(); & $shot 'help'
-                $sec = @(Get-HelpSections)[3]
-                $sec.IsExpanded = $true; [void](& $waitUi { $false } 400)
-                $y = $sec.TransformToAncestor($ctl.HelpScroll.Content).Transform((New-Object System.Windows.Point 0, 0)).Y
-                $ctl.HelpScroll.ScrollToVerticalOffset([math]::Max(0, $y - 16)); & $shot 'help-map'
-                $sec.IsExpanded = $false; $ctl.HelpScroll.ScrollToTop(); Show-Page 'clean'
+                # 帮助：快速上手，再看「空间地图」那一项
+                Show-Page 'help'; $hp0 = $script:helpPane; Select-HelpPane 'start' -NoRemember; & $shot 'help'
+                Select-HelpPane 's3' -NoRemember; & $shot 'help-map'
+                Select-HelpPane $hp0 -NoRemember; Show-Page 'clean'
             }
         }
         # 各种扫描用了多久（CLEANC_SPEED=1 时；开发者和 IT 模式，只统计不删）：报告里以 timing 开头的几行
