@@ -213,6 +213,22 @@ function Invoke-UiTest {
             if (-not $old.SetEquals($new) -or $nReg -ne $nReg2) { throw ("references differ: before {0} (registry {1}), now {2} (registry {3})" -f $old.Count, $nReg, $new.Count, $nReg2) }
             "{0} of {1} packages; {2} references, the same as asking one by one" -f $o.Count, $all.Count, $new.Count
         }
+        & $step 'services and drivers read from the registry cover every program WMI lists' {
+            # 判断软件能不能搬时要知道哪些服务、驱动的程序在它的文件夹里：直接读注册表，不能比 WMI 少
+            $reg = @(Get-ServicePaths)
+            $wmi = @(@(Get-CimInstance -ClassName Win32_Service -ErrorAction Stop) + @(Get-CimInstance -ClassName Win32_SystemDriver -ErrorAction Stop))
+            $miss = @(); $n = 0
+            foreach ($w in $wmi) {
+                $m = [regex]::Match([string]$w.PathName, '(?i)([a-z]:\\[^"]*?\.(exe|sys|dll))')
+                if (-not $m.Success) { continue }
+                $dir = Split-Path $m.Groups[1].Value -Parent
+                if ($dir -match '(?i)^[a-z]:\\windows(\\|$)') { continue }   # 系统自带的不用看（在 Windows 文件夹里，不会是要搬的软件）
+                $n++
+                if (-not @($reg | Where-Object { ([string]$_.PathName).IndexOf($dir, [StringComparison]::OrdinalIgnoreCase) -ge 0 -or ([string]$_.PathName).IndexOf(($dir -replace '^[A-Za-z]:', ''), [StringComparison]::OrdinalIgnoreCase) -ge 0 }).Count) { $miss += ('{0} ({1})' -f $w.Name, $w.PathName) }
+            }
+            if ($reg.Count -lt 50 -or $miss.Count) { throw ("registry has {0} entries; missing {1} of {2}: {3}" -f $reg.Count, $miss.Count, $n, (($miss | Select-Object -First 4) -join ' | ')) }
+            "{0} services and drivers from the registry; all {1} outside the Windows folder that WMI lists are there" -f $reg.Count, $n
+        }
         & $step 'save space: reserved storage, crash dump, temp folder, OneDrive' {
             Show-Page 'save'; $win.UpdateLayout()
             foreach ($n in 'SaveRsState', 'SaveDumpState', 'SaveTmpState') { if (-not [string]$ctl[$n].Text) { throw "$n is empty" } }

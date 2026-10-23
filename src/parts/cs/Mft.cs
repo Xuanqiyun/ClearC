@@ -145,7 +145,7 @@ public sealed class MftIndex {
     public int[] Parent; public ushort[] ParentSeq, Seq;
     public long[] Size, Write;
     public long[] Disk;                               // 这条记录里的数据实际占的盘（主记录和续页各记各的；压缩、稀疏、只在云端的文件比文件大小小，很小的文件放在记录里不另占）
-    public byte[] Flag;                               // 1 在用  2 文件夹  4 链接（重解析点）  8 有属性列表
+    public byte[] Flag;                               // 1 在用  2 文件夹  4 链接（重解析点）  8 有属性列表  16 别的重解析点  32 系统压缩或重复数据删除（对程序就是普通文件）
     public uint[] Attr;                               // $STANDARD_INFORMATION 里的文件属性（系统、脱机、云端占位、重解析点……），查重复文件时按它跳过
     public byte[] Cat;                                // 文件类别（FileCats）
     public string[] Name;                             // 只存文件夹、1 MB 以上的文件和有属性列表的文件的名字
@@ -468,6 +468,8 @@ public static class Mft {
                 // 数据太长放在盘上别处（很长的链接目标、云端文件夹的数据）：只有文件夹才去盘上读它的类型，文件用不着（读多了很慢）
                 else if ((ext ? (ix.Flag[owner] & 2) : (flags & 2)) != 0) known = ReparseTag(ix, b, a, len, out tag);
                 if (known && (tag & 0x20000000) != 0) ix.Flag[owner] |= 4; else ix.Flag[owner] |= 16;
+                // 系统压缩（WOF）、重复数据删除（Dedup）的文件对程序来说就是普通文件（列举时看不到重解析点）：记下来，查重复文件时和逐个列举一样对待
+                if (known && (tag == 0x80000017 || tag == 0x80000013)) ix.Flag[owner] |= 32;
             }
             a += len;
         }
@@ -721,6 +723,7 @@ public static class Mft {
             List<MftLink> l;
             bool multi = ix.Extra.TryGetValue(i, out l) && l.Count > 0;   // 有不止一个名字（硬链接）：每个名字下都算，但盘上只有一份
             uint at = ix.Attr != null && i < ix.Attr.Length ? ix.Attr[i] : 0; bool ha = ix.Attr != null;
+            if ((f & 32) != 0) at &= ~0x400u;          // 系统压缩、重复数据删除：程序看到的是普通文件
             bool any = AddFile(ix, nodes, reach, ix.Parent[i], ix.ParentSeq[i], ix.Name[i], size, disk, multi, wt, at, ha, big, ref files);
             if (multi) foreach (MftLink k in l) any |= AddFile(ix, nodes, reach, k.Parent, k.ParentSeq, k.Name, size, disk, true, wt, at, ha, big, ref files);
             if (any) { uniq += size; uniqDisk += disk; if (multi) linked += size; byte c = ix.Cat[i]; tc[c]++; tb[c] += size; td[c] += disk; }
