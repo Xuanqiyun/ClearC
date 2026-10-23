@@ -11,7 +11,8 @@ $ctl.BtnDupMove.Add_Click({
         $del = @($rows | Where-Object { $_.ToDelete -and $_.CanDelete })
         if ($del.Count -eq 0) { continue }
         if ($del.Count -ge $rows.Count) { $allChecked++; continue }
-        foreach ($r in $del) { [void]$plan.Add(@{ Path = $r.Path; Size = $r.Size }); $bytes += $r.Size }
+        $keepers = @($rows | Where-Object { -not $_.ToDelete } | ForEach-Object { $_.Path })
+        foreach ($r in $del) { [void]$plan.Add(@{ Path = $r.Path; Size = $r.Size; Mtime = $r.ModifiedTicks; Keep = $keepers }); $bytes += $r.Size }
     }
     if ($plan.Count -eq 0) { if ($allChecked) { Show-Sheet -Kind warn -Title (T '每组至少要留一份') -Text ((T "有 {0} 组把所有副本都勾上了，这些组不会动。") -f $allChecked) | Out-Null }; return }
     $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
@@ -39,7 +40,9 @@ foreach ($p in $arg.Plan) {
     if ($arg.Protect -and (Test-Personal $p.Path)) { Log ((T "  跳过（C 盘个人文件夹，受保护）：{0}") -f $($p.Path)); continue }
     $fi = Get-Item -LiteralPath $p.Path -Force -ErrorAction SilentlyContinue
     if (-not $fi) { continue }
-    if ($fi.Length -ne $p.Size) { Log ((T "  跳过（文件在扫描后被修改过）：{0}") -f $($p.Path)); continue }
+    if ($fi.Length -ne $p.Size -or ($p.Mtime -and $fi.LastWriteTime.Ticks -ne [long]$p.Mtime)) { Log ((T "  跳过（文件在扫描后被修改过）：{0}") -f $($p.Path)); continue }
+    $sameOne = $false; foreach ($k in @($p.Keep)) { if ([FsTools]::SameFile($k, $p.Path)) { $sameOne = $true; break } }
+    if ($sameOne) { Log ((T "  跳过（和保留的那份是同一个文件，只是路径不同）：{0}") -f $($p.Path)); continue }
     $rel = $p.Path.Substring(0, 1).ToUpper() + '\' + $p.Path.Substring(3)
     $to = Join-Path $arg.Dest $rel
     if ($to.StartsWith($p.Path + '\', [StringComparison]::OrdinalIgnoreCase) -or $to -ieq $p.Path) { Log ((T "  跳过（目标在原文件里面）：{0}") -f $($p.Path)); continue }
@@ -71,7 +74,7 @@ $ctl.BtnDupMerge.Add_Click({
             $root = [IO.Path]::GetPathRoot($r.Path)
             $k = @($keepers | Where-Object { [IO.Path]::GetPathRoot($_.Path) -ieq $root }) | Select-Object -First 1
             if (-not $k) { $skip++; continue }
-            [void]$plan.Add(@{ Path = $r.Path; Size = $r.Size; Keep = $k.Path; Verified = $r.Verified })
+            [void]$plan.Add(@{ Path = $r.Path; Size = $r.Size; Keep = $k.Path; Verified = $r.Verified; Mtime = $r.ModifiedTicks })
             $bytes += $r.Size
         }
     }
@@ -96,7 +99,8 @@ foreach ($p in $arg.Plan) {
     if ($arg.Protect -and (Test-Personal $p.Path)) { continue }
     $fi = Get-Item -LiteralPath $p.Path -Force -ErrorAction SilentlyContinue
     $ki = Get-Item -LiteralPath $p.Keep -Force -ErrorAction SilentlyContinue
-    if (-not $fi -or -not $ki -or $fi.Length -ne $p.Size -or $ki.Length -ne $p.Size) { Log ((T "  跳过（文件在扫描后变了）：{0}") -f $($p.Path)); continue }
+    if (-not $fi -or -not $ki -or $fi.Length -ne $p.Size -or $ki.Length -ne $p.Size -or ($p.Mtime -and $fi.LastWriteTime.Ticks -ne [long]$p.Mtime)) { Log ((T "  跳过（文件在扫描后变了）：{0}") -f $($p.Path)); continue }
+    if ([FsTools]::SameFile($p.Keep, $p.Path)) { Log ((T "  跳过（本来就是同一个文件）：{0}") -f $($p.Path)); continue }
     if (-not $p.Verified) {
         SetP @{ SubKind = 'verify'; Detail = $p.Path }
         $same = [DupFinder]::SameContent($p.Keep, $p.Path)

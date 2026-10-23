@@ -474,7 +474,8 @@ public static class DupFinder {
         string probe = null;
         if (roots != null) {
             for (int i = roots.Length - 1; i >= 0; i--) {
-                try { if (Directory.Exists(roots[i])) { job.Push(roots[i]); probe = roots[i]; } } catch { }
+                // 根本身是链接（比如本工具搬走后留下的）：它和指向的地方是同一份东西，一起扫会把同一个文件当成两份
+                try { if (Directory.Exists(roots[i]) && (File.GetAttributes(roots[i]) & FileAttributes.ReparsePoint) == 0) { job.Push(roots[i]); probe = roots[i]; } } catch { }
             }
         }
         job.Fast = System.IO.Path.DirectorySeparatorChar == '\\' && probe != null && FastEnumWorks(probe);

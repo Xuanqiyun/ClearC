@@ -72,6 +72,22 @@ public static class FsTools {
         } catch { return ""; } finally { if (sd != IntPtr.Zero) LocalFree(sd); }
     }
     public static bool IsCompressed(string path) { try { return (System.IO.File.GetAttributes(path) & System.IO.FileAttributes.Compressed) != 0; } catch { return false; } }
+    [StructLayout(LayoutKind.Sequential)]
+    struct BY_HANDLE_FILE_INFORMATION { public uint FileAttributes; public long CreationTime, LastAccessTime, LastWriteTime; public uint VolumeSerialNumber, FileSizeHigh, FileSizeLow, NumberOfLinks, FileIndexHigh, FileIndexLow; }
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool GetFileInformationByHandle(Microsoft.Win32.SafeHandles.SafeFileHandle h, out BY_HANDLE_FILE_INFORMATION info);
+    // 两个路径是不是同一个文件（同一块卷、同一个文件记录）：硬链接的两个名字、经过目录链接的两条路径都算同一个。读不到就当不是
+    public static bool SameFile(string a, string b) {
+        if (!Win) { try { return new FileInfo(a).FullName == new FileInfo(b).FullName; } catch { return false; } }
+        try {
+            BY_HANDLE_FILE_INFORMATION x, y;
+            using (FileStream fa = new FileStream(a, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+            using (FileStream fb = new FileStream(b, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete)) {
+                if (!GetFileInformationByHandle(fa.SafeFileHandle, out x) || !GetFileInformationByHandle(fb.SafeFileHandle, out y)) return false;
+            }
+            return x.VolumeSerialNumber == y.VolumeSerialNumber && x.FileIndexHigh == y.FileIndexHigh && x.FileIndexLow == y.FileIndexLow;
+        } catch { return false; }
+    }
     public static string MergeHardLink(string keep, string dup) {
         try {
             if (!string.Equals(System.IO.Path.GetPathRoot(keep), System.IO.Path.GetPathRoot(dup), StringComparison.OrdinalIgnoreCase)) return L10n.T("不在同一块盘上");

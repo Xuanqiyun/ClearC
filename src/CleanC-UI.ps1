@@ -537,7 +537,8 @@ public static class DupFinder {
         string probe = null;
         if (roots != null) {
             for (int i = roots.Length - 1; i >= 0; i--) {
-                try { if (Directory.Exists(roots[i])) { job.Push(roots[i]); probe = roots[i]; } } catch { }
+                // 根本身是链接（比如本工具搬走后留下的）：它和指向的地方是同一份东西，一起扫会把同一个文件当成两份
+                try { if (Directory.Exists(roots[i]) && (File.GetAttributes(roots[i]) & FileAttributes.ReparsePoint) == 0) { job.Push(roots[i]); probe = roots[i]; } } catch { }
             }
         }
         job.Fast = System.IO.Path.DirectorySeparatorChar == '\\' && probe != null && FastEnumWorks(probe);
@@ -2621,6 +2622,22 @@ public static class FsTools {
         } catch { return ""; } finally { if (sd != IntPtr.Zero) LocalFree(sd); }
     }
     public static bool IsCompressed(string path) { try { return (System.IO.File.GetAttributes(path) & System.IO.FileAttributes.Compressed) != 0; } catch { return false; } }
+    [StructLayout(LayoutKind.Sequential)]
+    struct BY_HANDLE_FILE_INFORMATION { public uint FileAttributes; public long CreationTime, LastAccessTime, LastWriteTime; public uint VolumeSerialNumber, FileSizeHigh, FileSizeLow, NumberOfLinks, FileIndexHigh, FileIndexLow; }
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool GetFileInformationByHandle(Microsoft.Win32.SafeHandles.SafeFileHandle h, out BY_HANDLE_FILE_INFORMATION info);
+    // 两个路径是不是同一个文件（同一块卷、同一个文件记录）：硬链接的两个名字、经过目录链接的两条路径都算同一个。读不到就当不是
+    public static bool SameFile(string a, string b) {
+        if (!Win) { try { return new FileInfo(a).FullName == new FileInfo(b).FullName; } catch { return false; } }
+        try {
+            BY_HANDLE_FILE_INFORMATION x, y;
+            using (FileStream fa = new FileStream(a, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+            using (FileStream fb = new FileStream(b, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete)) {
+                if (!GetFileInformationByHandle(fa.SafeFileHandle, out x) || !GetFileInformationByHandle(fb.SafeFileHandle, out y)) return false;
+            }
+            return x.VolumeSerialNumber == y.VolumeSerialNumber && x.FileIndexHigh == y.FileIndexHigh && x.FileIndexLow == y.FileIndexLow;
+        } catch { return false; }
+    }
     public static string MergeHardLink(string keep, string dup) {
         try {
             if (!string.Equals(System.IO.Path.GetPathRoot(keep), System.IO.Path.GetPathRoot(dup), StringComparison.OrdinalIgnoreCase)) return L10n.T("不在同一块盘上");
@@ -3014,9 +3031,14 @@ public static class PhotoHash {
         List<PhotoItem> list = new List<PhotoItem>();
         Seen = 0; Hashed = 0; Failed = 0; Cancel = false;
         Stack<string> st = new Stack<string>();
-        foreach (string r in roots) st.Push(r);
+        HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string r in roots) {
+            string rr; try { rr = Path.GetFullPath(r).TrimEnd('\\'); if ((File.GetAttributes(rr) & FileAttributes.ReparsePoint) != 0) continue; } catch { continue; }
+            st.Push(rr);
+        }
         while (st.Count > 0 && !Cancel) {
             string d = st.Pop(); Current = d;
+            if (!seen.Add(d)) continue;   // 同一个文件夹只看一次（一个根在另一个根里面时）
             IEnumerable<string> dirs = null, files = null;
             try { dirs = Directory.EnumerateDirectories(d); files = Directory.EnumerateFiles(d); } catch { continue; }
             try { foreach (string s in dirs) { string n = Path.GetFileName(s); if (skip.Contains(n)) continue; try { if ((File.GetAttributes(s) & FileAttributes.ReparsePoint) != 0) continue; } catch { continue; } st.Push(s); } } catch { }
@@ -3025,6 +3047,8 @@ public static class PhotoHash {
                     if (!Exts.Contains(Path.GetExtension(f))) continue;
                     FileInfo fi; try { fi = new FileInfo(f); } catch { continue; }
                     if (fi.Length < min || (max > 0 && fi.Length > max)) continue;
+                    // 只在云端的占位文件（OneDrive 等）：读它会触发下载，跳过
+                    if ((((int)fi.Attributes) & (0x1000 | 0x40000 | 0x400000)) != 0) continue;
                     Seen++;
                     PhotoItem p = new PhotoItem(); p.Path = f; p.Size = fi.Length; p.Modified = fi.LastWriteTime; list.Add(p);
                     if (list.Count >= limit) { Cancel = true; break; }
@@ -3311,6 +3335,7 @@ function Recycle-Flush {
     if ($r -ne 0) { Log ((T "  有 {0} 项没能放进回收站（错误 {1}）") -f $arr.Count, $r) }
 }
 function Remove-Path($it) {
+    if ($script:autoMinAge -and $it.LastWriteTime -gt $script:autoMinAge) { return }
     if ($script:recycleNow) {
         if (-not $script:recycleBatch) { $script:recycleBatch = New-Object System.Collections.Generic.List[string] }
         $script:recycleBatch.Add($it.FullName)
@@ -3321,6 +3346,33 @@ function Remove-Path($it) {
 }
 function Remove-Contents([string[]]$paths, [string]$filter, [bool]$wholeDir) {
     try { Remove-Contents2 $paths $filter $wholeDir } finally { Recycle-Flush }
+}
+# 一个文件夹里面的所有链接（目录联接、符号链接）只拆链接本身，不跟进去：自己一层层走，碰到重解析点就 rmdir 掉它
+function Remove-LinksInside([string]$dir) {
+    $n = 0
+    $st = New-Object System.Collections.Generic.Stack[string]; $st.Push($dir)
+    while ($st.Count -gt 0) {
+        $d = $st.Pop()
+        $subs = $null; try { $subs = [IO.Directory]::GetDirectories($d) } catch { continue }
+        foreach ($s in $subs) {
+            $a = $null; try { $a = [IO.File]::GetAttributes($s) } catch { continue }
+            if (($a -band [IO.FileAttributes]::ReparsePoint) -ne 0) { & "$sys32\cmd.exe" /c rmdir "\\?\$s" 2>$null | Out-Null; $n++ }
+            else { $st.Push($s) }
+        }
+    }
+    return $n
+}
+# Windows.old：里面 Users\<user>\Application Data 这类是指向当前系统活目录的绝对路径链接，Remove-Item -Recurse（PowerShell 5.1）和 icacls /T 会跟进去。
+# 所以先把里面的链接全部拆掉，再夺权、再 rd（rd 对剩下的链接也只拆不跟）
+function Remove-WindowsOld {
+    $p = 'C:\Windows.old'
+    if (-not (Test-Path -LiteralPath $p)) { return }
+    if (IsLink $p) { Log (T '  C:\Windows.old 本身是链接，不删'); return }
+    $links = Remove-LinksInside $p
+    if ($links -gt 0) { Log ((T "  先拆掉了 Windows.old 里的 {0} 个链接（它们指向现在系统的文件夹，不能跟进去删）") -f $links) }
+    & "$env:SystemRoot\System32\takeown.exe" /F $p /R /A /D Y 2>$null | Out-Null
+    & "$env:SystemRoot\System32\icacls.exe" $p /grant Administrators:F /T /C /Q 2>$null | Out-Null
+    Remove-OneDir (Get-Item -LiteralPath $p -Force)
 }
 function Remove-Contents2([string[]]$paths, [string]$filter, [bool]$wholeDir) {
     $ex = Get-ExcludeList
@@ -4046,14 +4098,14 @@ function Get-Catalog {
     $list += @(
         @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); N=(T '清空回收站');            Note=(T '回收站里是你以前删掉、但还能找回的文件。清空后就永远找不回了，请先打开回收站确认里面没有要的东西')
            Size={ try { $s = ((New-Object -ComObject Shell.Application).NameSpace(0xA).Items() | Measure-Object -Property Size -Sum).Sum; if ($s) { $s } else { 0 } } catch { 0 } }
-           Act ={ Clear-RecycleBin -Force -ErrorAction SilentlyContinue } }
+           Act ={ if ($script:recycledThisRun) { Log (T '  这一轮刚把文件放进回收站，不清空回收站（下次再清）') } else { Clear-RecycleBin -Force -ErrorAction SilentlyContinue } } }
         @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Windows 传递优化缓存'); Note=(T 'Windows 更新的点对点分发缓存')
            Size={ try { $s = (Get-DeliveryOptimizationStatus -ErrorAction Stop | Measure-Object -Property FileSize -Sum).Sum; if ($s) { $s } else { 0 } } catch { 0 } }
            Act ={ Delete-DeliveryOptimizationCache -Force -ErrorAction SilentlyContinue } }
 
         # ---- 需确认：有代价 ----
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache';  Def=(T '跳过'); One=(T '删除'); N='Windows.old';        Paths=@('C:\Windows.old'); Whole=$true; Note=(T '上一版 Windows 的完整副本。删后不能回退到上一版系统（系统升级 10 天后会自动删）')
-           Act ={ & "$env:SystemRoot\System32\takeown.exe" /F 'C:\Windows.old' /R /A /D Y | Out-Null; & "$env:SystemRoot\System32\icacls.exe" 'C:\Windows.old' /grant Administrators:F /T /C /Q | Out-Null; Remove-Item 'C:\Windows.old' -Recurse -Force -ErrorAction SilentlyContinue } }
+        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache';  Def=(T '跳过'); One=(T '跳过'); N='Windows.old';        Paths=@('C:\Windows.old'); Whole=$true; Note=(T '上一版 Windows 的完整副本。删后不能回退到上一版系统（系统升级 10 天后会自动删）')
+           Act ={ Remove-WindowsOld } }
         @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def=(T '跳过'); One=(T '执行'); N=(T '重建 Windows 搜索索引'); Lvl=1; Note=(T '搜索索引膨胀时可重建，重建后通常只剩 1 到 2 GB。重建期间（约 1 小时）搜文件会变慢')
            Size={ $s = 0; foreach ($f in 'C:\ProgramData\Microsoft\Search\Data\Applications\Windows\Windows.edb','C:\ProgramData\Microsoft\Search\Data\Applications\Windows\Windows.db') { $i = Get-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue; if ($i) { $s += $i.Length } }; if ($s -gt 2GB) { $s } else { 0 } }
            Act ={ Stop-Service WSearch -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 3; Remove-Item 'C:\ProgramData\Microsoft\Search\Data\Applications\Windows\Windows.edb','C:\ProgramData\Microsoft\Search\Data\Applications\Windows\Windows.db' -Force -ErrorAction SilentlyContinue; Set-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows Search' -Name SetupCompletedSuccessfully -Value 0 -ErrorAction SilentlyContinue; Start-Service WSearch -ErrorAction SilentlyContinue } }
@@ -4137,9 +4189,12 @@ function Measure-Item($it, $tree = $null) {
     return Get-Size $paths $it.Filter $tree (Get-ExcludeList)
 }
 
+$script:recycledThisRun = $false
+$script:autoMinAge = $null
 function Invoke-Delete($it, $res, [switch]$Auto) {
     $f0 = FreeC
     $script:recycleNow = (-not $Auto) -and ((Get-Setting 'Recycle' '0') -eq '1') -and -not $it.Act
+    $script:autoMinAge = if ($Auto) { (Get-Date).AddDays(-1) } else { $null }   # 自动清理：一天内写过的临时文件可能还在用，不碰
     $kind = if ($it.Slow) { 'slow' } elseif ($it.Act) { 'action' } else { 'delete' }
     SetP @{ SubKind = $kind; SubStart = (Get-Date); FreeC0 = [double]$f0; Detail = $it.Note }
     if ($it.Svc) { $it.Svc | ForEach-Object { Stop-Service $_ -Force -ErrorAction SilentlyContinue } }
@@ -4149,6 +4204,8 @@ function Invoke-Delete($it, $res, [switch]$Auto) {
         if ($res -and $sync -and $sync.WasCancelled) { $res.Cancelled = $true }
     }
     if ($it.Svc) { $it.Svc | ForEach-Object { Start-Service $_ -ErrorAction SilentlyContinue } }
+    if ($script:recycleNow) { $script:recycledThisRun = $true }
+    $script:autoMinAge = $null
     $freed = [math]::Max([double]0, [double]((FreeC) - $f0))
     if ($res) { $res.Freed = $freed }
     Log ((T "  完成  {0,-26} 释放 {1}") -f $it.N, (GB $freed))
@@ -4336,6 +4393,20 @@ function Rename-WithRetry([string]$from, [string]$to, $it, [int]$tries = 8) {
     return @{ Err = $err; Tries = $tries }
 }
 
+# OneDrive 的同步根目录（个人版、公司版，可能有好几个）：里面的文件夹换成链接，OneDrive 会当成删除同步到云端
+function Get-OneDriveRoots {
+    $out = New-Object System.Collections.Generic.List[string]
+    foreach ($v in @($env:OneDrive, $env:OneDriveConsumer, $env:OneDriveCommercial)) { if ($v) { $out.Add($v.TrimEnd('\')) } }
+    try { foreach ($k in @(Get-ChildItem 'HKCU:\Software\Microsoft\OneDrive\Accounts' -ErrorAction Stop)) { $uf = (Get-ItemProperty $k.PSPath -ErrorAction SilentlyContinue).UserFolder; if ($uf) { $out.Add(([string]$uf).TrimEnd('\')) } } } catch {}
+    if ($env:USERPROFILE) { foreach ($d in @(Get-ChildItem -LiteralPath $env:USERPROFILE -Directory -Filter 'OneDrive*' -Force -ErrorAction SilentlyContinue)) { $out.Add($d.FullName.TrimEnd('\')) } }
+    return @($out | Where-Object { $_ } | Select-Object -Unique)
+}
+function Test-InOneDrive([string]$path) {
+    if (-not $path) { return $false }
+    $p = $path.TrimEnd('\')
+    foreach ($r in (Get-OneDriveRoots)) { if ($p -ieq $r -or $p.StartsWith($r + '\', [StringComparison]::OrdinalIgnoreCase)) { return $true } }
+    return $false
+}
 function Invoke-Move($it, $destRoot, $res) {
     if (-not $res) { $res = @{} }
     $res.Done = 0; $res.Fail = 0; $res.Wait = 0; $res.Moved = [double]0; $res.Dest = @(); $res.Msgs = @(); $res.Skipped = 0
@@ -4353,7 +4424,7 @@ function Invoke-Move($it, $destRoot, $res) {
         if (-not (Test-Path -LiteralPath $src)) { continue }
         if (Stopping) { $m = (T '已取消，剩下的文件夹没有搬'); Log "  $m"; $res.Cancelled = $true; $res.Msgs += $m; break }
         if (IsLink $src) { Log ((T "  已经搬过（是链接），跳过 {0}") -f $src); $res.Skipped++; continue }
-        if ($it.NoOneDrive -and $src -like '*OneDrive*') { Log ((T "  {0} 由 OneDrive 管理，不搬") -f $src); $res.Skipped++; continue }
+        if (($it.NoOneDrive -and $src -like '*OneDrive*') -or (Test-InOneDrive $src)) { $m = ((T "  {0} 在 OneDrive 同步目录里，不搬：换成链接后 OneDrive 会当成删除同步到云端") -f $src); Log $m; OpLog '搬运' (T '不搬：在 OneDrive 同步目录里') $src ''; $res.Skipped++; $res.Msgs += $m.Trim(); continue }
         if ($src.Substring(0,1) -ieq $destRoot.Substring(0,1)) { Log ((T "  {0} 已在目标盘") -f $src); $res.Skipped++; continue }
         $leaf = Split-Path $src -Leaf
         $pick = Find-MoveDest $src $destRoot
@@ -4402,7 +4473,8 @@ function Invoke-Move($it, $destRoot, $res) {
         SetP @{ MovePhase = 'copy'; SubKind = 'copy'; SubTotal = [double]$srcBytes; SubBase = $base; SubDone = $base; SubStart = (Get-Date); DestDrive = $destDrive; DestFree0 = $destFree0; Detail = "$src  ->  $dst" }
         # 每复制完一个文件，robocopy 输出一行「大小<Tab>文件名」，累加起来就是已复制的字节数。
         # 用上次的副本时用 /MIR：副本和原目录完全一致（原目录里已删掉的旧文件，副本里也删掉）
-        $mode = if ($reuse) { '/MIR' } else { '/E' }
+        # 副本里有一个 C 盘上没有的文件（在允许范围内）也不用 /MIR：那些文件留着不删，只补新的
+        $mode = if ($reuse -and $extra -eq 0) { '/MIR' } else { '/E' }
         $more = @(); if ($reuse -and $it.Sddl) { $more += '/SECFIX' }   # 用上次的副本时，连没变的文件的权限也改对
         $rc = Invoke-Tool "$sys32\robocopy.exe" (@($src, $dst, $mode, $cp) + $more + @('/DCOPY:DAT', '/R:2', '/W:2', '/NDL', '/NJH', '/NJS', '/NP', '/BYTES', '/XJ')) '' $base
         $cxHalf = (T "已取消：{0} 原文件夹没动。已复制的部分留在 {1}，下次再搬这一项会接着复制；不需要的话，可以在「搬家管理」里删掉这份副本") -f $src, $dst
@@ -4441,8 +4513,10 @@ function Invoke-Move($it, $destRoot, $res) {
         Set-CanCancel $false
         & "$sys32\cmd.exe" /c mklink /J "$src" "$dst" | Out-Null
         if (-not (IsLink $src)) {
-            try { [IO.Directory]::Move($bak, $src) } catch {}
-            $m = ((T "建链接失败，已改回原目录，副本在 {0}") -f $dst); Log "  $m"; OpLog '搬运' (T '搬家失败') $src $m; $res.Fail++; $res.Msgs += $m; continue
+            $back = $true
+            try { if (Test-Path -LiteralPath $src) { Remove-Item -LiteralPath $src -Force -ErrorAction Stop }; [IO.Directory]::Move($bak, $src) } catch { $back = $false }
+            $m = if ($back) { ((T "建链接失败，已改回原目录，副本在 {0}") -f $dst) } else { ((T "建链接失败，而且没能把原目录改回来：你的数据在 {0}，请手动把它改名回 {1}（{1} 现在可能是别的程序新建的空文件夹）；副本在 {2}") -f $bak, $src, $dst) }
+            Log "  $m"; OpLog '搬运' (T '搬家失败') $src $m; $res.Fail++; $res.Msgs += $m; continue
         }
         # 核对之后到改名之间可能有程序又写了文件，补复制一遍新文件；补不过去就保留 C 盘上的旧文件夹
         SetP @{ Detail = (T '补复制最后写入的文件') }
@@ -4591,6 +4665,8 @@ function Get-DeleteBlock([string]$path, [switch]$Leftover) {
     $full = $full.TrimEnd('\')
     if ($full.Length -le 2) { return (T '整块磁盘不能删') }
     if (Test-Personal $full) { return (T 'C 盘个人文件夹（桌面、文档、下载、图片、视频、音乐等）里的东西不删') }
+    # 任何一块盘根下的这些文件夹：回收站（所有用户的）、还原点、恢复分区的东西、启动文件
+    if ($full -match '^[A-Za-z]:\\(\$Recycle\.Bin|System Volume Information|Recovery|EFI|Boot|Config\.Msi|\$WinREAgent)(\\|$)') { return (T '系统文件夹，删了 Windows 可能出问题') }
     $sd = $env:SystemDrive
     foreach ($d in @($env:SystemRoot, "$sd\System Volume Information", "$sd\`$Recycle.Bin", "$sd\Recovery", "$sd\Boot", "$sd\EFI", "$sd\Config.Msi", "$sd\Documents and Settings", "$sd\ProgramData\Microsoft")) {
         if ($full -ieq $d -or $full.StartsWith("$d\", [StringComparison]::OrdinalIgnoreCase)) { return (T '系统文件夹，删了 Windows 可能出问题') }
@@ -5625,6 +5701,15 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+  C:\\Windows.old 本身是链接，不删	  C:\\Windows.old is itself a link; not deleted
+  先拆掉了 Windows.old 里的 {0} 个链接（它们指向现在系统的文件夹，不能跟进去删）	  Removed {0} links inside Windows.old first (they point at folders of the current system and must not be followed)
+  这一轮刚把文件放进回收站，不清空回收站（下次再清）	  Files were just moved to the Recycle Bin in this run, so it is not emptied (next time)
+  {0} 在 OneDrive 同步目录里，不搬：换成链接后 OneDrive 会当成删除同步到云端	  {0} is inside an OneDrive sync folder and is not moved: OneDrive would treat the link as a deletion and sync it to the cloud
+不搬：在 OneDrive 同步目录里	Not moved: inside an OneDrive sync folder
+建链接失败，而且没能把原目录改回来：你的数据在 {0}，请手动把它改名回 {1}（{1} 现在可能是别的程序新建的空文件夹）；副本在 {2}	Creating the link failed and the original folder could not be restored: your data is in {0}; rename it back to {1} by hand ({1} may now be an empty folder another program created); the copy is in {2}
+  跳过（和保留的那份是同一个文件，只是路径不同）：{0}	  skipped (same file as the kept copy, only a different path): {0}
+没能放进回收站（代码 {0}）：可能回收站放不下或被禁用，这个文件没有删	Could not move to the Recycle Bin (code {0}): it may be full or disabled; this file was not deleted
+  跳过（本来就是同一个文件）：{0}	  skipped (already the same file): {0}
 相似照片	Similar photos
 每组优先保留这个文件夹（含子文件夹）里的那份	Prefer to keep the copy inside this folder (and its subfolders) in each group
 每组优先保留 {0} 里的那份	Keeping the copy inside {0} in each group
@@ -13269,6 +13354,7 @@ $ctl.Roots.ItemsSource = $script:roots
 function Add-Root($path, $label, $on, $detail, [bool]$removable = $false) {
     if (-not $path) { return }
     if (-not (Test-Path -LiteralPath $path)) { return }
+    if (IsLink $path) { return }   # 链接（多半是搬走后留下的）：和它指向的地方是同一份东西，不单独当一个位置
     foreach ($r in $script:roots) { if ($r.Path -ieq $path) { return } }
     $ri = New-Object RootItem
     $ri.Path = $path; $ri.Label = $label; $ri.Enabled = [bool]$on
@@ -13763,7 +13849,7 @@ $ctl.BtnDupDelete.Add_Click({
         if ($del.Count -ge $rows.Count) { $allChecked++; continue }
         $keep = @($rows | Where-Object { -not $_.ToDelete } | ForEach-Object { $_.Path })
         foreach ($r in $del) {
-            [void]$plan.Add(@{ Path = $r.Path; Size = $r.Size; Keep = $keep; Verified = $r.Verified })
+            [void]$plan.Add(@{ Path = $r.Path; Size = $r.Size; Keep = $keep; Verified = $r.Verified; Mtime = $r.ModifiedTicks })
             $bytes += $r.Size
             if ($r.HasRisk) { $risky++ }
         }
@@ -13793,7 +13879,7 @@ $ctl.BtnDupDelete.Add_Click({
     Start-Worker @'
 Add-Type -AssemblyName Microsoft.VisualBasic
 $done = New-Object System.Collections.ArrayList
-$i = 0; $total = $arg.Plan.Count; $freed = [double]0
+$i = 0; $total = $arg.Plan.Count; $freed = [double]0; $same = $false
 foreach ($p in $arg.Plan) {
     if (Stopping) { break }
     $i++
@@ -13803,24 +13889,29 @@ foreach ($p in $arg.Plan) {
     # 删之前再确认一次：要删的文件大小没变，并且至少有一份保留的副本还在、大小相同
     $fi = Get-Item -LiteralPath $p.Path -Force -ErrorAction SilentlyContinue
     if (-not $fi) { [void]$done.Add($p.Path); continue }
-    if ($fi.Length -ne $p.Size) { Log ((T "  跳过（文件在扫描后被修改过）：{0}") -f $($p.Path)); continue }
+    if ($fi.Length -ne $p.Size -or ($p.Mtime -and $fi.LastWriteTime.Ticks -ne [long]$p.Mtime)) { Log ((T "  跳过（文件在扫描后被修改过）：{0}") -f $($p.Path)); continue }
     $kept = $false
     foreach ($k in $p.Keep) {
         $ki = Get-Item -LiteralPath $k -Force -ErrorAction SilentlyContinue
-        if ($p.Similar) { if ($ki) { $kept = $true; break }; continue }   # 相似照片：保留的那份还在就行（大小本来就不同）
-        if (-not $ki -or $ki.Length -ne $p.Size) { continue }
+        if (-not $ki) { continue }
+        # 保留的那份和要删的其实是同一个文件（硬链接的两个名字，或者经过目录链接的两条路径）：删了就一份都不剩
+        if ([FsTools]::SameFile($k, $p.Path)) { Log ((T "  跳过（和保留的那份是同一个文件，只是路径不同）：{0}") -f $($p.Path)); $kept = $false; $same = $true; break }
+        if ($p.Similar) { $kept = $true; break }   # 相似照片：保留的那份还在就行（大小本来就不同）
+        if ($ki.Length -ne $p.Size) { continue }
         if ($p.Verified) { $kept = $true; break }
         # 抽样判定的组：和保留的那份逐字节比一遍，完全相同才删
         SetP @{ SubKind = 'verify'; Detail = $p.Path }
         if ([DupFinder]::SameContent($k, $p.Path)) { $kept = $true; break }
     }
     SetP @{ SubKind = 'none' }
+    if ($same) { $same = $false; continue }
     if (-not $kept -and (Stopping)) { break }   # 核对到一半取消了：这个文件不删
     if (-not $kept) { Log ((T "  没有删除（和保留的那份内容不完全相同，或保留的那份已不在）：{0}") -f $($p.Path)); continue }
     try {
         if ($fi.Attributes -band [IO.FileAttributes]::ReadOnly) { $fi.Attributes = $fi.Attributes -bxor [IO.FileAttributes]::ReadOnly }
         if ($arg.Recycle) {
-            [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($p.Path, [Microsoft.VisualBasic.FileIO.UIOption]::OnlyErrorDialogs, [Microsoft.VisualBasic.FileIO.RecycleOption]::SendToRecycleBin)
+            $rc = [FsTools]::Recycle($p.Path, [long]$sync.Hwnd)
+            if (Test-Path -LiteralPath $p.Path) { throw ((T "没能放进回收站（代码 {0}）：可能回收站放不下或被禁用，这个文件没有删") -f $rc) }
         } else {
             [IO.File]::Delete($p.Path)
         }
@@ -16990,7 +17081,8 @@ $ctl.BtnDupMove.Add_Click({
         $del = @($rows | Where-Object { $_.ToDelete -and $_.CanDelete })
         if ($del.Count -eq 0) { continue }
         if ($del.Count -ge $rows.Count) { $allChecked++; continue }
-        foreach ($r in $del) { [void]$plan.Add(@{ Path = $r.Path; Size = $r.Size }); $bytes += $r.Size }
+        $keepers = @($rows | Where-Object { -not $_.ToDelete } | ForEach-Object { $_.Path })
+        foreach ($r in $del) { [void]$plan.Add(@{ Path = $r.Path; Size = $r.Size; Mtime = $r.ModifiedTicks; Keep = $keepers }); $bytes += $r.Size }
     }
     if ($plan.Count -eq 0) { if ($allChecked) { Show-Sheet -Kind warn -Title (T '每组至少要留一份') -Text ((T "有 {0} 组把所有副本都勾上了，这些组不会动。") -f $allChecked) | Out-Null }; return }
     $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
@@ -17018,7 +17110,9 @@ foreach ($p in $arg.Plan) {
     if ($arg.Protect -and (Test-Personal $p.Path)) { Log ((T "  跳过（C 盘个人文件夹，受保护）：{0}") -f $($p.Path)); continue }
     $fi = Get-Item -LiteralPath $p.Path -Force -ErrorAction SilentlyContinue
     if (-not $fi) { continue }
-    if ($fi.Length -ne $p.Size) { Log ((T "  跳过（文件在扫描后被修改过）：{0}") -f $($p.Path)); continue }
+    if ($fi.Length -ne $p.Size -or ($p.Mtime -and $fi.LastWriteTime.Ticks -ne [long]$p.Mtime)) { Log ((T "  跳过（文件在扫描后被修改过）：{0}") -f $($p.Path)); continue }
+    $sameOne = $false; foreach ($k in @($p.Keep)) { if ([FsTools]::SameFile($k, $p.Path)) { $sameOne = $true; break } }
+    if ($sameOne) { Log ((T "  跳过（和保留的那份是同一个文件，只是路径不同）：{0}") -f $($p.Path)); continue }
     $rel = $p.Path.Substring(0, 1).ToUpper() + '\' + $p.Path.Substring(3)
     $to = Join-Path $arg.Dest $rel
     if ($to.StartsWith($p.Path + '\', [StringComparison]::OrdinalIgnoreCase) -or $to -ieq $p.Path) { Log ((T "  跳过（目标在原文件里面）：{0}") -f $($p.Path)); continue }
@@ -17050,7 +17144,7 @@ $ctl.BtnDupMerge.Add_Click({
             $root = [IO.Path]::GetPathRoot($r.Path)
             $k = @($keepers | Where-Object { [IO.Path]::GetPathRoot($_.Path) -ieq $root }) | Select-Object -First 1
             if (-not $k) { $skip++; continue }
-            [void]$plan.Add(@{ Path = $r.Path; Size = $r.Size; Keep = $k.Path; Verified = $r.Verified })
+            [void]$plan.Add(@{ Path = $r.Path; Size = $r.Size; Keep = $k.Path; Verified = $r.Verified; Mtime = $r.ModifiedTicks })
             $bytes += $r.Size
         }
     }
@@ -17075,7 +17169,8 @@ foreach ($p in $arg.Plan) {
     if ($arg.Protect -and (Test-Personal $p.Path)) { continue }
     $fi = Get-Item -LiteralPath $p.Path -Force -ErrorAction SilentlyContinue
     $ki = Get-Item -LiteralPath $p.Keep -Force -ErrorAction SilentlyContinue
-    if (-not $fi -or -not $ki -or $fi.Length -ne $p.Size -or $ki.Length -ne $p.Size) { Log ((T "  跳过（文件在扫描后变了）：{0}") -f $($p.Path)); continue }
+    if (-not $fi -or -not $ki -or $fi.Length -ne $p.Size -or $ki.Length -ne $p.Size -or ($p.Mtime -and $fi.LastWriteTime.Ticks -ne [long]$p.Mtime)) { Log ((T "  跳过（文件在扫描后变了）：{0}") -f $($p.Path)); continue }
+    if ([FsTools]::SameFile($p.Keep, $p.Path)) { Log ((T "  跳过（本来就是同一个文件）：{0}") -f $($p.Path)); continue }
     if (-not $p.Verified) {
         SetP @{ SubKind = 'verify'; Detail = $p.Path }
         $same = [DupFinder]::SameContent($p.Keep, $p.Path)

@@ -156,6 +156,15 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+  C:\\Windows.old 本身是链接，不删	  C:\\Windows.old is itself a link; not deleted
+  先拆掉了 Windows.old 里的 {0} 个链接（它们指向现在系统的文件夹，不能跟进去删）	  Removed {0} links inside Windows.old first (they point at folders of the current system and must not be followed)
+  这一轮刚把文件放进回收站，不清空回收站（下次再清）	  Files were just moved to the Recycle Bin in this run, so it is not emptied (next time)
+  {0} 在 OneDrive 同步目录里，不搬：换成链接后 OneDrive 会当成删除同步到云端	  {0} is inside an OneDrive sync folder and is not moved: OneDrive would treat the link as a deletion and sync it to the cloud
+不搬：在 OneDrive 同步目录里	Not moved: inside an OneDrive sync folder
+建链接失败，而且没能把原目录改回来：你的数据在 {0}，请手动把它改名回 {1}（{1} 现在可能是别的程序新建的空文件夹）；副本在 {2}	Creating the link failed and the original folder could not be restored: your data is in {0}; rename it back to {1} by hand ({1} may now be an empty folder another program created); the copy is in {2}
+  跳过（和保留的那份是同一个文件，只是路径不同）：{0}	  skipped (same file as the kept copy, only a different path): {0}
+没能放进回收站（代码 {0}）：可能回收站放不下或被禁用，这个文件没有删	Could not move to the Recycle Bin (code {0}): it may be full or disabled; this file was not deleted
+  跳过（本来就是同一个文件）：{0}	  skipped (already the same file): {0}
 相似照片	Similar photos
 每组优先保留这个文件夹（含子文件夹）里的那份	Prefer to keep the copy inside this folder (and its subfolders) in each group
 每组优先保留 {0} 里的那份	Keeping the copy inside {0} in each group
