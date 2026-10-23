@@ -206,6 +206,21 @@ try { & {
     Check 'verdicts: nothing to report gives one "no problems" line' ($quiet.Count -eq 1 -and $quiet[0].Id -eq 'none' -and $quiet[0].Level -eq 'green')
     $ex7 = Get-DumpExplain $x7
     Check 'explain 0x7A: storage kind with the status in words' ($ex7.Kind -eq 'storage' -and (@($ex7.Detail) -join ' ') -match 'C000000E' -and @($ex7.Fixes) -contains 'diskpower')
+    # 蓝屏记录（WER 1001）里的错误码和状态码：小转储只留最近几个，记录每次都有
+    $wb = ConvertFrom-BugCheckText '计算机已经从检测错误后重新启动。检测错误: 0x0000007a (0xffffa78113151f38, 0xffffffffc000000e, 0x0000000148370860, 0xfffff80560723ab4)。'
+    Check "bug check from an event message ($('{0:X}' -f $wb.Code) $('{0:X8}' -f $wb.Status))" ($wb.Code -eq 0x7A -and $wb.Status -eq [Convert]::ToUInt32('C000000E', 16) -and $wb.CodeName -eq 'KERNEL_DATA_INPAGE_ERROR' -and -not (ConvertFrom-BugCheckText 'nothing here'))
+    # 21 次蓝屏只留了 1 个转储；U 盘的读写重试不算系统盘的；时钟比发布日期还早又上不了网；Dell 的下载页按服务编号
+    $many = @(1..20 | ForEach-Object { @{ Code = [long]0xEF; CodeName = 'CRITICAL_PROCESS_DIED'; Status = 0; Time = (Get-Date) } }) + @(@{ Code = [long]0x7A; CodeName = 'KERNEL_DATA_INPAGE_ERROR'; Status = [long][Convert]::ToUInt32('C000000E', 16); Time = (Get-Date) })
+    $hv2 = @{ Crash = @{ Dumps = @($xe); BugChecks = $many; DiskEvents = @(@{ Disk = 2; Count = 4; Name = 'USB Stick'; Bus = 'USB'; IsSystem = $false }); Events = @(@{ Source = 'disk'; Count = 4 }, @{ Source = 'volmgr'; Count = 3 }, @{ Source = 'Microsoft-Windows-Kernel-Power'; Count = 25 }); Drivers = @() }; Disks = @(); Mem = @{ Whea = 0 }
+              Clock = @{ Wrong = $true; BehindBuild = 500; AheadDays = 500; SyncFails = 9; SyncOk = 0; DnsFail = $true }; Win = @{ BuildNo = 26100 }; Power = @{ DiskFix = $false; FastStartup = 'on' }
+              Sys = @{ Maker = 'Dell Inc.'; Model = 'Precision 3640 Tower'; Bios = '1.2.3'; BiosDate = [DateTime]'2020-08-06'; Serial = 'ABC1234'; BitLocker = 0; SysDisk = @{ Name = 'NVMe X'; Bus = 'RAID'; Firmware = '1'; RaidVolume = $false }; Stor = @(@{ Device = 'Intel RST Premium Controller'; Version = '16.8'; Date = [DateTime]'2018-02-07'; Rst = $true }) } }
+    $vd2 = @(Get-CrashVerdict $hv2); $st2 = @($vd2 | Where-Object { $_.Id -eq 'storage' })[0]; $cl2 = @($vd2 | Where-Object { $_.Id -eq 'clock' })[0]
+    Check "verdicts count every bug check in the event log, not just the kept dumps, and leave the USB stick out ($(@($vd2 | ForEach-Object { $_.Id }) -join ','))" ($st2 -and $st2.Body -match '21' -and $st2.Body -match 'USB Stick' -and @($vd2 | Where-Object { $_.Id -eq 'unexpected' }).Count -eq 0)
+    Check 'storage verdict: a fix-as-suggested plan plus things to do yourself (vendor update by service tag, AHCI guide on RST)' (($st2.Plan -join ',') -eq 'diskpower,faststartup' -and @($st2.Todo).Count -ge 4 -and @($st2.Fixes) -contains 'ahciguide' -and @($st2.Fixes) -contains 'vendor' -and (@($st2.Todo) -join ' ') -match 'ABC1234')
+    Check 'clock verdict: behind the release date and offline means set it by hand' ($cl2 -and $cl2.Level -eq 'red' -and ($cl2.Plan -join ',') -eq 'datetime')
+    Check 'vendor page: Dell goes by service tag, others to a search' ((Get-VendorSupportUrl $hv2.Sys) -match 'dell\.com/support/.*/servicetag/ABC1234/drivers' -and (Get-VendorSupportUrl @{ Maker = 'Acme'; Model = 'Box 1'; Serial = '' }) -match '^https://www\.bing\.com/search\?q=')
+    $rt2 = Get-HealthReportText ($hv2 + @{ At = (Get-Date); Verdicts = $vd2 })
+    Check 'the report says what ClearC can do and what is left to you' ($rt2 -match [regex]::Escape((T '本工具能直接做（结论下面的「按建议处理」）：')) -and $rt2 -match [regex]::Escape((T '需要你自己做：')) -and $rt2 -match 'Precision 3640')
     # 常见问题修复目录：每个问题里的步骤都存在；会改动的都写了确认文字或是无害的
     $fc = Get-FixCatalog; $bad = @()
     foreach ($pb in $fc.Problems) { foreach ($sid in $pb.Steps) { if (-not $fc.Steps.Contains($sid)) { $bad += "$($pb.Id)/$sid" } } }

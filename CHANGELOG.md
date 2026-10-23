@@ -1,5 +1,15 @@
 # 更新记录
 
+## 3.2
+- **诊断结论带上处理办法**：每条结论下面分两块。「按建议处理」把本工具能直接做的几步一次做完：先列出要做什么、确认一次，都能撤销（硬盘掉线：关闭硬盘和 PCIe 省电、关闭快速启动；时间不准：打开日期和时间；系统文件：修复系统文件；内存：内存诊断），做完告诉你做好了什么、还剩什么。「需要你自己做的」按顺序列出本工具做不了的：备份、更新 BIOS / 存储驱动 / 固态硬盘固件（写明这台电脑现在的版本和日期有多旧）、厂商硬件检测（Dell 按 F12 进 ePSA）、重新插硬盘、最后才是换盘。报告和诊断包里的 summary.txt 也写上「本工具能直接做」和「需要你自己做」。
+- **厂商驱动下载页**：按厂商和型号打开 BIOS、驱动和固件的下载页，Dell 按服务编号直达；链接同时复制，上不了外网的电脑可以拿到别的电脑上下载。
+- **改用 Windows 自带的硬盘驱动**（硬盘接在 Intel RST / RAID On 上又老掉线时）：先替你查是不是单块盘、有没有组 RAID、BitLocker 开没开，再列出进 BIOS 改成 AHCI 的步骤和改回去的办法；要进 BIOS，本工具不替你改。
+- **诊断更准**：蓝屏次数按系统的蓝屏记录（WER 1001）算，小转储只留最近几个也不漏；读出这台电脑的厂商、型号、BIOS 版本和日期、服务编号、存储控制器驱动的版本和日期、系统盘的型号和固件、BitLocker；磁盘读写错误按盘号归到具体哪块盘，U 盘、移动硬盘的错误不再算到系统盘头上；蓝屏时连转储都没写出来的次数单独算；系统时间比本工具的发布日期还早（电脑从装系统起时间就不对时，文件时间也跟着错，原来查不出来）、时间服务一直同步不了（域名解析不了 = 上不了外网）都会报出来。
+- 修复系统文件：上不了外网时 DISM 会报错，窗口里写明不要紧，接着运行的 sfc 照样有效。「日期和时间」改成打开控制面板的日期和时间，上不了网的电脑也能手动改。
+- 诊断包里 systeminfo、driverquery 的输出按系统区域的代码页读，中文系统上不再是乱码；硬盘温度报 0、1 °C 的（RST 之类的控制器乱报）当成读不到；最近装的驱动里空白的一行不再显示。
+- 测试：WER 记录解析、U 盘错误不算系统盘、时钟比发布日期早、Dell 下载页、报告里有处理办法；安全规则测试新增「按建议处理只用能撤销、不删东西的几步，先确认一次」「硬盘驱动指南不替你运行 bcdedit」；检查里加发布日期一年没改就报；界面自测覆盖按建议处理要先确认、厂商下载页、硬盘驱动指南。
+- Each diagnosis now has "Fix as suggested" (does the reversible steps ClearC can take in one go, after one confirmation) and "Things to do yourself" (backup, BIOS / driver / firmware updates with this PC's current versions, the maker's hardware test, reseating, replacing); a maker's driver page by service tag; a guided switch from Intel RST to Windows' own disk driver; crashes counted from Windows' crash records; USB disk errors no longer blamed on the system disk; clock checks against the release date and failed time syncs; readable systeminfo on Chinese Windows.
+
 ## 3.1
 - **蓝屏诊断修好并讲人话**：转储解析之前读错了驱动表（每项 0x90 字节，名字是完整路径），真机转储里「可能的驱动」和「栈上的驱动」都不对，现在按真机的 Win10 1903 转储核对过。新读出读盘失败的状态码（0x7A 的 0xC000000E 就是硬盘掉线）、出事时的进程（0xEF 时就是退出的那个关键进程）、栈上驱动是谁做的；0x50 改看参数 3，0x116 看参数 2；栈上只有 Windows 自带驱动的不再冤枉某个驱动；0x7A 读不回来的那一页属于哪个驱动只说明它倒霉，不点名。每次蓝屏下面一句话说明是什么错、常见原因。
 - **诊断结论**：把几次蓝屏、事件日志、硬盘健康、系统时钟和 Windows 版本放在一起看，给出几条结论和对应的修复按钮：硬盘或硬盘连接不稳定（读盘失败 + 系统进程反复退出 + 磁盘错误，顺带认出 Intel RST 存储驱动）、同一个第三方驱动反复被点名（按显卡、网卡、安全软件、反作弊、存储给不同的建议）、显卡、内存、硬件错误、睡眠唤醒、多次没有正常关机、系统时间不准（系统自己写的文件比「现在」还晚）、Windows 版本太旧。「复制报告」复制成文字；「导出诊断包」把转储、最近 30 天的系统和应用日志、systeminfo、驱动列表、硬盘信息和报告打成 zip，不覆盖已有文件。

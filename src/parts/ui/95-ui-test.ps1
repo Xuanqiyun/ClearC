@@ -365,6 +365,15 @@ function Invoke-UiTest {
             if (-not $hit) { throw 'repair button not found in the list' }
             & $click $hit
             if (-not $script:uiFixRuns.Contains('timecheck')) { throw 'clicking a repair button did nothing' }
+            # 按建议处理：先把要做的列出来确认（自测里当作取消），所以什么都不改；硬盘驱动指南、厂商下载页只显示
+            $fake = @{ Id = 'uitest'; Level = 'red'; Title = 'uitest'; Body = ''; Fixes = @(); Plan = @('diskpower', 'faststartup', 'datetime'); Todo = @('x') }
+            $keepV = $script:healthData.Verdicts; $script:healthData.Verdicts = @($keepV) + @($fake); $n1 = $script:uiSheets.Count; $script:uiFixRuns.Clear()
+            try { Invoke-RepairPlan 'uitest' } finally { $script:healthData.Verdicts = $keepV }
+            if ($script:uiSheets.Count -ne $n1 + 1 -or $script:uiFixRuns.Count -ne 0) { throw 'fix-as-suggested did not ask first, or ran something' }
+            if ((Get-Setting 'PowerFixUndo' '') -ne $undo0 -or (Get-FastStartup) -ne $fs0) { throw 'power settings changed by fix-as-suggested without confirmation' }
+            Show-AhciGuide; Open-VendorPage
+            if (-not @($script:uiFixRuns | Where-Object { $_ -like 'vendor:http*' }).Count) { throw 'vendor page has no link' }
+            $L.Add(('  vendor: ' + @($script:uiFixRuns | Where-Object { $_ -like 'vendor:*' })[0]))
             # 报告文字
             $rep = Get-HealthReportText $script:healthData
             if ($rep.Length -lt 200 -or $rep -notmatch [regex]::Escape((T '诊断结论'))) { throw 'report text too short' }

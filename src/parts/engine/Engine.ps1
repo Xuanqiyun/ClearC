@@ -11,6 +11,7 @@ function Log($m) { if ($sync -and $sync.Log) { $sync.Log.Enqueue($m) } else { Wr
 # 向界面报告进度（界面每 0.3 秒读一次）
 function SetP([hashtable]$h) { if ($sync -and $sync.P) { foreach ($k in $h.Keys) { $sync.P[$k] = $h[$k] } } }
 $sys32 = "$env:SystemRoot\System32"
+$script:AppBuilt = [DateTime]'2026-10-23'   # 这一版的发布日期（发版时改）：系统时间比它还早，时钟肯定不对
 function GB($b) { "{0:N2} GB" -f ([double]$b / 1GB) }
 function FreeC { (Get-PSDrive C).Free }
 function DirBytes($p) { [double][DirStat]::Measure([string]$p) }
@@ -710,7 +711,7 @@ function Get-DiskHealthInfo([string]$drive) {
                     $rc = $pd | Get-StorageReliabilityCounter -ErrorAction Stop
                     if ($rc) {
                         if ($rc.Wear -ne $null -and [int]$rc.Wear -ge 0) { $r.Wear = [int]$rc.Wear }
-                        if ($rc.Temperature -and [int]$rc.Temperature -gt 0) { $r.Temp = [int]$rc.Temperature }
+                        if ($rc.Temperature -and [int]$rc.Temperature -ge 5) { $r.Temp = [int]$rc.Temperature }   # RST 这类控制器会报 0、1，不当真
                         if ($rc.PowerOnHours -and [long]$rc.PowerOnHours -gt 0) { $r.Hours = [long]$rc.PowerOnHours }
                         if ($rc.ReadErrorsTotal -and [long]$rc.ReadErrorsTotal -gt 0) { $r.ReadErrors = [long]$rc.ReadErrorsTotal }
                     }
@@ -975,11 +976,15 @@ function Get-CrashHealth {
         @{ Prov = 'volmgr'; Ids = @(161); What = (T '没能写出转储文件') },
         @{ Prov = 'Microsoft-Windows-Kernel-General'; Ids = @(1); What = (T '系统时间被改动') }
     )
+    $r.BugChecks = @(); $r.DiskEvents = @()
     foreach ($df in $defs) {
         if ($df.Prov -eq 'Microsoft-Windows-Kernel-General') { continue }
         try {
             $ev = @(Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = $df.Prov; Id = $df.Ids; StartTime = (Get-Date).AddDays(-30) } -MaxEvents 200 -ErrorAction Stop)
             if ($ev.Count -gt 0) { $r.Events += @{ Source = $df.Prov; What = $df.What; Count = $ev.Count; Last = ($ev | Sort-Object TimeCreated -Descending | Select-Object -First 1).TimeCreated; Sample = (([string]$ev[0].Message -split "`n")[0]).Trim() } }
+            # 小转储只留最近几个，蓝屏记录（WER 1001）每次都有：错误码和四个参数都在里面
+            if ($df.Prov -eq 'Microsoft-Windows-WER-SystemErrorReporting') { foreach ($e in $ev) { $b = ConvertFrom-BugCheckText ([string]$e.Message + ' ' + [string]$e.ToXml()); if ($b) { $b.Time = $e.TimeCreated; $r.BugChecks += $b } } }
+            if ($df.Prov -eq 'disk') { $r.DiskEvents = @(Group-DiskEvents $ev) }
         } catch {}
     }
     # 最近 30 天装的驱动（设备管理器的安装记录）
@@ -990,12 +995,75 @@ function Get-CrashHealth {
             $x = [xml]$e.ToXml(); $d = @{}
             foreach ($n in $x.Event.EventData.Data) { $d[[string]$n.Name] = [string]$n.'#text' }
             $name = $d['DriverName']; if (-not $name) { $name = $d['DeviceInstanceID'] }
+            if (-not $name) { continue }
             $k = $name + '|' + $d['DriverVersion']
             if ($seen.ContainsKey($k)) { continue }; $seen[$k] = $true
             $r.Drivers += @{ When = $e.TimeCreated; Name = $name; Provider = $d['DriverProvider']; Version = $d['DriverVersion']; Device = $d['DeviceInstanceID']; Status = $d['Status'] }
         }
     } catch {}
     return $r
+}
+# 蓝屏记录里的「检测错误: 0x0000007a (0x…, 0x…, 0x…, 0x…)」：各种语言的系统里这一段都一样
+function ConvertFrom-BugCheckText([string]$t) {
+    $m = [regex]::Match($t, '0x([0-9a-fA-F]{8})\s*\((0x[0-9a-fA-F]+),\s*(0x[0-9a-fA-F]+),\s*(0x[0-9a-fA-F]+),\s*(0x[0-9a-fA-F]+)\)')
+    if (-not $m.Success) { return $null }
+    $code = [long][Convert]::ToUInt32($m.Groups[1].Value, 16)
+    $hx = @(2..5 | ForEach-Object { $m.Groups[$_].Value.Substring(2).PadLeft(16, '0') })
+    $p = @($hx | ForEach-Object { [Convert]::ToUInt64($_, 16) })
+    $lo = { param($h) [long][Convert]::ToUInt32($h.Substring($h.Length - 8), 16) }   # 状态码是参数的低 32 位（0xffffffffc000000e → 0xC000000E）
+    $st = 0; if ($code -eq 0x7A) { $st = & $lo $hx[1] } elseif ($code -eq 0x77) { $st = $(if ($p[0] -le 2) { & $lo $hx[1] } else { & $lo $hx[0] }) }
+    return @{ Code = $code; CodeName = [DumpInfo]::CodeName([uint32]$code); Params = @($p | ForEach-Object { '0x{0:X}' -f $_ }); Status = $st; Time = $null }
+}
+# 磁盘事件（disk 7/11/51/153）按盘号归并：「已在磁盘 2 … 重试」是哪块盘，是不是系统盘
+function Group-DiskEvents($ev) {
+    $by = @{}
+    foreach ($e in @($ev)) {
+        $n = -1
+        $x = ''; try { $x = [string]$e.ToXml() } catch {}
+        $m = [regex]::Match($x, 'Harddisk(\d+)'); if (-not $m.Success) { $m = [regex]::Match([string]$e.Message, '(?:磁盘|[Dd]isk)\s*(\d+)') }
+        if ($m.Success) { $n = [int]$m.Groups[1].Value }
+        if (-not $by.ContainsKey($n)) { $by[$n] = @{ Disk = $n; Count = 0; Last = $e.TimeCreated; Name = ''; Bus = ''; IsSystem = $false } }
+        $by[$n].Count++; if ($e.TimeCreated -gt $by[$n].Last) { $by[$n].Last = $e.TimeCreated }
+    }
+    $sys = -1; try { $sys = [int](@(Get-Partition -DriveLetter ([string]$env:SystemDrive).Substring(0, 1) -ErrorAction Stop)[0].DiskNumber) } catch {}
+    $pds = @(); try { $pds = @(Get-PhysicalDisk -ErrorAction Stop) } catch {}
+    foreach ($g in $by.Values) {
+        $pd = @($pds | Where-Object { [string]$_.DeviceId -eq [string]$g.Disk })[0]
+        if ($pd) { $g.Name = ([string]$pd.FriendlyName).Trim(); $g.Bus = [string]$pd.BusType }
+        $g.IsSystem = ($g.Disk -ge 0 -and $g.Disk -eq $sys) -or ($g.Disk -lt 0)   # 读不出盘号的算系统盘（宁可多怀疑）
+    }
+    return @($by.Values)
+}
+# 这台电脑本身：厂商、型号、BIOS、服务编号、存储控制器驱动、系统盘、BitLocker、时间同步。给建议用（BIOS 和驱动多旧、去哪下载）
+function Get-SysFacts {
+    $r = @{ Maker = ''; Model = ''; Bios = ''; BiosDate = $null; Serial = ''; Stor = @(); SysDisk = $null; BitLocker = -1 }
+    $cs = @(Try-Cim 'Win32_ComputerSystem'); if ($cs.Count) { $r.Maker = ([string]$cs[0].Manufacturer).Trim(); $r.Model = ([string]$cs[0].Model).Trim() }
+    $b = @(Try-Cim 'Win32_BIOS')
+    if ($b.Count) { $r.Bios = ([string]$b[0].SMBIOSBIOSVersion).Trim(); try { $r.BiosDate = [DateTime]$b[0].ReleaseDate } catch {}; $r.Serial = ([string]$b[0].SerialNumber).Trim() }
+    # 存储控制器的驱动：版本和驱动日期（设备管理器「驱动程序」页上的那两个）
+    foreach ($d in @(Try-Cim 'Win32_PnPSignedDriver' 'root\cimv2' "DeviceClass='SCSIADAPTER' OR DeviceClass='HDC'")) {
+        if (-not $d.DeviceName) { continue }
+        $dt = $null; try { $dt = [DateTime]$d.DriverDate } catch {}
+        $r.Stor += @{ Device = ([string]$d.DeviceName).Trim(); Version = [string]$d.DriverVersion; Date = $dt; Provider = [string]$d.DriverProviderName; Inf = [string]$d.InfName; Rst = ([string]$d.DeviceName -match '(?i)RST|Rapid Storage|RAID|Optane|VMD|Chipset SATA') }
+    }
+    try {
+        $part = @(Get-Partition -DriveLetter ([string]$env:SystemDrive).Substring(0, 1) -ErrorAction Stop)[0]
+        $pd = @(Get-PhysicalDisk -ErrorAction Stop | Where-Object { [string]$_.DeviceId -eq [string]$part.DiskNumber })[0]
+        if ($pd) { $r.SysDisk = @{ Number = [int]$part.DiskNumber; Name = ([string]$pd.FriendlyName).Trim(); Bus = [string]$pd.BusType; Media = [string]$pd.MediaType; Firmware = ([string]$pd.FirmwareVersion).Trim(); RaidVolume = ([string]$pd.FriendlyName -match '(?i)raid|volume') } }
+    } catch {}
+    $bl = @(Try-Cim 'Win32_EncryptableVolume' 'root\cimv2\Security\MicrosoftVolumeEncryption' ("DriveLetter='{0}'" -f $env:SystemDrive))
+    if ($bl.Count) { $r.BitLocker = [int]$bl[0].ProtectionStatus }
+    return $r
+}
+# 厂商的驱动下载页：Dell 按服务编号直达；别的牌子给搜索
+function Get-VendorSupportUrl($f) {
+    if (-not $f) { return '' }
+    $tag = [string]$f.Serial
+    if ($f.Maker -match '(?i)^Dell' -and $tag -match '^[A-Za-z0-9]{5,8}$') { $en = $false; try { $en = ($null -ne [L10n]::Map -and [L10n]::Map.Count -gt 0) } catch {}; return ('https://www.dell.com/support/home/{0}/product-support/servicetag/{1}/drivers' -f $(if ($en) { 'en-us' } else { 'zh-cn' }), $tag) }
+    if ($f.Maker -match '(?i)^Lenovo' -and $tag) { return ('https://pcsupport.lenovo.com/products/{0}/downloads' -f $tag) }
+    if ($f.Maker -match '(?i)^(HP|Hewlett)') { return 'https://support.hp.com/drivers' }
+    $q = (('{0} {1} ' -f $f.Maker, $f.Model) + (T 'BIOS 驱动 下载')).Trim()
+    return ('https://www.bing.com/search?q=' + [uri]::EscapeDataString($q))
 }
 # 转储解析结果变成健康页用的表：多带上状态码、出事的进程、栈上驱动是谁做的
 function ConvertFrom-DumpInfo($d, [string]$file, [string]$name, $time, [double]$size) {
@@ -1056,7 +1124,7 @@ function Get-DriverKind([string]$n) {
 }
 # 系统时钟准不准：拿不到网络时间也能看出「时钟往回走了」——系统自己写的文件里有比现在还晚的修改时间
 function Get-ClockHealth {
-    $r = @{ Ok = $true; Wrong = $false; AheadDays = 0; Newest = $null; Source = ''; Service = ''; Jumps = 0; MaxJumpDays = 0 }
+    $r = @{ Ok = $true; Wrong = $false; AheadDays = 0; Newest = $null; Source = ''; Service = ''; Jumps = 0; MaxJumpDays = 0; SyncFails = 0; SyncOk = 0; DnsFail = $false; BehindBuild = 0 }
     $now = Get-Date
     foreach ($spec in @(@{ Dir = (Join-Path $env:SystemRoot 'Prefetch'); Filter = '*.pf' }, @{ Dir = (Join-Path $env:SystemRoot 'System32\winevt\Logs'); Filter = '*.evtx' }, @{ Dir = (Join-Path $env:SystemRoot 'Logs\CBS'); Filter = '*.log' }, @{ Dir = (Join-Path $env:SystemRoot 'SoftwareDistribution\DataStore'); Filter = '*.edb' })) {
         try {
@@ -1065,6 +1133,13 @@ function Get-ClockHealth {
         } catch {}
     }
     if ($r.Newest -and $r.Newest -gt $now.AddDays(1)) { $r.Wrong = $true; $r.AheadDays = [int][math]::Floor(($r.Newest - $now).TotalDays) }
+    # 电脑从装系统起时间就不对时，系统写的文件时间也都跟着错，比不出来；本工具的发布日期是外面带进来的
+    if ($script:AppBuilt -and $now -lt $script:AppBuilt.AddDays(-1)) { $r.Wrong = $true; $r.BehindBuild = [int][math]::Floor(($script:AppBuilt - $now).TotalDays); if ($r.BehindBuild -gt $r.AheadDays) { $r.AheadDays = $r.BehindBuild; $r.Newest = $script:AppBuilt; $r.Source = 'ClearC' } }
+    # 时间服务：同步失败（134 DNS 解析不了、129 连不上、36 一天没同步）和成功（35、37）
+    try {
+        $ev = @(Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'Microsoft-Windows-Time-Service'; StartTime = $now.AddDays(-30) } -MaxEvents 500 -ErrorAction Stop)
+        foreach ($e in $ev) { if ($e.Id -in 129, 134, 36, 47) { $r.SyncFails++; if ($e.Id -eq 134 -and ([string]$e.Message -match '0x80072AF9|DNS')) { $r.DnsFail = $true } } elseif ($e.Id -in 35, 37) { $r.SyncOk++ } }
+    } catch {}
     try { $s = Get-Service -Name W32Time -ErrorAction Stop; $r.Service = '{0}/{1}' -f $s.Status, $s.StartType } catch {}
     # Kernel-General 1：系统时间被改过（OldTime → NewTime），一次差一天以上的算跳变
     try {
@@ -1081,7 +1156,7 @@ function Get-ClockHealth {
 # 一次读完健康页要的全部（在后台线程里跑）
 function Get-HealthAll {
     $t0 = Get-Date
-    $r = @{ Cpu = (Get-CpuHealth); Mem = (Get-MemHealth); Battery = (Get-BatteryHealth); Gpu = @(Get-GpuHealth); Win = (Get-WinHealth); Boot = (Get-BootHealth); Crash = (Get-CrashHealth); Clock = (Get-ClockHealth); Power = (Get-PowerFixState); At = (Get-Date) }
+    $r = @{ Cpu = (Get-CpuHealth); Mem = (Get-MemHealth); Battery = (Get-BatteryHealth); Gpu = @(Get-GpuHealth); Win = (Get-WinHealth); Boot = (Get-BootHealth); Crash = (Get-CrashHealth); Clock = (Get-ClockHealth); Power = (Get-PowerFixState); Sys = (Get-SysFacts); At = (Get-Date) }
     $r.Disks = @(); foreach ($d in @(Get-FixedDriveLetters)) { try { $h = Get-DiskHealthInfo $d; $h.Drive = $d; $r.Disks += $h } catch {} }
     $r.Verdicts = @(Get-CrashVerdict $r)
     $r.Secs = ((Get-Date) - $t0).TotalSeconds
@@ -1149,32 +1224,71 @@ function Get-DumpExplain($x) {
 function Get-CrashVerdict($r) {
     $out = @()
     $cr = $r.Crash; $dumps = @($cr.Dumps | Where-Object { $_.Ok })
+    $sys = $r.Sys; $ck = $r.Clock; $w = $r.Win; $pw = $r.Power
     $ex = @{}; foreach ($d in $dumps) { $ex[$d.File] = Get-DumpExplain $d }
     $ev = @{}; foreach ($x in @($cr.Events)) { $ev[[string]$x.Source] = $x }
-    $diskEv = 0; foreach ($k in 'disk', 'Ntfs') { if ($ev.ContainsKey($k)) { $diskEv += [int]$ev[$k].Count } }
-    $badDisks = @($r.Disks | Where-Object { $_.Ok -and (([string]$_.Health -and [string]$_.Health -notmatch 'Healthy|正常|OK') -or ($_.ReadErrors -ne $null -and [long]$_.ReadErrors -gt 0)) })
-    $byKind = @{}; foreach ($d in $dumps) { $k = $ex[$d.File].Kind; if (-not $byKind.ContainsKey($k)) { $byKind[$k] = @() }; $byKind[$k] += $d }
+    # 参照时间：时钟不对时用本工具的发布日期算「BIOS、驱动有多旧」
+    $ref = Get-Date; if ($script:AppBuilt -and $script:AppBuilt -gt $ref) { $ref = $script:AppBuilt }
+    # 蓝屏次数：蓝屏记录（WER 1001）每次都有，小转储只留最近几个；记录比转储少（日志被清过）就用转储
+    $bcs = @($cr.BugChecks | Where-Object { $_ })
+    if ($bcs.Count -lt $dumps.Count) { $bcs = @($dumps | ForEach-Object { @{ Code = [long]$_.Code; CodeName = $_.CodeName; Status = [long]$_.Status; Time = $_.Time } }) }
+    $kindOf = { param($b) $k = 'other'; $hx = '{0:X}' -f [long]$b.Code; $kb = @(Get-BugcheckKb | Where-Object { $_.Codes -contains $hx } | Select-Object -First 1); if ($kb.Count) { $k = $kb[0].Kind }; if ($k -eq 'storage' -and $b.Status -and -not [DumpInfo]::IsStorageStatus([uint32]$b.Status)) { $k = 'memory' }; $k }
+    $byKind = @{}
+    foreach ($b in $bcs) { $k = & $kindOf $b; if (-not $byKind.ContainsKey($k)) { $byKind[$k] = @() }; $byKind[$k] += $b }
     $get = { param($k) if ($byKind.ContainsKey($k)) { @($byKind[$k]) } else { @() } }
     $n = { param($k) @(& $get $k).Count }
-    $codeList = { param($list) (@($list | Group-Object { $_.CodeName } | ForEach-Object { if ($_.Count -gt 1) { '{0} ×{1}' -f $_.Name, $_.Count } else { $_.Name } }) -join (T '、')) }
+    $nameOf = { param($b) if ($b.CodeName) { $b.CodeName } else { '0x{0:X}' -f [long]$b.Code } }
+    $codeList = { param($list) (@(@($list) | Group-Object { & $nameOf $_ } | Sort-Object Count -Descending | ForEach-Object { if ($_.Count -gt 1) { '{0} ×{1}' -f $_.Name, $_.Count } else { $_.Name } }) -join (T '、')) }
+    $dumpFail = if ($ev.ContainsKey('volmgr')) { [int]$ev['volmgr'].Count } else { 0 }
+    # 磁盘事件只算系统盘的；U 盘、移动硬盘的读写重试和蓝屏无关
+    $de = @($cr.DiskEvents | Where-Object { $_ })
+    $sysDiskEv = 0; $otherDisk = @()
+    if ($de.Count -gt 0) { foreach ($g in $de) { if ($g.IsSystem) { $sysDiskEv += [int]$g.Count } else { $otherDisk += $g } } }
+    elseif ($ev.ContainsKey('disk')) { $sysDiskEv = [int]$ev['disk'].Count }
+    $fsEv = if ($ev.ContainsKey('Ntfs')) { [int]$ev['Ntfs'].Count } else { 0 }
+    $badDisks = @($r.Disks | Where-Object { $_ -and $_.Ok -and (([string]$_.Health -and [string]$_.Health -notmatch 'Healthy|正常|OK') -or ($_.ReadErrors -ne $null -and [long]$_.ReadErrors -gt 0)) })
+    $rstDrv = @(@($sys.Stor) | Where-Object { $_ -and $_.Rst })
+    $rstNames = @($dumps | ForEach-Object { @($_.StorageDrivers) } | Where-Object { $_ -match '^(?i)iastor' } | Select-Object -Unique)
+    $isDell = ([string]$sys.Maker -match '(?i)^Dell')
+    $vendorTodo = {
+        $old = @()
+        if ($sys.BiosDate -and ($ref - $sys.BiosDate).TotalDays -gt 540) { $old += (T 'BIOS {0}（{1:yyyy-MM-dd}）') -f $sys.Bios, $sys.BiosDate }
+        foreach ($s in $rstDrv) { if ($s.Date -and ($ref - $s.Date).TotalDays -gt 540) { $old += (T '{0} 驱动 {1}（{2:yyyy-MM-dd}）') -f $s.Device, $s.Version, $s.Date } }
+        $t = if ($isDell) { (T '到 Dell 支持网站下载这台电脑的最新 BIOS、Intel Rapid Storage Technology（RST）驱动和固态硬盘固件（下面「厂商驱动下载页」按服务编号 {0} 直达）') -f $sys.Serial } else { (T '到电脑或主板厂商的网站下载最新的 BIOS、芯片组 / 存储驱动和固态硬盘固件（下面「厂商驱动下载页」）') }
+        if ($old.Count -gt 0) { $t += (T '。现在的 {0} 都是好几年前的') -f ($old -join (T '、')) }
+        if ($ck -and $ck.DnsFail) { $t += (T '。这台电脑上不了外网：在别的电脑上下载，用 U 盘拷过来装') }
+        $t
+    }
     # 1. 硬盘或硬盘连接
-    $storDumps = @(& $get 'storage' | Where-Object { [DumpInfo]::IsStorageStatus([uint32]$_.Status) })
-    $storage = ($storDumps.Count -gt 0) -or ($badDisks.Count -gt 0 -and $dumps.Count -gt 0) -or ($diskEv -gt 0 -and ((& $n 'sysproc') + (& $n 'memory') + (& $n 'filesystem')) -gt 0)
+    $storBc = @(& $get 'storage' | Where-Object { [DumpInfo]::IsStorageStatus([uint32]$_.Status) })
+    $sp = @(& $get 'sysproc')
+    $storage = ($storBc.Count -gt 0) -or ($badDisks.Count -gt 0 -and $bcs.Count -gt 0) -or (($sysDiskEv + $fsEv) -gt 0 -and ($sp.Count + (& $n 'memory') + (& $n 'filesystem')) -gt 0)
     if ($storage) {
         $lines = @()
-        foreach ($d in $storDumps) { $lines += ((T '• {0:MM-dd HH:mm} {1}：{2}（0x{3:X8}）') -f $d.Time, $d.CodeName, $(if (Get-StatusPlain $d.Status) { Get-StatusPlain $d.Status } else { (T '读盘失败') }), [long]$d.Status) }
-        $sp = @(& $get 'sysproc')
+        if ($bcs.Count -gt 0) { $lines += ((T '• 最近 30 天蓝屏 {0} 次：{1}') -f $bcs.Count, (& $codeList $bcs)) }
+        foreach ($g in @($storBc | Group-Object { [long]$_.Status })) { $st = [long]$g.Group[0].Status; $lines += ((T '• 其中 {0} 次读盘失败，状态码 0x{1:X8}：{2}') -f $g.Count, $st, $(if (Get-StatusPlain $st) { Get-StatusPlain $st } else { (T '读盘失败') })) }
         if ($sp.Count -gt 0) {
-            $procs = @($sp | ForEach-Object { $_.Process } | Where-Object { $_ } | Select-Object -Unique)
-            $lines += ((T '• {0} 次系统进程退出（{1}）：系统进程读不到自己的文件时就会这样') -f $sp.Count, $(if ($procs.Count) { $procs -join ', ' } else { (& $codeList $sp) }))
+            $procs = @($dumps | Where-Object { $ex[$_.File].Kind -eq 'sysproc' } | ForEach-Object { $_.Process } | Where-Object { $_ } | Select-Object -Unique)
+            $lines += ((T '• {0} 次是系统进程退出{1}：系统进程读不到自己的文件时就会这样') -f $sp.Count, $(if ($procs.Count) { (T '（{0}）') -f ($procs -join ', ') } else { '' }))
         }
-        if ($diskEv -gt 0) { $lines += ((T '• 最近 30 天系统日志里有 {0} 条磁盘或文件系统错误') -f $diskEv) }
+        if ($dumpFail -gt 0) { $lines += ((T '• 另有 {0} 次蓝屏连转储文件都没写出来：转储要写在系统盘上，硬盘不见了就写不出来') -f $dumpFail) }
+        if ($sysDiskEv + $fsEv -gt 0) { $lines += ((T '• 最近 30 天系统日志里有 {0} 条系统盘的读写或文件系统错误') -f ($sysDiskEv + $fsEv)) }
         foreach ($b in $badDisks) { $lines += ((T '• {0} {1}：健康状态「{2}」{3}') -f $b.Drive, $b.Model, $b.Health, $(if ($b.ReadErrors -gt 0) { (T '，读错误 {0} 次') -f $b.ReadErrors } else { '' })) }
-        $rst = @($dumps | ForEach-Object { @($_.StorageDrivers) } | Where-Object { $_ -match '^(?i)iastor' } | Select-Object -Unique)
-        if ($rst.Count -gt 0) { $lines += ((T '• 硬盘用的是 Intel RST 存储驱动（{0}）：这类掉盘很多和它的版本或省电设置有关') -f ($rst -join ', ')) }
-        $body = ($lines -join "`n") + "`n" + (T '最可能的原因：硬盘数据线或电源线接触不良、硬盘省电后唤醒失败、存储驱动太旧，或者硬盘本身在坏。') + "`n" +
-            (T '建议按顺序做：① 先把重要资料备份到别的盘或网盘；② 在「硬件」里看这块盘的健康和读错误；③ 关闭硬盘省电（下面的按钮，随时能恢复）；④ 更新存储驱动（到电脑或主板厂商的网站下载最新的芯片组 / RST 驱动）；⑤ 台式机关机断电后重新插一下硬盘的数据线和电源线，换个接口；⑥ 还是掉线，就是硬盘本身的问题，尽快换盘。')
-        $out += @{ Id = 'storage'; Level = 'red'; Title = (T '硬盘或硬盘连接不稳定（最可能）'); Body = $body; Fixes = @('hwtab', 'diskpower', 'chkscan', 'devmgmt', 'diagpack') }
+        if ($sys.SysDisk) { $lines += ((T '• 系统盘是 {0}（固件 {1}，接口 {2}）') -f $sys.SysDisk.Name, $sys.SysDisk.Firmware, $sys.SysDisk.Bus) }
+        foreach ($s in $rstDrv) { $lines += ((T '• 存储驱动：{0}，版本 {1}，驱动日期 {2:yyyy-MM-dd}') -f $s.Device, $s.Version, $s.Date) }
+        if ($rstDrv.Count -eq 0 -and $rstNames.Count -gt 0) { $lines += ((T '• 硬盘用的是 Intel RST 存储驱动（{0}）：这类掉盘很多和它的版本或省电设置有关') -f ($rstNames -join ', ')) }
+        if ($sys.BiosDate) { $lines += ((T '• BIOS：{0}（{1:yyyy-MM-dd}）') -f $sys.Bios, $sys.BiosDate) }
+        foreach ($g in $otherDisk) { $lines += ((T '• 另外 {0} 条读写重试是 {1}（磁盘 {2}，{3}）的，不是系统盘，和蓝屏无关') -f $g.Count, $(if ($g.Name) { $g.Name } else { (T '另一块盘') }), $g.Disk, $g.Bus) }
+        $body = ($lines -join "`n") + "`n" + (T '最可能的原因：系统盘在运行中短暂掉线（省电后唤醒失败、存储驱动或 BIOS 太旧、接触不良），或者硬盘本身在坏。硬盘报告的健康状态正常、蓝屏又都是这一类时，多半是前几种，能修好。')
+        $todo = @((T '先把重要资料备份到另一块硬盘、U 盘或网盘（同一块硬盘上的 D 盘不算备份）'), (& $vendorTodo))
+        $todo += $(if ($isDell) { (T '用 Dell 自带的硬件检测查一次硬盘：重启时按 F12，选 Diagnostics（ePSA）；报硬盘错误就直接换盘') } else { (T '用厂商自带的硬件检测（开机按 F12 或 F10 进诊断）或者硬盘厂商的工具查一次硬盘') })
+        $todo += (T '关机断电后把固态硬盘拔下来重新插紧（M.2 的拧好固定螺丝）；SATA 盘换一根数据线、换个接口')
+        if ($rstDrv.Count -gt 0 -or $rstNames.Count -gt 0 -or ($sys.SysDisk -and $sys.SysDisk.Bus -eq 'RAID')) { $todo += (T '以上都做了还掉盘：把 BIOS 里的硬盘模式从 RAID On 改成 AHCI，改用 Windows 自带的驱动（下面「改用 Windows 自带的硬盘驱动」有步骤）；还不行就是硬盘坏了，换一块') }
+        else { $todo += (T '以上都做了还掉盘，就是硬盘本身坏了：换一块，把备份拷回去') }
+        $plan = @('diskpower', 'faststartup')
+        $fixes = @('hwtab', 'diskpower', 'faststartup', 'vendor', 'chkscan', 'devmgmt', 'diagpack')
+        if ($rstDrv.Count -gt 0 -or $rstNames.Count -gt 0 -or ($sys.SysDisk -and $sys.SysDisk.Bus -eq 'RAID')) { $fixes += 'ahciguide' }
+        $out += @{ Id = 'storage'; Level = 'red'; Title = (T '系统盘在运行中掉线（最可能）'); Body = $body; Fixes = $fixes; Plan = $plan; Todo = $todo }
     }
     # 2. 同一个第三方驱动反复被点名
     $sus = @($dumps | Where-Object { $_.Suspect -and -not $_.SuspectMs -and -not (Test-MsDriverName $_.Suspect) -and $ex[$_.File].Kind -notin 'storage', 'sysproc' } | Group-Object { $_.Suspect } | Sort-Object Count -Descending)
@@ -1183,52 +1297,65 @@ function Get-CrashVerdict($r) {
         $one = $g.Group[0]; $kind = Get-DriverKind $one.Suspect
         $who = if ($one.SuspectMaker) { (T '{0}（{1}）') -f $one.Suspect, $one.SuspectMaker } else { $one.Suspect }
         $hint = switch ($kind) { 'graphics' { (T '这是显卡驱动：到显卡厂商（NVIDIA、AMD、Intel）官网下载最新驱动重新安装；刚更新完才出现的，就回退到上一个版本。') } 'network' { (T '这是网卡驱动：到电脑或网卡厂商网站下载最新版；VPN、加速器类软件也会装网络驱动，最近装过的先卸掉试试。') } 'security' { (T '这是安全软件的驱动：先升级这款安全软件；还蓝屏就暂时卸载它（Windows 自带的 Defender 会自动接管）。') } 'anticheat' { (T '这是游戏反作弊的驱动：更新或重新安装对应的游戏；不玩了就卸载。') } 'storage' { (T '这是硬盘控制器驱动：到电脑或主板厂商网站下载最新的芯片组 / 存储驱动。') } default { (T '到这个驱动的厂商网站下载最新版本；刚装或刚更新过的，在设备管理器里「回退驱动程序」，或者卸载对应的软件。') } }
-        $body = ((T '{0} 在 {1} 次蓝屏里被点名（{2}）。') -f $who, $g.Count, (& $codeList $g.Group)) + "`n" + $hint
+        $body = ((T '{0} 在 {1} 次蓝屏里被点名（{2}）。') -f $who, $g.Count, (& $codeList $g.Group))
         $recent = @($cr.Drivers | Where-Object { $_.Name -and ($_.Name -like ('*' + [IO.Path]::GetFileNameWithoutExtension($one.Suspect) + '*')) } | Select-Object -First 1)
         if ($recent.Count -gt 0) { $body += "`n" + ((T '最近 30 天装过相关的驱动：{0} {1}（{2:MM-dd}）') -f $recent[0].Provider, $recent[0].Version, $recent[0].When) }
-        $out += @{ Id = 'driver-' + $one.Suspect; Level = 'red'; Title = ((T '驱动 {0} 嫌疑最大') -f $one.Suspect); Body = $body; Fixes = @('devmgmt', 'rstrui', 'winupdate') }
+        $out += @{ Id = 'driver-' + $one.Suspect; Level = 'red'; Title = ((T '驱动 {0} 嫌疑最大') -f $one.Suspect); Body = $body; Fixes = @('devmgmt', 'vendor', 'rstrui', 'winupdate'); Plan = @(); Todo = @($hint, (T '改完用几天，看还会不会蓝屏；还蓝屏就把诊断包发给懂的人看')) }
     }
     # 3. 显卡
     if ((& $n 'graphics') -gt 0 -and -not ($out | Where-Object { $_.Id -like 'driver-*' -and (Get-DriverKind ($_.Id.Substring(7))) -eq 'graphics' })) {
-        $out += @{ Id = 'graphics'; Level = 'amber'; Title = (T '显卡驱动出问题'); Body = ((T '{0}：显卡驱动没响应被系统重置过。') -f (& $codeList (& $get 'graphics'))) + "`n" + (T '到显卡厂商官网下载最新驱动，安装时选「清洁安装」；看看「硬件」里显卡占用和散热；超频过的先恢复默认频率。'); Fixes = @('devmgmt', 'hwtab') }
+        $out += @{ Id = 'graphics'; Level = 'amber'; Title = (T '显卡驱动出问题'); Body = ((T '{0}：显卡驱动没响应被系统重置过。') -f (& $codeList (& $get 'graphics'))); Fixes = @('devmgmt', 'vendor', 'hwtab'); Plan = @()
+                   Todo = @((T '到显卡厂商官网下载最新驱动，安装时选「清洁安装」'), (T '看看「硬件」里显卡占用和散热，清一下显卡风扇的灰'), (T '超频过的先恢复默认频率')) }
     }
     # 4. 内存
-    $memD = @(& $get 'memory')
+    $memB = @(& $get 'memory')
     $whea = [int]$r.Mem.Whea
-    if (($memD.Count -ge 2 -and -not $storage) -or $whea -gt 0) {
-        $body = if ($memD.Count -gt 0) { (T '{0}：这类蓝屏点名的驱动各不相同，或者只有 Windows 自带的驱动，内存出问题的可能性比较大。') -f (& $codeList $memD) } else { '' }
+    if (($memB.Count -ge 2 -and -not $storage) -or $whea -gt 0) {
+        $body = if ($memB.Count -gt 0) { (T '{0}：这类蓝屏点名的驱动各不相同，或者只有 Windows 自带的驱动，内存出问题的可能性比较大。') -f (& $codeList $memB) } else { '' }
         if ($whea -gt 0) { $body += $(if ($body) { "`n" } else { '' }) + ((T '最近 30 天 Windows 记录了 {0} 次内存硬件错误（WHEA）。') -f $whea) }
-        $body += "`n" + (T '用 Windows 内存诊断查一次（重启后自动检测，大约 15 分钟）；在 BIOS 里开过 XMP / 超频的先关掉；台式机可以把内存条拔下来擦一下金手指重新插，或者一根一根地试。')
-        $out += @{ Id = 'memory'; Level = 'amber'; Title = (T '可能是内存不稳定'); Body = $body; Fixes = @('memtest', 'sfccheck') }
+        $out += @{ Id = 'memory'; Level = 'amber'; Title = (T '可能是内存不稳定'); Body = $body; Fixes = @('memtest', 'sfccheck'); Plan = @('memtest')
+                   Todo = @((T '用 Windows 内存诊断查一次（重启后自动检测，大约 15 分钟），报错就换内存条'), (T '在 BIOS 里开过 XMP / 超频的先关掉'), (T '台式机可以把内存条拔下来擦一下金手指重新插，或者一根一根地试')) }
     }
     # 5. 硬件错误
     if ((& $n 'hardware') -gt 0 -or $ev.ContainsKey('Microsoft-Windows-WHEA-Logger')) {
         $cnt = if ($ev.ContainsKey('Microsoft-Windows-WHEA-Logger')) { [int]$ev['Microsoft-Windows-WHEA-Logger'].Count } else { 0 }
-        $out += @{ Id = 'hardware'; Level = 'red'; Title = (T 'CPU、内存或主板报告了硬件错误'); Body = ((T '硬件错误蓝屏 {0} 次，系统日志里的硬件错误 {1} 条。') -f (& $n 'hardware'), $cnt) + "`n" + (T '先恢复 BIOS 默认设置（取消超频和 XMP），看「硬件」里 CPU 温度；清一下散热器的灰；台式机检查电源功率是否够；再去主板厂商网站更新 BIOS。'); Fixes = @('hwtab', 'memtest') }
+        $out += @{ Id = 'hardware'; Level = 'red'; Title = (T 'CPU、内存或主板报告了硬件错误'); Body = ((T '硬件错误蓝屏 {0} 次，系统日志里的硬件错误 {1} 条。') -f (& $n 'hardware'), $cnt); Fixes = @('hwtab', 'memtest', 'vendor'); Plan = @()
+                   Todo = @((T '先恢复 BIOS 默认设置（取消超频和 XMP）'), (T '看「硬件」里 CPU 温度，清一下散热器的灰'), (T '台式机检查电源功率是否够'), (T '到电脑或主板厂商网站更新 BIOS')) }
     }
     # 6. 睡眠唤醒、意外关机
-    if ((& $n 'power') -gt 0) { $out += @{ Id = 'power'; Level = 'amber'; Title = (T '睡眠、唤醒或关机时驱动没响应'); Body = ((T '{0}。') -f (& $codeList (& $get 'power'))) + "`n" + (T '先关闭快速启动试试（随时能再打开）；再更新芯片组、无线网卡、显卡驱动。'); Fixes = @('faststartup', 'powerreq', 'devmgmt') } }
+    if ((& $n 'power') -gt 0) { $out += @{ Id = 'power'; Level = 'amber'; Title = (T '睡眠、唤醒或关机时驱动没响应'); Body = ((T '{0}。') -f (& $codeList (& $get 'power'))); Fixes = @('faststartup', 'powerreq', 'devmgmt'); Plan = @('faststartup'); Todo = @((T '更新芯片组、无线网卡、显卡驱动')) } }
     $kp = if ($ev.ContainsKey('Microsoft-Windows-Kernel-Power')) { [int]$ev['Microsoft-Windows-Kernel-Power'].Count } else { 0 }
-    if ($kp -ge 3 -and $kp -gt ($dumps.Count + 1)) {
-        $out += @{ Id = 'unexpected'; Level = 'amber'; Title = (T '多次没有正常关机'); Body = ((T '最近 30 天有 {0} 次意外关机或重启，比蓝屏转储（{1} 个）多。') -f $kp, $dumps.Count) + "`n" + (T '多出来的那些是直接断电、死机后按了电源键，或者蓝屏时没能写出转储。台式机检查电源和插线板；笔记本检查电池；死机时屏幕定住不动的，多半是显卡、内存或硬盘的问题。'); Fixes = @('memtest', 'chkscan', 'reliability') }
+    $unexplained = $kp - [math]::Max($bcs.Count, $dumps.Count) - $dumpFail
+    if ($kp -ge 3 -and $unexplained -ge 3) {
+        $out += @{ Id = 'unexpected'; Level = 'amber'; Title = (T '多次没有正常关机'); Body = ((T '最近 30 天有 {0} 次意外关机或重启，其中 {1} 次找不到蓝屏记录。') -f $kp, $unexplained) + "`n" + (T '这些多半是直接断电、死机后按了电源键，或者蓝屏时没能写出记录。'); Fixes = @('memtest', 'chkscan', 'reliability'); Plan = @()
+                   Todo = @((T '台式机检查电源和插线板；笔记本检查电池'), (T '死机时屏幕定住不动的，多半是显卡、内存或硬盘的问题')) }
     }
     # 7. 系统文件
-    if ((& $n 'sysproc') -gt 0 -and -not $storage) {
-        $out += @{ Id = 'sysfile'; Level = 'amber'; Title = (T '系统进程意外退出'); Body = ((T '{0}。') -f (& $codeList (& $get 'sysproc'))) + "`n" + (T '先检查系统文件，有损坏就修复；最近装过更新、驱动或软件之后才开始的，可以用系统还原回到之前。'); Fixes = @('sfccheck', 'sfcrepair', 'rstrui') }
+    if ($sp.Count -gt 0 -and -not $storage) {
+        $out += @{ Id = 'sysfile'; Level = 'amber'; Title = (T '系统进程意外退出'); Body = ((T '{0}。') -f (& $codeList $sp)); Fixes = @('sfccheck', 'sfcrepair', 'rstrui'); Plan = @('sfcrepair')
+                   Todo = @((T '修复系统文件后用几天看还会不会出现'), (T '最近装过更新、驱动或软件之后才开始的，可以用系统还原回到之前')) }
     }
     # 8. 时钟
-    $ck = $r.Clock
-    if ($ck -and $ck.Wrong) {
-        $out += @{ Id = 'clock'; Level = 'amber'; Title = (T '系统时间不准'); Body = ((T '系统自己写的文件里有比「现在」还晚 {0} 天的（{1:yyyy-MM-dd}）：时钟被往回调过，或者主板电池没电后时间重置了。') -f $ck.AheadDays, $ck.Newest) + "`n" + (T '时间不对会让网页提示证书错误、Windows 更新失败，蓝屏记录的时间也跟着不准。同步一次时间；台式机每次断电后时间都变回去，就是主板上的纽扣电池（CR2032）该换了。'); Fixes = @('timecheck', 'timesync', 'datetime') }
+    if ($ck -and ($ck.Wrong -or ($ck.SyncFails -gt 0 -and $ck.SyncOk -eq 0))) {
+        $lines = @()
+        if ($ck.BehindBuild -gt 0) { $lines += (T '系统时间比本工具的发布日期（{0:yyyy-MM-dd}）还早 {1} 天，肯定不对。') -f $script:AppBuilt, $ck.BehindBuild }
+        elseif ($ck.Wrong) { $lines += (T '系统自己写的文件里有比「现在」还晚 {0} 天的（{1:yyyy-MM-dd}）：时钟被往回调过，或者主板电池没电后时间重置了。') -f $ck.AheadDays, $ck.Newest }
+        if ($ck.DnsFail) { $lines += (T '时间服务连不上 time.windows.com（域名解析不了）：这台电脑上不了外网，时间没法自动校准，只能手动改。') }
+        elseif ($ck.SyncFails -gt 0) { $lines += (T '最近 30 天时间服务同步失败 {0} 次，一次也没成功。') -f $ck.SyncFails }
+        $lines += (T '时间不对会让网页提示证书错误、Windows 激活和更新失败，蓝屏和日志记下的时间也跟着不准。')
+        $todo = @((T '把时间改对：点「日期和时间」，在「日期和时间」选项卡点「更改日期和时间」'), (T '台式机每次断电后时间都变回去，就是主板上的纽扣电池（CR2032）没电了，换一颗'))
+        if (-not $ck.DnsFail) { $todo = @((T '点「同步系统时间」；同步不了再手动改')) + $todo }
+        $out += @{ Id = 'clock'; Level = $(if ($ck.Wrong) { 'red' } else { 'amber' }); Title = $(if ($ck.Wrong) { (T '系统时间不准') } else { (T '系统时间一直同步不了') }); Body = ($lines -join "`n"); Fixes = @('datetime', 'timesync', 'timecheck'); Plan = $(if ($ck.DnsFail) { @('datetime') } else { @('timesync') }); Todo = $todo }
     }
     # 9. 系统版本太旧
-    $w = $r.Win
     if ($w -and $w.BuildNo -gt 0 -and $w.BuildNo -lt 19045 -and [string]$w.Product -notmatch 'Server|LTSC|LTSB') {   # 服务器版和长期服务版支持得更久
-        $out += @{ Id = 'oldwin'; Level = 'amber'; Title = (T 'Windows 版本太旧'); Body = ((T '这台电脑是 {0} {1}（版本号 {2}），早就收不到安全更新和修复补丁了：很多蓝屏和驱动问题在新版本里已经修好。') -f $w.Product, $w.Release, $w.BuildNo) + "`n" + (T '建议先备份资料，再升级到 Windows 11（硬件不满足时至少升到 Windows 10 22H2）。如果硬盘有问题，先把硬盘的问题解决掉再升级，否则升级到一半掉盘会更麻烦。'); Fixes = @('winupdate') }
+        $todo = @((T '先把硬盘的问题解决掉、把资料备份好'), (T '装着专用软件的电脑（测试设备、采集卡、工控软件）先问清楚这些软件支不支持新版本 Windows'), (T '在能上网的电脑上用微软的「媒体创建工具」做一个 Windows 安装 U 盘，在这台电脑上运行里面的 setup.exe，选「保留个人文件和应用」升级到 Windows 10 22H2 或 Windows 11'))
+        if ($w.LastUpdate) { $todo += (T '这台电脑最近一次装更新是 {0:yyyy-MM-dd}（{1}），之后的安全补丁都没有') -f $w.LastUpdate, $w.LastUpdateId }
+        $out += @{ Id = 'oldwin'; Level = 'amber'; Title = (T 'Windows 版本太旧'); Body = ((T '这台电脑是 {0} {1}（版本号 {2}），早就收不到安全更新和修复补丁了：很多蓝屏和驱动问题在新版本里已经修好。') -f $w.Product, $w.Release, $w.BuildNo); Fixes = @('winupdate'); Plan = @(); Todo = $todo }
     }
     if ($out.Count -eq 0) {
-        $t = if ($dumps.Count -gt 0) { (T '有蓝屏记录，但看不出集中在哪一类：先检查系统文件，再看每次蓝屏下面的说明。') } else { (T '最近没有蓝屏转储，也没有意外关机、硬件错误和磁盘错误的记录。') }
-        $out += @{ Id = 'none'; Level = $(if ($dumps.Count -gt 0) { 'blue' } else { 'green' }); Title = $(if ($dumps.Count -gt 0) { (T '没有明显的规律') } else { (T '没发现问题') }); Body = $t; Fixes = $(if ($dumps.Count -gt 0) { @('sfccheck', 'diagpack') } else { @() }) }
+        $t = if ($bcs.Count -gt 0) { (T '有蓝屏记录，但看不出集中在哪一类：先检查系统文件，再看每次蓝屏下面的说明。') } else { (T '最近没有蓝屏转储，也没有意外关机、硬件错误和磁盘错误的记录。') }
+        $out += @{ Id = 'none'; Level = $(if ($bcs.Count -gt 0) { 'blue' } else { 'green' }); Title = $(if ($bcs.Count -gt 0) { (T '没有明显的规律') } else { (T '没发现问题') }); Body = $t; Fixes = $(if ($bcs.Count -gt 0) { @('sfccheck', 'diagpack') } else { @() }); Plan = $(if ($bcs.Count -gt 0) { @('sfcrepair') } else { @() }); Todo = @() }
     }
     return $out
 }
@@ -1247,7 +1374,7 @@ function Get-FixCatalog {
     $s.startapps  = @{ Name = (T '管理开机启动'); Kind = 'go'; Go = 'startup'; Lvl = 1; Desc = (T '「软件管理 → 开机启动」：关掉不需要开机就运行的程序') }
     $s.sfccheck   = @{ Name = (T '检查系统文件'); Kind = 'check'; Lvl = 0; Cmd = 'echo === sfc /verifyonly === & sfc /verifyonly & echo. & echo === DISM /ScanHealth === & DISM /Online /Cleanup-Image /ScanHealth'; Desc = (T 'sfc /verifyonly 和 DISM /ScanHealth：只检查系统文件和系统映像有没有损坏，不改任何东西。要几分钟') }
     $s.dismcheck  = @{ Name = (T '快速检查系统映像'); Kind = 'check'; Lvl = 1; Cmd = 'DISM /Online /Cleanup-Image /CheckHealth'; Desc = (T 'DISM /CheckHealth：几秒钟看一下系统映像有没有被标记为损坏，不改东西') }
-    $s.sfcrepair  = @{ Name = (T '修复系统文件…'); Kind = 'fix'; Lvl = 0; Cmd = 'echo === DISM /RestoreHealth === & DISM /Online /Cleanup-Image /RestoreHealth & echo. & echo === sfc /scannow === & sfc /scannow'; Desc = (T '先 DISM /RestoreHealth 修好系统映像（可能要联网下载），再 sfc /scannow 把损坏的系统文件换成正常的。只动 Windows 自己的文件，不碰你的资料。十几分钟到半小时')
+    $s.sfcrepair  = @{ Name = (T '修复系统文件…'); Kind = 'fix'; Lvl = 0; Cmd = ('echo === DISM /RestoreHealth === & DISM /Online /Cleanup-Image /RestoreHealth & echo. & echo {0} & echo. & echo === sfc /scannow === & sfc /scannow' -f (T '上不了外网时 DISM 会报错（0x800f081f、0x800f0906），不要紧：接着运行的 sfc 用的是本机的备份，照样有效。')); Desc = (T '先 DISM /RestoreHealth 修好系统映像（可能要联网下载），再 sfc /scannow 把损坏的系统文件换成正常的。只动 Windows 自己的文件，不碰你的资料。十几分钟到半小时')
                       Confirm = (T "会运行 DISM /RestoreHealth 和 sfc /scannow：把损坏的系统文件换成正常的副本。这会改动系统文件（只动 Windows 自己的文件，不碰你的资料），DISM 可能要联网下载，一共要十几分钟到半小时，中途不要关窗口。`n`n可以先用「检查系统文件」看一眼有没有问题，再决定要不要修复。") }
     $s.chkscan    = @{ Name = (T '扫描 C 盘文件系统'); Kind = 'check'; Lvl = 0; Cmd = ('chkdsk {0} /scan' -f $sd); Desc = (T 'chkdsk /scan：在线扫描 C 盘的文件系统，不用重启、不锁盘。发现问题会提示下一步') }
     $s.chkfix     = @{ Name = (T '下次开机检查并修复 C 盘…'); Kind = 'fix'; Lvl = 1; Reboot = $true; Cmd = ('echo Y| chkdsk {0} /f & echo. & echo {1}' -f $sd, ((T '重启电脑后会先检查 {0}，期间不要断电。不想检查了可以运行 chkntfs /x {0}') -f $sd)); Desc = (T 'chkdsk /f：安排在下次开机时检查并修复 C 盘的文件系统。开机会多花几分钟到一小时，期间不能断电。可以撤销')
@@ -1273,7 +1400,7 @@ function Get-FixCatalog {
     $s.ncpa       = @{ Name = (T '网络连接'); Kind = 'open'; Lvl = 1; Exe = "$sr\System32\control.exe"; Args = 'ncpa.cpl'; Desc = (T '打开网络连接：禁用再启用网卡、看网卡属性') }
     $s.timecheck  = @{ Name = (T '检查时间准不准'); Kind = 'check'; Lvl = 0; Cmd = ('w32tm /tz & echo. & echo === {0} === & w32tm /stripchart /computer:time.windows.com /samples:3 /dataonly' -f (T '和 time.windows.com 比较，o: 后面是相差的秒数')); Desc = (T 'w32tm /stripchart：和微软的时间服务器比一比差多少秒。只看不改，要联网') }
     $s.timesync   = @{ Name = (T '同步系统时间'); Kind = 'fix'; Lvl = 0; Harmless = $true; Cmd = ('net start w32time & w32tm /resync & echo. & echo {0} & start ms-settings:dateandtime' -f (T '如果上面提示时间差太大、没有同步：请在打开的「日期和时间」里手动改，或者先关再开「自动设置时间」。')); Desc = (T '启动 Windows 时间服务并马上同步一次。差得太多时 Windows 不肯自动改，会打开「日期和时间」让你手动改') }
-    $s.datetime   = @{ Name = (T '日期和时间设置'); Kind = 'open'; Lvl = 0; Uri = 'ms-settings:dateandtime'; Desc = (T '手动改时间、时区，开关「自动设置时间」') }
+    $s.datetime   = @{ Name = (T '日期和时间'); Kind = 'open'; Lvl = 0; Exe = "$sr\System32\control.exe"; Args = 'timedate.cpl'; Desc = (T '打开「日期和时间」：点「更改日期和时间」手动改成正确的时间，上不了网的电脑只能这样改') }
     $s.faststartup = @{ Name = (T '关闭快速启动…'); Kind = 'special'; Lvl = 1; Desc = (T '快速启动让「关机」其实是半休眠：驱动出错会一直带到下次开机。关掉后关机就是真关机，开机慢几秒。随时能再打开')
                       Confirm = (T "会关闭快速启动（控制面板 → 电源选项 →「启用快速启动」）。`n`n关掉以后「关机」就是真正的关机，驱动和设备每次都重新初始化：能解决关机变重启、睡眠唤醒失败、开机后设备不正常这类问题。代价是开机慢几秒。`n`n随时可以在这里再打开。") }
     $s.powerreq   = @{ Name = (T '查看谁不让电脑睡眠'); Kind = 'check'; Lvl = 1; Cmd = 'echo === powercfg /requests === & powercfg /requests & echo. & echo === powercfg /lastwake === & powercfg /lastwake & echo. & echo === powercfg /waketimers === & powercfg /waketimers'; Desc = (T 'powercfg /requests、/lastwake、/waketimers：哪个程序或设备阻止睡眠、上次是谁唤醒的。不改东西') }
@@ -1284,10 +1411,12 @@ function Get-FixCatalog {
     $s.reliability = @{ Name = (T '可靠性监视器'); Kind = 'open'; Lvl = 0; Exe = "$sr\System32\perfmon.exe"; Args = '/rel'; Desc = (T '按天列出程序崩溃、蓝屏、更新失败，看问题从哪天开始') }
     $s.eventvwr   = @{ Name = (T '事件查看器'); Kind = 'open'; Lvl = 1; Exe = "$sr\System32\eventvwr.msc"; Desc = (T 'Windows 的全部日志：「Windows 日志 → 系统」里看错误和警告') }
     $s.dumpdir    = @{ Name = (T '打开转储文件夹'); Kind = 'open'; Lvl = 0; Folder = ($sr + '\Minidump'); Desc = (T '蓝屏转储所在的文件夹（C:\Windows\Minidump）：可以拷出来给别人分析') }
+    $s.vendor     = @{ Name = (T '厂商驱动下载页'); Kind = 'special'; Lvl = 0; Desc = (T '按这台电脑的厂商和型号（Dell 按服务编号）打开 BIOS、驱动和固件的下载页，链接同时复制下来：这台电脑上不了外网时，到别的电脑上打开、下载好用 U 盘拷过来') }
+    $s.ahciguide  = @{ Name = (T '改用 Windows 自带的硬盘驱动…'); Kind = 'special'; Lvl = 0; Desc = (T '硬盘接在 Intel RST（RAID On）上、更新驱动和 BIOS 后还掉线时：把 BIOS 的硬盘模式改成 AHCI，改用 Windows 自带的驱动。显示这台电脑能不能改、详细步骤和改回去的办法；要进 BIOS，本工具不替你改') }
     $s.diagpack   = @{ Name = (T '导出诊断包…'); Kind = 'special'; Lvl = 0; Desc = (T '把蓝屏转储、最近 30 天的系统和应用日志、系统信息、驱动列表、本工具的诊断结论打成一个 zip，方便发给懂的人看。只读不改') }
     $p = @(
-        @{ Id = 'bsod'; Title = (T '蓝屏、死机、自动重启'); Desc = (T '先看蓝屏诊断的结论；再按「系统文件 → 硬盘 → 内存 → 驱动」的顺序排查。一次只改一样，改完用几天看还会不会出现。'); Steps = @('crashtab', 'sfccheck', 'sfcrepair', 'chkscan', 'memtest', 'devmgmt', 'rstrui', 'diagpack') },
-        @{ Id = 'disk'; Title = (T '硬盘掉线、卡顿、读写出错'); Desc = (T '蓝屏代码 0x7A、0xEF、0xF4，系统突然卡住几十秒又恢复，磁盘占用一直 100%，都可能是硬盘或硬盘连接的问题。先备份资料。'); Steps = @('hwtab', 'chkscan', 'diskpower', 'diskpowerundo', 'chkfix', 'chkundo', 'devmgmt') },
+        @{ Id = 'bsod'; Title = (T '蓝屏、死机、自动重启'); Desc = (T '先看蓝屏诊断的结论，点结论里的「按建议处理」；再按「系统文件 → 硬盘 → 内存 → 驱动」的顺序排查。一次只改一样，改完用几天看还会不会出现。'); Steps = @('crashtab', 'sfccheck', 'sfcrepair', 'chkscan', 'memtest', 'devmgmt', 'vendor', 'rstrui', 'diagpack') },
+        @{ Id = 'disk'; Title = (T '硬盘掉线、卡顿、读写出错'); Desc = (T '蓝屏代码 0x7A、0xEF、0xF4，系统突然卡住几十秒又恢复，磁盘占用一直 100%，都可能是硬盘或硬盘连接的问题。先备份资料。'); Steps = @('hwtab', 'diskpower', 'diskpowerundo', 'faststartup', 'vendor', 'chkscan', 'chkfix', 'chkundo', 'devmgmt', 'ahciguide') },
         @{ Id = 'sysfile'; Title = (T '系统文件损坏'); Desc = (T '系统设置或自带程序打不开、提示缺少某个 dll、装完更新后出怪问题。'); Steps = @('sfccheck', 'dismcheck', 'sfcrepair', 'rstrui') },
         @{ Id = 'update'; Title = (T 'Windows 更新失败或一直卡住'); Desc = (T '更新报错、反复安装同一个更新、卡在某个百分比不动。系统时间不对也会让更新失败，先看时间。'); Steps = @('timecheck', 'wutrouble', 'wureset', 'sfcrepair', 'winupdate') },
         @{ Id = 'net'; Title = (T '上不了网、个别网站打不开'); Desc = (T '从轻到重：先看网络状态，再清 DNS 缓存，最后才重置网络。'); Steps = @('netinfo', 'flushdns', 'netsettings', 'ncpa', 'netreset') },
@@ -1365,7 +1494,10 @@ function Invoke-Capture([string]$exe, [string]$argLine, [int]$timeoutSec = 120) 
     $p = New-Object Diagnostics.Process
     $p.StartInfo.FileName = $exe; $p.StartInfo.Arguments = $argLine; $p.StartInfo.UseShellExecute = $false
     $p.StartInfo.RedirectStandardOutput = $true; $p.StartInfo.RedirectStandardError = $true; $p.StartInfo.CreateNoWindow = $true
-    try { $p.StartInfo.StandardOutputEncoding = [Text.Encoding]::GetEncoding([Globalization.CultureInfo]::CurrentCulture.TextInfo.OEMCodePage) } catch {}
+    # 控制台程序按「系统区域设置」的 OEM 代码页输出（中文系统是 936），和界面语言、当前用户的区域无关
+    $oem = 0; try { $oem = [int](Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Nls\CodePage' -ErrorAction Stop).OEMCP } catch {}
+    if ($oem -le 0) { $oem = [Globalization.CultureInfo]::CurrentCulture.TextInfo.OEMCodePage }
+    try { $p.StartInfo.StandardOutputEncoding = [Text.Encoding]::GetEncoding($oem) } catch {}
     try { [void]$p.Start() } catch { return ('(' + $_.Exception.Message + ')') }
     $o = $p.StandardOutput.ReadToEndAsync(); $er = $p.StandardError.ReadToEndAsync()
     if (-not $p.WaitForExit($timeoutSec * 1000)) { return ((T '（{0} 秒没运行完，没等它）') -f $timeoutSec) }
@@ -1390,9 +1522,33 @@ function Get-HealthReportText($r) {
     $L.Add((T '腾挪 ClearC 系统健康报告')); $L.Add(('{0:yyyy-MM-dd HH:mm}  {1}' -f $r.At, $env:COMPUTERNAME)); $L.Add('')
     $w = $r.Win
     if ($w) { $L.Add(('Windows: {0} {1}  {2}.{3}' -f $w.Product, $w.Release, $w.Build, $w.Ubr)); if ($w.Uptime) { $L.Add(((T '开机已经 {0:N1} 天') -f $w.Uptime.TotalDays)) }; if ($w.LastUpdate) { $L.Add(((T '最近一次更新 {0:yyyy-MM-dd} {1}') -f $w.LastUpdate, $w.LastUpdateId)) } }
-    if ($r.Clock -and $r.Clock.Wrong) { $L.Add(((T '时钟可能不准：有比现在晚 {0} 天的系统文件（{1}）') -f $r.Clock.AheadDays, $r.Clock.Source)) }
-    $L.Add(''); $L.Add('== ' + (T '诊断结论'))
-    foreach ($v in @($r.Verdicts)) { $L.Add(('[{0}] {1}' -f $v.Level, $v.Title)); foreach ($x in ([string]$v.Body -split "`n")) { $L.Add('    ' + $x) } }
+    if ($r.Clock -and $r.Clock.BehindBuild -gt 0) { $L.Add(((T '时钟不准：系统时间比本工具的发布日期（{0:yyyy-MM-dd}）还早 {1} 天') -f $script:AppBuilt, $r.Clock.BehindBuild)) }
+    elseif ($r.Clock -and $r.Clock.Wrong) { $L.Add(((T '时钟可能不准：有比现在晚 {0} 天的系统文件（{1}）') -f $r.Clock.AheadDays, $r.Clock.Source)) }
+    $f = $r.Sys
+    if ($f) {
+        $L.Add(''); $L.Add('== ' + (T '这台电脑'))
+        $L.Add(('{0} {1}' -f $f.Maker, $f.Model).Trim())
+        if ($f.Bios) { $L.Add(((T 'BIOS {0}（{1:yyyy-MM-dd}），服务编号 / 序列号 {2}') -f $f.Bios, $f.BiosDate, $f.Serial)) }
+        if ($f.SysDisk) { $L.Add(((T '系统盘：{0}，固件 {1}，接口 {2}') -f $f.SysDisk.Name, $f.SysDisk.Firmware, $f.SysDisk.Bus)) }
+        foreach ($s in @($f.Stor)) { if ($s) { $L.Add(((T '存储驱动：{0}，{1}，{2:yyyy-MM-dd}，{3}') -f $s.Device, $s.Version, $s.Date, $s.Provider)) } }
+        if ($f.BitLocker -ge 0) { $L.Add('BitLocker: ' + $(if ($f.BitLocker -eq 1) { (T '开着') } else { (T '关着') })) }
+    }
+    $ck = $r.Clock; if ($ck) { $L.Add(((T '时间同步：最近 30 天失败 {0} 次、成功 {1} 次{2}') -f $ck.SyncFails, $ck.SyncOk, $(if ($ck.DnsFail) { (T '，连不上时间服务器（上不了外网）') } else { '' }))) }
+    $pw = $r.Power; if ($pw) { $L.Add(((T '硬盘省电：{0}；快速启动：{1}') -f $(if ($pw.DiskFix) { (T '已关闭（本工具改的，能恢复）') } else { (T '系统默认') }), $(switch ($pw.FastStartup) { 'on' { (T '开') } 'off' { (T '关') } default { (T '没有') } }))) }
+    $L.Add(''); $L.Add('== ' + (T '诊断结论和处理办法'))
+    $fc = $null; try { $fc = Get-FixCatalog } catch {}
+    foreach ($v in @($r.Verdicts)) {
+        $L.Add(('[{0}] {1}' -f $v.Level, $v.Title)); foreach ($x in ([string]$v.Body -split "`n")) { $L.Add('    ' + $x) }
+        $pl = @($v.Plan | Where-Object { $_ -and $fc -and $fc.Steps.Contains($_) } | ForEach-Object { ([string]$fc.Steps[$_].Name).TrimEnd('…') })
+        if ($pl.Count) { $L.Add('    ' + (T '本工具能直接做（结论下面的「按建议处理」）：') + ($pl -join (T '、'))) }
+        $td = @($v.Todo | Where-Object { $_ })
+        if ($td.Count) { $L.Add('    ' + (T '需要你自己做：')); for ($i = 0; $i -lt $td.Count; $i++) { $L.Add(('      {0}. {1}' -f ($i + 1), $td[$i])) } }
+    }
+    $bc = @($r.Crash.BugChecks | Where-Object { $_ })
+    if ($bc.Count) {
+        $L.Add(''); $L.Add('== ' + ((T '最近 30 天的蓝屏记录（{0} 次）') -f $bc.Count))
+        foreach ($b in $bc) { $L.Add(('{0:yyyy-MM-dd HH:mm}  0x{1:X} {2}  {3}' -f $b.Time, [long]$b.Code, $b.CodeName, ($b.Params -join ' '))) }
+    }
     $L.Add(''); $L.Add('== ' + (T '蓝屏转储'))
     foreach ($d in @($r.Crash.Dumps)) {
         $e = Get-DumpExplain $d

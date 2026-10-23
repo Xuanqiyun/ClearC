@@ -2028,6 +2028,14 @@
                       <StackPanel>
                         <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="SemiBold" Foreground="{Binding Fg}" TextWrapping="Wrap"/>
                         <TextBlock Text="{Binding Body}" Style="{StaticResource Body}" Margin="0,6,0,0"/>
+                        <StackPanel x:Name="VdPlan" Orientation="Horizontal" Margin="0,12,0,0">
+                          <Button Content="{Binding PlanName}" Tag="{Binding PlanTag}" ToolTip="{Binding PlanTip}" Style="{StaticResource Primary}" Padding="16,5"/>
+                          <TextBlock Text="本工具能直接做的，一次做完；做之前会列出要做什么，都能撤销" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="12,0,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                        <StackPanel x:Name="VdTodo" Margin="0,12,0,0">
+                          <TextBlock Text="需要你自己做的" FontWeight="SemiBold"/>
+                          <TextBlock Text="{Binding Todo}" Style="{StaticResource Body}" Margin="0,4,0,0"/>
+                        </StackPanel>
                         <ItemsControl x:Name="VdFixes" ItemsSource="{Binding Fixes}" Margin="0,10,0,0">
                           <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                           <ItemsControl.ItemTemplate><DataTemplate><Button Content="{Binding Name}" Tag="{Binding Id}" ToolTip="{Binding Tip}" IsEnabled="{Binding Enabled}" Style="{StaticResource Small}" Margin="0,0,8,6"/></DataTemplate></ItemsControl.ItemTemplate>
@@ -2036,6 +2044,8 @@
                     </Border>
                     <DataTemplate.Triggers>
                       <DataTrigger Binding="{Binding HasFixes}" Value="False"><Setter TargetName="VdFixes" Property="Visibility" Value="Collapsed"/></DataTrigger>
+                      <DataTrigger Binding="{Binding HasPlan}" Value="False"><Setter TargetName="VdPlan" Property="Visibility" Value="Collapsed"/></DataTrigger>
+                      <DataTrigger Binding="{Binding HasTodo}" Value="False"><Setter TargetName="VdTodo" Property="Visibility" Value="Collapsed"/></DataTrigger>
                     </DataTemplate.Triggers>
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
@@ -3409,8 +3419,9 @@
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="诊断结论"/>
-                  <TextBlock Style="{StaticResource HelpBody}"><Run>几次蓝屏、事件日志、硬盘健康、系统时钟和 Windows 版本放在一起看，给出几条结论：比如「读盘失败 + 系统进程反复退出 + 磁盘错误」就是硬盘或硬盘连接不稳定，同一个第三方驱动在两次以上蓝屏里被点名就是它嫌疑最大，还有内存、显卡、硬件错误、睡眠唤醒、时钟不准、系统版本太旧。每条结论下面直接带着建议的修复按钮。</Run></TextBlock>
-                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>「复制报告」把结论和每次蓝屏的说明复制成文字；「导出诊断包」把转储、最近 30 天的系统和应用日志、systeminfo、驱动列表、硬盘信息和这份报告打成一个 zip（存到你选的位置，不覆盖已有文件），方便发给懂的人看。诊断包可能包含电脑名、用户名、装过的软件和内存片段，只发给你信任的人。</Run></TextBlock></DockPanel>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>几次蓝屏、事件日志、硬盘健康、系统时钟和 Windows 版本放在一起看，给出几条结论：比如「读盘失败 + 系统进程反复退出 + 磁盘错误」就是硬盘或硬盘连接不稳定，同一个第三方驱动在两次以上蓝屏里被点名就是它嫌疑最大，还有内存、显卡、硬件错误、睡眠唤醒、时钟不准、系统版本太旧。每条结论下面分两块：「按建议处理」把本工具能直接做的几步一次做完（先列出来确认，都能撤销，比如关闭硬盘省电、关闭快速启动、打开日期和时间）；「需要你自己做的」按顺序列出本工具做不了的事（备份、更新 BIOS 和驱动、厂商硬件检测、重新插硬盘），写明这台电脑的 BIOS、存储驱动有多旧。蓝屏次数按系统的蓝屏记录算（小转储只留最近几个）；U 盘、移动硬盘的读写错误不算到系统盘头上；系统时间比本工具的发布日期还早、或者时间服务一直同步不了，也会报出来。</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>「厂商驱动下载页」按厂商和型号打开 BIOS、驱动、固件的下载页（Dell 按服务编号直达），链接同时复制下来，上不了外网的电脑可以拿到别的电脑上下载。「改用 Windows 自带的硬盘驱动」针对接在 Intel RST（RAID On）上又老掉线的硬盘：先替你查是不是单块盘、BitLocker 开没开，再列出进 BIOS 改成 AHCI 的步骤和改回去的办法，本工具不替你改。</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>「复制报告」把结论、处理办法和每次蓝屏的说明复制成文字；「导出诊断包」把转储、最近 30 天的系统和应用日志、systeminfo、驱动列表、硬盘信息和这份报告打成一个 zip（存到你选的位置，不覆盖已有文件），方便发给懂的人看。诊断包可能包含电脑名、用户名、装过的软件和内存片段，只发给你信任的人。</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="常见问题修复"/>
@@ -3613,7 +3624,7 @@
               <Expander Style="{StaticResource HelpQ}">
                 <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="蓝屏了怎么查？"/></Expander.Header>
                 <StackPanel>
-                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>「系统健康 → 蓝屏和崩溃」：最上面的「诊断结论」把几次蓝屏、事件日志和硬盘健康放在一起看，告诉你最可能是哪一类问题，下面带着修复按钮；每次蓝屏下面还有一句话的解释。常见的处理顺序：硬盘掉线的先备份、关硬盘省电、更新存储驱动；驱动被反复点名的先更新或回退它；再跑「检查系统文件」，内存类的跑内存诊断。要找人帮忙，点「导出诊断包」。</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>「系统健康 → 蓝屏和崩溃」：最上面的「诊断结论」把几次蓝屏、事件日志和硬盘健康放在一起看，告诉你最可能是哪一类问题；点「按建议处理」把本工具能做的一次做完，再照「需要你自己做的」一条条做；每次蓝屏下面还有一句话的解释。常见的处理顺序：硬盘掉线的先备份、关硬盘省电、更新存储驱动；驱动被反复点名的先更新或回退它；再跑「检查系统文件」，内存类的跑内存诊断。要找人帮忙，点「导出诊断包」。</Run></TextBlock>
                 </StackPanel>
               </Expander>
               <Expander Style="{StaticResource HelpQ}">

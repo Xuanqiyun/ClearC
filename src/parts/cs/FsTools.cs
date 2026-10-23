@@ -423,6 +423,12 @@ public class VerdictRow {
     string _fg, _bg; public string Fg { get { return Theme.F(_fg); } set { _fg = value; } } public string Bg { get { return Theme.B(_bg); } set { _bg = value; } }
     public List<FixBtn> Fixes { get; set; }
     public bool HasFixes { get; set; }
+    public string PlanTag { get; set; }      // 「按建议处理」按钮的 Tag：plan:<结论编号>
+    public string PlanName { get; set; }
+    public string PlanTip { get; set; }
+    public bool HasPlan { get; set; }
+    public string Todo { get; set; }         // 本工具做不了、要你自己做的，编好号
+    public bool HasTodo { get; set; }
     public VerdictRow() { Fixes = new List<FixBtn>(); }
 }
 public class FixStepRow {
