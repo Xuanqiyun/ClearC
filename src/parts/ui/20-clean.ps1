@@ -8,13 +8,90 @@ function Update-CleanOverview {
     $order = New-Object System.Collections.Generic.List[string]; $cnt = @{}
     foreach ($r in $col) { if (-not $cnt.ContainsKey($r.GroupTitle)) { $order.Add($r.GroupTitle); $cnt[$r.GroupTitle] = 0 }; $cnt[$r.GroupTitle]++ }
     $parts = @($order | ForEach-Object { (T "{0} {1} 项") -f $_, $cnt[$_] })
-    $ctl.CleanOverviewText.Text = (T "扫描到 {0} 项，分成 {1} 类：{2}。每一项都可以单独选「删除」「搬走」或「跳过」，往下滚动查看全部。") -f $col.Count, $order.Count, ($parts -join (T '、'))
+    $ctl.CleanOverviewText.Text = (T "扫描到 {0} 项，分成 {1} 类：{2}。每一项都可以单独选「删除」「搬走」或「跳过」，往下滚动查看全部。双击一行打开它所在的文件夹，右键可以复制路径。") -f $col.Count, $order.Count, ($parts -join (T '、'))
     $ctl.CleanOverview.Visibility = 'Visible'
     $script:cleanItems = $null
     $ctl.CleanScroll.ScrollToTop()
     $ctl.CleanScroll.UpdateLayout()
     Update-CleanMore
 }
+# ---------- 清理页：双击一行打开它的文件夹，右键打开全部位置或复制路径（只看不改，方便把文件拷出来分析） ----------
+# 没有固定路径、由系统命令处理的几项，指到 Windows 存放它们的地方
+function Get-CleanExtraPaths([string]$n) {
+    $m = @{
+        (T '清空回收站') = @('shell:RecycleBinFolder')
+        (T 'Windows 传递优化缓存') = @("$env:SystemRoot\SoftwareDistribution\DeliveryOptimization", "$env:SystemRoot\ServiceProfiles\NetworkService\AppData\Local\Microsoft\Windows\DeliveryOptimization\Cache")
+        (T '重建 Windows 搜索索引') = @("$env:ProgramData\Microsoft\Search\Data\Applications\Windows")
+        (T 'Windows Installer 孤儿安装包') = @("$env:SystemRoot\Installer")
+        (T '驱动存储里的旧版驱动包') = @("$env:SystemRoot\System32\DriverStore\FileRepository")
+        (T '开始菜单里失效的快捷方式') = @("$env:APPDATA\Microsoft\Windows\Start Menu\Programs", "$env:ProgramData\Microsoft\Windows\Start Menu\Programs")
+        (T 'Windows 事件日志') = @("$env:SystemRoot\System32\winevt\Logs")
+        (T 'WinSxS 组件清理 (DISM)') = @("$env:SystemRoot\WinSxS")
+    }
+    if ($m.ContainsKey($n)) { return $m[$n] } else { return @() }
+}
+# 一行对应的、现在确实存在的位置（带 * 的展开成真实的文件夹，最多 30 个）
+function Get-CleanOpenPaths($it) {
+    $out = New-Object System.Collections.Generic.List[string]
+    if (-not $it) { return ,$out.ToArray() }
+    foreach ($p in (@($it.Paths) + @(Get-CleanExtraPaths ([string]$it.N)))) {
+        if (-not $p) { continue }
+        $p = [Environment]::ExpandEnvironmentVariables([string]$p)
+        if ($p -like 'shell:*') { if (-not $out.Contains($p)) { $out.Add($p) }; continue }
+        $cands = if ($p -match '[\*\?]') { @(Get-PathItems $p | Select-Object -First 30 | ForEach-Object { $_.FullName }) } else { @($p) }
+        foreach ($c in $cands) { if ($c -and -not $out.Contains($c) -and (Test-Path -LiteralPath $c)) { $out.Add($c) } }
+        if ($out.Count -ge 30) { break }
+    }
+    return ,$out.ToArray()
+}
+function Get-CleanRowFrom($src) {
+    $v = $src
+    while ($v -and $v -isnot [System.Windows.Controls.ListViewItem]) {
+        if ($v -is [System.Windows.Controls.ListBox] -and $v -isnot [System.Windows.Controls.ListView]) { return $null }   # 点在「删除 / 跳过」上
+        if ($v -is [System.Windows.Controls.Primitives.ScrollBar]) { return $null }
+        $v = if ($v -is [System.Windows.Media.Visual] -or $v -is [System.Windows.Media.Media3D.Visual3D]) { [System.Windows.Media.VisualTreeHelper]::GetParent($v) } else { $null }
+    }
+    if ($v -and $v.DataContext -is [RowItem]) { return $v.DataContext }
+    return $null
+}
+function Get-CleanItemOf($row) { if (-not $row) { return $null }; foreach ($c in $catalog) { if ($c.Idx -eq $row.Idx) { return $c } }; return $null }
+function Open-CleanPath([string]$p) {
+    if ($script:uiTest) { $script:uiOpened.Add($p); return }
+    if ($p -like 'shell:*') { Start-Process -FilePath "$env:SystemRoot\explorer.exe" -ArgumentList $p } else { Open-Location $p }
+}
+$script:uiOpened = New-Object System.Collections.Generic.List[string]
+$script:cleanMenuRow = $null
+function Open-CleanRow($row, [bool]$all) {
+    $it = Get-CleanItemOf $row
+    $ps = @(Get-CleanOpenPaths $it)
+    if ($ps.Count -eq 0) { Show-Sheet -Title ([string]$row.Name) -Text (T '这一项现在没有可以打开的文件夹：要么已经清空了，要么是由系统命令处理、没有固定的位置。') | Out-Null; return }
+    if (-not $all) { Open-CleanPath $ps[0]; if ($ps.Count -gt 1) { UI-Log ((T "「{0}」还有 {1} 个位置，右键可以全部打开") -f $row.Name, ($ps.Count - 1)) }; return }
+    foreach ($p in ($ps | Select-Object -First 8)) { Open-CleanPath $p }
+    if ($ps.Count -gt 8) { UI-Log ((T "「{0}」一共 {1} 个位置，打开了前 8 个；全部路径可以右键「复制路径」") -f $row.Name, $ps.Count) }
+}
+$ctl.List.Add_MouseDoubleClick({
+    param($s, $e)
+    if ($e.ChangedButton -ne [System.Windows.Input.MouseButton]::Left) { return }
+    $row = Get-CleanRowFrom $e.OriginalSource
+    if ($row) { $e.Handled = $true; Open-CleanRow $row $false }
+})
+$ctl.List.Add_ContextMenuOpening({
+    param($s, $e)
+    $row = Get-CleanRowFrom $e.OriginalSource
+    if (-not $row) { $e.Handled = $true; return }
+    $script:cleanMenuRow = $row
+    $n = @(Get-CleanOpenPaths (Get-CleanItemOf $row)).Count
+    $ctl.CmOpen.IsEnabled = $n -gt 0; $ctl.CmCopy.IsEnabled = $n -gt 0
+    $ctl.CmOpenAll.Visibility = $(if ($n -gt 1) { 'Visible' } else { 'Collapsed' })
+    $ctl.CmOpenAll.Header = (T "打开全部位置（{0} 个）") -f $n
+})
+$ctl.CmOpen.Add_Click({ if ($script:cleanMenuRow) { Open-CleanRow $script:cleanMenuRow $false } })
+$ctl.CmOpenAll.Add_Click({ if ($script:cleanMenuRow) { Open-CleanRow $script:cleanMenuRow $true } })
+$ctl.CmCopy.Add_Click({
+    if (-not $script:cleanMenuRow) { return }
+    $ps = @(Get-CleanOpenPaths (Get-CleanItemOf $script:cleanMenuRow) | Where-Object { $_ -notlike 'shell:*' })
+    if ($ps.Count -gt 0) { try { [System.Windows.Clipboard]::SetText(($ps -join "`r`n")); UI-Log ((T "已复制 {0} 个路径") -f $ps.Count) } catch {} }
+})
 # 下面还有没看到的内容时，底部浮一个「下面还有 N 项」
 function Update-CleanMore {
     $sv = $ctl.CleanScroll

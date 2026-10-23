@@ -335,6 +335,31 @@ try { & {
     # OneDrive「仅在线」：OneDrive 自己的文件（云端类型的重解析点）要处理，真正的链接不碰
     Check 'cloud reparse tags (OneDrive) are told apart from links' ([FsTools]::IsCloudTag([Convert]::ToUInt32('9000001A', 16)) -and [FsTools]::IsCloudTag([Convert]::ToUInt32('9000101A', 16)) -and -not [FsTools]::IsCloudTag([Convert]::ToUInt32('A0000003', 16)) -and -not [FsTools]::IsCloudTag([Convert]::ToUInt32('A000000C', 16)))
     if ($win) { Check 'a junction reports the mount-point reparse tag, so OneDrive online-only leaves it alone' (([FsTools]::ReparseTag($dl) -eq [Convert]::ToUInt32('A0000003', 16))) }
+    # ============ 7f. 系统健康的「常见问题修复」：不删文件、不结束进程、会改动的先确认、能撤销的先留底 ============
+    $fc = Get-FixCatalog
+    $cmds = @($fc.Steps.Keys | ForEach-Object { [string]$fc.Steps[$_].Cmd } | Where-Object { $_ })
+    $danger = @($cmds | Where-Object { $_ -match '(?i)(^|[\s&|])(del|erase|rd|rmdir|format|diskpart|bcdedit|vssadmin|cipher|taskkill|sdelete|cleanmgr|takeown|icacls)(\s|$)|reg(\.exe)?\s+delete|Remove-Item|Stop-Process|/RU\s+SYSTEM|schtasks' })
+    Check ("repair commands never delete, format, kill or schedule anything ({0})" -f ($danger -join ' | ')) ($cmds.Count -ge 15 -and $danger.Count -eq 0)
+    $noAsk = @($fc.Steps.Keys | Where-Object { $st = $fc.Steps[$_]; ($st.Kind -eq 'fix' -and -not $st.Harmless -and -not $st.Confirm) -or ($st.Kind -eq 'special' -and $_ -in 'diskpower', 'faststartup' -and -not $st.Confirm) })
+    Check ("every repair that changes the system has its own confirmation text ({0})" -f ($noAsk -join ',')) ($noAsk.Count -eq 0)
+    $harm = @($fc.Steps.Keys | Where-Object { $fc.Steps[$_].Harmless })
+    Check ("only cache-flush style steps skip the confirmation ({0})" -f ($harm -join ',')) (@($harm | Where-Object { $_ -notin 'flushdns', 'icons', 'wsreset', 'audiorestart', 'timesync', 'chkundo' }).Count -eq 0)
+    $wu = [string]$fc.Steps['wureset'].Cmd
+    $stops = @([regex]::Matches($wu, 'net stop (\w+)') | ForEach-Object { $_.Groups[1].Value }); $starts = @([regex]::Matches($wu, 'net start (\w+)') | ForEach-Object { $_.Groups[1].Value })
+    Check 'Windows Update reset renames the caches with a time stamp and restarts every service it stopped' ($wu -match 'ren "[^"]+\\SoftwareDistribution" SoftwareDistribution\.bak-\d{8}-\d{6}' -and $wu -match 'catroot2\.bak-\d{8}-\d{6}' -and $stops.Count -eq 4 -and @($stops | Where-Object { $starts -notcontains $_ }).Count -eq 0)
+    $svc = @($cmds | ForEach-Object { [regex]::Matches($_, 'net stop (\w+)') | ForEach-Object { $_.Groups[1].Value } } | Select-Object -Unique)
+    Check ("repairs only stop the update and audio services, and start them again ({0})" -f ($svc -join ',')) (@($svc | Where-Object { $_ -notin 'wuauserv', 'cryptSvc', 'bits', 'msiserver', 'audiosrv' }).Count -eq 0)
+    Check 'chkdsk /f is only scheduled for the system drive and can be cancelled with chkntfs /x' ([string]$fc.Steps['chkfix'].Cmd -match ('chkdsk ' + [regex]::Escape($(if ($env:SystemDrive) { $env:SystemDrive } else { 'C:' })) + ' /f') -and [string]$fc.Steps['chkundo'].Cmd -match 'chkntfs /x' -and $fc.Steps['chkfix'].Reboot)
+    $pf = [regex]::Match($engineText, '(?s)function Set-DiskPowerFix.*?\r?\n\}').Value
+    Check 'disk power fix saves the old values before it changes anything, and keeps the first saved copy' ($pf -match "(?s)Set-Setting 'PowerFixUndo'.*?return @\{ Ok = \`$false; Why = \(T '没能记下原来的设置.*?/setacvalueindex \`$g" -and $pf -match "if \(-not \(Get-Setting 'PowerFixUndo' ''\)\) \{ Set-Setting")
+    Check 'Fast Startup switch only writes HiberbootEnabled' (([regex]::Match($engineText, '(?s)function Set-FastStartup.*?\r?\n\}').Value) -match "-Name HiberbootEnabled" -and ([regex]::Matches($src, 'HiberbootEnabled -Value')).Count -eq 1)
+    $dp = [regex]::Match($engineText, '(?s)function Export-DiagPack.*?\r?\nfunction ').Value
+    Check 'diagnostics package never overwrites a file and cleans its temp folder without recursion' ($dp -match 'FileMode\]::CreateNew' -and $dp -match '\[IO\.Directory\]::Delete\(\$tmp, \$false\)' -and $dp -notmatch 'Remove-Item' -and $dp -notmatch 'Recurse')
+    $ifs = [regex]::Match($src, '(?s)function Invoke-FixStep.*?\r?\n\}').Value
+    Check 'repair runner: the UI self-test never starts a command, and changing steps go through a confirmation sheet first' ($ifs -match '(?s)Show-Sheet -Kind warn.*?if \(\$script:uiTest\) \{ \$script:uiFixRuns\.Add\(\$id\); return \}.*?Start-Process' -and $ifs -match "if \(\`$s\.Kind -eq 'fix' -and -not \`$s\.Harmless\)")
+    # 空间地图点盘卡片、清理页打开文件夹：只看不改
+    $op = [regex]::Match($src, '(?s)function Get-CleanOpenPaths.*?function Update-CleanMore').Value
+    Check 'opening a cleanup row only opens folders (no delete, move or write)' ($op.Length -gt 500 -and $op -notmatch '(?i)Remove-|Move-Item|rd /s|Delete\(|Set-Content|Out-File|Copy-Item')
     # ============ 8. 源码锁：改坏了就报 ============
     Check 'recycle bin: SHFileOperation asks when a file is too big instead of nuking it (ALLOWUNDO|NOCONFIRMATION|WANTNUKEWARNING)' (([regex]::Matches($dupCode, '0x40 \| 0x10 \| 0x4000')).Count -ge 2)
     Check 'restore points are never deleted (no vssadmin delete / Win32_ShadowCopy.Delete / Remove-ComputerRestorePoint)' ($src -notmatch '(?i)vssadmin\s+delete|Remove-ComputerRestorePoint|Disable-ComputerRestore|ShadowCopy[^\r\n]*\.Delete\(')

@@ -33,8 +33,11 @@ function Apply-Mode {
     # 清理页、自动提醒、帮助、设置
     $ctl.BtnCleanCustom.Visibility = & $v 2
     $ctl.AutoJunkRow.Visibility = & $v 1
-    foreach ($n in 'HealthCardBoot', 'HealthCardCrash', 'HealthCardMon') { $ctl[$n].Visibility = & $v 1 }
-    $ctl.BtnSfcRepair.Visibility = & $v 2; $ctl.HealthCardEvents.Visibility = & $v 2
+    # 系统健康：开机用时、活动监控给工程师，Windows 事件给开发者和 IT；蓝屏诊断和常见问题修复谁都能用
+    foreach ($n in 'HTabBoot', 'HTabMon') { $ctl[$n].Visibility = & $v 1 }
+    $ctl.HTabEvents.Visibility = & $v 2
+    Select-HealthTab $script:healthTab
+    Show-Fixes $(if ($script:healthData) { $script:healthData.Power } else { $null })
     $ctl.FbCopyDiag.Visibility = & $v 1; $ctl.FbSelfTest.Visibility = & $v 2
     $ctl.SetCardDisplay.Visibility = & $v 1; $ctl.SetCardScan.Visibility = & $v 2
     foreach ($n in 'SetCustomList', 'SetCustomEmpty', 'BtnSetCustomAdd', 'SetExcludeList', 'SetExcludeEmpty', 'BtnSetExcludeAdd', 'SetCustomHead', 'SetCustomNote', 'SetExcludeHead', 'SetExcludeNote') { $ctl[$n].Visibility = & $v 2 }
@@ -63,7 +66,27 @@ foreach ($rb in @($ctl.SetModeBasic, $ctl.SetModePro, $ctl.SetModeExpert)) {
         Set-Mode $(if ([object]::ReferenceEquals($this, $ctl.SetModeBasic)) { 'basic' } elseif ([object]::ReferenceEquals($this, $ctl.SetModePro)) { 'pro' } else { 'expert' })
     })
 }
-$ctl.ModeTag.Add_MouseLeftButtonUp({ Show-Page 'settings'; $ctl.SetScroll.ScrollToTop() })
+# 点侧边栏的模式标签：到设置里，「使用模式」那张卡片亮一下，告诉你在哪儿换
+function Flash-Card($el) {
+    try {
+        $orig = $el.Background
+        $c0 = if ($orig -is [System.Windows.Media.SolidColorBrush]) { $orig.Color } else { [System.Windows.Media.Colors]::White }
+        $hi = (Brush '#DCEBFF' 'b').Color
+        $b = New-Object System.Windows.Media.SolidColorBrush $hi
+        $el.Background = $b; $el.BorderBrush = (Brush '#0071E3' 'b'); $el.BorderThickness = New-Object System.Windows.Thickness 2
+        $an = New-Object System.Windows.Media.Animation.ColorAnimation $hi, $c0, (New-Object System.Windows.Duration ([TimeSpan]::FromMilliseconds(1400)))
+        $an.BeginTime = [TimeSpan]::FromMilliseconds(2200)
+        $script:flashEl = $el
+        $an.Add_Completed({ $x = $script:flashEl; if ($x) { $x.ClearValue([System.Windows.Controls.Border]::BackgroundProperty); $x.ClearValue([System.Windows.Controls.Border]::BorderBrushProperty); $x.ClearValue([System.Windows.Controls.Border]::BorderThicknessProperty) } })
+        $b.BeginAnimation([System.Windows.Media.SolidColorBrush]::ColorProperty, $an)
+    } catch {}
+}
+function Show-ModeCard {
+    Show-Page 'settings'; $ctl.SetScroll.ScrollToTop()
+    $ctl.SetCardMode.BringIntoView()
+    Flash-Card $ctl.SetCardMode
+}
+$ctl.ModeTag.Add_MouseLeftButtonUp({ Show-ModeCard })
 function Apply-Display {
     $m = Get-Mode
     $vis = { param([bool]$on) if ($on) { [System.Windows.Visibility]::Visible } else { [System.Windows.Visibility]::Collapsed } }

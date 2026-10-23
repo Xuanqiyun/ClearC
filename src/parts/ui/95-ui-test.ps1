@@ -259,13 +259,15 @@ function Invoke-UiTest {
             Set-Mode 'basic'
             if ($ctl.NavDup.Visibility -ne 'Collapsed' -or $ctl.NavLog.Visibility -ne 'Collapsed' -or $ctl.BtnLog.Visibility -ne 'Collapsed') { throw 'basic mode still shows advanced pages' }
             if ($ctl.SaveCardRs.Visibility -ne 'Collapsed' -or $ctl.AppsViewBox.Visibility -ne 'Collapsed' -or $ctl.MapViewFiles.Visibility -ne 'Collapsed' -or $ctl.BtnSetCustomAdd.Visibility -ne 'Collapsed') { throw 'basic mode still shows advanced cards' }
-            if ($ctl.NavClean.Visibility -ne 'Visible' -or $ctl.SaveCardCos.Visibility -ne 'Visible' -or $ctl.SaveCardOd.Visibility -ne 'Visible' -or $ctl.NavHealth.Visibility -ne 'Visible' -or $ctl.HealthCardHw.Visibility -ne 'Visible') { throw 'basic mode hides basic things' }
-            if ($ctl.HealthCardBoot.Visibility -ne 'Collapsed' -or $ctl.HealthCardMon.Visibility -ne 'Collapsed') { throw 'basic mode shows advanced health cards' }
+            if ($ctl.NavClean.Visibility -ne 'Visible' -or $ctl.SaveCardCos.Visibility -ne 'Visible' -or $ctl.SaveCardOd.Visibility -ne 'Visible' -or $ctl.NavHealth.Visibility -ne 'Visible' -or $ctl.HTabHw.Visibility -ne 'Visible' -or $ctl.HTabCrash.Visibility -ne 'Visible' -or $ctl.HTabFix.Visibility -ne 'Visible') { throw 'basic mode hides basic things' }
+            if ($ctl.HTabBoot.Visibility -ne 'Collapsed' -or $ctl.HTabMon.Visibility -ne 'Collapsed' -or $ctl.HTabEvents.Visibility -ne 'Collapsed') { throw 'basic mode shows advanced health tabs' }
+            $basicSteps = @(@($ctl.FixGroups.Items) | ForEach-Object { @($_.Steps) } | ForEach-Object { $_.Id })
+            if ($basicSteps -contains 'netreset' -or $basicSteps -contains 'wureset' -or $basicSteps -notcontains 'sfcrepair') { throw ('basic mode repair steps: ' + ($basicSteps -join ',')) }
             if ($ctl.ModeTag.Text -ne ((T '普通用户') + (T '模式'))) { throw ('mode tag: ' + $ctl.ModeTag.Text) }
             Set-Mode 'pro'
             if ($ctl.NavDup.Visibility -ne 'Visible' -or $ctl.AppsViewStartup.Visibility -ne 'Visible' -or $ctl.AppsViewTasks.Visibility -ne 'Collapsed' -or $ctl.SaveCardPf.Visibility -ne 'Visible' -or $ctl.SaveCardRs.Visibility -ne 'Collapsed') { throw 'pro mode wrong' }
             Set-Mode 'expert'
-            if ($ctl.AppsViewTasks.Visibility -ne 'Visible' -or $ctl.SaveCardRs.Visibility -ne 'Visible' -or $ctl.BtnLog.Visibility -ne 'Visible' -or $ctl.BtnSetCustomAdd.Visibility -ne 'Visible' -or $ctl.BtnSfcRepair.Visibility -ne 'Visible' -or $ctl.HealthCardEvents.Visibility -ne 'Visible') { throw 'expert mode wrong' }
+            if ($ctl.AppsViewTasks.Visibility -ne 'Visible' -or $ctl.SaveCardRs.Visibility -ne 'Visible' -or $ctl.BtnLog.Visibility -ne 'Visible' -or $ctl.BtnSetCustomAdd.Visibility -ne 'Visible' -or $ctl.BtnSfcRepair.Visibility -ne 'Visible' -or $ctl.HTabEvents.Visibility -ne 'Visible') { throw 'expert mode wrong' }
             if (@($catalog | Where-Object { [int]$_.Lvl -eq 2 }).Count -lt 5 -or @($catalog | Where-Object { [int]$_.Lvl -eq 1 }).Count -lt 5) { throw 'catalog levels missing' }
         }
         & $step 'cleanup tiers: careful group, delete preview, recycle switch' {
@@ -309,6 +311,62 @@ function Invoke-UiTest {
             if (-not (& $waitUi { -not $script:bg['monitor'] } 15000)) { throw 'monitor thread did not end' }
             # 系统文件检查按钮只是起终端：不点，查它在不在
             if ($ctl.BtnSfcCheck.Visibility -ne 'Visible') { throw 'sfc check button hidden' }
+        }
+        & $step 'cleanup rows open their folders; drive cards scan; mode card lights up' {
+            # 清理页：每一行都能找到要打开的位置（找不到的只能是没有固定位置的系统命令项）
+            $withPaths = 0
+            foreach ($it in $catalog) { $ps = @(Get-CleanOpenPaths $it); if ($ps.Count -gt 0) { $withPaths++ }; foreach ($p in $ps) { if ($p -notlike 'shell:*' -and -not (Test-Path -LiteralPath $p)) { throw "open path does not exist: $p" } } }
+            if ($withPaths -lt 5) { throw "only $withPaths cleanup items have a folder to open" }
+            $rb = @($catalog | Where-Object { $_.N -eq (T '清空回收站') })
+            if ($rb.Count -and @(Get-CleanOpenPaths $rb[0]) -notcontains 'shell:RecycleBinFolder') { throw 'recycle bin has no location' }
+            $script:uiOpened.Clear()
+            $row = New-Object RowItem; $row.Idx = @($catalog | Where-Object { @(Get-CleanOpenPaths $_).Count -gt 0 })[0].Idx; $row.Name = 'x'
+            Open-CleanRow $row $false
+            if ($script:uiOpened.Count -ne 1) { throw ('double-click opened {0} locations' -f $script:uiOpened.Count) }
+            # 空间地图：点盘卡片 = 选中并扫描
+            Show-Page 'map'; $win.UpdateLayout()
+            $cards = @($ctl.MapHealth.ItemsSource)
+            if ($cards.Count -gt 0 -and $ctl.MapDrive.Items.Count -gt 0) {
+                $script:uiOpened.Clear(); $saved = $script:mapRoot; $script:mapRoot = $null
+                try { Select-MapDriveCard ([string]$cards[0].Letter) $true } finally { $script:mapRoot = $saved }
+                if (-not ([string]$ctl.MapDrive.SelectedItem.Tag).StartsWith([string]$cards[0].Letter, [StringComparison]::OrdinalIgnoreCase)) { throw 'card click did not select the drive' }
+                if (-not $script:worker -and @($script:uiOpened | Where-Object { $_ -like 'scan:*' }).Count -ne 1) { throw 'card click did not start a scan' }
+                if (-not $cards[0].Sel) { throw 'selected card is not highlighted' }
+            }
+            # 模式标签：到设置页，「使用模式」卡片亮起来
+            Show-ModeCard; $win.UpdateLayout()
+            if ($ctl.PageSettings.Visibility -ne 'Visible') { throw 'mode tag did not open settings' }
+            if ($ctl.SetCardMode.ReadLocalValue([System.Windows.Controls.Border]::BackgroundProperty) -eq [System.Windows.DependencyProperty]::UnsetValue) { throw 'mode card not highlighted' }
+        }
+        & $step 'health tabs, verdicts and repair steps' {
+            Show-Page 'health'
+            foreach ($k in @($script:healthTabs.Keys)) {
+                $ctl[$script:healthTabs[$k][0]].IsChecked = $true; $win.UpdateLayout()
+                foreach ($j in @($script:healthTabs.Keys)) { $want = if ($j -eq $k) { 'Visible' } else { 'Collapsed' }; if ($ctl[$script:healthTabs[$j][1]].Visibility -ne $want) { throw "tab ${k}: $j is not $want" } }
+                if ($script:healthTab -ne $k) { throw "current tab is $($script:healthTab), not $k" }
+                & $snap $ctl.PageHealth ('health-' + $k)
+            }
+            if ($ctl.HealthVerdicts.Items.Count -lt 1) { throw 'no verdict shown' }
+            $L.Add(('  verdicts: ' + (@($ctl.HealthVerdicts.Items | ForEach-Object { $_.Title }) -join ' | ')))
+            if ($ctl.FixGroups.Items.Count -lt 8) { throw ('only {0} problem groups' -f $ctl.FixGroups.Items.Count) }
+            # 只看的步骤直接运行（自测里只记下来，不开窗口）；会改动的先确认（自测里当作点了取消，所以不会运行）
+            $script:uiFixRuns.Clear(); $n0 = $script:uiSheets.Count; $undo0 = Get-Setting 'PowerFixUndo' ''; $fs0 = Get-FastStartup
+            foreach ($id in 'sfccheck', 'wureset', 'netreset', 'chkfix', 'sfcrepair', 'diskpower', 'faststartup') { Invoke-FixStep $id }
+            if (-not $script:uiFixRuns.Contains('sfccheck')) { throw 'a check step did not run' }
+            foreach ($id in 'wureset', 'netreset', 'chkfix', 'sfcrepair') { if ($script:uiFixRuns.Contains($id)) { throw "$id ran without confirmation" } }
+            if ($script:uiSheets.Count -lt $n0 + 5) { throw ('changing steps did not all ask first ({0} sheets)' -f ($script:uiSheets.Count - $n0)) }
+            if ((Get-Setting 'PowerFixUndo' '') -ne $undo0 -or (Get-FastStartup) -ne $fs0) { throw 'power settings changed without confirmation' }
+            # 列表里的按钮点下去走同一套
+            Select-HealthTab 'fix'; $win.UpdateLayout(); $script:uiFixRuns.Clear()
+            $q = New-Object System.Collections.Queue; $q.Enqueue($ctl.FixGroups); $hit = $null
+            while ($q.Count -gt 0 -and -not $hit) { $v = $q.Dequeue(); if ($v -is [System.Windows.Controls.Button] -and [string]$v.Tag -eq 'timecheck') { $hit = $v; break }; for ($i = 0; $i -lt [System.Windows.Media.VisualTreeHelper]::GetChildrenCount($v); $i++) { $q.Enqueue([System.Windows.Media.VisualTreeHelper]::GetChild($v, $i)) } }
+            if (-not $hit) { throw 'repair button not found in the list' }
+            & $click $hit
+            if (-not $script:uiFixRuns.Contains('timecheck')) { throw 'clicking a repair button did nothing' }
+            # 报告文字
+            $rep = Get-HealthReportText $script:healthData
+            if ($rep.Length -lt 200 -or $rep -notmatch [regex]::Escape((T '诊断结论'))) { throw 'report text too short' }
+            Select-HealthTab 'hw'
         }
         & $step 'similar photos and keep rules' {
             if (-not ('PhotoHash' -as [type])) { throw 'PhotoHash did not compile' }

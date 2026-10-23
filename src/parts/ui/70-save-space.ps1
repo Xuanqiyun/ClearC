@@ -14,6 +14,8 @@ function Load-Health {
         if (-not $r) { $ctl.HealthNote.Text = (T '没能读取：') + $err; return }
         $script:healthData = $r
         Show-Health $r
+        Show-Verdicts $r
+        Show-Fixes $r.Power
     }
     if (-not $ok) { $ctl.BtnHealthRefresh.IsEnabled = $true }
 }
@@ -24,7 +26,9 @@ function New-Chip([string]$text, $tier) { $c = New-Object HealthChip; $c.Text = 
 function New-HealthCard([string]$title, [string]$sub, $tier) { $c = New-Object HealthCard; $c.Title = $title; $c.Sub = $sub; $c.Stripe = $tier[0]; $c.BarBrush = $tier[0]; return $c }
 function Tier-Worst($a, $b) { $rank = @{ ($script:hcGrey[0]) = 0; ($script:hcGreen[0]) = 1; ($script:hcBlue[0]) = 1; ($script:hcAmber[0]) = 2; ($script:hcRed[0]) = 3 }; if ($rank[$b[0]] -gt $rank[$a[0]]) { $b } else { $a } }
 function Show-Health($r) {
-    $ctl.HealthNote.Text = (T "读取于 {0:HH:mm}，用了 {1:N0} 秒。只看不改。") -f $r.At, $r.Secs
+    $ctl.HealthNote.Text = (T "读取于 {0:HH:mm}，用了 {1:N0} 秒。读取只看不改；修复的按钮点了会先说明要改什么。") -f $r.At, $r.Secs
+    $bad = @($r.Verdicts | Where-Object { $_.Level -eq 'red' })
+    if ($bad.Count -gt 0 -and $ctl.HTabCrash.Visibility -eq 'Visible') { $ctl.HealthNote.Text += ' ' + ((T '发现 {0} 个要注意的问题：「{1}」，详情和修法在「蓝屏和崩溃」里。') -f $bad.Count, ((@($bad | ForEach-Object { $_.Title })) -join (T '」「'))) }
     $cards = New-Object 'System.Collections.ObjectModel.ObservableCollection[HealthCard]'
     # CPU
     $c = $r.Cpu
@@ -103,7 +107,9 @@ function Show-Health($r) {
     # Windows
     $w = $r.Win
     $tier = if ($w.BadDevices.Count -gt 0) { $script:hcAmber } else { $script:hcGreen }
-    $card = New-HealthCard 'Windows' ((T "版本 {0}") -f $w.Build) $tier
+    $card = New-HealthCard 'Windows' $(if ($w.Release) { (T "{0} {1}（{2}.{3}）") -f $w.Product, $w.Release, $w.BuildNo, $w.Ubr } else { (T "版本 {0}") -f $w.Build }) $tier
+    if ($w.BuildNo -gt 0 -and $w.BuildNo -lt 19045 -and [string]$w.Product -notmatch 'Server|LTSC|LTSB') { $card.Chips.Add((New-Chip (T '版本太旧') $script:hcAmber)); $tier = Tier-Worst $tier $script:hcAmber }
+    if ($r.Clock -and $r.Clock.Wrong) { $card.Chips.Add((New-Chip (T '时间可能不准') $script:hcAmber)); $card.Lines.Add(((T '有系统文件的修改时间比现在还晚 {0} 天：时钟被往回调过，或者主板电池没电了') -f $r.Clock.AheadDays)); $tier = Tier-Worst $tier $script:hcAmber }
     if ($w.Uptime) { $card.Chips.Add((New-Chip ((T "开机 {0}") -f (FmtSpan $w.Uptime)) $(if ($w.Uptime.TotalDays -ge 14) { $script:hcAmber } else { $script:hcBlue }))) }
     if ($w.PendingReboot) { $card.Chips.Add((New-Chip (T '等待重启') $script:hcAmber)); $tier = Tier-Worst $tier $script:hcAmber }
     if ($w.LastUpdate) { $card.Chips.Add((New-Chip ((T "更新 {0:yyyy-MM-dd}") -f $w.LastUpdate) $(if (((Get-Date) - $w.LastUpdate).TotalDays -gt 60) { $script:hcAmber } else { $script:hcGreen }))) }
@@ -131,9 +137,13 @@ function Show-Health($r) {
         $row = New-Object DumpRow
         $row.When = '{0:yyyy-MM-dd HH:mm}' -f $d.Time; $row.File = $d.File
         $row.Code = if ($d.Ok) { ('0x{0:X} {1}' -f $d.Code, $d.CodeName).Trim() } else { (T '没解析出来') }
-        $row.Suspect = if ($d.Suspect) { (T "可能是 {0}") -f $d.Suspect } else { '' }
-        $row.SuspectBrush = '#C0101C'
-        $det = @()
+        $xp = Get-DumpExplain $d
+        $row.Plain = $xp.Plain + (T '。') + $(if ($d.Ok) { (T '常见原因：') + $xp.Causes + (T '。') } else { '' })
+        $row.Suspect = ''; $row.SuspectBrush = '#C0101C'
+        if ($d.Suspect -and $d.SuspectFrom -eq 'address' -and -not $d.SuspectMs) { $row.Suspect = (T "可能是 {0}") -f $d.Suspect }
+        elseif ($d.Suspect) { $row.Suspect = (T "可能和 {0} 有关") -f $d.Suspect; $row.SuspectBrush = '#995700' }
+        elseif ($xp.Kind -eq 'storage') { $row.Suspect = (T '读盘失败'); $row.SuspectBrush = '#C0101C' }
+        $det = @($xp.Detail)
         if ($d.Ok) { $det += (T "参数 {0}") -f ($d.Params -join ' ') }
         if ($d.Stack.Count -gt 0) { $det += (T "栈上的驱动：{0}") -f (($d.Stack | Select-Object -First 6) -join ', ') }
         if ($d.Ok) { $det += (T "出事时加载了 {0} 个驱动") -f $d.Drivers }
@@ -160,22 +170,186 @@ function Show-Health($r) {
     $ctl.HealthWinText.Text = if ($w.ErrorCount -gt 0) { (T "最近 7 天系统日志里有 {0} 条严重或错误事件，来源最多的几个：") -f $w.ErrorCount } else { (T '最近 7 天系统日志里没有严重或错误事件。') }
 }
 $ctl.HealthDumps.AddHandler([System.Windows.Controls.Button]::ClickEvent, [System.Windows.RoutedEventHandler]{ param($s, $e) $b = $e.OriginalSource; if ($b -is [System.Windows.Controls.Button] -and $b.Tag -is [DumpRow]) { Open-Location $b.Tag.File } })
-# SFC / DISM：检查只看不改；修复会改系统文件，先确认。都在终端窗口里跑，过程看得见
-function Start-SystemFileTool([bool]$repair) {
-    $cmd = if ($repair) { 'echo === sfc /scannow === && sfc /scannow && echo === DISM /RestoreHealth === && DISM /Online /Cleanup-Image /RestoreHealth' }
-           else { 'echo === sfc /verifyonly === && sfc /verifyonly && echo === DISM /ScanHealth === && DISM /Online /Cleanup-Image /ScanHealth' }
-    if ($repair) {
-        $ans = Show-Sheet -Kind warn -Title (T '修复系统文件？') -Text (T "会运行 sfc /scannow 和 DISM /RestoreHealth：把损坏的系统文件换成正常的副本。这会改动系统文件（只动 Windows 自己的文件，不碰你的资料），DISM 可能要联网下载，一共要十几分钟到半小时。`n`n先用「检查系统文件（只看）」看一眼有没有问题，再决定要不要修复。") -Buttons @((T '取消'), (T '修复')) -Primary (T '修复') -Cancel (T '取消')
-        if ($ans -ne (T '修复')) { return }
-    }
-    try {
-        Start-Process -FilePath "$env:SystemRoot\System32\cmd.exe" -ArgumentList ('/k ' + $cmd)
-        OpLog '系统设置' $(if ($repair) { (T '修复系统文件（sfc /scannow、DISM /RestoreHealth）') } else { (T '检查系统文件（sfc /verifyonly、DISM /ScanHealth）') }) '' $cmd
-        UI-Log ((T "已在终端里开始：{0}") -f $cmd)
-    } catch { Show-Sheet -Kind warn -Title (T '没能打开终端') -Text $_.Exception.Message | Out-Null }
+# ---------- 选项卡：点哪一项只显示哪一项 ----------
+$script:healthTabs = [ordered]@{ hw = @('HTabHw', 'HealthViewHw'); boot = @('HTabBoot', 'HealthViewBoot'); crash = @('HTabCrash', 'HealthViewCrash'); fix = @('HTabFix', 'HealthViewFix'); mon = @('HTabMon', 'HealthViewMon'); events = @('HTabEvents', 'HealthViewEvents') }
+$script:healthTab = Get-Setting 'HealthTab' 'hw'; $script:htabQuiet = $false
+function Select-HealthTab([string]$k) {
+    if (-not $script:healthTabs.Contains($k) -or $ctl[$script:healthTabs[$k][0]].Visibility -ne 'Visible') { $k = 'hw' }
+    foreach ($t in $script:healthTabs.Keys) { $ctl[$script:healthTabs[$t][1]].Visibility = $(if ($t -eq $k) { 'Visible' } else { 'Collapsed' }) }
+    $rb = $ctl[$script:healthTabs[$k][0]]
+    if (-not $rb.IsChecked) { $script:htabQuiet = $true; try { $rb.IsChecked = $true } finally { $script:htabQuiet = $false } }
+    $script:healthTab = $k
 }
+foreach ($t in $script:healthTabs.Keys) {
+    $rb = $ctl[$script:healthTabs[$t][0]]; $rb.Tag = $t
+    $rb.Add_Checked({ if ($script:htabQuiet) { return }; Select-HealthTab ([string]$this.Tag); Set-Setting 'HealthTab' $script:healthTab })
+}
+# ---------- 诊断结论和常见问题修复 ----------
+$script:fixCat = $null
+function Get-FixCat { if (-not $script:fixCat) { $script:fixCat = Get-FixCatalog }; return $script:fixCat }
+# 一步修复在界面上的样子：标签写明只看 / 会改动 / 要重启；硬盘省电、快速启动按现在的状态换说法
+function New-FixStepRow([string]$id, $st) {
+    $s = (Get-FixCat).Steps[$id]
+    $row = New-Object FixStepRow; $row.Id = $id; $row.Name = $s.Name; $row.Desc = $s.Desc; $row.Enabled = $true
+    $tier = $script:hcGrey; $tag = ''
+    switch ($s.Kind) {
+        'check' { $tag = (T '只看'); $tier = $script:hcGreen }
+        'fix' { if ($s.Reboot) { $tag = (T '要重启'); $tier = $script:hcRed } elseif ($s.Harmless) { $tag = (T '马上生效'); $tier = $script:hcBlue } else { $tag = (T '会改动'); $tier = $script:hcAmber } }
+        'open' { $tag = (T '打开工具') }
+        'go' { $tag = (T '跳转') }
+        'special' { $tag = (T '可恢复'); $tier = $script:hcAmber }
+    }
+    switch ($id) {
+        'diagpack' { $tag = (T '只读'); $tier = $script:hcGreen }
+        'diskpowerundo' { $tag = (T '恢复'); $tier = $script:hcBlue; $row.Enabled = [bool]($st -and $st.DiskFix); if (-not $row.Enabled) { $row.Desc = $s.Desc + (T '（现在没改过，不用恢复）') } }
+        'diskpower' { if ($st -and $st.DiskFix) { $row.Name = (T '已关闭硬盘省电'); $row.Enabled = $false; $tag = (T '已改') } }
+        'faststartup' {
+            if ($st -and $st.FastStartup -eq 'off') { $row.Name = (T '打开快速启动…'); $row.Desc = (T '快速启动现在是关着的。打开后「关机」变成半休眠，开机快几秒；关机变重启、唤醒失败的问题可能会回来') }
+            elseif ($st -and $st.FastStartup -eq 'na') { $row.Name = (T '没有快速启动'); $row.Enabled = $false; $row.Desc = (T '休眠关着，所以没有快速启动，不用管'); $tag = (T '不用改'); $tier = $script:hcGrey }
+        }
+    }
+    $row.Tag = $tag; $row.TagFg = $tier[0]; $row.TagBg = $tier[1]
+    return $row
+}
+function New-FixBtn([string]$id, $st) {
+    if (-not (Get-FixCat).Steps.Contains($id)) { return $null }
+    $x = New-FixStepRow $id $st
+    $b = New-Object FixBtn; $b.Id = $id; $b.Name = $x.Name; $b.Tip = $x.Desc; $b.Enabled = $x.Enabled
+    return $b
+}
+function Show-Fixes($st) {
+    $c = Get-FixCat; $m = Get-Mode
+    $col = New-Object 'System.Collections.ObjectModel.ObservableCollection[FixGroupRow]'
+    foreach ($p in $c.Problems) {
+        $g = New-Object FixGroupRow; $g.Id = $p.Id; $g.Title = $p.Title; $g.Desc = $p.Desc
+        foreach ($id in $p.Steps) {
+            $s = $c.Steps[$id]; if (-not $s) { continue }
+            $show = [int]$s.Lvl -le $m
+            if ($id -eq 'diskpowerundo') { $show = ($st -and $st.DiskFix) -or $m -ge [int]$c.Steps['diskpower'].Lvl }   # 改过了就一直能恢复，不管什么模式
+            if ($show) { $g.Steps.Add((New-FixStepRow $id $st)) }
+        }
+        if ($g.Steps.Count -gt 0) { $col.Add($g) }
+    }
+    $ctl.FixGroups.ItemsSource = $col
+}
+function Show-Verdicts($r) {
+    $col = New-Object 'System.Collections.ObjectModel.ObservableCollection[VerdictRow]'
+    $rec = New-Object 'System.Collections.ObjectModel.ObservableCollection[FixBtn]'; $seen = @{}
+    foreach ($v in @($r.Verdicts)) {
+        $row = New-Object VerdictRow; $row.Title = $v.Title; $row.Body = $v.Body
+        $tier = switch ($v.Level) { 'red' { $script:hcRed } 'amber' { $script:hcAmber } 'green' { $script:hcGreen } default { $script:hcBlue } }
+        $row.Fg = $tier[0]; $row.Bg = $tier[1]
+        foreach ($id in @($v.Fixes)) {
+            $b = New-FixBtn $id $r.Power; if (-not $b) { continue }
+            $row.Fixes.Add($b)
+            if ($v.Id -ne 'none' -and -not $seen.ContainsKey($id)) { $seen[$id] = $true; $rec.Add((New-FixBtn $id $r.Power)) }
+        }
+        $row.HasFixes = $row.Fixes.Count -gt 0
+        $col.Add($row)
+    }
+    $ctl.HealthVerdicts.ItemsSource = $col
+    $ctl.FixRec.ItemsSource = $rec
+    $ctl.FixRecBox.Visibility = $(if ($rec.Count -gt 0) { 'Visible' } else { 'Collapsed' })
+}
+# 改完硬盘省电、快速启动后重新读一下状态，按钮跟着变
+function Refresh-FixState {
+    $st = Get-PowerFixState
+    if ($script:healthData) { $script:healthData.Power = $st; Show-Verdicts $script:healthData }
+    Show-Fixes $st
+}
+$script:uiFixRuns = New-Object System.Collections.Generic.List[string]
+# 运行一步修复。会改动的先确认（界面自测时 Show-Sheet 当作点了取消）；命令都在看得见的终端窗口里跑
+function Invoke-FixStep([string]$id) {
+    $c = Get-FixCatalog; if (-not $c.Steps.Contains($id)) { return }   # 每次现取：命令里的时间戳（改名留底用）要是现在的
+    $s = $c.Steps[$id]; $name = ([string]$s.Name).TrimEnd('…')
+    if ($s.Kind -eq 'go') {
+        switch ($s.Go) { 'startup' { Show-Page 'apps'; if ($ctl.AppsViewStartup.Visibility -eq 'Visible') { $ctl.AppsViewStartup.IsChecked = $true } } default { Select-HealthTab $s.Go } }
+        return
+    }
+    if ($s.Kind -eq 'special') {
+        switch ($id) {
+            'diagpack' { Start-DiagPack }
+            'diskpower' {
+                $ans = Show-Sheet -Kind warn -Title (T '关闭硬盘省电？') -Text $s.Confirm -Buttons @((T '取消'), (T '关闭省电')) -Primary (T '关闭省电') -Cancel (T '取消')
+                if ($ans -ne (T '关闭省电')) { return }
+                $res = Set-DiskPowerFix $true
+                if ($res.Ok) { Show-Sheet -Kind done -Title (T '已关闭硬盘省电') -Text ((T "改了：{0}。马上生效，不用重启。想改回去，点「恢复硬盘省电」。") -f ($res.Names -join (T '、'))) | Out-Null }
+                else { Show-Sheet -Kind warn -Title (T '没有改') -Text $res.Why | Out-Null }
+                Refresh-FixState
+            }
+            'diskpowerundo' {
+                $res = Set-DiskPowerFix $false
+                if ($res.Ok) { Show-Sheet -Kind done -Title (T '已恢复硬盘省电') -Text (T '三项设置都改回了原来的值。') | Out-Null } else { Show-Sheet -Kind warn -Title (T '没有恢复') -Text $res.Why | Out-Null }
+                Refresh-FixState
+            }
+            'faststartup' {
+                $cur = Get-FastStartup
+                if ($cur -eq 'na') { return }
+                if ($cur -eq 'on') {
+                    $ans = Show-Sheet -Kind warn -Title (T '关闭快速启动？') -Text $s.Confirm -Buttons @((T '取消'), (T '关闭快速启动')) -Primary (T '关闭快速启动') -Cancel (T '取消')
+                    if ($ans -ne (T '关闭快速启动')) { return }
+                } else {
+                    $ans = Show-Sheet -Title (T '打开快速启动？') -Text (T '会重新打开快速启动：「关机」变成半休眠，下次开机快几秒。') -Buttons @((T '取消'), (T '打开')) -Primary (T '打开') -Cancel (T '取消')
+                    if ($ans -ne (T '打开')) { return }
+                }
+                try { Set-FastStartup ($cur -ne 'on'); UI-Log $(if ($cur -eq 'on') { (T '已关闭快速启动') } else { (T '已打开快速启动') }) } catch { Show-Sheet -Kind warn -Title (T '没能改') -Text $_.Exception.Message | Out-Null }
+                Refresh-FixState
+            }
+        }
+        return
+    }
+    if ($s.Kind -eq 'fix' -and -not $s.Harmless) {
+        $ans = Show-Sheet -Kind warn -Title ((T '{0}？') -f $name) -Text $(if ($s.Confirm) { $s.Confirm } else { $s.Desc }) -Buttons @((T '取消'), (T '开始')) -Primary (T '开始') -Cancel (T '取消')
+        if ($ans -ne (T '开始')) { return }
+    }
+    if ($script:uiTest) { $script:uiFixRuns.Add($id); return }   # 界面自测：不真的运行
+    try {
+        if ($s.Cmd) { Start-Process -FilePath "$env:SystemRoot\System32\cmd.exe" -ArgumentList ('/k title ClearC - {0} & {1} & echo. & echo {2}' -f $name, $s.Cmd, (T '运行完了，可以关掉这个窗口。')) }
+        elseif ($s.Uri) { Start-Process $s.Uri }
+        elseif ($s.Folder) { Open-Location $s.Folder; return }
+        elseif ($s.Exe -and $s.Args) { Start-Process -FilePath $s.Exe -ArgumentList $s.Args }
+        elseif ($s.Exe) { Start-Process -FilePath $s.Exe }
+        if ($s.Kind -in 'fix', 'check') { OpLog '系统设置' $name '' $(if ($s.Cmd) { $s.Cmd } else { $s.Exe }) }
+        UI-Log ((T "已打开：{0}") -f $name)
+    } catch { Show-Sheet -Kind warn -Title ((T '没能打开：{0}') -f $name) -Text $_.Exception.Message | Out-Null }
+}
+foreach ($ic in @($ctl.HealthVerdicts, $ctl.FixRec, $ctl.FixGroups)) {
+    $ic.AddHandler([System.Windows.Controls.Button]::ClickEvent, [System.Windows.RoutedEventHandler]{ param($s, $e) $b = $e.OriginalSource; if ($b -is [System.Windows.Controls.Button] -and $b.Tag -is [string] -and $b.Tag) { Invoke-FixStep ([string]$b.Tag) } })
+}
+# 原来的两个按钮：和「常见问题修复」里的是同一步
+function Start-SystemFileTool([bool]$repair) { Invoke-FixStep $(if ($repair) { 'sfcrepair' } else { 'sfccheck' }) }
 $ctl.BtnSfcCheck.Add_Click({ Start-SystemFileTool $false })
 $ctl.BtnSfcRepair.Add_Click({ Start-SystemFileTool $true })
+# 诊断包：在后台打包，存到你选的位置（默认桌面），不覆盖已有的文件
+function Start-DiagPack {
+    if (-not $script:healthData) { Show-Sheet -Kind warn -Title (T '还在读取') -Text (T '等系统健康读完再导出。') | Out-Null; return }
+    if ($script:uiTest) { $script:uiFixRuns.Add('diagpack'); return }
+    $dlg = New-Object Microsoft.Win32.SaveFileDialog
+    $dlg.Title = (T '诊断包保存到'); $dlg.Filter = (T 'zip 压缩包') + ' (*.zip)|*.zip'; $dlg.OverwritePrompt = $false
+    $dlg.FileName = ('ClearC-diag-{0}-{1:yyyyMMdd-HHmm}.zip' -f $env:COMPUTERNAME, (Get-Date)); $dlg.InitialDirectory = [Environment]::GetFolderPath('Desktop')
+    if (-not $dlg.ShowDialog($win)) { return }
+    $zip = $dlg.FileName
+    if (Test-Path -LiteralPath $zip) { Show-Sheet -Kind warn -Title (T '已经有这个文件') -Text (T '换一个文件名再导出：不会覆盖已有的文件。') | Out-Null; return }
+    $ctl.BtnDiagPack.IsEnabled = $false
+    $ctl.HealthNote.Text = (T '正在导出诊断包，要半分钟到几分钟（systeminfo 比较慢）…')
+    $ok = Start-BgEngine 'diagpack' 'Export-DiagPack $arg.Zip $arg.Health' @{ Zip = $zip; Health = $script:healthData } {
+        param($res, $err)
+        $ctl.BtnDiagPack.IsEnabled = $true
+        if ($res -and $res.Ok) {
+            $ctl.HealthNote.Text = (T "诊断包已导出：{0}（{1} 个文件，{2}）") -f $res.Path, $res.Count, (Fmt $res.Bytes)
+            OpLog '系统设置' (T '导出诊断包') $res.Path ((T '{0} 个文件，{1}') -f $res.Count, (Fmt $res.Bytes))
+            $ans = Show-Sheet -Kind done -Title (T '诊断包已导出') -Text ((T "{0}`n`n{1} 个文件，{2}。里面有蓝屏转储、日志和系统信息，可能包含电脑名、用户名、装过的软件和内存片段，只发给你信任的人。") -f $res.Path, $res.Count, (Fmt $res.Bytes)) -Buttons @((T '好'), (T '打开所在位置')) -Primary (T '打开所在位置') -Cancel (T '好')
+            if ($ans -eq (T '打开所在位置')) { Open-Location $res.Path }
+        } else { $ctl.HealthNote.Text = (T '没能导出诊断包'); Show-Sheet -Kind warn -Title (T '没能导出诊断包') -Text $(if ($res -and $res.Error) { $res.Error } else { [string]$err }) | Out-Null }
+    }
+    if (-not $ok) { $ctl.BtnDiagPack.IsEnabled = $true }
+}
+$ctl.BtnDiagPack.Add_Click({ Start-DiagPack })
+$ctl.BtnCopyReport.Add_Click({
+    if (-not $script:healthData) { return }
+    try { [System.Windows.Clipboard]::SetText((Get-HealthReportText $script:healthData)); UI-Log (T '诊断报告已复制，可以直接粘贴') ; $ctl.HealthNote.Text = (T '诊断报告已复制，可以直接粘贴给别人。') } catch { Show-Sheet -Kind warn -Title (T '没能复制') -Text $_.Exception.Message | Out-Null }
+})
+Show-Fixes $null
 # 活动监控：后台线程每 3 秒采一次样，把结果放进共享表；界面每秒看一眼
 $script:monShared = $null; $script:monSeen = -1; $script:monTimer = $null
 function Start-Monitor {

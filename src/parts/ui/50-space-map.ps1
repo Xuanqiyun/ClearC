@@ -108,7 +108,7 @@ function Show-DiskHealth($list) {
         }
         if ($h.Ok -and $h.Hours -gt 0) { $c.HoursText = (T "通电 {0:N0} 小时") -f $h.Hours }
         $c.Stripe = if (-not $h.Ok) { '#C7C7CC' } elseif ($worst -eq 2) { '#FF3B30' } elseif ($worst -eq 1) { '#FF9F0A' } else { '#34C759' }
-        $tip = @((T '点一下选这块盘。'))
+        $tip = @((T '点一下扫描这块盘，下面显示它的详细情况。'))
         if ($h.Ok) {
             $tip += (T '温度：45 °C 以下正常，60 °C 以上偏高，长期高温会缩短固态硬盘寿命。')
             $tip += (T '磨损：固态硬盘已用掉的写入寿命，到 100% 厂商就不保了；10% 以下很新，50% 以上要开始考虑备份。')
@@ -119,17 +119,38 @@ function Show-DiskHealth($list) {
         $col.Add($c)
     }
     $ctl.MapHealth.ItemsSource = $col
+    Update-MapCardSel
     $ctl.MapHealthNote.Visibility = if ($col.Count -gt 0) { 'Collapsed' } else { 'Visible' }
     if ($col.Count -eq 0) { $ctl.MapHealthNote.Text = (T '读不到磁盘的健康信息（型号、磨损、温度）') }
 }
-# 点卡片 = 选这块盘
+# 选中的盘：卡片描边跟着下拉框走
+function Update-MapCardSel {
+    $sel = if ($ctl.MapDrive.SelectedItem) { ([string]$ctl.MapDrive.SelectedItem.Tag).TrimEnd('\') } else { '' }
+    $any = $false
+    foreach ($c in @($ctl.MapHealth.ItemsSource)) { if (-not $c) { continue }; $on = $sel -and ([string]$c.Letter).TrimEnd('\') -ieq $sel; if ($c.Sel -ne $on) { $c.Sel = $on; $any = $true } }
+    if ($any) { try { $ctl.MapHealth.Items.Refresh() } catch {} }
+}
+$ctl.MapDrive.Add_SelectionChanged({ Update-MapCardSel })
+# 点卡片 = 选这块盘并扫描它（已经显示的就是这块盘时不重扫；正在忙别的就只选上）
+function Select-MapDriveCard([string]$letter, [bool]$scan = $true) {
+    $hit = $null
+    foreach ($it in $ctl.MapDrive.Items) { if (([string]$it.Tag).StartsWith($letter, [StringComparison]::OrdinalIgnoreCase)) { $hit = $it } }
+    if (-not $hit) { return }
+    $ctl.MapDrive.SelectedItem = $hit
+    if (-not $scan) { return }
+    $root = [string]$hit.Tag
+    $shown = if ($script:mapRoot) { try { $script:mapRoot.FullPath() } catch { '' } } else { '' }
+    if ($shown -and $shown.TrimEnd('\') -ieq $root.TrimEnd('\')) { UI-Log ((T "空间地图：下面已经是 {0} 的结果；要重新扫描点「扫描」") -f $root.TrimEnd('\')); return }
+    if ($script:worker) { UI-Log (T '空间地图：正在忙别的，等它做完再点「扫描」'); return }
+    if ($script:uiTest) { $script:uiOpened.Add('scan:' + $root); return }
+    Start-MapScan $root
+}
 $ctl.MapHealth.AddHandler([System.Windows.UIElement]::MouseLeftButtonUpEvent, [System.Windows.Input.MouseButtonEventHandler]{
     param($s, $e)
     $el = $e.OriginalSource
     while ($el -and -not ($el -is [System.Windows.Controls.Border] -and $el.Tag -is [DiskCard])) { $el = [System.Windows.Media.VisualTreeHelper]::GetParent($el) }
     if (-not $el) { return }
-    $letter = [string]$el.Tag.Letter
-    foreach ($it in $ctl.MapDrive.Items) { if (([string]$it.Tag).StartsWith($letter, [StringComparison]::OrdinalIgnoreCase)) { $ctl.MapDrive.SelectedItem = $it } }
+    Select-MapDriveCard ([string]$el.Tag.Letter) $true
 })
 function Start-MapScan([string]$root) {
     if ($script:worker -or -not $root) { return }

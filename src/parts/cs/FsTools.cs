@@ -207,7 +207,7 @@ public static class FsTools {
 
 // ==================== 蓝屏转储（C:\Windows\Minidump\*.dmp）：不用调试器也能读出错误码、参数、出事时加载的驱动和栈上出现的驱动 ====================
 // 64 位内核小转储：开头是 DUMP_HEADER64（0x2000 字节），接着 TRIAGE_DUMP64，里面记着驱动列表、异常记录和调用栈在文件里的位置
-public class DumpDriver { public string Name; public ulong Base; public uint Size; public bool Hit; }
+public class DumpDriver { public string Name, Path; public ulong Base; public uint Size; public bool Hit; }   // Name 是文件名，Path 是转储里记的完整路径
 public class DumpInfo {
     public string File, Error = "";
     public bool Ok, Is64;
@@ -217,6 +217,11 @@ public class DumpInfo {
     public List<DumpDriver> Drivers = new List<DumpDriver>();
     public List<string> StackDrivers = new List<string>();   // 调用栈上出现的驱动（按出现顺序，去重），ntoskrnl 排除
     public string Suspect = "";                             // 最可能的：异常地址或出事参数落在哪个驱动里；没有就取栈上第一个非系统驱动
+    public string SuspectFrom = "";                         // address = 出事地址落在它里面（证据强）；stack = 只是栈上第一个（证据弱）
+    public uint Status;                                     // 读写失败类（0x7A、0x77）和异常类（0x1E、0x3B…）里记着的状态码 / 异常码
+    public string PageOwner = "";                           // 0x7A：没读进来的那一页属于哪个驱动（它是受害者，不是原因）
+    public string Process = "";                             // 出事时的当前进程（EPROCESS.ImageFileName）
+    public bool ProcessIsParam1;                            // 0xEF：当前进程就是参数 1 里那个死掉的关键进程
     public static DumpInfo Parse(string path) { return Parse(path, 4 * 1024 * 1024); }
     public static DumpInfo Parse(string path, int maxBytes) {
         DumpInfo d = new DumpInfo(); d.File = path;
@@ -244,9 +249,10 @@ public class DumpInfo {
                 if (b.Length >= tri + 0x50) {
                     d.ServicePackBuild = BitConverter.ToUInt32(b, tri);
                     uint exOff = BitConverter.ToUInt32(b, tri + 0x10), csOff = BitConverter.ToUInt32(b, tri + 0x28), csSize = BitConverter.ToUInt32(b, tri + 0x2C);
+                    uint prOff = BitConverter.ToUInt32(b, tri + 0x20), thOff = BitConverter.ToUInt32(b, tri + 0x24);
                     uint drvOff = BitConverter.ToUInt32(b, tri + 0x30), drvCount = BitConverter.ToUInt32(b, tri + 0x34);
                     if (exOff > 0 && exOff + 0x18 <= b.Length) { d.ExceptionCode = BitConverter.ToUInt32(b, (int)exOff); d.ExceptionAddress = BitConverter.ToUInt64(b, (int)exOff + 0x10); }
-                    const int entry = 0x98;   // DUMP_DRIVER_ENTRY64：名字的位置 + KLDR_DATA_TABLE_ENTRY64
+                    const int entry = 0x90;   // DUMP_DRIVER_ENTRY64：名字的位置（4 字节，补齐到 8）+ KLDR_DATA_TABLE_ENTRY64（0x88）
                     for (uint i = 0; i < drvCount && i < 4096; i++) {
                         long o = (long)drvOff + (long)i * entry;
                         if (o + entry > b.Length) break;
@@ -254,7 +260,8 @@ public class DumpInfo {
                         uint nameOff = BitConverter.ToUInt32(b, (int)o);
                         dr.Base = BitConverter.ToUInt64(b, (int)o + 8 + 0x30);
                         dr.Size = BitConverter.ToUInt32(b, (int)o + 8 + 0x40);
-                        dr.Name = ReadString(b, nameOff);
+                        dr.Path = ReadString(b, nameOff);
+                        dr.Name = Leaf(dr.Path);
                         if (dr.Name.Length > 0) d.Drivers.Add(dr);
                     }
                     if (csOff > 0 && csSize > 0 && csOff + csSize <= b.Length) {
@@ -264,6 +271,11 @@ public class DumpInfo {
                             if (hit != null && !IsKernel(hit.Name) && !d.StackDrivers.Contains(hit.Name)) { d.StackDrivers.Add(hit.Name); hit.Hit = true; }
                         }
                     }
+                    if (prOff > 0) d.Process = ImageName(b, prOff);
+                    // KTHREAD.ApcState.Process（0xB8）和 KTHREAD.Process（0x220）：Win10、Win11 x64 一直是这两个位置
+                    if (thOff > 0 && d.Params[0] != 0) {
+                        foreach (int k in new int[] { 0xB8, 0x220 }) if (thOff + k + 8 <= b.Length && BitConverter.ToUInt64(b, (int)thOff + k) == d.Params[0]) d.ProcessIsParam1 = true;
+                    }
                 }
             } else {
                 d.Build = BitConverter.ToUInt32(b, 0x0C);
@@ -271,10 +283,16 @@ public class DumpInfo {
                 for (int i = 0; i < 4; i++) d.Params[i] = BitConverter.ToUInt32(b, 0x2C + i * 4);
                 d.Error = "32-bit dump: only the bug check code is read";
             }
-            // 最可能的驱动：异常地址，或者这类错误码里记着出事地址的那个参数
-            ulong[] addrs = AddrParams(d);
-            foreach (ulong a in addrs) { DumpDriver hit = Find(d, a); if (hit != null && !IsKernel(hit.Name)) { d.Suspect = hit.Name; hit.Hit = true; break; } }
-            if (d.Suspect.Length == 0 && d.StackDrivers.Count > 0) d.Suspect = d.StackDrivers[0];
+            d.Status = StatusParam(d);
+            if (d.BugCheck == 0x7A || d.BugCheck == 0x77) {
+                // 读盘失败：出事地址是「没读进来的那一页」，它属于哪个驱动只说明那个驱动倒霉，原因在硬盘或硬盘的连接上，不点名驱动
+                DumpDriver pg = Find(d, d.Params[3]); if (pg != null) d.PageOwner = pg.Name;
+            } else {
+                // 最可能的驱动：异常地址，或者这类错误码里记着出事地址的那个参数
+                ulong[] addrs = AddrParams(d);
+                foreach (ulong a in addrs) { DumpDriver hit = Find(d, a); if (hit != null && !IsKernel(hit.Name)) { d.Suspect = hit.Name; d.SuspectFrom = "address"; hit.Hit = true; break; } }
+                if (d.Suspect.Length == 0 && d.StackDrivers.Count > 0 && d.BugCheck != 0xEF && d.BugCheck != 0x124) { d.Suspect = d.StackDrivers[0]; d.SuspectFrom = "stack"; }
+            }
             d.Ok = true;
         } catch (Exception e) { d.Error = e.Message; }
         return d;
@@ -284,14 +302,54 @@ public class DumpInfo {
         if (d.ExceptionAddress != 0) a.Add(d.ExceptionAddress);
         switch (d.BugCheck) {
             case 0x0A: case 0xD1: a.Add(d.Params[3]); break;                    // IRQL_NOT_LESS_OR_EQUAL, DRIVER_IRQL…：参数 4 是出事地址
-            case 0x1E: case 0x7E: case 0x8E: case 0x3B: a.Add(d.Params[1]); break;   // 异常类：参数 2 是出事地址
-            case 0x50: case 0xC5: a.Add(d.Params[3]); break;                    // PAGE_FAULT_IN_NONPAGED_AREA：参数 4
-            case 0xC4: a.Add(d.Params[1]); break;
-            case 0x139: a.Add(d.Params[1]); break;
-            case 0xC2: a.Add(d.Params[2]); break;
+            case 0x1E: case 0x7E: case 0x8E: case 0x3B: case 0x1000007E: case 0x1000008E: a.Add(d.Params[1]); break;   // 异常类：参数 2 是出事地址
+            case 0x50: case 0xD5: case 0xD6: a.Add(d.Params[2]); break;        // 页错误类：参数 3 是访问内存的那条指令
+            case 0xC5: a.Add(d.Params[3]); break;                               // DRIVER_CORRUPTED_EXPOOL：参数 4
+            case 0x116: a.Add(d.Params[1]); break;                              // VIDEO_TDR_FAILURE：参数 2 指向出问题的显卡驱动
         }
         return a.ToArray();
     }
+    // 状态码：0x7A 的参数 2；0x77 参数 1 是 0/1/2 时在参数 2，否则就是参数 1；异常类的参数 1 是异常码
+    static uint StatusParam(DumpInfo d) {
+        switch (d.BugCheck) {
+            case 0x7A: return (uint)d.Params[1];
+            case 0x77: return d.Params[0] <= 2 ? (uint)d.Params[1] : (uint)d.Params[0];
+            case 0x1E: case 0x7E: case 0x8E: case 0x3B: case 0x1000007E: case 0x1000008E: return (uint)d.Params[0];
+        }
+        return 0;
+    }
+    static string Leaf(string p) { if (p == null) return ""; int i = p.LastIndexOfAny(new char[] { '\\', '/' }); return i >= 0 ? p.Substring(i + 1) : p; }
+    // EPROCESS.ImageFileName：15 个字节的 ASCII，后面一个字节是 PriorityClass（0–6）。先试各版本已知的位置，再按这个特征找
+    static string ImageName(byte[] b, uint pr) {
+        foreach (int k in new int[] { 0x450, 0x5A8, 0x338, 0x448, 0x2E0 }) { string s = ImageAt(b, pr + (uint)k); if (s.Length > 0) return s; }
+        for (int k = 0x200; k <= 0x800; k += 8) { string s = ImageAt(b, pr + (uint)k); if (s.Length > 0 && (s.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || s == "System" || s == "Registry" || s == "MemCompression")) return s; }
+        return "";
+    }
+    static string ImageAt(byte[] b, uint o) {
+        if (o + 16 > b.Length) return "";
+        int n = 0; while (n < 15 && b[o + n] >= 0x20 && b[o + n] < 0x7F) n++;
+        if (n < 2) return "";
+        for (int i = n; i < 15; i++) if (b[o + i] != 0) return "";
+        if (b[o + 15] > 6) return "";
+        string s = Encoding.ASCII.GetString(b, (int)o, n);
+        foreach (char c in s) if (!(char.IsLetterOrDigit(c) || c == '.' || c == '_' || c == '-' || c == ' ')) return "";
+        return s;
+    }
+    // 常见状态码 / 异常码的名字
+    public static string StatusName(uint s) {
+        switch (s) {
+            case 0xC000000E: return "STATUS_NO_SUCH_DEVICE"; case 0xC000009C: return "STATUS_DEVICE_DATA_ERROR"; case 0xC000009D: return "STATUS_DEVICE_NOT_CONNECTED";
+            case 0xC0000185: return "STATUS_IO_DEVICE_ERROR"; case 0xC000016A: return "STATUS_DISK_OPERATION_FAILED"; case 0xC0000483: return "STATUS_DEVICE_HARDWARE_ERROR";
+            case 0xC00000B5: return "STATUS_IO_TIMEOUT"; case 0xC000009A: return "STATUS_INSUFFICIENT_RESOURCES"; case 0xC0000006: return "STATUS_IN_PAGE_ERROR";
+            case 0xC000003F: return "STATUS_CRC_ERROR"; case 0xC0000102: return "STATUS_FILE_CORRUPT_ERROR"; case 0xC0000221: return "STATUS_IMAGE_CHECKSUM_MISMATCH";
+            case 0xC0000010: return "STATUS_INVALID_DEVICE_REQUEST"; case 0xC0000005: return "STATUS_ACCESS_VIOLATION"; case 0x80000003: return "STATUS_BREAKPOINT";
+            case 0xC0000420: return "STATUS_ASSERTION_FAILURE"; case 0xC0000409: return "STATUS_STACK_BUFFER_OVERRUN"; case 0xC000001D: return "STATUS_ILLEGAL_INSTRUCTION";
+            case 0xC0000096: return "STATUS_PRIVILEGED_INSTRUCTION"; case 0x80000002: return "STATUS_DATATYPE_MISALIGNMENT"; case 0xC0000094: return "STATUS_INTEGER_DIVIDE_BY_ZERO";
+            default: return "";
+        }
+    }
+    // 读盘失败类的状态码：硬盘掉线、坏道、线缆、超时
+    public static bool IsStorageStatus(uint s) { return s == 0xC000000E || s == 0xC000009C || s == 0xC000009D || s == 0xC0000185 || s == 0xC000016A || s == 0xC0000483 || s == 0xC00000B5 || s == 0xC000003F; }
     static bool IsKernel(string n) { n = n.ToLowerInvariant(); return n.StartsWith("ntoskrnl") || n.StartsWith("ntkrnl") || n == "hal.dll" || n.StartsWith("hal") || n == "kd.dll" || n.StartsWith("kdcom") || n == "pshed.dll" || n == "bootvid.dll" || n == "clfs.sys" || n == "ci.dll" || n.StartsWith("mcupdate"); }
     static DumpDriver Find(DumpInfo d, ulong a) {
         if (a == 0) return null;
@@ -350,10 +408,36 @@ public class ProcRow {
 public class DumpRow {
     public string When { get; set; }
     public string Code { get; set; }
+    public string Plain { get; set; }
     public string Suspect { get; set; }
     public string Detail { get; set; }
     public string File { get; set; }
     string _fg; public string SuspectBrush { get { return Theme.F(_fg); } set { _fg = value; } }
 }
 public class NoteRow { public string Head { get; set; } public string Body { get; set; } public string Path { get; set; } public bool HasPath { get; set; } }
+// 诊断结论和「常见问题修复」：按钮的 Tag 是修复步骤的编号
+public class FixBtn { public string Id { get; set; } public string Name { get; set; } public string Tip { get; set; } public bool Enabled { get; set; } }
+public class VerdictRow {
+    public string Title { get; set; }
+    public string Body { get; set; }
+    string _fg, _bg; public string Fg { get { return Theme.F(_fg); } set { _fg = value; } } public string Bg { get { return Theme.B(_bg); } set { _bg = value; } }
+    public List<FixBtn> Fixes { get; set; }
+    public bool HasFixes { get; set; }
+    public VerdictRow() { Fixes = new List<FixBtn>(); }
+}
+public class FixStepRow {
+    public string Id { get; set; }
+    public string Name { get; set; }
+    public string Desc { get; set; }
+    public string Tag { get; set; }
+    public bool Enabled { get; set; }
+    string _f, _b; public string TagFg { get { return Theme.F(_f); } set { _f = value; } } public string TagBg { get { return Theme.B(_b); } set { _b = value; } }
+}
+public class FixGroupRow {
+    public string Id { get; set; }
+    public string Title { get; set; }
+    public string Desc { get; set; }
+    public List<FixStepRow> Steps { get; set; }
+    public FixGroupRow() { Steps = new List<FixStepRow>(); }
+}
 
