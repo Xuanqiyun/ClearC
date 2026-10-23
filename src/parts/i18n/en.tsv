@@ -156,6 +156,120 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+按建议处理…	Fix as suggested…
+会做：	Will do: 
+本工具能做的都已经做过了。剩下的要你自己做，见结论下面「需要你自己做的」。	Everything ClearC can do has been done. The rest is up to you: see "Things to do yourself" under the diagnosis.
+本工具会直接做下面这几件，都能撤销（硬盘省电和快速启动可以在「常见问题修复」里改回来）。	ClearC will do the following right away, and all of it can be undone (disk power saving and Fast Startup can be changed back under "Common fixes").
+做完以后还需要你自己做：	After that, you still need to:
+{0}：按建议处理？	{0}: fix as suggested?
+开始处理	Start
+{0}（马上生效）	{0} (takes effect now)
+{0}（下次关机起生效）	{0} (takes effect from the next shutdown)
+{0}（已在新窗口里打开或运行）	{0} (opened or started in a new window)
+按建议处理	Fix as suggested
+做好了：	Done:
+没做成：	Not done:
+还需要你自己做：	Still up to you:
+改完用几天，再回来点「刷新」看还有没有新的蓝屏。	Use the PC for a few days, then come back and click "Refresh" to see whether new crashes appear.
+处理完了	Finished
+{0} {1}，服务编号 / 序列号 {2}\n\n{3}\n\n链接已经复制。要下载的：BIOS、芯片组驱动、存储驱动（Intel RST）、固态硬盘固件；装的顺序是 BIOS → 芯片组 → 存储驱动 → 固件，每装一样重启一次。这台电脑上不了外网的话，在别的电脑上打开这个链接，下载好用 U 盘拷过来。	{0} {1}, service tag / serial number {2}\n\n{3}\n\nThe link has been copied. Download: BIOS, chipset driver, storage driver (Intel RST) and SSD firmware; install them in that order (BIOS → chipset → storage driver → firmware), restarting after each. If this PC has no internet, open the link on another computer and bring the downloads over on a USB stick.
+厂商驱动下载页	Maker's driver page
+在浏览器里打开	Open in browser
+系统盘：{0}，接口 {1}	System disk: {0}, interface {1}
+✗ 这看起来是 RAID 阵列（几块盘组在一起）：不要改，改了阵列会读不出来	✗ This looks like a RAID array (several disks combined): do not change it, or the array becomes unreadable
+✗ 系统盘没有接在 RAID / RST 控制器上，用不着改	✗ The system disk is not on a RAID / RST controller, so there is nothing to change
+✓ 单块盘，不是 RAID 阵列	✓ A single disk, not a RAID array
+读不到系统盘的接口，改之前自己在 BIOS 里确认是单块盘、没有组 RAID	Could not read the system disk's interface; before changing anything, check in the BIOS that it is a single disk with no RAID array
+✗ BitLocker 开着：先在「控制面板 → BitLocker 驱动器加密」里点「暂停保护」，并准备好恢复密钥，否则改完要输恢复密钥	✗ BitLocker is on: first click "Suspend protection" in "Control Panel → BitLocker Drive Encryption" and have the recovery key ready, or you will be asked for it after the change
+✓ BitLocker 关着	✓ BitLocker is off
+1. 先把重要资料备份到另一块盘。\n2. 以管理员身份打开命令提示符，运行：\n      bcdedit /set {current} safeboot minimal\n3. 重启，开机时进 BIOS（Dell 按 F2），在 System Configuration → SATA/NVMe Operation 里把 RAID On 改成 AHCI/NVMe，保存退出。\n4. Windows 会进安全模式，并自动装上 Windows 自带的 NVMe / AHCI 驱动。\n5. 在安全模式里再以管理员身份运行：\n      bcdedit /deletevalue {current} safeboot\n   然后重启，回到正常模式。\n\n改完开不了机：进 BIOS 把模式改回 RAID On，一切照旧，数据不受影响。之后 Intel RST 的管理软件用不了，这没关系。	1. Back up important files to another disk first.\n2. Open Command Prompt as administrator and run:\n      bcdedit /set {current} safeboot minimal\n3. Restart and enter the BIOS (F2 on Dell). Under System Configuration → SATA/NVMe Operation, change RAID On to AHCI/NVMe, then save and exit.\n4. Windows starts in Safe Mode and installs its own NVMe / AHCI driver by itself.\n5. In Safe Mode, run as administrator:\n      bcdedit /deletevalue {current} safeboot\n   then restart to return to normal mode.\n\nIf Windows will not start after the change, set the BIOS back to RAID On and everything is as before; your data is not affected. The Intel RST management app will no longer work, which does not matter.
+适用：硬盘接在 Intel RST（RAID On）上、只有一块盘，更新 BIOS 和 RST 驱动后还是掉线。改用 Windows 自带的驱动后，就不经过 RST 了。\n\n这台电脑：\n{0}\n\n{1}\n\n本工具不替你改：要进 BIOS，中途出错要你手动改回来。	For: a single disk on Intel RST (RAID On) that still drops out after updating the BIOS and the RST driver. With Windows' own driver, the disk no longer goes through RST.\n\nThis PC:\n{0}\n\n{1}\n\nClearC does not make this change for you: it needs the BIOS, and if something goes wrong you have to change it back by hand.
+按上面的检查结果，这台电脑不要这样改。	Based on the checks above, do not make this change on this PC.
+改用 Windows 自带的硬盘驱动	Switch to Windows' own disk driver
+复制两条命令	Copy both commands
+BIOS 驱动 下载	BIOS driver download
+BIOS {0}（{1:yyyy-MM-dd}）	BIOS {0} ({1:yyyy-MM-dd})
+{0} 驱动 {1}（{2:yyyy-MM-dd}）	{0} driver {1} ({2:yyyy-MM-dd})
+到 Dell 支持网站下载这台电脑的最新 BIOS、Intel Rapid Storage Technology（RST）驱动和固态硬盘固件（下面「厂商驱动下载页」按服务编号 {0} 直达）	Download this PC's latest BIOS, Intel Rapid Storage Technology (RST) driver and SSD firmware from Dell Support ("Maker's driver page" below goes straight there with service tag {0})
+到电脑或主板厂商的网站下载最新的 BIOS、芯片组 / 存储驱动和固态硬盘固件（下面「厂商驱动下载页」）	Download the latest BIOS, chipset / storage driver and SSD firmware from the PC or motherboard maker ("Maker's driver page" below)
+。现在的 {0} 都是好几年前的	. The current {0} are several years old
+。这台电脑上不了外网：在别的电脑上下载，用 U 盘拷过来装	. This PC has no internet: download on another computer and bring the files over on a USB stick
+• 最近 30 天蓝屏 {0} 次：{1}	• {0} blue screens in the last 30 days: {1}
+• 其中 {0} 次读盘失败，状态码 0x{1:X8}：{2}	• {0} of them were failed disk reads, status 0x{1:X8}: {2}
+• {0} 次是系统进程退出{1}：系统进程读不到自己的文件时就会这样	• {0} were a system process stopping{1}: this happens when a system process cannot read its own files
+（{0}）	 ({0})
+• 另有 {0} 次蓝屏连转储文件都没写出来：转储要写在系统盘上，硬盘不见了就写不出来	• {0} more crashes could not even write a dump file: dumps are written to the system disk, which was gone
+• 最近 30 天系统日志里有 {0} 条系统盘的读写或文件系统错误	• {0} read/write or file system errors on the system disk in the System log in the last 30 days
+• 系统盘是 {0}（固件 {1}，接口 {2}）	• The system disk is {0} (firmware {1}, interface {2})
+• 存储驱动：{0}，版本 {1}，驱动日期 {2:yyyy-MM-dd}	• Storage driver: {0}, version {1}, driver date {2:yyyy-MM-dd}
+• BIOS：{0}（{1:yyyy-MM-dd}）	• BIOS: {0} ({1:yyyy-MM-dd})
+• 另外 {0} 条读写重试是 {1}（磁盘 {2}，{3}）的，不是系统盘，和蓝屏无关	• {0} other I/O retries are on {1} (disk {2}, {3}), not the system disk, and unrelated to the crashes
+另一块盘	another disk
+最可能的原因：系统盘在运行中短暂掉线（省电后唤醒失败、存储驱动或 BIOS 太旧、接触不良），或者硬盘本身在坏。硬盘报告的健康状态正常、蓝屏又都是这一类时，多半是前几种，能修好。	Most likely cause: the system disk briefly drops out while running (failing to wake from power saving, an outdated storage driver or BIOS, a loose connection), or the disk itself is failing. When the disk reports itself healthy and the crashes are all of this kind, it is usually one of the first few, which can be fixed.
+先把重要资料备份到另一块硬盘、U 盘或网盘（同一块硬盘上的 D 盘不算备份）	Back up important files to another disk, a USB stick or the cloud first (a D: drive on the same disk is not a backup)
+用 Dell 自带的硬件检测查一次硬盘：重启时按 F12，选 Diagnostics（ePSA）；报硬盘错误就直接换盘	Test the disk with Dell's built-in diagnostics: press F12 while restarting and choose Diagnostics (ePSA); if it reports a disk error, replace the disk
+用厂商自带的硬件检测（开机按 F12 或 F10 进诊断）或者硬盘厂商的工具查一次硬盘	Test the disk with the maker's built-in diagnostics (press F12 or F10 at start-up) or the disk maker's tool
+关机断电后把固态硬盘拔下来重新插紧（M.2 的拧好固定螺丝）；SATA 盘换一根数据线、换个接口	Shut down, unplug the power, and reseat the SSD (tighten the M.2 screw); for a SATA disk, try another cable and port
+以上都做了还掉盘：把 BIOS 里的硬盘模式从 RAID On 改成 AHCI，改用 Windows 自带的驱动（下面「改用 Windows 自带的硬盘驱动」有步骤）；还不行就是硬盘坏了，换一块	If it still drops out after all of that: change the disk mode in the BIOS from RAID On to AHCI so Windows' own driver is used (steps under "Switch to Windows' own disk driver" below); if that does not help either, the disk is failing: replace it
+以上都做了还掉盘，就是硬盘本身坏了：换一块，把备份拷回去	If it still drops out after all of that, the disk itself is failing: replace it and copy the backup back
+系统盘在运行中掉线（最可能）	The system disk drops out while running (most likely)
+改完用几天，看还会不会蓝屏；还蓝屏就把诊断包发给懂的人看	Use the PC for a few days to see whether crashes continue; if they do, send the diagnostics package to someone who can help
+到显卡厂商官网下载最新驱动，安装时选「清洁安装」	Download the latest driver from the graphics card maker and choose a "clean install"
+看看「硬件」里显卡占用和散热，清一下显卡风扇的灰	Check graphics load and cooling under "Hardware", and clean the dust off the graphics card fan
+超频过的先恢复默认频率	If it is overclocked, go back to default clocks
+用 Windows 内存诊断查一次（重启后自动检测，大约 15 分钟），报错就换内存条	Run Windows Memory Diagnostic once (it checks after a restart, about 15 minutes); replace the memory if it reports errors
+在 BIOS 里开过 XMP / 超频的先关掉	Turn off XMP / overclocking in the BIOS if enabled
+台式机可以把内存条拔下来擦一下金手指重新插，或者一根一根地试	On a desktop, reseat the memory sticks after cleaning the contacts, or test them one at a time
+先恢复 BIOS 默认设置（取消超频和 XMP）	Restore BIOS defaults first (no overclocking or XMP)
+看「硬件」里 CPU 温度，清一下散热器的灰	Check the CPU temperature under "Hardware" and clean the dust out of the cooler
+台式机检查电源功率是否够	On a desktop, check that the power supply is big enough
+到电脑或主板厂商网站更新 BIOS	Update the BIOS from the PC or motherboard maker's website
+更新芯片组、无线网卡、显卡驱动	Update chipset, Wi-Fi and graphics drivers
+最近 30 天有 {0} 次意外关机或重启，其中 {1} 次找不到蓝屏记录。	{0} unexpected shutdowns or restarts in the last 30 days, {1} of them with no crash record.
+这些多半是直接断电、死机后按了电源键，或者蓝屏时没能写出记录。	These are usually power cuts, holding the power button after a freeze, or crashes that could not write a record.
+台式机检查电源和插线板；笔记本检查电池	On a desktop, check the power supply and power strip; on a laptop, the battery
+死机时屏幕定住不动的，多半是显卡、内存或硬盘的问题	If the screen freezes in place, it is usually the graphics card, memory or disk
+修复系统文件后用几天看还会不会出现	After repairing the system files, use the PC for a few days to see whether it happens again
+最近装过更新、驱动或软件之后才开始的，可以用系统还原回到之前	If it started after installing an update, driver or app, System Restore can take you back
+系统时间比本工具的发布日期（{0:yyyy-MM-dd}）还早 {1} 天，肯定不对。	The system clock is {1} days earlier than this version of ClearC was released ({0:yyyy-MM-dd}), so it is definitely wrong.
+时间服务连不上 time.windows.com（域名解析不了）：这台电脑上不了外网，时间没法自动校准，只能手动改。	The time service cannot reach time.windows.com (the name does not resolve): this PC has no internet, so the clock cannot be corrected automatically and must be set by hand.
+最近 30 天时间服务同步失败 {0} 次，一次也没成功。	The time service failed to sync {0} times in the last 30 days and never succeeded.
+时间不对会让网页提示证书错误、Windows 激活和更新失败，蓝屏和日志记下的时间也跟着不准。	A wrong clock causes certificate errors on websites and failed Windows activation and updates, and crash and log times are wrong too.
+把时间改对：点「日期和时间」，在「日期和时间」选项卡点「更改日期和时间」	Set the correct time: click "Date and time", then "Change date and time" on the "Date and Time" tab
+台式机每次断电后时间都变回去，就是主板上的纽扣电池（CR2032）没电了，换一颗	If a desktop loses the time every time it is unplugged, the motherboard coin battery (CR2032) is flat: replace it
+点「同步系统时间」；同步不了再手动改	Click "Sync the clock"; set it by hand if that fails
+系统时间一直同步不了	The system clock never syncs
+先把硬盘的问题解决掉、把资料备份好	Fix the disk problem and back up your files first
+装着专用软件的电脑（测试设备、采集卡、工控软件）先问清楚这些软件支不支持新版本 Windows	On PCs running specialised software (test equipment, data acquisition cards, industrial control), first check that the software supports the newer Windows
+在能上网的电脑上用微软的「媒体创建工具」做一个 Windows 安装 U 盘，在这台电脑上运行里面的 setup.exe，选「保留个人文件和应用」升级到 Windows 10 22H2 或 Windows 11	On a computer with internet, use Microsoft's "Media Creation Tool" to make a Windows installation USB stick, run its setup.exe on this PC and choose "Keep personal files and apps" to upgrade to Windows 10 22H2 or Windows 11
+这台电脑最近一次装更新是 {0:yyyy-MM-dd}（{1}），之后的安全补丁都没有	This PC last installed an update on {0:yyyy-MM-dd} ({1}) and has none of the security fixes since
+上不了外网时 DISM 会报错（0x800f081f、0x800f0906），不要紧：接着运行的 sfc 用的是本机的备份，照样有效。	Without internet, DISM reports an error (0x800f081f, 0x800f0906). That is fine: sfc, which runs next, uses the copy on this PC and still works.
+日期和时间	Date and time
+打开「日期和时间」：点「更改日期和时间」手动改成正确的时间，上不了网的电脑只能这样改	Opens "Date and Time": click "Change date and time" to set the correct time by hand, the only way on a PC without internet
+按这台电脑的厂商和型号（Dell 按服务编号）打开 BIOS、驱动和固件的下载页，链接同时复制下来：这台电脑上不了外网时，到别的电脑上打开、下载好用 U 盘拷过来	Opens the BIOS, driver and firmware download page for this PC's maker and model (by service tag on Dell) and copies the link, so on a PC without internet you can open it on another computer and bring the files over on a USB stick
+改用 Windows 自带的硬盘驱动…	Switch to Windows' own disk driver…
+硬盘接在 Intel RST（RAID On）上、更新驱动和 BIOS 后还掉线时：把 BIOS 的硬盘模式改成 AHCI，改用 Windows 自带的驱动。显示这台电脑能不能改、详细步骤和改回去的办法；要进 BIOS，本工具不替你改	For a disk on Intel RST (RAID On) that still drops out after updating the driver and BIOS: change the disk mode in the BIOS to AHCI to use Windows' own driver. Shows whether this PC can be changed, the exact steps and how to change back; it needs the BIOS, so ClearC does not do it for you
+先看蓝屏诊断的结论，点结论里的「按建议处理」；再按「系统文件 → 硬盘 → 内存 → 驱动」的顺序排查。一次只改一样，改完用几天看还会不会出现。	Start with the crash diagnosis and click "Fix as suggested" there, then work through "system files → disk → memory → drivers". Change one thing at a time and use the PC for a few days to see whether it happens again.
+时钟不准：系统时间比本工具的发布日期（{0:yyyy-MM-dd}）还早 {1} 天	Wrong clock: the system time is {1} days earlier than this version's release ({0:yyyy-MM-dd})
+这台电脑	This PC
+BIOS {0}（{1:yyyy-MM-dd}），服务编号 / 序列号 {2}	BIOS {0} ({1:yyyy-MM-dd}), service tag / serial number {2}
+系统盘：{0}，固件 {1}，接口 {2}	System disk: {0}, firmware {1}, interface {2}
+存储驱动：{0}，{1}，{2:yyyy-MM-dd}，{3}	Storage driver: {0}, {1}, {2:yyyy-MM-dd}, {3}
+开着	on
+关着	off
+时间同步：最近 30 天失败 {0} 次、成功 {1} 次{2}	Time sync in the last 30 days: {0} failures, {1} successes{2}
+，连不上时间服务器（上不了外网）	, cannot reach the time server (no internet)
+硬盘省电：{0}；快速启动：{1}	Disk power saving: {0}; Fast Startup: {1}
+已关闭（本工具改的，能恢复）	off (changed by ClearC, can be restored)
+开	on
+关	off
+没有	none
+诊断结论和处理办法	Diagnosis and what to do
+本工具能直接做（结论下面的「按建议处理」）：	ClearC can do this for you ("Fix as suggested" under the diagnosis): 
+需要你自己做：	Up to you:
+最近 30 天的蓝屏记录（{0} 次）	Blue screen records of the last 30 days ({0})
+本工具能直接做的，一次做完；做之前会列出要做什么，都能撤销	Does everything ClearC can do in one go; lists it first, and all of it can be undone
+需要你自己做的	Things to do yourself
 复制报告	Copy report
 在终端窗口里运行 DISM /RestoreHealth 和 sfc /scannow：会把损坏的系统文件换成正常的副本（会改系统文件，可能要联网下载）。点了会先确认	Runs DISM /RestoreHealth and sfc /scannow in a terminal window to replace damaged system files with good copies (changes system files, may download from the internet). Asks first
 把蓝屏转储、最近 30 天的系统和应用日志、系统信息、驱动列表和诊断结论打成一个 zip，方便发给懂的人看。只读不改	Packs crash dumps, the last 30 days of System and Application logs, system information, the driver list and the diagnosis into one zip to send to someone who can help. Read-only

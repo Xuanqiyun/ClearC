@@ -356,7 +356,13 @@ try { & {
     $dp = [regex]::Match($engineText, '(?s)function Export-DiagPack.*?\r?\nfunction ').Value
     Check 'diagnostics package never overwrites a file and cleans its temp folder without recursion' ($dp -match 'FileMode\]::CreateNew' -and $dp -match '\[IO\.Directory\]::Delete\(\$tmp, \$false\)' -and $dp -notmatch 'Remove-Item' -and $dp -notmatch 'Recurse')
     $ifs = [regex]::Match($src, '(?s)function Invoke-FixStep.*?\r?\n\}').Value
-    Check 'repair runner: the UI self-test never starts a command, and changing steps go through a confirmation sheet first' ($ifs -match '(?s)Show-Sheet -Kind warn.*?if \(\$script:uiTest\) \{ \$script:uiFixRuns\.Add\(\$id\); return \}.*?Start-Process' -and $ifs -match "if \(\`$s\.Kind -eq 'fix' -and -not \`$s\.Harmless\)")
+    Check 'repair runner: the UI self-test never starts a command, and changing steps go through a confirmation sheet first' ($ifs -match '(?s)Show-Sheet -Kind warn.*?if \(\$script:uiTest\) \{ \$script:uiFixRuns\.Add\(\$id\); return \}.*?Start-Process' -and $ifs -match "if \(\`$s\.Kind -eq 'fix' -and -not \`$s\.Harmless -and -not \`$Quiet\)" -and ([regex]::Matches($src, 'Invoke-FixStep \$id -Quiet')).Count -eq 1 -and ([regex]::Matches($src, '-Quiet\b')).Count -le 2)
+    # 「按建议处理」：只做能撤销、不删东西的几步，先列出来确认一次；硬盘驱动指南只给步骤，不替你运行 bcdedit
+    $planIds = @([regex]::Matches(([regex]::Match($engineText, '(?s)function Get-CrashVerdict.*?\r?\n\}').Value), "(?:Plan|\`$plan) = ([^;\r\n]*)") | ForEach-Object { [regex]::Matches($_.Groups[1].Value, "'(\w+)'") | ForEach-Object { $_.Groups[1].Value } } | Select-Object -Unique)
+    Check ("fix-as-suggested plans only use reversible, non-deleting steps ({0})" -f ($planIds -join ',')) ($planIds.Count -ge 4 -and @($planIds | Where-Object { $_ -notin 'diskpower', 'faststartup', 'timesync', 'datetime', 'sfcrepair', 'memtest' }).Count -eq 0)
+    $rp = [regex]::Match($src, '(?s)function Invoke-RepairPlan.*?\r?\n\}').Value
+    Check 'fix-as-suggested lists the steps and asks once before doing anything' ($rp -match "(?s)Show-Sheet -Kind warn.*?if \(\`$ans -ne \(T '开始处理'\)\) \{ return \}.*?Set-DiskPowerFix" -and $rp -match 'OpLog')
+    Check 'the AHCI guide never runs bcdedit itself' ($src -notmatch '(?i)(Start-Process|&\s*"?[^\r\n"]*)[^\r\n]*bcdedit\.exe' -and ([regex]::Match($src, '(?s)function Show-AhciGuide.*?\r?\n\}').Value) -notmatch 'Start-Process')
     # 空间地图点盘卡片、清理页打开文件夹：只看不改
     $op = [regex]::Match($src, '(?s)function Get-CleanOpenPaths.*?function Update-CleanMore').Value
     Check 'opening a cleanup row only opens folders (no delete, move or write)' ($op.Length -gt 500 -and $op -notmatch '(?i)Remove-|Move-Item|rd /s|Delete\(|Set-Content|Out-File|Copy-Item')

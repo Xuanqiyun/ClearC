@@ -1,4 +1,4 @@
-# 不用 Windows 也能跑的检查：语法、C# 编译、XAML、控件名、翻译。PowerShell 7 或 Windows PowerShell 5.1 都行。
+﻿# 不用 Windows 也能跑的检查：语法、C# 编译、XAML、控件名、翻译。PowerShell 7 或 Windows PowerShell 5.1 都行。
 # 用法：pwsh tests/Checks.ps1        有问题时退出码是问题的个数
 param([string]$Script = (Join-Path $PSScriptRoot '../src/CleanC-UI.ps1'))
 $fails = 0
@@ -84,6 +84,9 @@ foreach ($l in ($libText -split "`r?`n")) {
     [void]$keys.Add($f[0].Trim()); [void]$keys.Add($f[2].Trim()); $libN++
 }
 if ($libN -lt 40) { Bad "cache library: only $libN entries parsed" } else { Ok "cache library: $libN entries" }
+# 发布日期（判断系统时钟往回走用）：发版时要改，一年没改就报
+$bm = [regex]::Match($src, "\`$script:AppBuilt = \[DateTime\]'(\d{4}-\d\d-\d\d)'")
+if (-not $bm.Success) { Bad 'release date $script:AppBuilt not found' } elseif (([DateTime]$bm.Groups[1].Value) -gt (Get-Date).AddDays(2) -or ([DateTime]$bm.Groups[1].Value) -lt (Get-Date).AddDays(-365)) { Bad ("release date {0} is in the future or more than a year old: update it when releasing" -f $bm.Groups[1].Value) } else { Ok ("release date {0}" -f $bm.Groups[1].Value) }
 $miss = @($keys | Where-Object { -not $dict.ContainsKey($_) })
 if ($miss) { Bad ("{0} strings have no English translation, e.g. {1}" -f $miss.Count, ($miss | Select-Object -First 3) -join ' | ') } else { Ok "$($keys.Count) strings all translated" }
 $fmtBad = 0

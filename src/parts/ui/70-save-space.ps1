@@ -245,6 +245,12 @@ function Show-Verdicts($r) {
             if ($v.Id -ne 'none' -and -not $seen.ContainsKey($id)) { $seen[$id] = $true; $rec.Add((New-FixBtn $id $r.Power)) }
         }
         $row.HasFixes = $row.Fixes.Count -gt 0
+        $pend = @(Get-PlanPending $v $r.Power)
+        $row.HasPlan = $pend.Count -gt 0; $row.PlanTag = 'plan:' + [string]$v.Id; $row.PlanName = (T '按建议处理…')
+        $row.PlanTip = (T '会做：') + ((@($pend | ForEach-Object { ([string](Get-FixCat).Steps[$_].Name).TrimEnd('…') })) -join (T '、'))
+        $td = @($v.Todo | Where-Object { $_ })
+        $row.HasTodo = $td.Count -gt 0
+        $row.Todo = (@(for ($i = 0; $i -lt $td.Count; $i++) { '{0}. {1}' -f ($i + 1), $td[$i] })) -join "`n"
         $col.Add($row)
     }
     $ctl.HealthVerdicts.ItemsSource = $col
@@ -258,8 +264,82 @@ function Refresh-FixState {
     Show-Fixes $st
 }
 $script:uiFixRuns = New-Object System.Collections.Generic.List[string]
+# 一条结论里还没做的自动步骤（硬盘省电已经关了、快速启动已经关了的就不再列）
+function Get-PlanPending($v, $st) {
+    $out = @()
+    foreach ($id in @($v.Plan)) {
+        if (-not $id -or -not (Get-FixCat).Steps.Contains($id)) { continue }
+        if ($id -eq 'diskpower' -and $st -and $st.DiskFix) { continue }
+        if ($id -eq 'faststartup' -and $st -and $st.FastStartup -ne 'on') { continue }
+        $out += $id
+    }
+    return $out
+}
+# 按建议处理：本工具能直接做的几步一次做完（先列出来确认一次），做完告诉你哪些做好了、还剩哪些要你自己做
+function Invoke-RepairPlan([string]$vid) {
+    if (-not $script:healthData) { return }
+    $v = @($script:healthData.Verdicts | Where-Object { [string]$_.Id -eq $vid })[0]
+    if (-not $v) { return }
+    $st = Get-PowerFixState; $c = Get-FixCatalog
+    $pend = @(Get-PlanPending $v $st)
+    if ($pend.Count -eq 0) { Show-Sheet -Title ([string]$v.Title) -Text (T '本工具能做的都已经做过了。剩下的要你自己做，见结论下面「需要你自己做的」。') | Out-Null; return }
+    $items = @($pend | ForEach-Object { '{0}：{1}' -f ([string]$c.Steps[$_].Name).TrimEnd('…'), $c.Steps[$_].Desc })
+    $td = @($v.Todo | Where-Object { $_ })
+    $text = (T '本工具会直接做下面这几件，都能撤销（硬盘省电和快速启动可以在「常见问题修复」里改回来）。') + $(if ($td.Count) { "`n`n" + (T '做完以后还需要你自己做：') + "`n" + ((@(for ($i = 0; $i -lt $td.Count; $i++) { '{0}. {1}' -f ($i + 1), $td[$i] })) -join "`n") } else { '' })
+    $ans = Show-Sheet -Kind warn -Title ((T '{0}：按建议处理？') -f $v.Title) -Text $text -Items $items -Buttons @((T '取消'), (T '开始处理')) -Primary (T '开始处理') -Cancel (T '取消')
+    if ($ans -ne (T '开始处理')) { return }
+    $done = @(); $fail = @()
+    foreach ($id in $pend) {
+        $name = ([string]$c.Steps[$id].Name).TrimEnd('…')
+        try {
+            switch ($id) {
+                'diskpower' { $res = Set-DiskPowerFix $true; if ($res.Ok) { $done += ((T '{0}（马上生效）') -f $name) } else { $fail += ('{0}：{1}' -f $name, $res.Why) } }
+                'faststartup' { Set-FastStartup $false; $done += ((T '{0}（下次关机起生效）') -f $name) }
+                default { Invoke-FixStep $id -Quiet; $done += ((T '{0}（已在新窗口里打开或运行）') -f $name) }
+            }
+        } catch { $fail += ('{0}：{1}' -f $name, $_.Exception.Message) }
+    }
+    OpLog '系统设置' (T '按建议处理') ([string]$v.Title) (($done + $fail) -join (T '；'))
+    Refresh-FixState
+    $msg = (T '做好了：') + "`n" + (@($done | ForEach-Object { '• ' + $_ }) -join "`n")
+    if ($fail.Count) { $msg += "`n`n" + (T '没做成：') + "`n" + (@($fail | ForEach-Object { '• ' + $_ }) -join "`n") }
+    if ($td.Count) { $msg += "`n`n" + (T '还需要你自己做：') + "`n" + ((@(for ($i = 0; $i -lt $td.Count; $i++) { '{0}. {1}' -f ($i + 1), $td[$i] })) -join "`n") }
+    $msg += "`n`n" + (T '改完用几天，再回来点「刷新」看还有没有新的蓝屏。')
+    Show-Sheet -Kind done -Title (T '处理完了') -Text $msg | Out-Null
+}
+# 厂商驱动下载页：打开，同时把链接复制下来（这台电脑上不了网时，到别的电脑上打开）
+function Open-VendorPage {
+    $f = if ($script:healthData) { $script:healthData.Sys } else { $null }
+    if (-not $f) { $f = Get-SysFacts }
+    $url = Get-VendorSupportUrl $f
+    if (-not $url) { return }
+    try { [System.Windows.Clipboard]::SetText($url) } catch {}
+    if ($script:uiTest) { $script:uiFixRuns.Add('vendor:' + $url); return }
+    $txt = (T "{0} {1}，服务编号 / 序列号 {2}`n`n{3}`n`n链接已经复制。要下载的：BIOS、芯片组驱动、存储驱动（Intel RST）、固态硬盘固件；装的顺序是 BIOS → 芯片组 → 存储驱动 → 固件，每装一样重启一次。这台电脑上不了外网的话，在别的电脑上打开这个链接，下载好用 U 盘拷过来。") -f $f.Maker, $f.Model, $f.Serial, $url
+    $ans = Show-Sheet -Title (T '厂商驱动下载页') -Text $txt -Buttons @((T '关闭'), (T '在浏览器里打开')) -Primary (T '在浏览器里打开') -Cancel (T '关闭')
+    if ($ans -eq (T '在浏览器里打开')) { try { Start-Process $url } catch {} }
+}
+# 改用 Windows 自带的硬盘驱动：只给步骤（要进 BIOS），先替你查好能不能改
+function Show-AhciGuide {
+    $f = if ($script:healthData) { $script:healthData.Sys } else { Get-SysFacts }
+    $sd = if ($f) { $f.SysDisk } else { $null }
+    $chk = @()
+    $stop = $false
+    if ($sd) {
+        $chk += (T '系统盘：{0}，接口 {1}') -f $sd.Name, $sd.Bus
+        if ($sd.RaidVolume) { $chk += (T '✗ 这看起来是 RAID 阵列（几块盘组在一起）：不要改，改了阵列会读不出来'); $stop = $true }
+        elseif ($sd.Bus -ne 'RAID') { $chk += (T '✗ 系统盘没有接在 RAID / RST 控制器上，用不着改'); $stop = $true }
+        else { $chk += (T '✓ 单块盘，不是 RAID 阵列') }
+    } else { $chk += (T '读不到系统盘的接口，改之前自己在 BIOS 里确认是单块盘、没有组 RAID') }
+    if ($f -and $f.BitLocker -eq 1) { $chk += (T '✗ BitLocker 开着：先在「控制面板 → BitLocker 驱动器加密」里点「暂停保护」，并准备好恢复密钥，否则改完要输恢复密钥') }
+    elseif ($f -and $f.BitLocker -eq 0) { $chk += (T '✓ BitLocker 关着') }
+    $steps = (T "1. 先把重要资料备份到另一块盘。`n2. 以管理员身份打开命令提示符，运行：`n      bcdedit /set {current} safeboot minimal`n3. 重启，开机时进 BIOS（Dell 按 F2），在 System Configuration → SATA/NVMe Operation 里把 RAID On 改成 AHCI/NVMe，保存退出。`n4. Windows 会进安全模式，并自动装上 Windows 自带的 NVMe / AHCI 驱动。`n5. 在安全模式里再以管理员身份运行：`n      bcdedit /deletevalue {current} safeboot`n   然后重启，回到正常模式。`n`n改完开不了机：进 BIOS 把模式改回 RAID On，一切照旧，数据不受影响。之后 Intel RST 的管理软件用不了，这没关系。")
+    $txt = (T "适用：硬盘接在 Intel RST（RAID On）上、只有一块盘，更新 BIOS 和 RST 驱动后还是掉线。改用 Windows 自带的驱动后，就不经过 RST 了。`n`n这台电脑：`n{0}`n`n{1}`n`n本工具不替你改：要进 BIOS，中途出错要你手动改回来。") -f ($chk -join "`n"), $(if ($stop) { (T '按上面的检查结果，这台电脑不要这样改。') } else { $steps })
+    $ans = Show-Sheet -Kind warn -Title (T '改用 Windows 自带的硬盘驱动') -Text $txt -Buttons @((T '关闭'), (T '复制两条命令')) -Primary (T '复制两条命令') -Cancel (T '关闭')
+    if ($ans -eq (T '复制两条命令')) { try { [System.Windows.Clipboard]::SetText("bcdedit /set {current} safeboot minimal`r`nbcdedit /deletevalue {current} safeboot") } catch {} }
+}
 # 运行一步修复。会改动的先确认（界面自测时 Show-Sheet 当作点了取消）；命令都在看得见的终端窗口里跑
-function Invoke-FixStep([string]$id) {
+function Invoke-FixStep([string]$id, [switch]$Quiet) {
     $c = Get-FixCatalog; if (-not $c.Steps.Contains($id)) { return }   # 每次现取：命令里的时间戳（改名留底用）要是现在的
     $s = $c.Steps[$id]; $name = ([string]$s.Name).TrimEnd('…')
     if ($s.Kind -eq 'go') {
@@ -269,6 +349,8 @@ function Invoke-FixStep([string]$id) {
     if ($s.Kind -eq 'special') {
         switch ($id) {
             'diagpack' { Start-DiagPack }
+            'vendor' { Open-VendorPage }
+            'ahciguide' { Show-AhciGuide }
             'diskpower' {
                 $ans = Show-Sheet -Kind warn -Title (T '关闭硬盘省电？') -Text $s.Confirm -Buttons @((T '取消'), (T '关闭省电')) -Primary (T '关闭省电') -Cancel (T '取消')
                 if ($ans -ne (T '关闭省电')) { return }
@@ -298,7 +380,7 @@ function Invoke-FixStep([string]$id) {
         }
         return
     }
-    if ($s.Kind -eq 'fix' -and -not $s.Harmless) {
+    if ($s.Kind -eq 'fix' -and -not $s.Harmless -and -not $Quiet) {   # Quiet：「按建议处理」已经一起确认过
         $ans = Show-Sheet -Kind warn -Title ((T '{0}？') -f $name) -Text $(if ($s.Confirm) { $s.Confirm } else { $s.Desc }) -Buttons @((T '取消'), (T '开始')) -Primary (T '开始') -Cancel (T '取消')
         if ($ans -ne (T '开始')) { return }
     }
@@ -314,7 +396,7 @@ function Invoke-FixStep([string]$id) {
     } catch { Show-Sheet -Kind warn -Title ((T '没能打开：{0}') -f $name) -Text $_.Exception.Message | Out-Null }
 }
 foreach ($ic in @($ctl.HealthVerdicts, $ctl.FixRec, $ctl.FixGroups)) {
-    $ic.AddHandler([System.Windows.Controls.Button]::ClickEvent, [System.Windows.RoutedEventHandler]{ param($s, $e) $b = $e.OriginalSource; if ($b -is [System.Windows.Controls.Button] -and $b.Tag -is [string] -and $b.Tag) { Invoke-FixStep ([string]$b.Tag) } })
+    $ic.AddHandler([System.Windows.Controls.Button]::ClickEvent, [System.Windows.RoutedEventHandler]{ param($s, $e) $b = $e.OriginalSource; if ($b -is [System.Windows.Controls.Button] -and $b.Tag -is [string] -and $b.Tag) { $t = [string]$b.Tag; if ($t.StartsWith('plan:')) { Invoke-RepairPlan $t.Substring(5) } else { Invoke-FixStep $t } } })
 }
 # 原来的两个按钮：和「常见问题修复」里的是同一步
 function Start-SystemFileTool([bool]$repair) { Invoke-FixStep $(if ($repair) { 'sfcrepair' } else { 'sfccheck' }) }
