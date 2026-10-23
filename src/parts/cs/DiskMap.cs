@@ -27,6 +27,7 @@ public class DmNode {
 public class DmFile {
     public DmNode Dir; public string Name; public long Size; public DateTime Modified;
     public long Disk = -1; public bool Shared;        // 实际占用（-1 不知道）；有不止一个名字（硬链接）
+    public uint Attr; public bool HasAttr;            // 文件属性（只有读文件表得来的才有）
     public string Path { get { string d = Dir.FullPath(); return (d.EndsWith("\\") || d.EndsWith("/")) ? d + Name : d + System.IO.Path.DirectorySeparatorChar + Name; } }
 }
 public class DmFind { public List<DmFile> Files = new List<DmFile>(); public long Count, Bytes; }
@@ -97,6 +98,8 @@ public static class DiskMap {
     }
 
     public static volatile bool MftOff;              // 用户在设置里关掉了「直接读文件表」
+    // 这块盘的文件表已经在内存里（再要时只按变更日志补读，很快）
+    public static bool HasIndex(string root) { if (string.IsNullOrEmpty(root)) return false; lock (cacheLock) return mftIdx.ContainsKey(root.Substring(0, 1)); }
     static bool MftAllowed(string root) {
         if (MftOff || !Win || root == null || root.Length < 2 || root[1] != ':' || root.TrimEnd('\\').Length != 2) return false;   // 只认整块盘
         lock (cacheLock) { if (mftBroken.ContainsKey(root.Substring(0, 1))) return false; }
