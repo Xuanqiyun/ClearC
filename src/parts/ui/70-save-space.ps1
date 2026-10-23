@@ -6,7 +6,7 @@
 # ------------------------------------------------------------
 $script:healthData = $null
 function Load-Health {
-    $ctl.HealthNote.Text = if ($script:healthData) { (T '正在后台刷新，下面先显示上次读到的…') } else { (T '正在读取硬件、事件日志和转储文件，要十几秒…') }
+    $ctl.HealthNote.Text = if ($script:healthData) { (T '正在后台刷新，下面先显示上次读到的…') } else { (T '正在读取硬件、事件日志和转储文件，要几秒…') }
     $ctl.BtnHealthRefresh.IsEnabled = $false
     $ok = Start-BgEngine 'health' 'Get-HealthAll' $null {
         param($r, $err)

@@ -307,7 +307,7 @@ function Load-StartRows([string]$kind) {
     $ctl.StartList.ItemsSource = $null
     $ctl.EmptyApps.Visibility = 'Visible'; $ctl.EmptyAppsText.Text = (T '正在读取…')
     if ($kind -eq 'leftover') {
-        $ctl.EmptyAppsText.Text = (T '正在找已卸载软件可能留下的文件夹（要看一遍软件数据目录，几十秒）…')
+        $ctl.EmptyAppsText.Text = (T '正在找已卸载软件可能留下的文件夹…')
         $sync.Mode = 'leftovers'; $sync.LeftoverResult = $null
         Start-Op (T '查找残留文件夹') -NoCard; UI-Busy $true
         Start-Worker @'

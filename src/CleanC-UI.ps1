@@ -6893,6 +6893,9 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+正在扫描，一般几秒钟…	Scanning, usually a few seconds…
+正在读取硬件、事件日志和转储文件，要几秒…	Reading hardware, event logs and dump files, this takes a few seconds…
+正在找已卸载软件可能留下的文件夹…	Looking for folders left behind by uninstalled apps…
 {0:N0} 个文件，用时 {1:N1} 秒	{0:N0} files in {1:N1} s
 空闲时在后台读了 C 盘的文件表：	Read the file table of C: in the background while idle: 
   没能同时做几件事，改成一件一件做（{0}）	  Could not run these side by side, doing them one by one ({0})
@@ -15903,7 +15906,7 @@ function Update-CleanSummary {
 }
 
 function Do-Scan([switch]$Quiet) {
-    $ctl.Summary.Text = (T '正在扫描，大目录可能要一两分钟…')
+    $ctl.Summary.Text = (T '正在扫描，一般几秒钟…')
     if (-not $script:rows) { $ctl.EmptyCleanText.Text = (T '正在扫描…') }
     $script:prevSizes = $sync.Sizes   # 扫描中途取消时，列表还用上一次的结果
     $sync.Mode = 'scan'; $sync.Sizes = $null
@@ -19013,7 +19016,7 @@ $res = @{}; Invoke-MoveBack $arg.Rec $res; $sync.MoveRes = $res
 # ------------------------------------------------------------
 $script:healthData = $null
 function Load-Health {
-    $ctl.HealthNote.Text = if ($script:healthData) { (T '正在后台刷新，下面先显示上次读到的…') } else { (T '正在读取硬件、事件日志和转储文件，要十几秒…') }
+    $ctl.HealthNote.Text = if ($script:healthData) { (T '正在后台刷新，下面先显示上次读到的…') } else { (T '正在读取硬件、事件日志和转储文件，要几秒…') }
     $ctl.BtnHealthRefresh.IsEnabled = $false
     $ok = Start-BgEngine 'health' 'Get-HealthAll' $null {
         param($r, $err)
@@ -20190,7 +20193,7 @@ function Load-StartRows([string]$kind) {
     $ctl.StartList.ItemsSource = $null
     $ctl.EmptyApps.Visibility = 'Visible'; $ctl.EmptyAppsText.Text = (T '正在读取…')
     if ($kind -eq 'leftover') {
-        $ctl.EmptyAppsText.Text = (T '正在找已卸载软件可能留下的文件夹（要看一遍软件数据目录，几十秒）…')
+        $ctl.EmptyAppsText.Text = (T '正在找已卸载软件可能留下的文件夹…')
         $sync.Mode = 'leftovers'; $sync.LeftoverResult = $null
         Start-Op (T '查找残留文件夹') -NoCard; UI-Busy $true
         Start-Worker @'
