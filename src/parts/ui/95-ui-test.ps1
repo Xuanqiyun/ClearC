@@ -603,7 +603,7 @@ function Invoke-UiTest {
                 if ($script:uiSheets.Count -ne $n0 + 1 -or $script:worker) { throw 'deleting the list did not ask first' }
                 if ($script:uiSheets[$script:uiSheets.Count - 1] -notmatch 'git') { throw 'no warning about the git checkout' }
                 Clear-MapMarks
-                if ($ctl.MapMarkBar.Visibility -ne 'Collapsed' -or $ra.Marked) { throw 'clear left marks' }
+                if ($ctl.MapMarkBar.Visibility -ne 'Collapsed' -or $ra.Marked -or @($ctl.MapList.Items | Where-Object { $_.Marked }).Count) { throw 'clear left marks' }
                 # 方块图：按类型上色，下面有图例
                 $ctl.MapViewTree.IsChecked = $true; $win.UpdateLayout(); Draw-MapTree
                 if ($ctl.MapTreeLegend.Children.Count -lt 1) { throw 'no treemap legend' }
