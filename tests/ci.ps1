@@ -70,13 +70,18 @@ public static class CiDisplay {
     foreach ($run in @(@{ Title = 'UI test'; Set = ''; Report = 'uitest.txt' }, @{ Title = 'UI test (zh)'; Set = "Lang=zh`r`nTheme=light`r`n"; Report = 'uitest-zh.txt' }, @{ Title = 'UI test (zh dark)'; Set = "Lang=zh`r`nTheme=dark`r`n"; Report = 'uitest-zh-dark.txt' })) {
         $setBak = $null; if (Test-Path $setFile) { $setBak = [IO.File]::ReadAllBytes($setFile) }
         if ($run.Set) { New-Item -ItemType Directory -Force (Split-Path $setFile) | Out-Null; [IO.File]::WriteAllText($setFile, $run.Set) }
-        $env:CLEANC_REPORT = Join-Path $PWD ('out\' + $run.Report)   # 不设 CLEANC_TEST：那会让启动器不用 STA 线程，WPF 窗口打不开
+        $env:CLEANC_REPORT = Join-Path $PWD ('out\' + $run.Report)
+        # 第一遍顺便量一下各种扫描用了多久（报告里 timing 开头的几行，单独写成一条说明注释）
+        $env:CLEANC_SPEED = $(if ($run.Title -eq 'UI test') { '1' } else { '' })
+        $limit = $(if ($env:CLEANC_SPEED) { 900000 } else { 300000 })   # 不设 CLEANC_TEST：那会让启动器不用 STA 线程，WPF 窗口打不开
         $u = Start-Process -FilePath .\out\ClearC.exe -ArgumentList '/uitest' -PassThru
         $ulines = @()
-        if (-not $u.WaitForExit(300000)) { Write-Host ("::error title={0}::did not finish within 5 minutes" -f $run.Title); $fail = 1; try { $u.Kill() } catch {} }   # 只结束这次测试自己开的进程
+        if (-not $u.WaitForExit($limit)) { Write-Host ("::error title={0}::did not finish within {1} minutes" -f $run.Title, ($limit / 60000)); $fail = 1; try { $u.Kill() } catch {} }   # 只结束这次测试自己开的进程
         else {
             if (Test-Path $env:CLEANC_REPORT) { $ulines = @(Get-Content $env:CLEANC_REPORT -Encoding UTF8) }
             $ulines | ForEach-Object { Write-Host $_ }
+            $tl = @($ulines | Where-Object { $_ -like 'timing*' })
+            if ($tl) { Write-Host ("::notice title=scan speed::{0}" -f (Esc (($tl | Select-Object -First 60) -join "`n"))) }
             $ufails = @($ulines | Where-Object { $_ -like 'FAIL*' })
             if (-not $ulines -or -not ($ulines | Where-Object { $_ -like 'summary:*' })) { Write-Host ("::error title={0}::no complete report was written (exit {1})" -f $run.Title, $u.ExitCode); $fail = 1 }
             elseif ($u.ExitCode -or $ufails) { Write-Host ("::error title={0} (exit {1})::{2}" -f $run.Title, $u.ExitCode, (Esc ((@($ulines) | Where-Object { $_ -like 'FAIL*' } | Select-Object -First 20) -join "`n"))); $fail = 1 }
@@ -84,7 +89,7 @@ public static class CiDisplay {
         }
         if ($run.Set) { if ($setBak) { [IO.File]::WriteAllBytes($setFile, $setBak) } else { Remove-Item -LiteralPath $setFile -ErrorAction SilentlyContinue } }
     }
-    $env:CLEANC_SHOTS = ''
+    $env:CLEANC_SHOTS = ''; $env:CLEANC_SPEED = ''
     $env:CLEANC_QUIET = '1'; $env:CLEANC_REPORT = Join-Path $PWD 'out\selftest.txt'
     $p = Start-Process -FilePath .\out\ClearC.exe -ArgumentList '/selftest' -Wait -PassThru
     $lines = @(); if (Test-Path $env:CLEANC_REPORT) { $lines = @(Get-Content $env:CLEANC_REPORT -Encoding UTF8) }
