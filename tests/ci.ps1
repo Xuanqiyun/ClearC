@@ -64,7 +64,7 @@ public static class CiDisplay {
     }
 }
 '@
-        Write-Host ("::notice title=display::{0}" -f [CiDisplay]::Set(1920, 1080))
+        Write-Host ("display: {0}" -f [CiDisplay]::Set(1920, 1080))   # 不写成说明注释（一步最多留 10 条）
     } catch { Write-Host ("::notice title=display::{0}" -f $_.Exception.Message) }
     $setFile = Join-Path $env:LOCALAPPDATA 'CleanC\settings.txt'
     foreach ($run in @(@{ Title = 'UI test'; Set = ''; Report = 'uitest.txt' }, @{ Title = 'UI test (zh)'; Set = "Lang=zh`r`nTheme=light`r`n"; Report = 'uitest-zh.txt' }, @{ Title = 'UI test (zh dark)'; Set = "Lang=zh`r`nTheme=dark`r`n"; Report = 'uitest-zh-dark.txt' })) {
@@ -81,34 +81,13 @@ public static class CiDisplay {
             if (Test-Path $env:CLEANC_REPORT) { $ulines = @(Get-Content $env:CLEANC_REPORT -Encoding UTF8) }
             $ulines | ForEach-Object { Write-Host $_ }
             $tl = @($ulines | Where-Object { $_ -like 'timing*' })
-            if ($tl) { Write-Host ("::notice title=scan speed::{0}" -f (Esc (($tl | Select-Object -First 60) -join "`n"))) }
+            if ($tl -and $env:CLEANC_SPEED) { Write-Host ("::notice title=scan speed::{0}" -f (Esc (($tl | Select-Object -First 60) -join "`n"))) }   # 一步最多留 10 条说明注释：只在测速那一遍写
             $ufails = @($ulines | Where-Object { $_ -like 'FAIL*' })
             if (-not $ulines -or -not ($ulines | Where-Object { $_ -like 'summary:*' })) { Write-Host ("::error title={0}::no complete report was written (exit {1})" -f $run.Title, $u.ExitCode); $fail = 1 }
             elseif ($u.ExitCode -or $ufails) { Write-Host ("::error title={0} (exit {1})::{2}" -f $run.Title, $u.ExitCode, (Esc ((@($ulines) | Where-Object { $_ -like 'FAIL*' } | Select-Object -First 20) -join "`n"))); $fail = 1 }
             else { Write-Host ("::notice title={0}::{1}" -f $run.Title, (Esc (($ulines | Select-Object -First 40) -join "`n"))) }   # 整份报告（含跳过的说明）
         }
         if ($run.Set) { if ($setBak) { [IO.File]::WriteAllBytes($setFile, $setBak) } else { Remove-Item -LiteralPath $setFile -ErrorAction SilentlyContinue } }
-    }
-    # 想直接看几张界面截图时（tests/peek.txt 里一行一个截图名，比如 shot-help-zh）：缩成 1240 宽的 JPEG，分段写成说明注释
-    $peek = Join-Path $PSScriptRoot 'peek.txt'
-    if (Test-Path $peek) {
-        Add-Type -AssemblyName System.Drawing
-        foreach ($nm in @(Get-Content $peek | ForEach-Object { $_.Trim() } | Where-Object { $_ })) {
-            $f = Join-Path $PWD ('out\uitest-{0}.png' -f $nm)
-            if (-not (Test-Path $f)) { Write-Host ("::notice title=peek {0}::missing" -f $nm); continue }
-            $src = [System.Drawing.Image]::FromFile($f)
-            try {
-                $w = [math]::Min(1240, $src.Width); $h = [int]($src.Height * $w / $src.Width)
-                $bmp = New-Object System.Drawing.Bitmap $w, $h
-                $g = [System.Drawing.Graphics]::FromImage($bmp); $g.InterpolationMode = 'HighQualityBicubic'; $g.DrawImage($src, 0, 0, $w, $h); $g.Dispose()
-                $codec = [System.Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() | Where-Object { $_.MimeType -eq 'image/jpeg' }
-                $ep = New-Object System.Drawing.Imaging.EncoderParameters 1; $ep.Param[0] = New-Object System.Drawing.Imaging.EncoderParameter ([System.Drawing.Imaging.Encoder]::Quality), ([long]62)
-                $ms = New-Object IO.MemoryStream; $bmp.Save($ms, $codec, $ep); $bmp.Dispose()
-                $b64 = [Convert]::ToBase64String($ms.ToArray()); $size = 48000
-                $n = [int][math]::Ceiling($b64.Length / $size)
-                for ($i = 0; $i -lt $n; $i++) { Write-Host ("::notice title=peek {0} {1}/{2}::{3}" -f $nm, ($i + 1), $n, $b64.Substring($i * $size, [math]::Min($size, $b64.Length - $i * $size))) }
-            } catch { Write-Host ("::notice title=peek {0}::{1}" -f $nm, $_.Exception.Message) } finally { $src.Dispose() }
-        }
     }
     $env:CLEANC_SHOTS = ''; $env:CLEANC_SPEED = ''
     $env:CLEANC_QUIET = '1'; $env:CLEANC_REPORT = Join-Path $PWD 'out\selftest.txt'
