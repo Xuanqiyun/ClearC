@@ -511,6 +511,15 @@ $script:prefetchTimer.Add_Tick({
         if (-not $script:pageLoaded.health -and $ctl.NavHealth.Visibility -eq 'Visible') { $script:pageLoaded.health = $true; Load-Health; Write-LogFile (T '空闲时在后台读取系统健康') }
         return
     }
+    if ($script:prefetchStep -eq 2) {
+        # C 盘的文件表也先读进内存（只读）：之后清理扫描、软件管理、搬家、空间地图只按变更日志补读改过的部分，几秒钟的事变成不到一秒
+        if (-not $script:uiTest -and -not $script:mftWarm) {
+            $script:mftWarm = $true
+            [void](Start-BgEngine 'mftwarm' 'Init-DriveThreads; $t = [DiskMap]::GetTree($env:SystemDrive, [DirStat]::ThreadsFor($env:SystemDrive), $false, $false); if ($t) { (T "{0:N0} 个文件，用时 {1:N1} 秒") -f $t.Files, ([double][DiskMap]::LastMs / 1000) } else { [string][DiskMap]::LastNote }' $null {
+                param($r, $err) if ($r) { Write-LogFile ((T '空闲时在后台读了 C 盘的文件表：') + $r) } })
+        }
+        return
+    }
     $this.Stop()
     if (-not $script:pageLoaded.map -and $ctl.NavMap.Visibility -eq 'Visible') { $script:pageLoaded.map = $true; Fill-MapDrives; Start-DiskHealth }
 })

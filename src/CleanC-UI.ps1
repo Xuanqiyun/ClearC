@@ -6893,6 +6893,8 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+{0:N0} 个文件，用时 {1:N1} 秒	{0:N0} files in {1:N1} s
+空闲时在后台读了 C 盘的文件表：	Read the file table of C: in the background while idle: 
   没能同时做几件事，改成一件一件做（{0}）	  Could not run these side by side, doing them one by one ({0})
 等系统回答安装包、驱动包这几项	Waiting for Windows to report installer and driver packages
 读取 {0} 盘的文件表：{1:N0} 个文件，用时 {2:N1} 秒	Read the file table of {0}: {1:N0} files in {2:N1} s
@@ -22760,6 +22762,15 @@ $script:prefetchTimer.Add_Tick({
     $script:prefetchStep++
     if ($script:prefetchStep -eq 1) {
         if (-not $script:pageLoaded.health -and $ctl.NavHealth.Visibility -eq 'Visible') { $script:pageLoaded.health = $true; Load-Health; Write-LogFile (T '空闲时在后台读取系统健康') }
+        return
+    }
+    if ($script:prefetchStep -eq 2) {
+        # C 盘的文件表也先读进内存（只读）：之后清理扫描、软件管理、搬家、空间地图只按变更日志补读改过的部分，几秒钟的事变成不到一秒
+        if (-not $script:uiTest -and -not $script:mftWarm) {
+            $script:mftWarm = $true
+            [void](Start-BgEngine 'mftwarm' 'Init-DriveThreads; $t = [DiskMap]::GetTree($env:SystemDrive, [DirStat]::ThreadsFor($env:SystemDrive), $false, $false); if ($t) { (T "{0:N0} 个文件，用时 {1:N1} 秒") -f $t.Files, ([double][DiskMap]::LastMs / 1000) } else { [string][DiskMap]::LastNote }' $null {
+                param($r, $err) if ($r) { Write-LogFile ((T '空闲时在后台读了 C 盘的文件表：') + $r) } })
+        }
         return
     }
     $this.Stop()
