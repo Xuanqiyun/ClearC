@@ -138,6 +138,7 @@ public class VdiskRow : INotifyPropertyChanged {
 // 空间地图顶部的磁盘卡片：用量条、温度、磨损、健康状态，颜色按档位
 public class DiskCard {
     public string Letter { get; set; }
+    public bool Sel { get; set; }
     public string Model { get; set; }
     public string UsedText { get; set; }
     public double UsedPct { get; set; }

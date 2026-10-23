@@ -6,7 +6,7 @@
 param()
 
 $ErrorActionPreference = 'SilentlyContinue'
-$script:AppVersion = '3.0'
+$script:AppVersion = '3.1'
 $script:AppBuildStamp = ''   # 构建 exe 时由 build 脚本填上构建时间（UTC）：写进诊断信息和运行记录，反馈问题时好对上是哪一次构建的
 $script:startClock = [Diagnostics.Stopwatch]::StartNew()   # 记下启动各阶段用了多久，写进运行记录
 
@@ -2758,7 +2758,7 @@ public static class FsTools {
 
 // ==================== 蓝屏转储（C:\Windows\Minidump\*.dmp）：不用调试器也能读出错误码、参数、出事时加载的驱动和栈上出现的驱动 ====================
 // 64 位内核小转储：开头是 DUMP_HEADER64（0x2000 字节），接着 TRIAGE_DUMP64，里面记着驱动列表、异常记录和调用栈在文件里的位置
-public class DumpDriver { public string Name; public ulong Base; public uint Size; public bool Hit; }
+public class DumpDriver { public string Name, Path; public ulong Base; public uint Size; public bool Hit; }   // Name 是文件名，Path 是转储里记的完整路径
 public class DumpInfo {
     public string File, Error = "";
     public bool Ok, Is64;
@@ -2768,6 +2768,11 @@ public class DumpInfo {
     public List<DumpDriver> Drivers = new List<DumpDriver>();
     public List<string> StackDrivers = new List<string>();   // 调用栈上出现的驱动（按出现顺序，去重），ntoskrnl 排除
     public string Suspect = "";                             // 最可能的：异常地址或出事参数落在哪个驱动里；没有就取栈上第一个非系统驱动
+    public string SuspectFrom = "";                         // address = 出事地址落在它里面（证据强）；stack = 只是栈上第一个（证据弱）
+    public uint Status;                                     // 读写失败类（0x7A、0x77）和异常类（0x1E、0x3B…）里记着的状态码 / 异常码
+    public string PageOwner = "";                           // 0x7A：没读进来的那一页属于哪个驱动（它是受害者，不是原因）
+    public string Process = "";                             // 出事时的当前进程（EPROCESS.ImageFileName）
+    public bool ProcessIsParam1;                            // 0xEF：当前进程就是参数 1 里那个死掉的关键进程
     public static DumpInfo Parse(string path) { return Parse(path, 4 * 1024 * 1024); }
     public static DumpInfo Parse(string path, int maxBytes) {
         DumpInfo d = new DumpInfo(); d.File = path;
@@ -2795,9 +2800,10 @@ public class DumpInfo {
                 if (b.Length >= tri + 0x50) {
                     d.ServicePackBuild = BitConverter.ToUInt32(b, tri);
                     uint exOff = BitConverter.ToUInt32(b, tri + 0x10), csOff = BitConverter.ToUInt32(b, tri + 0x28), csSize = BitConverter.ToUInt32(b, tri + 0x2C);
+                    uint prOff = BitConverter.ToUInt32(b, tri + 0x20), thOff = BitConverter.ToUInt32(b, tri + 0x24);
                     uint drvOff = BitConverter.ToUInt32(b, tri + 0x30), drvCount = BitConverter.ToUInt32(b, tri + 0x34);
                     if (exOff > 0 && exOff + 0x18 <= b.Length) { d.ExceptionCode = BitConverter.ToUInt32(b, (int)exOff); d.ExceptionAddress = BitConverter.ToUInt64(b, (int)exOff + 0x10); }
-                    const int entry = 0x98;   // DUMP_DRIVER_ENTRY64：名字的位置 + KLDR_DATA_TABLE_ENTRY64
+                    const int entry = 0x90;   // DUMP_DRIVER_ENTRY64：名字的位置（4 字节，补齐到 8）+ KLDR_DATA_TABLE_ENTRY64（0x88）
                     for (uint i = 0; i < drvCount && i < 4096; i++) {
                         long o = (long)drvOff + (long)i * entry;
                         if (o + entry > b.Length) break;
@@ -2805,7 +2811,8 @@ public class DumpInfo {
                         uint nameOff = BitConverter.ToUInt32(b, (int)o);
                         dr.Base = BitConverter.ToUInt64(b, (int)o + 8 + 0x30);
                         dr.Size = BitConverter.ToUInt32(b, (int)o + 8 + 0x40);
-                        dr.Name = ReadString(b, nameOff);
+                        dr.Path = ReadString(b, nameOff);
+                        dr.Name = Leaf(dr.Path);
                         if (dr.Name.Length > 0) d.Drivers.Add(dr);
                     }
                     if (csOff > 0 && csSize > 0 && csOff + csSize <= b.Length) {
@@ -2815,6 +2822,11 @@ public class DumpInfo {
                             if (hit != null && !IsKernel(hit.Name) && !d.StackDrivers.Contains(hit.Name)) { d.StackDrivers.Add(hit.Name); hit.Hit = true; }
                         }
                     }
+                    if (prOff > 0) d.Process = ImageName(b, prOff);
+                    // KTHREAD.ApcState.Process（0xB8）和 KTHREAD.Process（0x220）：Win10、Win11 x64 一直是这两个位置
+                    if (thOff > 0 && d.Params[0] != 0) {
+                        foreach (int k in new int[] { 0xB8, 0x220 }) if (thOff + k + 8 <= b.Length && BitConverter.ToUInt64(b, (int)thOff + k) == d.Params[0]) d.ProcessIsParam1 = true;
+                    }
                 }
             } else {
                 d.Build = BitConverter.ToUInt32(b, 0x0C);
@@ -2822,10 +2834,16 @@ public class DumpInfo {
                 for (int i = 0; i < 4; i++) d.Params[i] = BitConverter.ToUInt32(b, 0x2C + i * 4);
                 d.Error = "32-bit dump: only the bug check code is read";
             }
-            // 最可能的驱动：异常地址，或者这类错误码里记着出事地址的那个参数
-            ulong[] addrs = AddrParams(d);
-            foreach (ulong a in addrs) { DumpDriver hit = Find(d, a); if (hit != null && !IsKernel(hit.Name)) { d.Suspect = hit.Name; hit.Hit = true; break; } }
-            if (d.Suspect.Length == 0 && d.StackDrivers.Count > 0) d.Suspect = d.StackDrivers[0];
+            d.Status = StatusParam(d);
+            if (d.BugCheck == 0x7A || d.BugCheck == 0x77) {
+                // 读盘失败：出事地址是「没读进来的那一页」，它属于哪个驱动只说明那个驱动倒霉，原因在硬盘或硬盘的连接上，不点名驱动
+                DumpDriver pg = Find(d, d.Params[3]); if (pg != null) d.PageOwner = pg.Name;
+            } else {
+                // 最可能的驱动：异常地址，或者这类错误码里记着出事地址的那个参数
+                ulong[] addrs = AddrParams(d);
+                foreach (ulong a in addrs) { DumpDriver hit = Find(d, a); if (hit != null && !IsKernel(hit.Name)) { d.Suspect = hit.Name; d.SuspectFrom = "address"; hit.Hit = true; break; } }
+                if (d.Suspect.Length == 0 && d.StackDrivers.Count > 0 && d.BugCheck != 0xEF && d.BugCheck != 0x124) { d.Suspect = d.StackDrivers[0]; d.SuspectFrom = "stack"; }
+            }
             d.Ok = true;
         } catch (Exception e) { d.Error = e.Message; }
         return d;
@@ -2835,14 +2853,54 @@ public class DumpInfo {
         if (d.ExceptionAddress != 0) a.Add(d.ExceptionAddress);
         switch (d.BugCheck) {
             case 0x0A: case 0xD1: a.Add(d.Params[3]); break;                    // IRQL_NOT_LESS_OR_EQUAL, DRIVER_IRQL…：参数 4 是出事地址
-            case 0x1E: case 0x7E: case 0x8E: case 0x3B: a.Add(d.Params[1]); break;   // 异常类：参数 2 是出事地址
-            case 0x50: case 0xC5: a.Add(d.Params[3]); break;                    // PAGE_FAULT_IN_NONPAGED_AREA：参数 4
-            case 0xC4: a.Add(d.Params[1]); break;
-            case 0x139: a.Add(d.Params[1]); break;
-            case 0xC2: a.Add(d.Params[2]); break;
+            case 0x1E: case 0x7E: case 0x8E: case 0x3B: case 0x1000007E: case 0x1000008E: a.Add(d.Params[1]); break;   // 异常类：参数 2 是出事地址
+            case 0x50: case 0xD5: case 0xD6: a.Add(d.Params[2]); break;        // 页错误类：参数 3 是访问内存的那条指令
+            case 0xC5: a.Add(d.Params[3]); break;                               // DRIVER_CORRUPTED_EXPOOL：参数 4
+            case 0x116: a.Add(d.Params[1]); break;                              // VIDEO_TDR_FAILURE：参数 2 指向出问题的显卡驱动
         }
         return a.ToArray();
     }
+    // 状态码：0x7A 的参数 2；0x77 参数 1 是 0/1/2 时在参数 2，否则就是参数 1；异常类的参数 1 是异常码
+    static uint StatusParam(DumpInfo d) {
+        switch (d.BugCheck) {
+            case 0x7A: return (uint)d.Params[1];
+            case 0x77: return d.Params[0] <= 2 ? (uint)d.Params[1] : (uint)d.Params[0];
+            case 0x1E: case 0x7E: case 0x8E: case 0x3B: case 0x1000007E: case 0x1000008E: return (uint)d.Params[0];
+        }
+        return 0;
+    }
+    static string Leaf(string p) { if (p == null) return ""; int i = p.LastIndexOfAny(new char[] { '\\', '/' }); return i >= 0 ? p.Substring(i + 1) : p; }
+    // EPROCESS.ImageFileName：15 个字节的 ASCII，后面一个字节是 PriorityClass（0–6）。先试各版本已知的位置，再按这个特征找
+    static string ImageName(byte[] b, uint pr) {
+        foreach (int k in new int[] { 0x450, 0x5A8, 0x338, 0x448, 0x2E0 }) { string s = ImageAt(b, pr + (uint)k); if (s.Length > 0) return s; }
+        for (int k = 0x200; k <= 0x800; k += 8) { string s = ImageAt(b, pr + (uint)k); if (s.Length > 0 && (s.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || s == "System" || s == "Registry" || s == "MemCompression")) return s; }
+        return "";
+    }
+    static string ImageAt(byte[] b, uint o) {
+        if (o + 16 > b.Length) return "";
+        int n = 0; while (n < 15 && b[o + n] >= 0x20 && b[o + n] < 0x7F) n++;
+        if (n < 2) return "";
+        for (int i = n; i < 15; i++) if (b[o + i] != 0) return "";
+        if (b[o + 15] > 6) return "";
+        string s = Encoding.ASCII.GetString(b, (int)o, n);
+        foreach (char c in s) if (!(char.IsLetterOrDigit(c) || c == '.' || c == '_' || c == '-' || c == ' ')) return "";
+        return s;
+    }
+    // 常见状态码 / 异常码的名字
+    public static string StatusName(uint s) {
+        switch (s) {
+            case 0xC000000E: return "STATUS_NO_SUCH_DEVICE"; case 0xC000009C: return "STATUS_DEVICE_DATA_ERROR"; case 0xC000009D: return "STATUS_DEVICE_NOT_CONNECTED";
+            case 0xC0000185: return "STATUS_IO_DEVICE_ERROR"; case 0xC000016A: return "STATUS_DISK_OPERATION_FAILED"; case 0xC0000483: return "STATUS_DEVICE_HARDWARE_ERROR";
+            case 0xC00000B5: return "STATUS_IO_TIMEOUT"; case 0xC000009A: return "STATUS_INSUFFICIENT_RESOURCES"; case 0xC0000006: return "STATUS_IN_PAGE_ERROR";
+            case 0xC000003F: return "STATUS_CRC_ERROR"; case 0xC0000102: return "STATUS_FILE_CORRUPT_ERROR"; case 0xC0000221: return "STATUS_IMAGE_CHECKSUM_MISMATCH";
+            case 0xC0000010: return "STATUS_INVALID_DEVICE_REQUEST"; case 0xC0000005: return "STATUS_ACCESS_VIOLATION"; case 0x80000003: return "STATUS_BREAKPOINT";
+            case 0xC0000420: return "STATUS_ASSERTION_FAILURE"; case 0xC0000409: return "STATUS_STACK_BUFFER_OVERRUN"; case 0xC000001D: return "STATUS_ILLEGAL_INSTRUCTION";
+            case 0xC0000096: return "STATUS_PRIVILEGED_INSTRUCTION"; case 0x80000002: return "STATUS_DATATYPE_MISALIGNMENT"; case 0xC0000094: return "STATUS_INTEGER_DIVIDE_BY_ZERO";
+            default: return "";
+        }
+    }
+    // 读盘失败类的状态码：硬盘掉线、坏道、线缆、超时
+    public static bool IsStorageStatus(uint s) { return s == 0xC000000E || s == 0xC000009C || s == 0xC000009D || s == 0xC0000185 || s == 0xC000016A || s == 0xC0000483 || s == 0xC00000B5 || s == 0xC000003F; }
     static bool IsKernel(string n) { n = n.ToLowerInvariant(); return n.StartsWith("ntoskrnl") || n.StartsWith("ntkrnl") || n == "hal.dll" || n.StartsWith("hal") || n == "kd.dll" || n.StartsWith("kdcom") || n == "pshed.dll" || n == "bootvid.dll" || n == "clfs.sys" || n == "ci.dll" || n.StartsWith("mcupdate"); }
     static DumpDriver Find(DumpInfo d, ulong a) {
         if (a == 0) return null;
@@ -2901,12 +2959,38 @@ public class ProcRow {
 public class DumpRow {
     public string When { get; set; }
     public string Code { get; set; }
+    public string Plain { get; set; }
     public string Suspect { get; set; }
     public string Detail { get; set; }
     public string File { get; set; }
     string _fg; public string SuspectBrush { get { return Theme.F(_fg); } set { _fg = value; } }
 }
 public class NoteRow { public string Head { get; set; } public string Body { get; set; } public string Path { get; set; } public bool HasPath { get; set; } }
+// 诊断结论和「常见问题修复」：按钮的 Tag 是修复步骤的编号
+public class FixBtn { public string Id { get; set; } public string Name { get; set; } public string Tip { get; set; } public bool Enabled { get; set; } }
+public class VerdictRow {
+    public string Title { get; set; }
+    public string Body { get; set; }
+    string _fg, _bg; public string Fg { get { return Theme.F(_fg); } set { _fg = value; } } public string Bg { get { return Theme.B(_bg); } set { _bg = value; } }
+    public List<FixBtn> Fixes { get; set; }
+    public bool HasFixes { get; set; }
+    public VerdictRow() { Fixes = new List<FixBtn>(); }
+}
+public class FixStepRow {
+    public string Id { get; set; }
+    public string Name { get; set; }
+    public string Desc { get; set; }
+    public string Tag { get; set; }
+    public bool Enabled { get; set; }
+    string _f, _b; public string TagFg { get { return Theme.F(_f); } set { _f = value; } } public string TagBg { get { return Theme.B(_b); } set { _b = value; } }
+}
+public class FixGroupRow {
+    public string Id { get; set; }
+    public string Title { get; set; }
+    public string Desc { get; set; }
+    public List<FixStepRow> Steps { get; set; }
+    public FixGroupRow() { Steps = new List<FixStepRow>(); }
+}
 
 // ==================== 界面文字翻译（PowerShell 启动时按语言设置填入；没有就原样返回中文） ====================
 public static class L10n {
@@ -3048,6 +3132,7 @@ public class VdiskRow : INotifyPropertyChanged {
 // 空间地图顶部的磁盘卡片：用量条、温度、磨损、健康状态，颜色按档位
 public class DiskCard {
     public string Letter { get; set; }
+    public bool Sel { get; set; }
     public string Model { get; set; }
     public string UsedText { get; set; }
     public double UsedPct { get; set; }
@@ -4100,6 +4185,12 @@ function Get-WinHealth {
     $r = @{ Ok = $true; Uptime = $null; LastBoot = $null; PendingReboot = $false; LastUpdate = $null; BadDevices = @(); Errors = @(); ErrorCount = 0; Build = '' }
     $os = @(Try-Cim 'Win32_OperatingSystem')
     if ($os.Count -gt 0) { try { $r.LastBoot = [DateTime]$os[0].LastBootUpTime; $r.Uptime = (Get-Date) - $r.LastBoot } catch {}; $r.Build = [string]$os[0].Version }
+    try {
+        $cv = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -ErrorAction Stop
+        $r.BuildNo = [int]$cv.CurrentBuildNumber; $r.Ubr = [int]$cv.UBR
+        $r.Release = if ($cv.DisplayVersion) { [string]$cv.DisplayVersion } else { [string]$cv.ReleaseId }
+        $r.Product = if ($r.BuildNo -ge 22000) { ([string]$cv.ProductName) -replace 'Windows 10', 'Windows 11' } else { [string]$cv.ProductName }
+    } catch {}
     foreach ($k in 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending', 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired') { if (Test-Path $k) { $r.PendingReboot = $true } }
     try { $p = Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' -Name PendingFileRenameOperations -ErrorAction Stop; if ($p.PendingFileRenameOperations) { $r.PendingReboot = $true } } catch {}
     try { $h = @(Get-HotFix -ErrorAction Stop | Where-Object { $_.InstalledOn } | Sort-Object InstalledOn -Descending); if ($h.Count -gt 0) { $r.LastUpdate = [DateTime]$h[0].InstalledOn; $r.LastUpdateId = [string]$h[0].HotFixID } } catch {}
@@ -4157,13 +4248,7 @@ function Get-CrashHealth {
     if (Test-Path -LiteralPath $r.DumpDir) { $files = @(Get-ChildItem -LiteralPath $r.DumpDir -Filter *.dmp -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 10) }
     foreach ($f in $files) {
         $d = $null; try { $d = [DumpInfo]::Parse($f.FullName) } catch { $d = $null }
-        $x = @{ File = $f.FullName; Name = $f.Name; Time = $f.LastWriteTime; Size = [double]$f.Length; Ok = $false; Code = 0; CodeName = ''; Params = @(); Suspect = ''; Stack = @(); Drivers = 0; Error = '' }
-        if ($d) {
-            $x.Ok = $d.Ok; $x.Code = [long]$d.BugCheck; $x.CodeName = [DumpInfo]::CodeName($d.BugCheck); $x.Params = @($d.Params | ForEach-Object { '0x{0:X}' -f $_ })
-            $x.Suspect = $d.Suspect; $x.Stack = @($d.StackDrivers); $x.Drivers = $d.Drivers.Count; $x.Error = $d.Error
-            if ($d.Time -gt [DateTime]'2000-01-01') { $x.Time = $d.Time }
-        }
-        $r.Dumps += $x
+        $r.Dumps += (ConvertFrom-DumpInfo $d $f.FullName $f.Name $f.LastWriteTime ([double]$f.Length))
     }
     $mem = Join-Path $env:SystemRoot 'MEMORY.DMP'
     if (Test-Path -LiteralPath $mem) { $i = Get-Item -LiteralPath $mem; $r.MemoryDmp = @{ Size = [double]$i.Length; Time = $i.LastWriteTime } }
@@ -4199,15 +4284,481 @@ function Get-CrashHealth {
     } catch {}
     return $r
 }
+# 转储解析结果变成健康页用的表：多带上状态码、出事的进程、栈上驱动是谁做的
+function ConvertFrom-DumpInfo($d, [string]$file, [string]$name, $time, [double]$size) {
+    $x = @{ File = $file; Name = $name; Time = $time; Size = $size; Ok = $false; Code = 0; CodeName = ''; Params = @(); Suspect = ''; SuspectFrom = ''; SuspectMaker = ''; SuspectMs = $false; Stack = @(); StackInfo = @(); Drivers = 0; Error = ''
+            Status = 0; StatusName = ''; PageOwner = ''; Process = ''; ProcIsP1 = $false; StorageDrivers = @(); Build = 0 }
+    if (-not $d) { return $x }
+    $x.Ok = $d.Ok; $x.Code = [long]$d.BugCheck; $x.CodeName = [DumpInfo]::CodeName($d.BugCheck); $x.Params = @($d.Params | ForEach-Object { '0x{0:X}' -f $_ })
+    $x.Drivers = $d.Drivers.Count; $x.Error = $d.Error; $x.Build = [int]$d.Build
+    $x.Status = [long]$d.Status; $x.StatusName = [DumpInfo]::StatusName($d.Status); $x.PageOwner = $d.PageOwner; $x.Process = $d.Process; $x.ProcIsP1 = $d.ProcessIsParam1
+    if ($d.Time -gt [DateTime]'2000-01-01') { $x.Time = $d.Time }
+    $paths = @{}; foreach ($dr in $d.Drivers) { if (-not $paths.ContainsKey($dr.Name)) { $paths[$dr.Name] = $dr.Path } }
+    $x.StorageDrivers = @($d.Drivers | Where-Object { (Get-DriverKind $_.Name) -eq 'storage' } | ForEach-Object { $_.Name } | Select-Object -Unique)
+    foreach ($s in @($d.StackDrivers)) { $m = Get-DriverMaker $paths[$s] $s; $x.StackInfo += @{ Name = $s; Maker = $m.Maker; Ms = $m.Ms } }
+    $x.Stack = @($d.StackDrivers)
+    # 只是「栈上第一个」的时候，Windows 自带的驱动多半是受害者：换成栈上第一个不是微软的；一个都没有就不点名
+    if ($d.SuspectFrom -eq 'stack') {
+        $pick = @($x.StackInfo | Where-Object { -not $_.Ms } | Select-Object -First 1)
+        if ($pick.Count -gt 0) { $x.Suspect = $pick[0].Name; $x.SuspectFrom = 'stack'; $x.SuspectMaker = $pick[0].Maker }
+    } elseif ($d.Suspect) {
+        $m = Get-DriverMaker $paths[$d.Suspect] $d.Suspect
+        $x.Suspect = $d.Suspect; $x.SuspectFrom = 'address'; $x.SuspectMaker = $m.Maker; $x.SuspectMs = $m.Ms
+    }
+    return $x
+}
+# 驱动文件是谁做的：转储里记的路径（\SystemRoot\...、\??\C:\...）换成本机路径，读文件的版本信息；读不到就按名字认几个 Windows 自带的
+function Get-DriverMaker([string]$path, [string]$name) {
+    $cands = @()
+    if ($path) {
+        $p = $path -replace '^\\SystemRoot', ([string]$env:SystemRoot) -replace '^\\\?\?\\', ''
+        if ($p -match '^[A-Za-z]:\\') { $cands += $p } elseif ($p -match '^\\Windows\\') { $cands += ($env:SystemDrive + $p) }
+    }
+    if ($name -and $env:SystemRoot) { $cands += (Join-Path $env:SystemRoot ('System32\drivers\' + $name)); $cands += (Join-Path $env:SystemRoot ('System32\' + $name)) }
+    foreach ($c in $cands) {
+        try {
+            if (Test-Path -LiteralPath $c -PathType Leaf) {
+                $v = [Diagnostics.FileVersionInfo]::GetVersionInfo($c)
+                $co = ([string]$v.CompanyName).Trim(); $desc = ([string]$v.FileDescription).Trim()
+                $maker = if ($co -and $desc -and $desc -ne $name) { '{0} · {1}' -f $co, $desc } elseif ($co) { $co } else { $desc }
+                return @{ Maker = $maker; Ms = ($co -match '^Microsoft'); Found = $true }
+            }
+        } catch {}
+    }
+    return @{ Maker = ''; Ms = (Test-MsDriverName $name); Found = $false }
+}
+function Test-MsDriverName([string]$n) { return ($n -match '^(?i)(ntoskrnl|ntkrnl|hal|ntfs|refs|win32k\w*|dxgkrnl|dxgmms\d|tcpip|ndis|netio|fltmgr|storport|stornvme|storahci|ataport|classpnp|disk|partmgr|volmgr\w*|volsnap|mountmgr|wdf01000|wdfldr|ks|ksecdd|cng|afd|http|mup|rdbss|srv\w*|wof|fileinfo|wdfilter|wdnisdrv|usbxhci|ucx01000|usbhub3|usbport|usbccgp|hidclass|hidusb|acpi|pci|pdc|cldflt|bindflt|luafv|npfs|msfs|fastfat|exfat|cdfs|udfs|iorate|storqosflt|wcifs|bowser|mrxsmb\w*|nsiproxy|netbt|tdx|vmbus|hvsocket|bam|ahcache|condrv|clipsp|ci|tm|clfs|pshed|kd|kdcom|bootvid|werkernel|mssecflt|sgrmagent|wtd|crashdmp|dumpstorport|dumpfve|fvevol|rdyboost|spaceport|intelpep|wmilib|cea|msrpc|ksthunk|portcls|drmk|hdaudbus|hdaudio|monitor|basicdisplay|basicrender|watchdog|mouclass|kbdclass|i8042prt|serial|serenum|vdrvroot|wpprecorder)\.(sys|dll|exe)$') }
+# 驱动是哪一类：存储、显卡、网卡、安全软件、反作弊、芯片组管理引擎。用来给建议，不用来定罪
+function Get-DriverKind([string]$n) {
+    switch -Regex ($n) {
+        '^(?i)(iastor\w*|rstmw\w*|amdsata|amdxata|amdsbs|nvstor\w*|secnvme|samsungnvme\w*|nvme\w*|stornvme|storahci|rcraid|rcbottom|megasas\w*|lsi_\w+|arcsas|percsas\w*|vmd)\.sys$' { return 'storage' }
+        '^(?i)(nvlddmkm|atikmdag|atikmpag|amdkmdag|amdkmpfd|amdfendr|igdkmd\w*|igdkmdn\w*|igdkmdnd\w*|igfxkmd\w*|dxgkrnl|dxgmms\d|basicdisplay)\.sys$' { return 'graphics' }
+        '^(?i)(e1[a-z]\d+x64|e2f\w*|rt640x64|rt\w*x64|rtwlan\w*|rtux64w10|netwtw\d+|netwbw\d+|netwsw\d+|athw\w*|qcamain\w*|bcmwl\w*|mrvlpcie\w*|ndis|tcpip|netio|wfplwfs|vwifibus)\.sys$' { return 'network' }
+        '^(?i)(klif|kl\w+|avgsp|avgsnx|aswsp|aswsnx|aswarpot|360\w*|bapidrv\w*|qmbsec\w*|tsdefensebt|taokernel\w*|qqprotect\w*|sysdiag\w*|hrwfpdrv|hrdevmon|mfe\w+|symefasi\w*|srtsp\w*|bdselfpr|avc3|gzflt|trufos|eamonm|ehdrv|epfw\w*|wdfilter|wdnisdrv)\.sys$' { return 'security' }
+        '^(?i)(easyanticheat\w*|bedaisy|vgk|ace-base\w*|ace-game\w*|tessafe|xhunter1|npptnt2|gameguard\w*)\.sys$' { return 'anticheat' }
+        '^(?i)(teedriver\w*|heci\w*|mei\w*|iqvw64e)\.sys$' { return 'mei' }
+        '^(?i)(vmx86|vmci|vboxdrv|vboxsup|vboxnetlwf|vboxusbmon|hvservice|vmbus|vmswitch)\.sys$' { return 'virt' }
+    }
+    return ''
+}
+# 系统时钟准不准：拿不到网络时间也能看出「时钟往回走了」——系统自己写的文件里有比现在还晚的修改时间
+function Get-ClockHealth {
+    $r = @{ Ok = $true; Wrong = $false; AheadDays = 0; Newest = $null; Source = ''; Service = ''; Jumps = 0; MaxJumpDays = 0 }
+    $now = Get-Date
+    foreach ($spec in @(@{ Dir = (Join-Path $env:SystemRoot 'Prefetch'); Filter = '*.pf' }, @{ Dir = (Join-Path $env:SystemRoot 'System32\winevt\Logs'); Filter = '*.evtx' }, @{ Dir = (Join-Path $env:SystemRoot 'Logs\CBS'); Filter = '*.log' }, @{ Dir = (Join-Path $env:SystemRoot 'SoftwareDistribution\DataStore'); Filter = '*.edb' })) {
+        try {
+            $f = @(Get-ChildItem -LiteralPath $spec.Dir -Filter $spec.Filter -File -Force -ErrorAction Stop | Sort-Object LastWriteTime -Descending | Select-Object -First 1)
+            if ($f.Count -gt 0 -and (-not $r.Newest -or $f[0].LastWriteTime -gt $r.Newest)) { $r.Newest = $f[0].LastWriteTime; $r.Source = $f[0].FullName }
+        } catch {}
+    }
+    if ($r.Newest -and $r.Newest -gt $now.AddDays(1)) { $r.Wrong = $true; $r.AheadDays = [int][math]::Floor(($r.Newest - $now).TotalDays) }
+    try { $s = Get-Service -Name W32Time -ErrorAction Stop; $r.Service = '{0}/{1}' -f $s.Status, $s.StartType } catch {}
+    # Kernel-General 1：系统时间被改过（OldTime → NewTime），一次差一天以上的算跳变
+    try {
+        $ev = @(Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'Microsoft-Windows-Kernel-General'; Id = 1; StartTime = $now.AddDays(-90) } -MaxEvents 200 -ErrorAction Stop)
+        foreach ($e in $ev) {
+            $x = [xml]$e.ToXml(); $d = @{}
+            foreach ($n in $x.Event.EventData.Data) { $d[[string]$n.Name] = [string]$n.'#text' }
+            try { $days = [math]::Abs(([DateTime]$d['NewTime'] - [DateTime]$d['OldTime']).TotalDays) } catch { continue }
+            if ($days -ge 1) { $r.Jumps++; if ($days -gt $r.MaxJumpDays) { $r.MaxJumpDays = [int][math]::Round($days) } }
+        }
+    } catch {}
+    return $r
+}
 # 一次读完健康页要的全部（在后台线程里跑）
 function Get-HealthAll {
     $t0 = Get-Date
-    $r = @{ Cpu = (Get-CpuHealth); Mem = (Get-MemHealth); Battery = (Get-BatteryHealth); Gpu = @(Get-GpuHealth); Win = (Get-WinHealth); Boot = (Get-BootHealth); Crash = (Get-CrashHealth); At = (Get-Date) }
+    $r = @{ Cpu = (Get-CpuHealth); Mem = (Get-MemHealth); Battery = (Get-BatteryHealth); Gpu = @(Get-GpuHealth); Win = (Get-WinHealth); Boot = (Get-BootHealth); Crash = (Get-CrashHealth); Clock = (Get-ClockHealth); Power = (Get-PowerFixState); At = (Get-Date) }
     $r.Disks = @(); foreach ($d in @(Get-FixedDriveLetters)) { try { $h = Get-DiskHealthInfo $d; $h.Drive = $d; $r.Disks += $h } catch {} }
+    $r.Verdicts = @(Get-CrashVerdict $r)
     $r.Secs = ((Get-Date) - $t0).TotalSeconds
     return $r
 }
 function Get-FixedDriveLetters { @([IO.DriveInfo]::GetDrives() | Where-Object { $_.DriveType -eq 'Fixed' -and $_.IsReady } | ForEach-Object { $_.Name.TrimEnd('\') }) }
+
+# ---------- 蓝屏诊断：错误码和状态码的人话解释，几次蓝屏放在一起看出来的结论 ----------
+# 错误码 → 哪一类问题、一句人话、常见原因、建议先做的修复（编号对应 Get-FixCatalog 里的步骤）
+function Get-BugcheckKb {
+    return @(
+        @{ Codes = @('7A', '77'); Kind = 'storage'; Plain = (T '系统要从硬盘读回一块数据时读失败了'); Causes = (T '硬盘或它的连接出了问题（看状态码）；少数是内存'); Fixes = @('hwtab', 'diskpower', 'chkscan', 'devmgmt') },
+        @{ Codes = @('EF', 'F4', 'C000021A'); Kind = 'sysproc'; Plain = (T 'Windows 离不开的系统进程意外退出了，只能蓝屏'); Causes = (T '系统文件损坏，或者硬盘读不出系统文件（和读盘失败、磁盘错误一起出现时多半是这个）；也可能是内存问题或安全软件误杀'); Fixes = @('sfccheck', 'sfcrepair', 'chkscan', 'memtest') },
+        @{ Codes = @('50'); Kind = 'memory'; Plain = (T '系统访问了一块不存在的内存'); Causes = (T '点名的驱动不是微软的时候多半是它的错；否则常见于内存条问题、硬盘读不回换出去的内存、安全软件'); Fixes = @('memtest', 'sfccheck', 'devmgmt') },
+        @{ Codes = @('1A', '4E', '19', 'C2', 'C5', '13A', '139', '7F', '109', 'BE', 'FC', 'D5', 'D6'); Kind = 'memory'; Plain = (T '内存里的数据被破坏了'); Causes = (T '内存条或内存超频（XMP）不稳定，或者某个驱动写坏了内存'); Fixes = @('memtest', 'devmgmt', 'sfccheck') },
+        @{ Codes = @('A', 'D1'); Kind = 'driver'; Plain = (T '有个驱动在不允许的时候访问了内存'); Causes = (T '几乎都是驱动的错：有线和无线网卡、VPN、安全软件、虚拟光驱的驱动最常见'); Fixes = @('devmgmt', 'rstrui', 'winupdate') },
+        @{ Codes = @('1E', '7E', '8E', '3B', '1000007E', '1000008E'); Kind = 'driver'; Plain = (T '系统或某个驱动里出了没处理的错误'); Causes = (T '多是驱动的错（尤其显卡、安全软件），也可能是系统文件损坏'); Fixes = @('devmgmt', 'sfccheck', 'rstrui') },
+        @{ Codes = @('9F', 'A0'); Kind = 'power'; Plain = (T '睡眠、唤醒或关机的时候，有个驱动迟迟不响应'); Causes = (T '芯片组、存储、无线网卡、显卡驱动太旧，或者快速启动和驱动不兼容'); Fixes = @('faststartup', 'devmgmt', 'winupdate') },
+        @{ Codes = @('133', 'EA', '100000EA'); Kind = 'driver'; Plain = (T '某个驱动占着处理器太久不放'); Causes = (T '常见于硬盘控制器驱动（比如 Intel RST）、固态硬盘固件太旧、显卡驱动'); Fixes = @('devmgmt', 'diskpower', 'winupdate') },
+        @{ Codes = @('124'); Kind = 'hardware'; Plain = (T 'CPU、内存或主板报告了没法纠正的硬件错误'); Causes = (T '超频或 XMP 不稳定、温度太高、电源供电不足、BIOS 太旧；少数是 CPU 或内存坏了'); Fixes = @('hwtab', 'memtest') },
+        @{ Codes = @('116', '117', '119', '141', '113', '10E'); Kind = 'graphics'; Plain = (T '显卡驱动没响应，系统重置它也没恢复'); Causes = (T '显卡驱动版本有问题、显卡温度过高或超频；笔记本双显卡切换时也常见'); Fixes = @('devmgmt', 'hwtab') },
+        @{ Codes = @('154'); Kind = 'storage'; Plain = (T '内存压缩存储出错'); Causes = (T '多是硬盘读写不稳，或者内存有问题'); Fixes = @('chkscan', 'memtest', 'diskpower') },
+        @{ Codes = @('24', 'F5', 'DE', '23'); Kind = 'filesystem'; Plain = (T '文件系统出错'); Causes = (T '磁盘上的文件系统有损坏，或者安全软件、加密软件的过滤驱动有问题'); Fixes = @('chkscan', 'chkfix', 'devmgmt') },
+        @{ Codes = @('C4'); Kind = 'driver'; Plain = (T '「驱动程序验证程序」抓到了驱动的错'); Causes = (T '只有开着 Driver Verifier（verifier.exe）时才会出现，被点名的驱动就是有问题的那个；查完记得用 verifier /reset 关掉'); Fixes = @('devmgmt') }
+    )
+}
+# 读盘失败的状态码 → 人话
+function Get-StatusPlain([long]$st) {
+    switch ('{0:X8}' -f $st) {
+        'C000000E' { return (T '硬盘在运行中掉线了，系统找不到它') }
+        'C000009D' { return (T '硬盘在运行中断开了连接') }
+        'C000009C' { return (T '硬盘读到了坏的扇区（坏道）') }
+        'C000016A' { return (T '硬盘读写操作失败，多是坏道') }
+        'C0000185' { return (T '硬盘读写出错，常见于数据线或接口接触不良') }
+        'C0000483' { return (T '硬盘报告了自身的硬件错误') }
+        'C00000B5' { return (T '硬盘很久没有响应（超时）') }
+        'C000003F' { return (T '数据校验出错（CRC），多是数据线或接口的问题') }
+        'C000009A' { return (T '系统资源（内存）耗尽，没法完成读盘') }
+    }
+    return ''
+}
+# 一次蓝屏的解释：哪一类、发生了什么（带上状态码、进程、点名的驱动）、建议的修复
+function Get-DumpExplain($x) {
+    $hex = '{0:X}' -f [long]$x.Code
+    $kb = @(Get-BugcheckKb | Where-Object { $_.Codes -contains $hex } | Select-Object -First 1)
+    $e = @{ Kind = 'other'; Plain = (T '这个错误码没有现成的解释'); Causes = (T '可以把转储文件交给懂的人用 WinDbg 分析'); Fixes = @('sfccheck', 'diagpack'); Detail = @() }
+    if ($kb.Count -gt 0) { $e.Kind = $kb[0].Kind; $e.Plain = $kb[0].Plain; $e.Causes = $kb[0].Causes; $e.Fixes = @($kb[0].Fixes) }
+    if (-not $x.Ok) { $e.Plain = (T '转储文件没解析出来'); return $e }
+    if ($e.Kind -eq 'storage' -and $x.Status) {
+        $sp = Get-StatusPlain $x.Status
+        $e.Detail += ((T '{0}（0x{1:X8}{2}）') -f $(if ($sp) { $sp } else { (T '读盘失败') }), [long]$x.Status, $(if ($x.StatusName) { ' ' + $x.StatusName } else { '' }))
+        if ($x.Status -and -not [DumpInfo]::IsStorageStatus([uint32]$x.Status)) { $e.Kind = 'memory'; $e.Fixes = @('memtest', 'chkscan', 'sfccheck') }
+        if ($x.PageOwner) { $e.Detail += ((T '读不回来的那一块属于 {0}：它只是碰上了，不是原因') -f $x.PageOwner) }
+    }
+    if ($hex -eq 'EF' -and $x.Process) { $e.Detail += $(if ($x.ProcIsP1) { (T '退出的是 {0}') -f $x.Process } else { (T '出事时的进程是 {0}') -f $x.Process }) }
+    if ($x.Suspect) {
+        $who = if ($x.SuspectMaker) { (T '{0}（{1}）') -f $x.Suspect, $x.SuspectMaker } else { $x.Suspect }
+        if ($x.SuspectFrom -eq 'address' -and $x.SuspectMs) { $e.Detail += ((T '出事的地址在 Windows 自带的 {0} 里：它常常是被别的驱动连累的') -f $who) }
+        elseif ($x.SuspectFrom -eq 'address') { $e.Detail += ((T '出事的地址在 {0} 里：最值得怀疑') -f $who) }
+        else { $e.Detail += ((T '栈上出现的第一个非微软驱动是 {0}：可以怀疑，但不确定') -f $who) }
+    } elseif (@($x.Stack).Count -gt 0 -and $e.Kind -notin 'storage', 'sysproc', 'hardware') { $e.Detail += ((T '栈上只有 Windows 自带的驱动（{0}）：这种多半不是驱动的错，更像内存或硬盘的问题') -f ((@($x.Stack) | Select-Object -First 4) -join ', ')) }
+    return $e
+}
+# 几次蓝屏、事件日志、硬盘健康、时钟、系统版本放在一起看：给出几条结论，每条带建议的修复
+function Get-CrashVerdict($r) {
+    $out = @()
+    $cr = $r.Crash; $dumps = @($cr.Dumps | Where-Object { $_.Ok })
+    $ex = @{}; foreach ($d in $dumps) { $ex[$d.File] = Get-DumpExplain $d }
+    $ev = @{}; foreach ($x in @($cr.Events)) { $ev[[string]$x.Source] = $x }
+    $diskEv = 0; foreach ($k in 'disk', 'Ntfs') { if ($ev.ContainsKey($k)) { $diskEv += [int]$ev[$k].Count } }
+    $badDisks = @($r.Disks | Where-Object { $_.Ok -and (([string]$_.Health -and [string]$_.Health -notmatch 'Healthy|正常|OK') -or ($_.ReadErrors -ne $null -and [long]$_.ReadErrors -gt 0)) })
+    $byKind = @{}; foreach ($d in $dumps) { $k = $ex[$d.File].Kind; if (-not $byKind.ContainsKey($k)) { $byKind[$k] = @() }; $byKind[$k] += $d }
+    $get = { param($k) if ($byKind.ContainsKey($k)) { @($byKind[$k]) } else { @() } }
+    $n = { param($k) @(& $get $k).Count }
+    $codeList = { param($list) (@($list | Group-Object { $_.CodeName } | ForEach-Object { if ($_.Count -gt 1) { '{0} ×{1}' -f $_.Name, $_.Count } else { $_.Name } }) -join (T '、')) }
+    # 1. 硬盘或硬盘连接
+    $storDumps = @(& $get 'storage' | Where-Object { [DumpInfo]::IsStorageStatus([uint32]$_.Status) })
+    $storage = ($storDumps.Count -gt 0) -or ($badDisks.Count -gt 0 -and $dumps.Count -gt 0) -or ($diskEv -gt 0 -and ((& $n 'sysproc') + (& $n 'memory') + (& $n 'filesystem')) -gt 0)
+    if ($storage) {
+        $lines = @()
+        foreach ($d in $storDumps) { $lines += ((T '• {0:MM-dd HH:mm} {1}：{2}（0x{3:X8}）') -f $d.Time, $d.CodeName, $(if (Get-StatusPlain $d.Status) { Get-StatusPlain $d.Status } else { (T '读盘失败') }), [long]$d.Status) }
+        $sp = @(& $get 'sysproc')
+        if ($sp.Count -gt 0) {
+            $procs = @($sp | ForEach-Object { $_.Process } | Where-Object { $_ } | Select-Object -Unique)
+            $lines += ((T '• {0} 次系统进程退出（{1}）：系统进程读不到自己的文件时就会这样') -f $sp.Count, $(if ($procs.Count) { $procs -join ', ' } else { (& $codeList $sp) }))
+        }
+        if ($diskEv -gt 0) { $lines += ((T '• 最近 30 天系统日志里有 {0} 条磁盘或文件系统错误') -f $diskEv) }
+        foreach ($b in $badDisks) { $lines += ((T '• {0} {1}：健康状态「{2}」{3}') -f $b.Drive, $b.Model, $b.Health, $(if ($b.ReadErrors -gt 0) { (T '，读错误 {0} 次') -f $b.ReadErrors } else { '' })) }
+        $rst = @($dumps | ForEach-Object { @($_.StorageDrivers) } | Where-Object { $_ -match '^(?i)iastor' } | Select-Object -Unique)
+        if ($rst.Count -gt 0) { $lines += ((T '• 硬盘用的是 Intel RST 存储驱动（{0}）：这类掉盘很多和它的版本或省电设置有关') -f ($rst -join ', ')) }
+        $body = ($lines -join "`n") + "`n" + (T '最可能的原因：硬盘数据线或电源线接触不良、硬盘省电后唤醒失败、存储驱动太旧，或者硬盘本身在坏。') + "`n" +
+            (T '建议按顺序做：① 先把重要资料备份到别的盘或网盘；② 在「硬件」里看这块盘的健康和读错误；③ 关闭硬盘省电（下面的按钮，随时能恢复）；④ 更新存储驱动（到电脑或主板厂商的网站下载最新的芯片组 / RST 驱动）；⑤ 台式机关机断电后重新插一下硬盘的数据线和电源线，换个接口；⑥ 还是掉线，就是硬盘本身的问题，尽快换盘。')
+        $out += @{ Id = 'storage'; Level = 'red'; Title = (T '硬盘或硬盘连接不稳定（最可能）'); Body = $body; Fixes = @('hwtab', 'diskpower', 'chkscan', 'devmgmt', 'diagpack') }
+    }
+    # 2. 同一个第三方驱动反复被点名
+    $sus = @($dumps | Where-Object { $_.Suspect -and -not $_.SuspectMs -and -not (Test-MsDriverName $_.Suspect) -and $ex[$_.File].Kind -notin 'storage', 'sysproc' } | Group-Object { $_.Suspect } | Sort-Object Count -Descending)
+    foreach ($g in $sus) {
+        if ($g.Count -lt 2 -and $dumps.Count -gt 1) { continue }
+        $one = $g.Group[0]; $kind = Get-DriverKind $one.Suspect
+        $who = if ($one.SuspectMaker) { (T '{0}（{1}）') -f $one.Suspect, $one.SuspectMaker } else { $one.Suspect }
+        $hint = switch ($kind) { 'graphics' { (T '这是显卡驱动：到显卡厂商（NVIDIA、AMD、Intel）官网下载最新驱动重新安装；刚更新完才出现的，就回退到上一个版本。') } 'network' { (T '这是网卡驱动：到电脑或网卡厂商网站下载最新版；VPN、加速器类软件也会装网络驱动，最近装过的先卸掉试试。') } 'security' { (T '这是安全软件的驱动：先升级这款安全软件；还蓝屏就暂时卸载它（Windows 自带的 Defender 会自动接管）。') } 'anticheat' { (T '这是游戏反作弊的驱动：更新或重新安装对应的游戏；不玩了就卸载。') } 'storage' { (T '这是硬盘控制器驱动：到电脑或主板厂商网站下载最新的芯片组 / 存储驱动。') } default { (T '到这个驱动的厂商网站下载最新版本；刚装或刚更新过的，在设备管理器里「回退驱动程序」，或者卸载对应的软件。') } }
+        $body = ((T '{0} 在 {1} 次蓝屏里被点名（{2}）。') -f $who, $g.Count, (& $codeList $g.Group)) + "`n" + $hint
+        $recent = @($cr.Drivers | Where-Object { $_.Name -and ($_.Name -like ('*' + [IO.Path]::GetFileNameWithoutExtension($one.Suspect) + '*')) } | Select-Object -First 1)
+        if ($recent.Count -gt 0) { $body += "`n" + ((T '最近 30 天装过相关的驱动：{0} {1}（{2:MM-dd}）') -f $recent[0].Provider, $recent[0].Version, $recent[0].When) }
+        $out += @{ Id = 'driver-' + $one.Suspect; Level = 'red'; Title = ((T '驱动 {0} 嫌疑最大') -f $one.Suspect); Body = $body; Fixes = @('devmgmt', 'rstrui', 'winupdate') }
+    }
+    # 3. 显卡
+    if ((& $n 'graphics') -gt 0 -and -not ($out | Where-Object { $_.Id -like 'driver-*' -and (Get-DriverKind ($_.Id.Substring(7))) -eq 'graphics' })) {
+        $out += @{ Id = 'graphics'; Level = 'amber'; Title = (T '显卡驱动出问题'); Body = ((T '{0}：显卡驱动没响应被系统重置过。') -f (& $codeList (& $get 'graphics'))) + "`n" + (T '到显卡厂商官网下载最新驱动，安装时选「清洁安装」；看看「硬件」里显卡占用和散热；超频过的先恢复默认频率。'); Fixes = @('devmgmt', 'hwtab') }
+    }
+    # 4. 内存
+    $memD = @(& $get 'memory')
+    $whea = [int]$r.Mem.Whea
+    if (($memD.Count -ge 2 -and -not $storage) -or $whea -gt 0) {
+        $body = if ($memD.Count -gt 0) { (T '{0}：这类蓝屏点名的驱动各不相同，或者只有 Windows 自带的驱动，内存出问题的可能性比较大。') -f (& $codeList $memD) } else { '' }
+        if ($whea -gt 0) { $body += $(if ($body) { "`n" } else { '' }) + ((T '最近 30 天 Windows 记录了 {0} 次内存硬件错误（WHEA）。') -f $whea) }
+        $body += "`n" + (T '用 Windows 内存诊断查一次（重启后自动检测，大约 15 分钟）；在 BIOS 里开过 XMP / 超频的先关掉；台式机可以把内存条拔下来擦一下金手指重新插，或者一根一根地试。')
+        $out += @{ Id = 'memory'; Level = 'amber'; Title = (T '可能是内存不稳定'); Body = $body; Fixes = @('memtest', 'sfccheck') }
+    }
+    # 5. 硬件错误
+    if ((& $n 'hardware') -gt 0 -or $ev.ContainsKey('Microsoft-Windows-WHEA-Logger')) {
+        $cnt = if ($ev.ContainsKey('Microsoft-Windows-WHEA-Logger')) { [int]$ev['Microsoft-Windows-WHEA-Logger'].Count } else { 0 }
+        $out += @{ Id = 'hardware'; Level = 'red'; Title = (T 'CPU、内存或主板报告了硬件错误'); Body = ((T '硬件错误蓝屏 {0} 次，系统日志里的硬件错误 {1} 条。') -f (& $n 'hardware'), $cnt) + "`n" + (T '先恢复 BIOS 默认设置（取消超频和 XMP），看「硬件」里 CPU 温度；清一下散热器的灰；台式机检查电源功率是否够；再去主板厂商网站更新 BIOS。'); Fixes = @('hwtab', 'memtest') }
+    }
+    # 6. 睡眠唤醒、意外关机
+    if ((& $n 'power') -gt 0) { $out += @{ Id = 'power'; Level = 'amber'; Title = (T '睡眠、唤醒或关机时驱动没响应'); Body = ((T '{0}。') -f (& $codeList (& $get 'power'))) + "`n" + (T '先关闭快速启动试试（随时能再打开）；再更新芯片组、无线网卡、显卡驱动。'); Fixes = @('faststartup', 'powerreq', 'devmgmt') } }
+    $kp = if ($ev.ContainsKey('Microsoft-Windows-Kernel-Power')) { [int]$ev['Microsoft-Windows-Kernel-Power'].Count } else { 0 }
+    if ($kp -ge 3 -and $kp -gt ($dumps.Count + 1)) {
+        $out += @{ Id = 'unexpected'; Level = 'amber'; Title = (T '多次没有正常关机'); Body = ((T '最近 30 天有 {0} 次意外关机或重启，比蓝屏转储（{1} 个）多。') -f $kp, $dumps.Count) + "`n" + (T '多出来的那些是直接断电、死机后按了电源键，或者蓝屏时没能写出转储。台式机检查电源和插线板；笔记本检查电池；死机时屏幕定住不动的，多半是显卡、内存或硬盘的问题。'); Fixes = @('memtest', 'chkscan', 'reliability') }
+    }
+    # 7. 系统文件
+    if ((& $n 'sysproc') -gt 0 -and -not $storage) {
+        $out += @{ Id = 'sysfile'; Level = 'amber'; Title = (T '系统进程意外退出'); Body = ((T '{0}。') -f (& $codeList (& $get 'sysproc'))) + "`n" + (T '先检查系统文件，有损坏就修复；最近装过更新、驱动或软件之后才开始的，可以用系统还原回到之前。'); Fixes = @('sfccheck', 'sfcrepair', 'rstrui') }
+    }
+    # 8. 时钟
+    $ck = $r.Clock
+    if ($ck -and $ck.Wrong) {
+        $out += @{ Id = 'clock'; Level = 'amber'; Title = (T '系统时间不准'); Body = ((T '系统自己写的文件里有比「现在」还晚 {0} 天的（{1:yyyy-MM-dd}）：时钟被往回调过，或者主板电池没电后时间重置了。') -f $ck.AheadDays, $ck.Newest) + "`n" + (T '时间不对会让网页提示证书错误、Windows 更新失败，蓝屏记录的时间也跟着不准。同步一次时间；台式机每次断电后时间都变回去，就是主板上的纽扣电池（CR2032）该换了。'); Fixes = @('timecheck', 'timesync', 'datetime') }
+    }
+    # 9. 系统版本太旧
+    $w = $r.Win
+    if ($w -and $w.BuildNo -gt 0 -and $w.BuildNo -lt 19045 -and [string]$w.Product -notmatch 'Server|LTSC|LTSB') {   # 服务器版和长期服务版支持得更久
+        $out += @{ Id = 'oldwin'; Level = 'amber'; Title = (T 'Windows 版本太旧'); Body = ((T '这台电脑是 {0} {1}（版本号 {2}），早就收不到安全更新和修复补丁了：很多蓝屏和驱动问题在新版本里已经修好。') -f $w.Product, $w.Release, $w.BuildNo) + "`n" + (T '建议先备份资料，再升级到 Windows 11（硬件不满足时至少升到 Windows 10 22H2）。如果硬盘有问题，先把硬盘的问题解决掉再升级，否则升级到一半掉盘会更麻烦。'); Fixes = @('winupdate') }
+    }
+    if ($out.Count -eq 0) {
+        $t = if ($dumps.Count -gt 0) { (T '有蓝屏记录，但看不出集中在哪一类：先检查系统文件，再看每次蓝屏下面的说明。') } else { (T '最近没有蓝屏转储，也没有意外关机、硬件错误和磁盘错误的记录。') }
+        $out += @{ Id = 'none'; Level = $(if ($dumps.Count -gt 0) { 'blue' } else { 'green' }); Title = $(if ($dumps.Count -gt 0) { (T '没有明显的规律') } else { (T '没发现问题') }); Body = $t; Fixes = $(if ($dumps.Count -gt 0) { @('sfccheck', 'diagpack') } else { @() }) }
+    }
+    return $out
+}
+
+# ---------- 常见问题修复：论坛里流传最广、确实有效的修法 ----------
+# 每一步都写清楚改不改东西；只用 Windows 自带的命令，在看得见的终端窗口里跑。
+# Kind：check 只看不改 / fix 会改动（先确认）/ open 打开 Windows 自带的工具 / go 跳到本工具的某一页 / special 本工具自己做
+# 不删任何文件：Windows 更新组件是改名留底，chkdsk 只在下次开机检查，网络重置要重启才生效
+function Get-FixCatalog {
+    $sr = if ($env:SystemRoot) { $env:SystemRoot } else { 'C:\Windows' }; $sd = if ($env:SystemDrive) { $env:SystemDrive } else { 'C:' }
+    $ts = '{0:yyyyMMdd-HHmmss}' -f (Get-Date)
+    $s = [ordered]@{}
+    $s.crashtab   = @{ Name = (T '看蓝屏诊断'); Kind = 'go'; Go = 'crash'; Lvl = 0; Desc = (T '本页「蓝屏和崩溃」：每次蓝屏是什么错、可能是谁，几次放在一起的结论') }
+    $s.hwtab      = @{ Name = (T '看硬盘健康'); Kind = 'go'; Go = 'hw'; Lvl = 0; Desc = (T '本页「硬件」：硬盘的健康状态、温度、磨损、读错误') }
+    $s.boottab    = @{ Name = (T '看开机用时'); Kind = 'go'; Go = 'boot'; Lvl = 1; Desc = (T '本页「开机用时」：Windows 点名拖慢开机的程序') }
+    $s.startapps  = @{ Name = (T '管理开机启动'); Kind = 'go'; Go = 'startup'; Lvl = 1; Desc = (T '「软件管理 → 开机启动」：关掉不需要开机就运行的程序') }
+    $s.sfccheck   = @{ Name = (T '检查系统文件'); Kind = 'check'; Lvl = 0; Cmd = 'echo === sfc /verifyonly === & sfc /verifyonly & echo. & echo === DISM /ScanHealth === & DISM /Online /Cleanup-Image /ScanHealth'; Desc = (T 'sfc /verifyonly 和 DISM /ScanHealth：只检查系统文件和系统映像有没有损坏，不改任何东西。要几分钟') }
+    $s.dismcheck  = @{ Name = (T '快速检查系统映像'); Kind = 'check'; Lvl = 1; Cmd = 'DISM /Online /Cleanup-Image /CheckHealth'; Desc = (T 'DISM /CheckHealth：几秒钟看一下系统映像有没有被标记为损坏，不改东西') }
+    $s.sfcrepair  = @{ Name = (T '修复系统文件…'); Kind = 'fix'; Lvl = 0; Cmd = 'echo === DISM /RestoreHealth === & DISM /Online /Cleanup-Image /RestoreHealth & echo. & echo === sfc /scannow === & sfc /scannow'; Desc = (T '先 DISM /RestoreHealth 修好系统映像（可能要联网下载），再 sfc /scannow 把损坏的系统文件换成正常的。只动 Windows 自己的文件，不碰你的资料。十几分钟到半小时')
+                      Confirm = (T "会运行 DISM /RestoreHealth 和 sfc /scannow：把损坏的系统文件换成正常的副本。这会改动系统文件（只动 Windows 自己的文件，不碰你的资料），DISM 可能要联网下载，一共要十几分钟到半小时，中途不要关窗口。`n`n可以先用「检查系统文件」看一眼有没有问题，再决定要不要修复。") }
+    $s.chkscan    = @{ Name = (T '扫描 C 盘文件系统'); Kind = 'check'; Lvl = 0; Cmd = ('chkdsk {0} /scan' -f $sd); Desc = (T 'chkdsk /scan：在线扫描 C 盘的文件系统，不用重启、不锁盘。发现问题会提示下一步') }
+    $s.chkfix     = @{ Name = (T '下次开机检查并修复 C 盘…'); Kind = 'fix'; Lvl = 1; Reboot = $true; Cmd = ('echo Y| chkdsk {0} /f & echo. & echo {1}' -f $sd, ((T '重启电脑后会先检查 {0}，期间不要断电。不想检查了可以运行 chkntfs /x {0}') -f $sd)); Desc = (T 'chkdsk /f：安排在下次开机时检查并修复 C 盘的文件系统。开机会多花几分钟到一小时，期间不能断电。可以撤销')
+                      Confirm = (T "会安排在下次开机时检查并修复 C 盘（chkdsk /f）。开机时会先检查，可能要几分钟到一小时，期间不要断电、不要强制关机。`n`n如果硬盘可能在坏（蓝屏诊断说硬盘掉线、硬件页里硬盘健康报警），请先把重要资料备份出来再做：检查会大量读写硬盘。`n`n不想检查了，可以用「取消开机检查」撤销。") }
+    $s.chkundo    = @{ Name = (T '取消开机检查'); Kind = 'fix'; Lvl = 1; Harmless = $true; Cmd = ('chkntfs /x {0} & echo. & echo {1}' -f $sd, ((T '已取消 {0} 的开机检查。') -f $sd)); Desc = (T 'chkntfs /x：撤销上面安排的开机检查') }
+    $s.memtest    = @{ Name = (T 'Windows 内存诊断'); Kind = 'open'; Lvl = 0; Exe = "$sr\System32\mdsched.exe"; Desc = (T '打开 Windows 自带的内存诊断：选「立即重新启动并检查」或「下次启动时检查」，大约 15 分钟，结果在重启后右下角提示') }
+    $s.diskpower  = @{ Name = (T '关闭硬盘省电…'); Kind = 'special'; Lvl = 1; Desc = (T '把当前电源计划里的「PCI Express 链路状态电源管理」「AHCI 链路电源管理」「关闭硬盘」改成不省电。治硬盘掉线、卡顿最常用的一招；笔记本续航会少一点。改之前记下原来的值，随时能恢复')
+                      Confirm = (T "会把当前电源计划里这三项改成不省电：`n• PCI Express 链路状态电源管理 → 关闭`n• AHCI 链路电源管理（HIPM/DIPM）→ 活动`n• 在此时间后关闭硬盘 → 从不`n`n硬盘、固态硬盘不再进入省电状态，能避免省电后唤醒失败导致的掉盘和卡顿。笔记本用电池时续航会少一点。原来的值会记下来，随时可以点「恢复硬盘省电」改回去。") }
+    $s.diskpowerundo = @{ Name = (T '恢复硬盘省电'); Kind = 'special'; Lvl = 0; Desc = (T '把上面改过的三项恢复成改之前的值') }
+    $s.devmgmt    = @{ Name = (T '设备管理器'); Kind = 'open'; Lvl = 0; Exe = "$sr\System32\devmgmt.msc"; Desc = (T '更新、回退或卸载驱动：右键设备 →「属性」→「驱动程序」。带黄色感叹号的设备有问题') }
+    $s.rstrui     = @{ Name = (T '系统还原'); Kind = 'open'; Lvl = 0; Exe = "$sr\System32\rstrui.exe"; Desc = (T '回到以前的还原点：会撤销那之后装的程序、驱动和更新，你的文档、照片不受影响。向导里每一步都可以取消') }
+    $s.winupdate  = @{ Name = (T 'Windows 更新'); Kind = 'open'; Lvl = 0; Uri = 'ms-settings:windowsupdate'; Desc = (T '打开 Windows 更新：装最新的补丁和驱动') }
+    $s.wutrouble  = @{ Name = (T '更新疑难解答'); Kind = 'open'; Lvl = 0; Uri = 'ms-settings:troubleshoot'; Desc = (T '打开 Windows 自带的疑难解答，运行「Windows 更新」那一项') }
+    $s.wureset    = @{ Name = (T '重置 Windows 更新组件…'); Kind = 'fix'; Lvl = 1
+                      Cmd = ('net stop wuauserv & net stop cryptSvc & net stop bits & net stop msiserver & ren "{0}\SoftwareDistribution" SoftwareDistribution.bak-{1} & ren "{0}\System32\catroot2" catroot2.bak-{1} & net start msiserver & net start bits & net start cryptSvc & net start wuauserv & echo. & echo {2}' -f $sr, $ts, ((T '旧的更新缓存改了名留在原处（{0}、{1}），确认更新正常后可以手动删掉。') -f "SoftwareDistribution.bak-$ts", "catroot2.bak-$ts"))
+                      Desc = (T '更新一直失败、卡在百分之几时最常用的修法：暂停更新服务，把更新缓存文件夹改名（不删除），再启动服务，Windows 会重新下载。更新历史的显示会变空，已装的更新不受影响')
+                      Confirm = (T "会暂停 Windows 更新、加密、后台传输、安装程序这四个服务，把 SoftwareDistribution 和 catroot2 两个更新缓存文件夹改名留底（不删除），再把服务启动起来。`n`nWindows 会重新下载需要的更新；「更新历史」的列表会变空，已经装好的更新不受影响。正在安装更新时不要做。") }
+    $s.flushdns   = @{ Name = (T '清除 DNS 缓存'); Kind = 'fix'; Lvl = 0; Harmless = $true; Cmd = 'ipconfig /flushdns'; Desc = (T 'ipconfig /flushdns：网站换了地址、个别网站打不开时用。只清缓存，马上生效') }
+    $s.netinfo    = @{ Name = (T '查看网络状态'); Kind = 'check'; Lvl = 0; Cmd = 'ipconfig /all & echo. & echo === ping www.microsoft.com === & ping -n 4 www.microsoft.com & echo. & nslookup www.microsoft.com'; Desc = (T 'ipconfig /all、ping、nslookup：看网卡有没有拿到地址、能不能解析域名和连上外网。不改东西') }
+    $s.netreset   = @{ Name = (T '重置网络…'); Kind = 'fix'; Lvl = 1; Reboot = $true; Cmd = ('netsh winsock reset & netsh int ip reset & ipconfig /flushdns & echo. & echo {0}' -f (T '重启电脑后生效。')); Desc = (T 'netsh winsock reset 和 netsh int ip reset：网络设置被软件改乱、能连上 Wi-Fi 却上不了网时用。要重启；手动设的固定 IP 要重新填')
+                      Confirm = (T "会把 Winsock 和 TCP/IP 设置恢复成默认（netsh winsock reset、netsh int ip reset），并清除 DNS 缓存，重启电脑后生效。`n`n• 手动设置的固定 IP 地址和 DNS 可能要重新填，先记下来`n• 部分 VPN、加速器类软件可能要重新安装`n`n只在上不了网、其他办法都试过时再用。") }
+    $s.netsettings = @{ Name = (T '网络和 Internet 设置'); Kind = 'open'; Lvl = 0; Uri = 'ms-settings:network-status'; Desc = (T '打开网络设置：里面有网络疑难解答和「网络重置」') }
+    $s.ncpa       = @{ Name = (T '网络连接'); Kind = 'open'; Lvl = 1; Exe = "$sr\System32\control.exe"; Args = 'ncpa.cpl'; Desc = (T '打开网络连接：禁用再启用网卡、看网卡属性') }
+    $s.timecheck  = @{ Name = (T '检查时间准不准'); Kind = 'check'; Lvl = 0; Cmd = ('w32tm /tz & echo. & echo === {0} === & w32tm /stripchart /computer:time.windows.com /samples:3 /dataonly' -f (T '和 time.windows.com 比较，o: 后面是相差的秒数')); Desc = (T 'w32tm /stripchart：和微软的时间服务器比一比差多少秒。只看不改，要联网') }
+    $s.timesync   = @{ Name = (T '同步系统时间'); Kind = 'fix'; Lvl = 0; Harmless = $true; Cmd = ('net start w32time & w32tm /resync & echo. & echo {0} & start ms-settings:dateandtime' -f (T '如果上面提示时间差太大、没有同步：请在打开的「日期和时间」里手动改，或者先关再开「自动设置时间」。')); Desc = (T '启动 Windows 时间服务并马上同步一次。差得太多时 Windows 不肯自动改，会打开「日期和时间」让你手动改') }
+    $s.datetime   = @{ Name = (T '日期和时间设置'); Kind = 'open'; Lvl = 0; Uri = 'ms-settings:dateandtime'; Desc = (T '手动改时间、时区，开关「自动设置时间」') }
+    $s.faststartup = @{ Name = (T '关闭快速启动…'); Kind = 'special'; Lvl = 1; Desc = (T '快速启动让「关机」其实是半休眠：驱动出错会一直带到下次开机。关掉后关机就是真关机，开机慢几秒。随时能再打开')
+                      Confirm = (T "会关闭快速启动（控制面板 → 电源选项 →「启用快速启动」）。`n`n关掉以后「关机」就是真正的关机，驱动和设备每次都重新初始化：能解决关机变重启、睡眠唤醒失败、开机后设备不正常这类问题。代价是开机慢几秒。`n`n随时可以在这里再打开。") }
+    $s.powerreq   = @{ Name = (T '查看谁不让电脑睡眠'); Kind = 'check'; Lvl = 1; Cmd = 'echo === powercfg /requests === & powercfg /requests & echo. & echo === powercfg /lastwake === & powercfg /lastwake & echo. & echo === powercfg /waketimers === & powercfg /waketimers'; Desc = (T 'powercfg /requests、/lastwake、/waketimers：哪个程序或设备阻止睡眠、上次是谁唤醒的。不改东西') }
+    $s.audiorestart = @{ Name = (T '重启音频服务'); Kind = 'fix'; Lvl = 0; Harmless = $true; Cmd = ('net stop audiosrv & net start audiosrv & echo. & echo {0}' -f (T '已重启 Windows Audio 服务。')); Desc = (T '突然没声音时先试这个：重启 Windows Audio 服务，几秒钟，正在播放的声音会断一下') }
+    $s.soundcpl   = @{ Name = (T '声音设置'); Kind = 'open'; Lvl = 0; Exe = "$sr\System32\control.exe"; Args = 'mmsys.cpl'; Desc = (T '看默认的播放设备对不对，耳机和音箱是不是选反了') }
+    $s.icons      = @{ Name = (T '刷新图标缓存'); Kind = 'fix'; Lvl = 0; Harmless = $true; Cmd = ('ie4uinit.exe -show & echo. & echo {0}' -f (T '已刷新。还不对的话，注销再登录一次。')); Desc = (T 'ie4uinit -show：图标显示成白块或者是别的程序的图标时用。马上生效，不用重启') }
+    $s.wsreset    = @{ Name = (T '重置应用商店缓存'); Kind = 'fix'; Lvl = 0; Harmless = $true; Exe = "$sr\System32\wsreset.exe"; Desc = (T 'wsreset：应用商店打不开、下载一直卡住时用。会清掉商店的缓存并重新打开商店，不影响装好的应用') }
+    $s.reliability = @{ Name = (T '可靠性监视器'); Kind = 'open'; Lvl = 0; Exe = "$sr\System32\perfmon.exe"; Args = '/rel'; Desc = (T '按天列出程序崩溃、蓝屏、更新失败，看问题从哪天开始') }
+    $s.eventvwr   = @{ Name = (T '事件查看器'); Kind = 'open'; Lvl = 1; Exe = "$sr\System32\eventvwr.msc"; Desc = (T 'Windows 的全部日志：「Windows 日志 → 系统」里看错误和警告') }
+    $s.dumpdir    = @{ Name = (T '打开转储文件夹'); Kind = 'open'; Lvl = 0; Folder = ($sr + '\Minidump'); Desc = (T '蓝屏转储所在的文件夹（C:\Windows\Minidump）：可以拷出来给别人分析') }
+    $s.diagpack   = @{ Name = (T '导出诊断包…'); Kind = 'special'; Lvl = 0; Desc = (T '把蓝屏转储、最近 30 天的系统和应用日志、系统信息、驱动列表、本工具的诊断结论打成一个 zip，方便发给懂的人看。只读不改') }
+    $p = @(
+        @{ Id = 'bsod'; Title = (T '蓝屏、死机、自动重启'); Desc = (T '先看蓝屏诊断的结论；再按「系统文件 → 硬盘 → 内存 → 驱动」的顺序排查。一次只改一样，改完用几天看还会不会出现。'); Steps = @('crashtab', 'sfccheck', 'sfcrepair', 'chkscan', 'memtest', 'devmgmt', 'rstrui', 'diagpack') },
+        @{ Id = 'disk'; Title = (T '硬盘掉线、卡顿、读写出错'); Desc = (T '蓝屏代码 0x7A、0xEF、0xF4，系统突然卡住几十秒又恢复，磁盘占用一直 100%，都可能是硬盘或硬盘连接的问题。先备份资料。'); Steps = @('hwtab', 'chkscan', 'diskpower', 'diskpowerundo', 'chkfix', 'chkundo', 'devmgmt') },
+        @{ Id = 'sysfile'; Title = (T '系统文件损坏'); Desc = (T '系统设置或自带程序打不开、提示缺少某个 dll、装完更新后出怪问题。'); Steps = @('sfccheck', 'dismcheck', 'sfcrepair', 'rstrui') },
+        @{ Id = 'update'; Title = (T 'Windows 更新失败或一直卡住'); Desc = (T '更新报错、反复安装同一个更新、卡在某个百分比不动。系统时间不对也会让更新失败，先看时间。'); Steps = @('timecheck', 'wutrouble', 'wureset', 'sfcrepair', 'winupdate') },
+        @{ Id = 'net'; Title = (T '上不了网、个别网站打不开'); Desc = (T '从轻到重：先看网络状态，再清 DNS 缓存，最后才重置网络。'); Steps = @('netinfo', 'flushdns', 'netsettings', 'ncpa', 'netreset') },
+        @{ Id = 'time'; Title = (T '时间不准'); Desc = (T '网页提示证书错误或「你的时钟快了 / 慢了」、更新失败、文件时间对不上。台式机每次断电后时间都变回去，是主板纽扣电池（CR2032）没电了，要换电池。'); Steps = @('timecheck', 'timesync', 'datetime') },
+        @{ Id = 'sleep'; Title = (T '关机变重启、睡眠后醒不来、开机后设备不正常'); Desc = (T '多半和快速启动、驱动的电源管理有关。'); Steps = @('faststartup', 'powerreq', 'devmgmt') },
+        @{ Id = 'sound'; Title = (T '没有声音'); Desc = (T '先看是不是选错了播放设备，再重启音频服务；还不行就到设备管理器里更新声卡驱动。'); Steps = @('soundcpl', 'audiorestart', 'devmgmt') },
+        @{ Id = 'icons'; Title = (T '图标显示不对、应用商店打不开'); Desc = (T '图标变白块或显示成别的程序的图标；应用商店转圈、下载卡住。'); Steps = @('icons', 'wsreset') },
+        @{ Id = 'slow'; Title = (T '开机慢'); Desc = (T '看 Windows 点名的拖慢开机的程序，把不需要的开机启动关掉。'); Steps = @('boottab', 'startapps') },
+        @{ Id = 'collect'; Title = (T '把信息发给别人帮忙看'); Desc = (T '诊断包里有转储、日志和系统信息，可能包含电脑名、用户名、装过的软件和内存片段，只发给你信任的人。'); Steps = @('diagpack', 'dumpdir', 'reliability', 'eventvwr') }
+    )
+    return @{ Steps = $s; Problems = $p }
+}
+
+# ---------- 硬盘省电、快速启动：改之前记下原来的值，随时能恢复 ----------
+function Get-PowerFixItems {
+    return @(
+        @{ Sub = 'SUB_PCIEXPRESS'; Set = 'ASPM'; Want = 0; Name = (T 'PCI Express 链路状态电源管理') },
+        @{ Sub = '0012ee47-9041-4b5d-9b77-535fba8b1442'; Set = '0b2d69d7-a2a1-449c-9680-f91c70521c60'; Want = 0; Name = (T 'AHCI 链路电源管理（HIPM/DIPM）') },
+        @{ Sub = 'SUB_DISK'; Set = 'DISKIDLE'; Want = 0; Name = (T '在此时间后关闭硬盘') }
+    )
+}
+function Get-ActiveSchemeGuid {
+    $o = (& "$sys32\powercfg.exe" /getactivescheme 2>$null) -join ' '
+    $m = [regex]::Match($o, '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}')
+    if ($m.Success) { return $m.Value } else { return '' }
+}
+# powercfg /q 的输出最后两个 0x 数就是当前的交流、直流值（标签随系统语言变，数字格式不变）
+function Get-PowerValue([string]$scheme, [string]$sub, [string]$set) {
+    $o = @(& "$sys32\powercfg.exe" /q $scheme $sub $set 2>$null)
+    if ($LASTEXITCODE -ne 0) { return $null }
+    $hex = @([regex]::Matches(($o -join "`n"), '0x([0-9a-fA-F]{8})') | ForEach-Object { [Convert]::ToUInt32($_.Groups[1].Value, 16) })
+    if ($hex.Count -lt 2) { return $null }
+    return @{ Ac = [long]$hex[$hex.Count - 2]; Dc = [long]$hex[$hex.Count - 1] }
+}
+function Set-DiskPowerFix([bool]$on) {
+    $pc = "$sys32\powercfg.exe"
+    if ($on) {
+        $g = Get-ActiveSchemeGuid
+        if (-not $g) { return @{ Ok = $false; Why = (T '读不到当前的电源计划') } }
+        $undo = @(); $names = @()
+        foreach ($it in (Get-PowerFixItems)) { $v = Get-PowerValue $g $it.Sub $it.Set; if ($v) { $undo += @{ Sub = $it.Sub; Set = $it.Set; Ac = $v.Ac; Dc = $v.Dc }; $names += $it.Name } }
+        if ($undo.Count -eq 0) { return @{ Ok = $false; Why = (T '当前电源计划里没有这几项设置') } }
+        # 先把原来的值记下来再改；已经记过（改过一次还没恢复）就保留最早的那份
+        if (-not (Get-Setting 'PowerFixUndo' '')) { Set-Setting 'PowerFixUndo' (ConvertTo-Json @{ Scheme = $g; Items = $undo } -Compress -Depth 4) }
+        if (-not (Get-Setting 'PowerFixUndo' '')) { return @{ Ok = $false; Why = (T '没能记下原来的设置，所以没有改') } }
+        foreach ($u in $undo) { $it = @(Get-PowerFixItems | Where-Object { $_.Set -eq $u.Set })[0]; & $pc /setacvalueindex $g $u.Sub $u.Set $it.Want 2>$null | Out-Null; & $pc /setdcvalueindex $g $u.Sub $u.Set $it.Want 2>$null | Out-Null }
+        & $pc /setactive $g 2>$null | Out-Null
+        OpLog '系统设置' (T '关闭硬盘和 PCIe 省电') $g ($names -join (T '、'))
+        return @{ Ok = $true; Names = $names }
+    }
+    $j = Get-Setting 'PowerFixUndo' ''
+    if (-not $j) { return @{ Ok = $false; Why = (T '没有改过，不用恢复') } }
+    try { $u = ConvertFrom-Json $j } catch { return @{ Ok = $false; Why = (T '记下的原值读不出来') } }
+    foreach ($it in @($u.Items)) { & $pc /setacvalueindex $u.Scheme $it.Sub $it.Set ([long]$it.Ac) 2>$null | Out-Null; & $pc /setdcvalueindex $u.Scheme $it.Sub $it.Set ([long]$it.Dc) 2>$null | Out-Null }
+    & $pc /setactive (Get-ActiveSchemeGuid) 2>$null | Out-Null
+    Set-Setting 'PowerFixUndo' ''
+    OpLog '系统设置' (T '恢复硬盘和 PCIe 省电') ([string]$u.Scheme) ''
+    return @{ Ok = $true }
+}
+function Get-FastStartup {
+    $h = Get-HiberInfo
+    if (-not $h.Exists) { return 'na' }
+    $v = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power' -ErrorAction SilentlyContinue).HiberbootEnabled
+    if ($v -eq 0) { return 'off' } else { return 'on' }
+}
+function Set-FastStartup([bool]$on) {
+    Set-ItemProperty -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power' -Name HiberbootEnabled -Value ([int]$on) -Type DWord -ErrorAction Stop
+    OpLog '系统设置' $(if ($on) { (T '打开快速启动') } else { (T '关闭快速启动') }) 'HiberbootEnabled' ([string][int]$on)
+}
+function Get-PowerFixState { return @{ FastStartup = (Get-FastStartup); DiskFix = [bool](Get-Setting 'PowerFixUndo' '') } }
+
+# ---------- 诊断包 ----------
+# 运行一个命令行程序，按控制台代码页读它的输出（systeminfo、driverquery 写的是 OEM 编码）。超时就不等了，不结束它
+function Invoke-Capture([string]$exe, [string]$argLine, [int]$timeoutSec = 120) {
+    $p = New-Object Diagnostics.Process
+    $p.StartInfo.FileName = $exe; $p.StartInfo.Arguments = $argLine; $p.StartInfo.UseShellExecute = $false
+    $p.StartInfo.RedirectStandardOutput = $true; $p.StartInfo.RedirectStandardError = $true; $p.StartInfo.CreateNoWindow = $true
+    try { $p.StartInfo.StandardOutputEncoding = [Text.Encoding]::GetEncoding([Globalization.CultureInfo]::CurrentCulture.TextInfo.OEMCodePage) } catch {}
+    try { [void]$p.Start() } catch { return ('(' + $_.Exception.Message + ')') }
+    $o = $p.StandardOutput.ReadToEndAsync(); $er = $p.StandardError.ReadToEndAsync()
+    if (-not $p.WaitForExit($timeoutSec * 1000)) { return ((T '（{0} 秒没运行完，没等它）') -f $timeoutSec) }
+    return ([string]$o.Result + [string]$er.Result)
+}
+function Get-EventText([string]$log, [int]$days, [int]$max) {
+    $sb = New-Object Text.StringBuilder
+    try {
+        $ev = @(Get-WinEvent -FilterHashtable @{ LogName = $log; Level = @(1, 2, 3); StartTime = (Get-Date).AddDays(-$days) } -MaxEvents $max -ErrorAction Stop)
+        foreach ($e in $ev) {
+            [void]$sb.AppendLine(('{0:yyyy-MM-dd HH:mm:ss}  {1}  {2}  [{3}]' -f $e.TimeCreated, $e.LevelDisplayName, $e.ProviderName, $e.Id))
+            $m = [string]$e.Message
+            if ($m) { [void]$sb.AppendLine('    ' + ((@($m -split "`r?`n" | Where-Object { $_.Trim() }) | Select-Object -First 6) -join "`r`n    ")) }
+        }
+    } catch { [void]$sb.AppendLine($_.Exception.Message) }
+    return $sb.ToString()
+}
+function Format-Bytes([double]$b) { if ($b -ge 1GB) { '{0:N1} GB' -f ($b / 1GB) } elseif ($b -ge 1MB) { '{0:N1} MB' -f ($b / 1MB) } else { '{0:N0} KB' -f ($b / 1KB) } }
+# 健康页的内容写成一份纯文本报告（诊断包里的 summary.txt，也能复制给别人）
+function Get-HealthReportText($r) {
+    $L = New-Object System.Collections.Generic.List[string]
+    $L.Add((T '腾挪 ClearC 系统健康报告')); $L.Add(('{0:yyyy-MM-dd HH:mm}  {1}' -f $r.At, $env:COMPUTERNAME)); $L.Add('')
+    $w = $r.Win
+    if ($w) { $L.Add(('Windows: {0} {1}  {2}.{3}' -f $w.Product, $w.Release, $w.Build, $w.Ubr)); if ($w.Uptime) { $L.Add(((T '开机已经 {0:N1} 天') -f $w.Uptime.TotalDays)) }; if ($w.LastUpdate) { $L.Add(((T '最近一次更新 {0:yyyy-MM-dd} {1}') -f $w.LastUpdate, $w.LastUpdateId)) } }
+    if ($r.Clock -and $r.Clock.Wrong) { $L.Add(((T '时钟可能不准：有比现在晚 {0} 天的系统文件（{1}）') -f $r.Clock.AheadDays, $r.Clock.Source)) }
+    $L.Add(''); $L.Add('== ' + (T '诊断结论'))
+    foreach ($v in @($r.Verdicts)) { $L.Add(('[{0}] {1}' -f $v.Level, $v.Title)); foreach ($x in ([string]$v.Body -split "`n")) { $L.Add('    ' + $x) } }
+    $L.Add(''); $L.Add('== ' + (T '蓝屏转储'))
+    foreach ($d in @($r.Crash.Dumps)) {
+        $e = Get-DumpExplain $d
+        $L.Add(('{0:yyyy-MM-dd HH:mm}  0x{1:X} {2}  {3}' -f $d.Time, [long]$d.Code, $d.CodeName, $d.Name))
+        $L.Add('    ' + $e.Plain); foreach ($x in @($e.Detail)) { $L.Add('    ' + $x) }
+        $L.Add(('    params {0}' -f ($d.Params -join ' '))); if (@($d.Stack).Count) { $L.Add(('    stack {0}' -f (@($d.Stack) -join ', '))) }
+        if ($d.Error) { $L.Add('    ' + $d.Error) }
+    }
+    if (@($r.Crash.Dumps).Count -eq 0) { $L.Add((T '（没有）')) }
+    $L.Add(''); $L.Add('== ' + (T '最近 30 天的相关事件'))
+    foreach ($x in @($r.Crash.Events)) { $L.Add(('{0}  {1}  ×{2}  {3:yyyy-MM-dd HH:mm}  {4}' -f $x.Source, $x.What, $x.Count, $x.Last, $x.Sample)) }
+    $L.Add(''); $L.Add('== ' + (T '硬盘'))
+    foreach ($d in @($r.Disks)) { $L.Add(('{0}  {1}  {2}  temp={3} wear={4} readErrors={5} hours={6}' -f $d.Drive, $d.Model, $d.Health, $d.Temp, $d.Wear, $d.ReadErrors, $d.Hours)) }
+    $m = $r.Mem; if ($m -and $m.Ok) { $L.Add(''); $L.Add((('== ' + (T '内存') + '  {0} / {1}  WHEA={2}') -f (Format-Bytes ($m.Total - $m.Free)), (Format-Bytes $m.Total), $m.Whea)) }
+    $c = $r.Cpu; if ($c -and $c.Ok) { $L.Add(('== CPU  {0}  {1}%' -f $c.Name, $c.Load)) }
+    $L.Add(''); $L.Add('== ' + (T '最近 30 天装的驱动'))
+    foreach ($x in @($r.Crash.Drivers)) { $L.Add(('{0:yyyy-MM-dd HH:mm}  {1}  {2}  {3}' -f $x.When, $x.Provider, $x.Name, $x.Version)) }
+    if ($w) { $L.Add(''); $L.Add('== ' + (T '有问题的设备')); foreach ($bd in @($w.BadDevices)) { $L.Add(('{0}  ({1}) {2}' -f $bd.Name, $bd.Code, $bd.Note)) } }
+    return ($L -join "`r`n")
+}
+# 诊断包：蓝屏转储、最近 30 天的系统和应用日志、系统信息、驱动列表、健康报告、本工具的操作日志，打成一个 zip。
+# 只读这些文件，不改任何东西。中间文件放在 TEMP 里自己建的文件夹，用完逐个删掉（不整个递归删）
+function Export-DiagPack([string]$zip, $health) {
+    $r = @{ Ok = $false; Path = $zip; Count = 0; Bytes = [double]0; Skipped = @(); Error = '' }
+    try { Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem } catch { $r.Error = $_.Exception.Message; return $r }
+    if (Test-Path -LiteralPath $zip) { $r.Error = (T '这个文件已经存在'); return $r }
+    $tmp = Join-Path ([IO.Path]::GetTempPath()) ('ClearC-diag-{0:yyyyMMdd-HHmmss}' -f (Get-Date))
+    $made = New-Object System.Collections.ArrayList
+    $fs = $null; $za = $null
+    try {
+        [void][IO.Directory]::CreateDirectory($tmp)
+        $fs = New-Object IO.FileStream($zip, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+        $za = New-Object IO.Compression.ZipArchive($fs, [IO.Compression.ZipArchiveMode]::Create)
+        $addText = { param($name, $text) $en = $za.CreateEntry($name); $sw = New-Object IO.StreamWriter($en.Open(), (New-Object Text.UTF8Encoding $true)); $sw.Write([string]$text); $sw.Dispose(); $r.Count++ }
+        $addFile = { param($name, $path) try { [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($za, $path, $name); $r.Count++ } catch { $r.Skipped += ('{0}: {1}' -f $name, $_.Exception.Message) } }
+        Progress-Note (T '健康报告')
+        if ($health) { & $addText 'summary.txt' (Get-HealthReportText $health) }
+        Progress-Note (T '蓝屏转储')
+        $md = Join-Path $env:SystemRoot 'Minidump'
+        foreach ($f in @(Get-ChildItem -LiteralPath $md -Filter *.dmp -File -Force -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 20)) {
+            if ($f.Length -gt 64MB) { $r.Skipped += ('{0}: {1}' -f $f.Name, (T '太大，没放进去')); continue }
+            & $addFile ('minidump/' + $f.Name) $f.FullName
+        }
+        $mem = Join-Path $env:SystemRoot 'MEMORY.DMP'
+        if (Test-Path -LiteralPath $mem) { $r.Skipped += ('MEMORY.DMP: ' + (T '完整转储太大，没放进去；需要的话单独拷')) }
+        Progress-Note (T '系统和应用日志')
+        foreach ($log in 'System', 'Application') {
+            $ev = Join-Path $tmp ($log + '.evtx'); [void]$made.Add($ev)
+            [void](Invoke-Capture "$sys32\wevtutil.exe" ('epl {0} "{1}" "/q:*[System[TimeCreated[timediff(@SystemTime) <= 2592000000]]]"' -f $log, $ev) 180)
+            if (Test-Path -LiteralPath $ev) { & $addFile ('events/' + $log + '.evtx') $ev } else { $r.Skipped += ('{0}.evtx: {1}' -f $log, (T '导出失败')) }
+            & $addText ('events/' + $log + '-30days.txt') (Get-EventText $log 30 1500)
+        }
+        Progress-Note (T '系统信息')
+        & $addText 'systeminfo.txt' (Invoke-Capture "$sys32\systeminfo.exe" '' 180)
+        & $addText 'drivers.csv' (Invoke-Capture "$sys32\driverquery.exe" '/v /fo csv' 120)
+        $dk = ''
+        try { $dk += (Get-PhysicalDisk -ErrorAction Stop | Select-Object FriendlyName, MediaType, BusType, HealthStatus, OperationalStatus, Size, FirmwareVersion | Format-List | Out-String -Width 200) } catch { $dk += $_.Exception.Message + "`r`n" }
+        try { $dk += (Get-PhysicalDisk -ErrorAction Stop | Get-StorageReliabilityCounter -ErrorAction Stop | Select-Object DeviceId, Temperature, Wear, ReadErrorsTotal, ReadErrorsUncorrected, WriteErrorsTotal, PowerOnHours, StartStopCycleCount | Format-List | Out-String -Width 200) } catch {}
+        try { $dk += (Get-Volume -ErrorAction Stop | Format-Table DriveLetter, FileSystemLabel, FileSystem, HealthStatus, Size, SizeRemaining -AutoSize | Out-String -Width 200) } catch {}
+        & $addText 'disks.txt' $dk
+        $wer = Join-Path $env:ProgramData 'Microsoft\Windows\WER\ReportArchive'
+        $wl = @(Get-ChildItem -LiteralPath $wer -Directory -Force -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 200 | ForEach-Object { '{0:yyyy-MM-dd HH:mm}  {1}' -f $_.LastWriteTime, $_.Name })
+        & $addText 'wer-reports.txt' ($wl -join "`r`n")
+        foreach ($f in @(Get-ChildItem -LiteralPath $script:opLogDir -Filter '*.txt' -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 3)) { & $addFile ('clearc-oplog/' + ('oplog-' + ($f.BaseName -replace '^\D+', '') + '.txt')) $f.FullName }
+        if ($r.Skipped.Count -gt 0) { & $addText 'skipped.txt' ($r.Skipped -join "`r`n") }
+        $r.Ok = $true
+    } catch { $r.Error = $_.Exception.Message }
+    finally {
+        if ($za) { try { $za.Dispose() } catch {} }
+        if ($fs) { try { $fs.Dispose() } catch {} }
+        foreach ($f in $made) { try { if ([IO.File]::Exists($f)) { [IO.File]::Delete($f) } } catch {} }
+        try { [IO.Directory]::Delete($tmp, $false) } catch {}
+    }
+    try { $r.Bytes = [double](Get-Item -LiteralPath $zip).Length } catch {}
+    if (-not $r.Ok -and (Test-Path -LiteralPath $zip) -and $r.Count -eq 0) { try { [IO.File]::Delete($zip) } catch {} }
+    return $r
+}
+# 后台任务里报进度用；界面线程里调用时什么也不做
+function Progress-Note([string]$s) { try { if (Get-Command SetP -ErrorAction SilentlyContinue) { SetP @{ StepName = $s } } } catch {} }
 
 # ---------- 活动监控：窗口开着时每隔几秒采一次样，看谁在吃 CPU、内存、磁盘 ----------
 # 一次采样：每个进程的累计 CPU 时间、工作集、累计写入字节（Windows 从进程启动起记的）
@@ -5982,6 +6533,313 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+复制报告	Copy report
+在终端窗口里运行 DISM /RestoreHealth 和 sfc /scannow：会把损坏的系统文件换成正常的副本（会改系统文件，可能要联网下载）。点了会先确认	Runs DISM /RestoreHealth and sfc /scannow in a terminal window to replace damaged system files with good copies (changes system files, may download from the internet). Asks first
+把蓝屏转储、最近 30 天的系统和应用日志、系统信息、驱动列表和诊断结论打成一个 zip，方便发给懂的人看。只读不改	Packs crash dumps, the last 30 days of System and Application logs, system information, the driver list and the diagnosis into one zip to send to someone who can help. Read-only
+把这一页的诊断结论、每次蓝屏的说明、相关事件和硬盘状态复制成文字，可以直接粘贴给别人	Copies the diagnosis, the notes on each crash, related events and disk status as text you can paste into a message
+打开全部位置	Open all locations
+打开所在文件夹	Open folder
+Windows 事件	Windows events
+常见问题修复	Common fixes
+活动监控	Activity monitor
+按问题找对应的修法，从上往下、从轻到重地试。「只看」不改任何东西；「会改动」点了会先说明要改什么，能撤销的写明怎么撤销；「要重启」重启后才生效。用的都是 Windows 自带的命令，在看得见的窗口里运行。	Find your problem and try the fixes from top to bottom, lightest first. "Read-only" changes nothing; "Changes system" explains what it changes before doing it, and how to undo it where possible; "Needs restart" takes effect after a restart. All of them are built-in Windows commands that run in a visible window.
+根据这台电脑的蓝屏诊断，建议先做	Based on this PC's crash diagnosis, start with
+结论是按错误码、状态码、事件日志和硬盘健康推出来的，是排查方向，不是定论。按钮和「常见问题修复」里的是同一套：只看的直接运行，会改动的先说明要改什么。	The diagnosis is worked out from stop codes, status codes, event logs and disk health. It points you in a direction; it is not a verdict. The buttons are the same as under "Common fixes": read-only ones run straight away, ones that change things explain what they change first.
+转储文件是本工具自己解析的（错误码、参数、状态码、出事时加载的驱动、栈上出现的驱动），不如 WinDbg 准确；「可能的驱动」只是提示，不是定论。蓝屏时间和最近装的驱动对得上的，优先怀疑那个驱动。	ClearC reads the dump files itself (stop code, parameters, status code, drivers loaded at the time, drivers on the stack), which is less precise than WinDbg; "may be" drivers are hints, not verdicts. If a crash lines up with a recently installed driver, suspect that driver first.
+这里的修复不删除任何文件、不结束任何程序、不装驱动；Windows 更新组件是改名留底，硬盘省电和快速启动随时能改回来。系统还原、内存诊断、设备管理器是 Windows 自己的工具，里面每一步都由你确认。每次运行都记在操作日志里。	These fixes never delete files, end programs or install drivers; Windows Update caches are renamed and kept, and disk power saving and Fast Startup can be changed back any time. System Restore, Memory Diagnostic and Device Manager are Windows tools where you confirm every step. Every run is recorded in the activity log.
+硬件状态、开机用时、蓝屏原因、常见问题的修法、谁在吃资源。读不到的数据直接写明读不到，不用估算冒充	Hardware status, start-up time, crash causes, fixes for common problems and what is using resources. Anything that cannot be read is shown as unreadable, never guessed
+扫描到 {0} 项，分成 {1} 类：{2}。每一项都可以单独选「删除」「搬走」或「跳过」，往下滚动查看全部。双击一行打开它所在的文件夹，右键可以复制路径。	Found {0} items in {1} groups: {2}. Each item can be set to "Delete", "Move" or "Skip" on its own; scroll down to see them all. Double-click a row to open its folder; right-click to copy the path.
+这一项现在没有可以打开的文件夹：要么已经清空了，要么是由系统命令处理、没有固定的位置。	There is no folder to open for this item right now: either it is already empty, or it is handled by a system command and has no fixed location.
+「{0}」还有 {1} 个位置，右键可以全部打开	"{0}" has {1} more location(s); right-click to open them all
+「{0}」一共 {1} 个位置，打开了前 8 个；全部路径可以右键「复制路径」	"{0}" has {1} locations; opened the first 8. Right-click "Copy path" to get them all
+打开全部位置（{0} 个）	Open all locations ({0})
+点一下扫描这块盘，下面显示它的详细情况。	Click to scan this drive and show its details below.
+空间地图：下面已经是 {0} 的结果；要重新扫描点「扫描」	Space map: the results below are already for {0}; click "Scan" to scan again
+空间地图：正在忙别的，等它做完再点「扫描」	Space map: busy with something else; click "Scan" when it is done
+读取于 {0:HH:mm}，用了 {1:N0} 秒。读取只看不改；修复的按钮点了会先说明要改什么。	Read at {0:HH:mm} in {1:N0} s. Reading changes nothing; repair buttons explain what they change before doing it.
+发现 {0} 个要注意的问题：「{1}」，详情和修法在「蓝屏和崩溃」里。	Found {0} issue(s) to look at: "{1}". Details and fixes are under "Blue screens and crashes".
+」「	", "
+{0} {1}（{2}.{3}）	{0} {1} ({2}.{3})
+版本太旧	Outdated version
+时间可能不准	Clock may be wrong
+有系统文件的修改时间比现在还晚 {0} 天：时钟被往回调过，或者主板电池没电了	Some system files were modified {0} days later than "now": the clock was set back, or the motherboard battery is flat
+常见原因：	Common causes: 
+可能和 {0} 有关	May involve {0}
+读盘失败	Disk read failed
+只看	Read-only
+要重启	Needs restart
+马上生效	Instant
+会改动	Changes system
+打开工具	Opens a tool
+跳转	Go to
+可恢复	Reversible
+只读	Read-only
+（现在没改过，不用恢复）	 (nothing changed yet, nothing to restore)
+已关闭硬盘省电	Disk power saving is off
+已改	Done
+打开快速启动…	Turn on Fast Startup…
+快速启动现在是关着的。打开后「关机」变成半休眠，开机快几秒；关机变重启、唤醒失败的问题可能会回来	Fast Startup is off. Turning it on makes "Shut down" a partial hibernation and starts up a few seconds faster; restart-instead-of-shutdown and wake-up problems may come back
+没有快速启动	No Fast Startup
+休眠关着，所以没有快速启动，不用管	Hibernation is off, so there is no Fast Startup; nothing to do
+不用改	Not needed
+关闭硬盘省电？	Turn off disk power saving?
+关闭省电	Turn off power saving
+改了：{0}。马上生效，不用重启。想改回去，点「恢复硬盘省电」。	Changed: {0}. This takes effect now, no restart needed. To change it back, click "Restore disk power saving".
+没有改	Nothing changed
+已恢复硬盘省电	Disk power saving restored
+三项设置都改回了原来的值。	All three settings are back to their earlier values.
+没有恢复	Nothing restored
+关闭快速启动？	Turn off Fast Startup?
+关闭快速启动	Turn off Fast Startup
+打开快速启动？	Turn on Fast Startup?
+会重新打开快速启动：「关机」变成半休眠，下次开机快几秒。	Fast Startup will be turned back on: "Shut down" becomes a partial hibernation and the next start-up is a few seconds faster.
+已关闭快速启动	Fast Startup turned off
+已打开快速启动	Fast Startup turned on
+没能改	Could not change it
+{0}？	{0}?
+运行完了，可以关掉这个窗口。	Finished. You can close this window.
+已打开：{0}	Opened: {0}
+没能打开：{0}	Could not open: {0}
+还在读取	Still reading
+等系统健康读完再导出。	Wait until System health has finished reading, then export.
+诊断包保存到	Save diagnostics package to
+zip 压缩包	Zip archive
+已经有这个文件	This file already exists
+换一个文件名再导出：不会覆盖已有的文件。	Pick another file name: an existing file is never overwritten.
+正在导出诊断包，要半分钟到几分钟（systeminfo 比较慢）…	Exporting the diagnostics package; this takes half a minute to a few minutes (systeminfo is slow)…
+诊断包已导出：{0}（{1} 个文件，{2}）	Diagnostics package exported: {0} ({1} files, {2})
+导出诊断包	Export diagnostics package
+诊断包已导出	Diagnostics package exported
+{0}\n\n{1} 个文件，{2}。里面有蓝屏转储、日志和系统信息，可能包含电脑名、用户名、装过的软件和内存片段，只发给你信任的人。	{0}\n\n{1} files, {2}. It contains crash dumps, logs and system information, which can include the computer name, user name, installed software and pieces of memory. Only send it to people you trust.
+没能导出诊断包	Could not export the diagnostics package
+诊断报告已复制，可以直接粘贴	Diagnostics report copied; ready to paste
+诊断报告已复制，可以直接粘贴给别人。	Diagnostics report copied; you can paste it straight into a message.
+没能复制	Could not copy
+诊断结论	Diagnosis
+系统要从硬盘读回一块数据时读失败了	Windows could not read data back from the disk
+硬盘或它的连接出了问题（看状态码）；少数是内存	a problem with the disk or its connection (see the status code); occasionally memory
+Windows 离不开的系统进程意外退出了，只能蓝屏	A system process Windows cannot run without stopped unexpectedly, so Windows had to stop
+系统文件损坏，或者硬盘读不出系统文件（和读盘失败、磁盘错误一起出现时多半是这个）；也可能是内存问题或安全软件误杀	damaged system files, or the disk could not deliver system files (most likely when disk read failures or disk errors also show up); sometimes memory problems or security software ending the process
+系统访问了一块不存在的内存	Windows accessed memory that does not exist
+点名的驱动不是微软的时候多半是它的错；否则常见于内存条问题、硬盘读不回换出去的内存、安全软件	if the driver named is not from Microsoft, usually that driver; otherwise faulty RAM, the disk failing to read back paged-out memory, or security software
+内存里的数据被破坏了	Data in memory was corrupted
+内存条或内存超频（XMP）不稳定，或者某个驱动写坏了内存	unstable RAM or memory overclocking (XMP), or a driver writing over memory
+有个驱动在不允许的时候访问了内存	A driver accessed memory when it was not allowed to
+几乎都是驱动的错：有线和无线网卡、VPN、安全软件、虚拟光驱的驱动最常见	almost always a driver bug; network and Wi-Fi adapters, VPNs, security software and virtual drive tools are the usual suspects
+系统或某个驱动里出了没处理的错误	An unhandled error in Windows or a driver
+多是驱动的错（尤其显卡、安全软件），也可能是系统文件损坏	usually a driver (graphics and security software especially), sometimes damaged system files
+睡眠、唤醒或关机的时候，有个驱动迟迟不响应	A driver stopped responding during sleep, wake-up or shutdown
+芯片组、存储、无线网卡、显卡驱动太旧，或者快速启动和驱动不兼容	outdated chipset, storage, Wi-Fi or graphics drivers, or Fast Startup not getting along with a driver
+某个驱动占着处理器太久不放	A driver held on to the processor for too long
+常见于硬盘控制器驱动（比如 Intel RST）、固态硬盘固件太旧、显卡驱动	common with disk controller drivers (such as Intel RST), outdated SSD firmware, and graphics drivers
+CPU、内存或主板报告了没法纠正的硬件错误	The CPU, memory or motherboard reported a hardware error it could not correct
+超频或 XMP 不稳定、温度太高、电源供电不足、BIOS 太旧；少数是 CPU 或内存坏了	unstable overclocking or XMP, overheating, an underpowered supply, an outdated BIOS; occasionally a failing CPU or RAM
+显卡驱动没响应，系统重置它也没恢复	The graphics driver stopped responding and did not recover after Windows reset it
+显卡驱动版本有问题、显卡温度过高或超频；笔记本双显卡切换时也常见	a bad graphics driver version, an overheating or overclocked graphics card; also common when laptops switch between two GPUs
+内存压缩存储出错	The compressed memory store failed
+多是硬盘读写不稳，或者内存有问题	usually unreliable disk reads and writes, or a memory problem
+文件系统出错	File system error
+磁盘上的文件系统有损坏，或者安全软件、加密软件的过滤驱动有问题	a damaged file system on disk, or a filter driver from security or encryption software
+「驱动程序验证程序」抓到了驱动的错	Driver Verifier caught a driver bug
+只有开着 Driver Verifier（verifier.exe）时才会出现，被点名的驱动就是有问题的那个；查完记得用 verifier /reset 关掉	only happens while Driver Verifier (verifier.exe) is on, and the driver named is the faulty one; turn it off with verifier /reset when you are done
+硬盘在运行中掉线了，系统找不到它	the disk dropped out while running and Windows could no longer find it
+硬盘在运行中断开了连接	the disk disconnected while running
+硬盘读到了坏的扇区（坏道）	the disk hit bad sectors
+硬盘读写操作失败，多是坏道	a disk operation failed, usually because of bad sectors
+硬盘读写出错，常见于数据线或接口接触不良	a disk I/O error, often a loose cable or connector
+硬盘报告了自身的硬件错误	the disk reported a hardware fault of its own
+硬盘很久没有响应（超时）	the disk did not respond for too long (timeout)
+数据校验出错（CRC），多是数据线或接口的问题	a data check (CRC) error, usually the cable or connector
+系统资源（内存）耗尽，没法完成读盘	system resources (memory) ran out, so the read could not finish
+这个错误码没有现成的解释	No ready explanation for this stop code
+可以把转储文件交给懂的人用 WinDbg 分析	someone familiar with WinDbg can analyse the dump file
+转储文件没解析出来	The dump file could not be read
+{0}（0x{1:X8}{2}）	{0} (0x{1:X8}{2})
+读不回来的那一块属于 {0}：它只是碰上了，不是原因	the data that could not be read belongs to {0}; it was just unlucky, not the cause
+退出的是 {0}	the process that stopped was {0}
+出事时的进程是 {0}	the process running at the time was {0}
+出事的地址在 Windows 自带的 {0} 里：它常常是被别的驱动连累的	the failing address is inside {0}, which is part of Windows; it is often a victim of another driver
+出事的地址在 {0} 里：最值得怀疑	the failing address is inside {0}: the main suspect
+栈上出现的第一个非微软驱动是 {0}：可以怀疑，但不确定	the first non-Microsoft driver on the stack is {0}: worth suspecting, but not certain
+栈上只有 Windows 自带的驱动（{0}）：这种多半不是驱动的错，更像内存或硬盘的问题	only Windows drivers are on the stack ({0}); this is rarely a driver bug and looks more like a memory or disk problem
+• {0:MM-dd HH:mm} {1}：{2}（0x{3:X8}）	• {0:MM-dd HH:mm} {1}: {2} (0x{3:X8})
+• {0} 次系统进程退出（{1}）：系统进程读不到自己的文件时就会这样	• {0} crash(es) where a system process stopped ({1}): this happens when a system process cannot read its own files
+• 最近 30 天系统日志里有 {0} 条磁盘或文件系统错误	• {0} disk or file system errors in the System log in the last 30 days
+• {0} {1}：健康状态「{2}」{3}	• {0} {1}: health "{2}"{3}
+，读错误 {0} 次	, {0} read errors
+• 硬盘用的是 Intel RST 存储驱动（{0}）：这类掉盘很多和它的版本或省电设置有关	• The disk uses the Intel RST storage driver ({0}); dropouts like these are often tied to its version or power-saving settings
+最可能的原因：硬盘数据线或电源线接触不良、硬盘省电后唤醒失败、存储驱动太旧，或者硬盘本身在坏。	Most likely causes: a loose data or power cable, the disk failing to wake up from power saving, an outdated storage driver, or the disk itself failing.
+建议按顺序做：① 先把重要资料备份到别的盘或网盘；② 在「硬件」里看这块盘的健康和读错误；③ 关闭硬盘省电（下面的按钮，随时能恢复）；④ 更新存储驱动（到电脑或主板厂商的网站下载最新的芯片组 / RST 驱动）；⑤ 台式机关机断电后重新插一下硬盘的数据线和电源线，换个接口；⑥ 还是掉线，就是硬盘本身的问题，尽快换盘。	Suggested order: ① back up important files to another drive or the cloud first; ② check this disk's health and read errors under "Hardware"; ③ turn off disk power saving (button below, can be undone any time); ④ update the storage driver (latest chipset / RST driver from the PC or motherboard maker's website); ⑤ on a desktop, power off, reseat the disk's data and power cables and try another port; ⑥ if it still drops out, the disk itself is failing: replace it soon.
+硬盘或硬盘连接不稳定（最可能）	Unstable disk or disk connection (most likely)
+这是显卡驱动：到显卡厂商（NVIDIA、AMD、Intel）官网下载最新驱动重新安装；刚更新完才出现的，就回退到上一个版本。	This is a graphics driver: download and reinstall the latest driver from the card maker (NVIDIA, AMD, Intel); if the crashes started right after an update, roll back to the previous version.
+这是网卡驱动：到电脑或网卡厂商网站下载最新版；VPN、加速器类软件也会装网络驱动，最近装过的先卸掉试试。	This is a network driver: get the latest version from the PC or adapter maker; VPN and network accelerator apps also install network drivers, so try uninstalling any you added recently.
+这是安全软件的驱动：先升级这款安全软件；还蓝屏就暂时卸载它（Windows 自带的 Defender 会自动接管）。	This is a security software driver: update that product first; if the crashes continue, uninstall it for now (the built-in Windows Defender takes over automatically).
+这是游戏反作弊的驱动：更新或重新安装对应的游戏；不玩了就卸载。	This is a game anti-cheat driver: update or reinstall that game, or uninstall it if you no longer play.
+这是硬盘控制器驱动：到电脑或主板厂商网站下载最新的芯片组 / 存储驱动。	This is a disk controller driver: get the latest chipset / storage driver from the PC or motherboard maker's website.
+到这个驱动的厂商网站下载最新版本；刚装或刚更新过的，在设备管理器里「回退驱动程序」，或者卸载对应的软件。	Get the latest version from the driver maker's website; if it was just installed or updated, use "Roll Back Driver" in Device Manager, or uninstall the software it came with.
+{0} 在 {1} 次蓝屏里被点名（{2}）。	{0} was named in {1} crash(es) ({2}).
+最近 30 天装过相关的驱动：{0} {1}（{2:MM-dd}）	A related driver was installed in the last 30 days: {0} {1} ({2:MM-dd})
+驱动 {0} 嫌疑最大	Driver {0} is the main suspect
+显卡驱动出问题	Graphics driver problems
+{0}：显卡驱动没响应被系统重置过。	{0}: the graphics driver stopped responding and was reset by Windows.
+到显卡厂商官网下载最新驱动，安装时选「清洁安装」；看看「硬件」里显卡占用和散热；超频过的先恢复默认频率。	Download the latest driver from the card maker and choose a "clean install"; check graphics load and cooling under "Hardware"; if it is overclocked, go back to default clocks.
+{0}：这类蓝屏点名的驱动各不相同，或者只有 Windows 自带的驱动，内存出问题的可能性比较大。	{0}: these crashes name different drivers each time, or only Windows drivers, which points to memory.
+最近 30 天 Windows 记录了 {0} 次内存硬件错误（WHEA）。	Windows logged {0} memory hardware errors (WHEA) in the last 30 days.
+用 Windows 内存诊断查一次（重启后自动检测，大约 15 分钟）；在 BIOS 里开过 XMP / 超频的先关掉；台式机可以把内存条拔下来擦一下金手指重新插，或者一根一根地试。	Run Windows Memory Diagnostic once (it checks after a restart, about 15 minutes); turn off XMP / overclocking in the BIOS if enabled; on a desktop, reseat the memory sticks after cleaning the contacts, or test them one at a time.
+可能是内存不稳定	Memory may be unstable
+CPU、内存或主板报告了硬件错误	The CPU, memory or motherboard reported hardware errors
+硬件错误蓝屏 {0} 次，系统日志里的硬件错误 {1} 条。	{0} hardware-error crash(es), {1} hardware errors in the System log.
+先恢复 BIOS 默认设置（取消超频和 XMP），看「硬件」里 CPU 温度；清一下散热器的灰；台式机检查电源功率是否够；再去主板厂商网站更新 BIOS。	Restore BIOS defaults first (no overclocking or XMP) and check the CPU temperature under "Hardware"; clean the dust out of the cooler; on a desktop, check the power supply is big enough; then update the BIOS from the motherboard maker's website.
+睡眠、唤醒或关机时驱动没响应	A driver hangs during sleep, wake-up or shutdown
+{0}。	{0}.
+先关闭快速启动试试（随时能再打开）；再更新芯片组、无线网卡、显卡驱动。	Try turning off Fast Startup first (it can be turned back on any time), then update chipset, Wi-Fi and graphics drivers.
+多次没有正常关机	Several unexpected shutdowns
+最近 30 天有 {0} 次意外关机或重启，比蓝屏转储（{1} 个）多。	{0} unexpected shutdowns or restarts in the last 30 days, more than the crash dumps ({1}).
+多出来的那些是直接断电、死机后按了电源键，或者蓝屏时没能写出转储。台式机检查电源和插线板；笔记本检查电池；死机时屏幕定住不动的，多半是显卡、内存或硬盘的问题。	The extra ones are power cuts, holding the power button after a freeze, or crashes that could not write a dump. On a desktop, check the power supply and power strip; on a laptop, the battery. If the screen freezes in place, it is usually the graphics card, memory or disk.
+系统进程意外退出	A system process stopped unexpectedly
+先检查系统文件，有损坏就修复；最近装过更新、驱动或软件之后才开始的，可以用系统还原回到之前。	Check the system files first and repair them if damaged; if it started after installing an update, driver or app, System Restore can take you back.
+系统时间不准	The system clock is wrong
+系统自己写的文件里有比「现在」还晚 {0} 天的（{1:yyyy-MM-dd}）：时钟被往回调过，或者主板电池没电后时间重置了。	Windows has written files dated {0} days after "now" ({1:yyyy-MM-dd}): the clock was set back, or it reset after the motherboard battery ran flat.
+时间不对会让网页提示证书错误、Windows 更新失败，蓝屏记录的时间也跟着不准。同步一次时间；台式机每次断电后时间都变回去，就是主板上的纽扣电池（CR2032）该换了。	A wrong clock causes certificate errors on websites and failed Windows updates, and crash times are wrong too. Sync the time once; if a desktop loses the time every time it is unplugged, replace the coin battery (CR2032) on the motherboard.
+Windows 版本太旧	Windows is outdated
+这台电脑是 {0} {1}（版本号 {2}），早就收不到安全更新和修复补丁了：很多蓝屏和驱动问题在新版本里已经修好。	This PC runs {0} {1} (build {2}), which stopped getting security updates and fixes long ago; many crash and driver problems are fixed in newer versions.
+建议先备份资料，再升级到 Windows 11（硬件不满足时至少升到 Windows 10 22H2）。如果硬盘有问题，先把硬盘的问题解决掉再升级，否则升级到一半掉盘会更麻烦。	Back up your files, then upgrade to Windows 11 (or at least Windows 10 22H2 if the hardware does not qualify). If the disk has problems, fix those first: a disk dropping out halfway through an upgrade makes things worse.
+有蓝屏记录，但看不出集中在哪一类：先检查系统文件，再看每次蓝屏下面的说明。	There are crashes, but no clear pattern: check the system files first, then read the notes under each crash.
+最近没有蓝屏转储，也没有意外关机、硬件错误和磁盘错误的记录。	No recent crash dumps, unexpected shutdowns, hardware errors or disk errors.
+没有明显的规律	No clear pattern
+没发现问题	No problems found
+看蓝屏诊断	See crash diagnosis
+本页「蓝屏和崩溃」：每次蓝屏是什么错、可能是谁，几次放在一起的结论	"Blue screens and crashes" on this page: what each crash was, the likely cause, and the conclusion across all of them
+看硬盘健康	See disk health
+本页「硬件」：硬盘的健康状态、温度、磨损、读错误	"Hardware" on this page: disk health, temperature, wear and read errors
+看开机用时	See boot time
+本页「开机用时」：Windows 点名拖慢开机的程序	"Boot time" on this page: programs Windows says slow down booting
+管理开机启动	Manage startup apps
+「软件管理 → 开机启动」：关掉不需要开机就运行的程序	"Apps → Startup": turn off programs that do not need to start with Windows
+检查系统文件	Check system files
+sfc /verifyonly 和 DISM /ScanHealth：只检查系统文件和系统映像有没有损坏，不改任何东西。要几分钟	sfc /verifyonly and DISM /ScanHealth: only check whether system files and the system image are damaged; nothing is changed. Takes a few minutes
+快速检查系统映像	Quick image check
+DISM /CheckHealth：几秒钟看一下系统映像有没有被标记为损坏，不改东西	DISM /CheckHealth: a few seconds to see whether the system image is flagged as damaged; nothing is changed
+先 DISM /RestoreHealth 修好系统映像（可能要联网下载），再 sfc /scannow 把损坏的系统文件换成正常的。只动 Windows 自己的文件，不碰你的资料。十几分钟到半小时	First DISM /RestoreHealth repairs the system image (may download from the internet), then sfc /scannow replaces damaged system files with good copies. Only Windows' own files are touched, never your data. 10 to 30 minutes
+会运行 DISM /RestoreHealth 和 sfc /scannow：把损坏的系统文件换成正常的副本。这会改动系统文件（只动 Windows 自己的文件，不碰你的资料），DISM 可能要联网下载，一共要十几分钟到半小时，中途不要关窗口。\n\n可以先用「检查系统文件」看一眼有没有问题，再决定要不要修复。	This runs DISM /RestoreHealth and sfc /scannow to replace damaged system files with good copies. It changes system files (only Windows' own files, never your data); DISM may download from the internet. It takes 10 to 30 minutes; do not close the window in the middle.\n\nYou can run "Check system files" first to see whether anything is wrong.
+扫描 C 盘文件系统	Scan C: file system
+chkdsk /scan：在线扫描 C 盘的文件系统，不用重启、不锁盘。发现问题会提示下一步	chkdsk /scan: scans the file system on C: online, with no restart and no locking. It tells you the next step if it finds problems
+下次开机检查并修复 C 盘…	Check and repair C: at next start…
+重启电脑后会先检查 {0}，期间不要断电。不想检查了可以运行 chkntfs /x {0}	{0} will be checked when the PC restarts; do not cut the power during the check. To cancel it, run chkntfs /x {0}
+chkdsk /f：安排在下次开机时检查并修复 C 盘的文件系统。开机会多花几分钟到一小时，期间不能断电。可以撤销	chkdsk /f: schedules a check and repair of the C: file system at the next start. Start-up takes a few minutes to an hour longer; do not cut the power. Can be cancelled
+会安排在下次开机时检查并修复 C 盘（chkdsk /f）。开机时会先检查，可能要几分钟到一小时，期间不要断电、不要强制关机。\n\n如果硬盘可能在坏（蓝屏诊断说硬盘掉线、硬件页里硬盘健康报警），请先把重要资料备份出来再做：检查会大量读写硬盘。\n\n不想检查了，可以用「取消开机检查」撤销。	This schedules a check and repair of C: at the next start (chkdsk /f). The check runs during start-up and can take a few minutes to an hour; do not cut the power or force a shutdown.\n\nIf the disk may be failing (the crash diagnosis says the disk dropped out, or Hardware shows a health warning), back up important files first: the check reads and writes the disk a lot.\n\nTo change your mind, use "Cancel startup check".
+取消开机检查	Cancel startup check
+已取消 {0} 的开机检查。	The startup check of {0} is cancelled.
+chkntfs /x：撤销上面安排的开机检查	chkntfs /x: cancels the startup check scheduled above
+Windows 内存诊断	Windows Memory Diagnostic
+打开 Windows 自带的内存诊断：选「立即重新启动并检查」或「下次启动时检查」，大约 15 分钟，结果在重启后右下角提示	Opens the built-in memory test: choose "Restart now and check" or "Check the next time I start", about 15 minutes; the result shows in the corner after the restart
+关闭硬盘省电…	Turn off disk power saving…
+把当前电源计划里的「PCI Express 链路状态电源管理」「AHCI 链路电源管理」「关闭硬盘」改成不省电。治硬盘掉线、卡顿最常用的一招；笔记本续航会少一点。改之前记下原来的值，随时能恢复	Sets "PCI Express Link State Power Management", "AHCI Link Power Management" and "Turn off hard disk after" in the current power plan to no power saving. The most common fix for disks dropping out or stalling; laptop battery life drops a little. The old values are saved first and can be restored any time
+会把当前电源计划里这三项改成不省电：\n• PCI Express 链路状态电源管理 → 关闭\n• AHCI 链路电源管理（HIPM/DIPM）→ 活动\n• 在此时间后关闭硬盘 → 从不\n\n硬盘、固态硬盘不再进入省电状态，能避免省电后唤醒失败导致的掉盘和卡顿。笔记本用电池时续航会少一点。原来的值会记下来，随时可以点「恢复硬盘省电」改回去。	These three settings in the current power plan will be set to no power saving:\n• PCI Express Link State Power Management → Off\n• AHCI Link Power Management (HIPM/DIPM) → Active\n• Turn off hard disk after → Never\n\nHard disks and SSDs no longer enter power-saving states, which avoids dropouts and stalls when they fail to wake up. Laptops get a little less battery life. The old values are saved, and "Restore disk power saving" puts them back any time.
+恢复硬盘省电	Restore disk power saving
+把上面改过的三项恢复成改之前的值	Puts the three settings above back to their earlier values
+设备管理器	Device Manager
+更新、回退或卸载驱动：右键设备 →「属性」→「驱动程序」。带黄色感叹号的设备有问题	Update, roll back or uninstall drivers: right-click a device → "Properties" → "Driver". Devices with a yellow exclamation mark have problems
+系统还原	System Restore
+回到以前的还原点：会撤销那之后装的程序、驱动和更新，你的文档、照片不受影响。向导里每一步都可以取消	Go back to an earlier restore point: undoes apps, drivers and updates installed since then; your documents and photos are not affected. Every step of the wizard can be cancelled
+打开 Windows 更新：装最新的补丁和驱动	Opens Windows Update to install the latest fixes and drivers
+更新疑难解答	Update troubleshooter
+打开 Windows 自带的疑难解答，运行「Windows 更新」那一项	Opens the built-in troubleshooters; run the "Windows Update" one
+重置 Windows 更新组件…	Reset Windows Update components…
+旧的更新缓存改了名留在原处（{0}、{1}），确认更新正常后可以手动删掉。	The old update caches were renamed and kept in place ({0}, {1}); you can delete them by hand once updates work again.
+更新一直失败、卡在百分之几时最常用的修法：暂停更新服务，把更新缓存文件夹改名（不删除），再启动服务，Windows 会重新下载。更新历史的显示会变空，已装的更新不受影响	The usual fix when updates keep failing or get stuck: stops the update services, renames the update cache folders (nothing is deleted) and starts the services again so Windows downloads afresh. The update history list becomes empty; installed updates are not affected
+会暂停 Windows 更新、加密、后台传输、安装程序这四个服务，把 SoftwareDistribution 和 catroot2 两个更新缓存文件夹改名留底（不删除），再把服务启动起来。\n\nWindows 会重新下载需要的更新；「更新历史」的列表会变空，已经装好的更新不受影响。正在安装更新时不要做。	This stops four services (Windows Update, Cryptographic, Background Intelligent Transfer and Windows Installer), renames the SoftwareDistribution and catroot2 update caches (nothing is deleted), and starts the services again.\n\nWindows downloads the updates it needs again; the "Update history" list becomes empty, and installed updates are not affected. Do not do this while updates are installing.
+清除 DNS 缓存	Flush DNS cache
+ipconfig /flushdns：网站换了地址、个别网站打不开时用。只清缓存，马上生效	ipconfig /flushdns: for when a site moved or a few sites will not open. Only clears the cache; takes effect at once
+查看网络状态	Check network status
+ipconfig /all、ping、nslookup：看网卡有没有拿到地址、能不能解析域名和连上外网。不改东西	ipconfig /all, ping, nslookup: shows whether the adapter has an address, whether names resolve and whether the internet is reachable. Changes nothing
+重置网络…	Reset network…
+重启电脑后生效。	Takes effect after a restart.
+netsh winsock reset 和 netsh int ip reset：网络设置被软件改乱、能连上 Wi-Fi 却上不了网时用。要重启；手动设的固定 IP 要重新填	netsh winsock reset and netsh int ip reset: for when software has scrambled the network settings, or Wi-Fi connects but nothing loads. Needs a restart; a manually set static IP must be entered again
+会把 Winsock 和 TCP/IP 设置恢复成默认（netsh winsock reset、netsh int ip reset），并清除 DNS 缓存，重启电脑后生效。\n\n• 手动设置的固定 IP 地址和 DNS 可能要重新填，先记下来\n• 部分 VPN、加速器类软件可能要重新安装\n\n只在上不了网、其他办法都试过时再用。	This resets Winsock and TCP/IP to defaults (netsh winsock reset, netsh int ip reset) and flushes the DNS cache; it takes effect after a restart.\n\n• A manually set static IP address and DNS may have to be entered again: note them down first\n• Some VPN and network accelerator apps may need reinstalling\n\nOnly use it when the internet does not work and the other steps have not helped.
+网络和 Internet 设置	Network & internet settings
+打开网络设置：里面有网络疑难解答和「网络重置」	Opens network settings, which include the network troubleshooter and "Network reset"
+网络连接	Network connections
+打开网络连接：禁用再启用网卡、看网卡属性	Opens Network Connections: disable and re-enable an adapter, see its properties
+检查时间准不准	Check the clock
+和 time.windows.com 比较，o: 后面是相差的秒数	Compared with time.windows.com; the number after o: is the difference in seconds
+w32tm /stripchart：和微软的时间服务器比一比差多少秒。只看不改，要联网	w32tm /stripchart: compares the clock with Microsoft's time server. Changes nothing; needs the internet
+同步系统时间	Sync the clock
+如果上面提示时间差太大、没有同步：请在打开的「日期和时间」里手动改，或者先关再开「自动设置时间」。	If it says the time difference is too big and did not sync: set the time by hand in the "Date and time" settings that open, or turn "Set time automatically" off and on again.
+启动 Windows 时间服务并马上同步一次。差得太多时 Windows 不肯自动改，会打开「日期和时间」让你手动改	Starts the Windows Time service and syncs once. If the clock is too far off, Windows will not change it by itself, so "Date and time" settings open for you to set it
+日期和时间设置	Date & time settings
+手动改时间、时区，开关「自动设置时间」	Set the time and time zone by hand, and switch "Set time automatically"
+关闭快速启动…	Turn off Fast Startup…
+快速启动让「关机」其实是半休眠：驱动出错会一直带到下次开机。关掉后关机就是真关机，开机慢几秒。随时能再打开	Fast Startup makes "Shut down" a partial hibernation, so a driver in a bad state carries over to the next start. Turning it off makes shutdown a real shutdown; start-up is a few seconds slower. Can be turned back on any time
+会关闭快速启动（控制面板 → 电源选项 →「启用快速启动」）。\n\n关掉以后「关机」就是真正的关机，驱动和设备每次都重新初始化：能解决关机变重启、睡眠唤醒失败、开机后设备不正常这类问题。代价是开机慢几秒。\n\n随时可以在这里再打开。	This turns off Fast Startup (Control Panel → Power Options → "Turn on fast startup").\n\nAfter that, "Shut down" is a real shutdown and drivers and devices start fresh every time, which fixes restarts instead of shutdowns, failed wake-ups and devices misbehaving after start-up. The cost is a few seconds longer start-up.\n\nYou can turn it back on here any time.
+查看谁不让电脑睡眠	See what blocks sleep
+powercfg /requests、/lastwake、/waketimers：哪个程序或设备阻止睡眠、上次是谁唤醒的。不改东西	powercfg /requests, /lastwake, /waketimers: which program or device keeps the PC awake and what woke it last. Changes nothing
+重启音频服务	Restart audio service
+已重启 Windows Audio 服务。	The Windows Audio service was restarted.
+突然没声音时先试这个：重启 Windows Audio 服务，几秒钟，正在播放的声音会断一下	Try this first when sound suddenly stops: restarts the Windows Audio service in a few seconds; anything playing cuts out briefly
+声音设置	Sound settings
+看默认的播放设备对不对，耳机和音箱是不是选反了	Check the default playback device, for example headphones versus speakers
+刷新图标缓存	Refresh icon cache
+已刷新。还不对的话，注销再登录一次。	Refreshed. If it still looks wrong, sign out and back in.
+ie4uinit -show：图标显示成白块或者是别的程序的图标时用。马上生效，不用重启	ie4uinit -show: for icons that show as blank squares or as another program's icon. Takes effect at once, no restart
+重置应用商店缓存	Reset Store cache
+wsreset：应用商店打不开、下载一直卡住时用。会清掉商店的缓存并重新打开商店，不影响装好的应用	wsreset: for when the Microsoft Store will not open or downloads get stuck. Clears the Store cache and reopens it; installed apps are not affected
+可靠性监视器	Reliability Monitor
+按天列出程序崩溃、蓝屏、更新失败，看问题从哪天开始	Lists app crashes, blue screens and failed updates by day, so you can see when problems started
+事件查看器	Event Viewer
+Windows 的全部日志：「Windows 日志 → 系统」里看错误和警告	All of Windows' logs: errors and warnings are under "Windows Logs → System"
+打开转储文件夹	Open dump folder
+蓝屏转储所在的文件夹（C:\\Windows\\Minidump）：可以拷出来给别人分析	The folder with crash dumps (C:\\Windows\\Minidump); copy them out for someone to analyse
+导出诊断包…	Export diagnostics package…
+把蓝屏转储、最近 30 天的系统和应用日志、系统信息、驱动列表、本工具的诊断结论打成一个 zip，方便发给懂的人看。只读不改	Packs crash dumps, the last 30 days of System and Application logs, system information, the driver list and this tool's diagnosis into one zip to send to someone who can help. Read-only
+蓝屏、死机、自动重启	Blue screens, freezes, random restarts
+先看蓝屏诊断的结论；再按「系统文件 → 硬盘 → 内存 → 驱动」的顺序排查。一次只改一样，改完用几天看还会不会出现。	Start with the crash diagnosis, then work through "system files → disk → memory → drivers". Change one thing at a time and use the PC for a few days to see whether it happens again.
+硬盘掉线、卡顿、读写出错	Disk drops out, stalls or has read errors
+蓝屏代码 0x7A、0xEF、0xF4，系统突然卡住几十秒又恢复，磁盘占用一直 100%，都可能是硬盘或硬盘连接的问题。先备份资料。	Stop codes 0x7A, 0xEF, 0xF4, the system freezing for tens of seconds and then recovering, or disk usage stuck at 100% can all mean a disk or connection problem. Back up your files first.
+系统文件损坏	Damaged system files
+系统设置或自带程序打不开、提示缺少某个 dll、装完更新后出怪问题。	Settings or built-in apps will not open, a missing dll error appears, or odd problems start after an update.
+Windows 更新失败或一直卡住	Windows Update fails or gets stuck
+更新报错、反复安装同一个更新、卡在某个百分比不动。系统时间不对也会让更新失败，先看时间。	Update errors, the same update installing again and again, or progress stuck at a percentage. A wrong clock also makes updates fail, so check the time first.
+上不了网、个别网站打不开	No internet, or some sites will not open
+从轻到重：先看网络状态，再清 DNS 缓存，最后才重置网络。	From light to heavy: check the network status, then flush the DNS cache, and only then reset the network.
+时间不准	Wrong clock
+网页提示证书错误或「你的时钟快了 / 慢了」、更新失败、文件时间对不上。台式机每次断电后时间都变回去，是主板纽扣电池（CR2032）没电了，要换电池。	Websites show certificate errors or "your clock is ahead / behind", updates fail, file times do not match. If a desktop loses the time every time it is unplugged, the motherboard coin battery (CR2032) is flat and needs replacing.
+关机变重启、睡眠后醒不来、开机后设备不正常	Shutdown restarts, sleep will not wake, devices act up after start-up
+多半和快速启动、驱动的电源管理有关。	Usually related to Fast Startup or driver power management.
+没有声音	No sound
+先看是不是选错了播放设备，再重启音频服务；还不行就到设备管理器里更新声卡驱动。	Check the playback device first, then restart the audio service; if that does not help, update the sound driver in Device Manager.
+图标显示不对、应用商店打不开	Wrong icons, Store will not open
+图标变白块或显示成别的程序的图标；应用商店转圈、下载卡住。	Icons show as blank squares or as another program's icon; the Store keeps spinning or downloads get stuck.
+开机慢	Slow start-up
+看 Windows 点名的拖慢开机的程序，把不需要的开机启动关掉。	See which programs Windows says slow down start-up, and turn off startup apps you do not need.
+把信息发给别人帮忙看	Send details to someone who can help
+诊断包里有转储、日志和系统信息，可能包含电脑名、用户名、装过的软件和内存片段，只发给你信任的人。	The diagnostics package contains dumps, logs and system information, which can include the computer name, user name, installed software and pieces of memory. Only send it to people you trust.
+PCI Express 链路状态电源管理	PCI Express Link State Power Management
+AHCI 链路电源管理（HIPM/DIPM）	AHCI Link Power Management (HIPM/DIPM)
+在此时间后关闭硬盘	Turn off hard disk after
+读不到当前的电源计划	Could not read the current power plan
+当前电源计划里没有这几项设置	The current power plan does not have these settings
+没能记下原来的设置，所以没有改	The current settings could not be saved, so nothing was changed
+关闭硬盘和 PCIe 省电	Turn off disk and PCIe power saving
+没有改过，不用恢复	Nothing was changed, nothing to restore
+记下的原值读不出来	The saved values could not be read
+恢复硬盘和 PCIe 省电	Restore disk and PCIe power saving
+打开快速启动	Turn on Fast Startup
+（{0} 秒没运行完，没等它）	(did not finish within {0} s; not waited for)
+腾挪 ClearC 系统健康报告	ClearC system health report
+开机已经 {0:N1} 天	Up for {0:N1} days
+最近一次更新 {0:yyyy-MM-dd} {1}	Last update {0:yyyy-MM-dd} {1}
+时钟可能不准：有比现在晚 {0} 天的系统文件（{1}）	Clock may be wrong: a system file is dated {0} days after now ({1})
+（没有）	(none)
+硬盘	Disks
+有问题的设备	Devices with problems
+这个文件已经存在	This file already exists
+健康报告	Health report
+太大，没放进去	too large, left out
+完整转储太大，没放进去；需要的话单独拷	the full dump is too large and was left out; copy it separately if needed
+系统和应用日志	System and Application logs
+导出失败	export failed
+系统信息	System information
 这里不能放搬过去的数据	Moved data can't go here
 {0} 在 {1} 里面。那是清理列表里的文件夹或临时文件夹，清理时会被清空，搬过去的数据会一起被删。请换一个位置。	{0} is inside {1}. That is a cleanup-list folder or a temporary folder, which gets emptied during cleanup, so moved data would be deleted with it. Please choose another location.
 \n但其中 {0} 项（{1}）由系统命令处理，不能放进回收站，会直接删除。	\nBut {0} of them ({1}) are handled by system commands and can't go to the Recycle Bin; they are deleted permanently.
@@ -7906,6 +8764,10 @@ $script:helpEnXaml = @'
                   <TextBlock Style="{StaticResource HelpBody}"><Run>Every item is in the operation log: what was deleted, free space on C: before and after, whether it went to the Recycle Bin, and what was not deleted and why.</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Open the folder"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>After a scan, double-click any row to open its folder in File Explorer, handy for copying logs, dumps and similar files out for analysis; right-click for "Open all locations" (when an item has several) or "Copy path". Items handled by system commands (Recycle Bin, Delivery Optimization cache, search index, Installer, driver store, event logs, WinSxS) open the place where Windows keeps them. This only opens and looks; nothing is changed.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Easy to see after a scan"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>The top of the list shows how many items were found and how many groups they fall into; each group heading also shows its item count. When there are many items, scroll down the page; a hint at the bottom tells you how many more are below.</Run></TextBlock>
                 </StackPanel>
@@ -8181,6 +9043,10 @@ $script:helpEnXaml = @'
                   <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>When a level holds a lot (WinSxS has tens of thousands of items), only the 500 largest are listed and the rest are combined into the last row; "Open location" shows everything in File Explorer.</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Click a drive card"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Each drive has a card at the top of the page (usage, temperature, wear, health). Click one to select that drive and start scanning it; the details below switch to that drive, and the selected card gets a blue outline. If the results below are already for that drive it does not scan again; click "Scan" to rescan.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Drive overview"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>After scanning a whole drive, a line above the list shows used / total and the percentage, with a bar split into system and apps, personal files, cleanable caches, other and free space. Caches are estimated from the "Safe to clean" folders of the cleanup page.</Run></TextBlock>
                 </StackPanel>
@@ -8350,12 +9216,16 @@ $script:helpEnXaml = @'
                   <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE95E;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                   <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="System health" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
-                    <TextBlock Text="Hardware status, boot time, blue screen causes, what eats resources; read-only" Style="{StaticResource HelpSum}"/>
+                    <TextBlock Text="Hardware status, boot time, crash diagnosis, common fixes, what eats resources" Style="{StaticResource HelpSum}"/>
                   </StackPanel>
                 </DockPanel>
               </Expander.Header>
               <StackPanel>
                 <StackPanel Margin="0,14,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Tabs"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>A row of tabs next to the title: Hardware, Boot time, Blue screens and crashes, Common fixes, Activity monitor, Windows events. Click one to show only that section, each with its own scroll bar, so you never scroll through the whole page. The page reopens on the tab you looked at last.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Hardware"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>One card per item, colored by tier (green OK, amber watch, red problem, grey unavailable): CPU load, current and maximum clock, performance counter (persistently below the rated clock means throttling), ACPI temperature; memory used, commit, hard faults and WHEA memory errors; each drive's SMART health, temperature, wear, read errors and hours; battery design capacity, full-charge capacity and cycles; GPU load, VRAM and driver; Windows uptime, pending restart, last update and devices with problems.</Run></TextBlock>
                   <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Anything that cannot be read says "unavailable" instead of an estimate: Windows does not provide CPU core or GPU temperatures (vendor tools do); desktops have no battery; USB enclosures and some virtual machines report no SMART.</Run></TextBlock></DockPanel>
@@ -8366,9 +9236,21 @@ $script:helpEnXaml = @'
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Blue screens and crashes"/>
-                  <TextBlock Style="{StaticResource HelpBody}"><Run>ClearC parses the dump files in C:\Windows\Minidump itself: bug check code and name, the four parameters, drivers loaded at the time, which driver the fault address falls in and which drivers appear on the stack, giving a "probably driver X" hint. It also lists the last 30 days of unexpected shutdowns, blue screen records, WHEA hardware errors, disk and file system errors, and recently installed drivers: a blue screen that matches a driver installation points at that driver first.</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>ClearC parses the dump files in C:\Windows\Minidump itself: bug check code and name, the four parameters, the status code of a failed disk read (0xC000000E means the disk dropped out, for example), the process running at the time, drivers loaded at the time, which driver the fault address falls in and which drivers appear on the stack. Each crash gets a one-line explanation and its common causes; when only Windows drivers are on the stack, no driver is wrongly blamed. It also lists the last 30 days of unexpected shutdowns, blue screen records, WHEA hardware errors, disk and file system errors, and recently installed drivers.</Run></TextBlock>
                   <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>A hint, not a verdict, and less accurate than WinDbg.</Run></TextBlock></DockPanel>
-                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>"Check system files (read-only)" runs sfc /verifyonly and DISM /ScanHealth in a terminal, checking only; "Repair system files" runs sfc /scannow and DISM /RestoreHealth, replacing damaged system files with good copies (only Windows' own files), and asks first.</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Diagnosis"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Crashes, event logs, disk health, the system clock and the Windows version are read together into a few conclusions: "disk read failures + a system process stopping again and again + disk errors" means an unstable disk or disk connection; a third-party driver named in two or more crashes is the main suspect; plus memory, graphics, hardware errors, sleep and wake-up, a wrong clock and an outdated Windows. Each conclusion comes with buttons for the suggested fixes.</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>"Copy report" copies the diagnosis and the notes on each crash as text. "Export diagnostics package" packs the dumps, the last 30 days of System and Application logs, systeminfo, the driver list, disk information and this report into one zip (saved where you choose, never overwriting a file) to send to someone who can help. It may contain the computer name, user name, installed software and pieces of memory, so only send it to people you trust.</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Common fixes"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>The fixes most often recommended on help forums that actually work, grouped by problem and ordered lightest first: blue screens and freezes, disks dropping out or stalling, damaged system files, failing Windows updates, no internet, a wrong clock, restarts instead of shutdowns and failed wake-ups, no sound, icons and the Store, slow start-up, and sending details to someone. Every step is labelled "Read-only", "Changes system" or "Needs restart"; hover to see exactly what it does.</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>All of them are built-in Windows commands (sfc, DISM, chkdsk, netsh, ipconfig, w32tm, powercfg and so on) that run in a visible terminal window, and every run is recorded in the activity log.</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Steps that change things explain themselves and ask first: repair system files (DISM /RestoreHealth, then sfc /scannow), check C: at the next start (undo with "Cancel startup check"), reset Windows Update components (the caches are renamed and kept, not deleted), reset the network (needs a restart; a static IP must be entered again).</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>"Turn off disk power saving" sets PCIe link power management, AHCI link power management and "Turn off hard disk after" in the power plan to no power saving, the most common fix for disks dropping out; the old values are saved first and "Restore disk power saving" puts them back. "Turn off Fast Startup" can be turned back on any time.</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Nothing deletes files, ends programs, installs drivers or touches settings unrelated to the fix. System Restore, Memory Diagnostic and Device Manager are Windows tools where you confirm every step.</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="What is slowing the PC down"/>
@@ -8383,8 +9265,8 @@ $script:helpEnXaml = @'
                   <DockPanel>
                     <TextBlock DockPanel.Dock="Left" Text="&#xEA18;" FontFamily="{StaticResource Icons}" FontSize="15" Foreground="#248A3D" VerticalAlignment="Top" Margin="0,2,12,0"/>
                     <StackPanel>
-                      <TextBlock Style="{StaticResource HelpLead}" Text="This page changes nothing"/>
-                      <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>Everything is read-only. The only thing that changes the system is "Repair system files", which is separate and asks first.</Run></TextBlock>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Reading changes nothing; fixes ask first"/>
+                      <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>Hardware, boot time, crashes, events and the activity monitor only read. Changes happen only through the fix buttons, which explain what they change and whether it can be undone, and then ask you.</Run></TextBlock>
                     </StackPanel>
                   </DockPanel>
                 </Border>
@@ -8513,9 +9395,9 @@ $script:helpEnXaml = @'
                 <StackPanel Margin="0,14,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Mode"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>Three modes decide how much the window shows. ClearC asks once on first start; after that, change it at the top of Settings at any time. Switching never loses settings or records. The current mode is written under the version number at the bottom left; click it to go to Settings.</Run></TextBlock>
-                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Home user</Run><Run>: Clean C:, Save space, Space map, Apps and Help. The cleanup list only has common caches and temporary files that apps rebuild; items with a cost are still skipped by default.</Run></TextBlock></DockPanel>
-                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Engineer</Run><Run>: adds Duplicates, Moves, Reminders and the operation log; find files, compare with last time, recent changes, export and compress in the space map; page file, restore points, compressed folders, virtual disks and merge duplicates in Save space; startup, leftover folders, update check and move in Apps; boot time, crash diagnosis and the activity monitor in System health; developer tool caches and driver leftovers in the cleanup list.</Run></TextBlock></DockPanel>
-                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Developer and IT</Run><Run>: everything. Adds scheduled tasks, context menu, reserved storage, component store analysis, crash dumps, temp folder location, custom cleanup list and exclusions, the fast scan switch, space breakdown, scan check, the run log, system file repair, the Windows event summary, and items such as orphaned Installer packages, event logs, old driver packages and NuGet / Gradle / Maven / JetBrains caches.</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Home user</Run><Run>: Clean C:, Save space, Space map, Apps, System health (hardware, blue screens and crashes, common fixes) and Help. The cleanup list only has common caches and temporary files that apps rebuild; items with a cost are still skipped by default.</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Engineer</Run><Run>: adds Duplicates, Moves, Reminders and the operation log; find files, compare with last time, recent changes, export and compress in the space map; page file, restore points, compressed folders, virtual disks and merge duplicates in Save space; startup, leftover folders, update check and move in Apps; boot time and the activity monitor in System health, plus the network reset, Windows Update reset, C: startup check, disk power saving and Fast Startup steps of Common fixes; developer tool caches and driver leftovers in the cleanup list.</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Developer and IT</Run><Run>: everything. Adds scheduled tasks, context menu, reserved storage, component store analysis, crash dumps, temp folder location, custom cleanup list and exclusions, the fast scan switch, space breakdown, scan check, the run log, the Windows event summary, and items such as orphaned Installer packages, event logs, old driver packages and NuGet / Gradle / Maven / JetBrains caches.</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Appearance and language"/>
@@ -8563,7 +9445,7 @@ $script:helpEnXaml = @'
               <Expander Style="{StaticResource HelpQ}">
                 <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="How do I investigate a blue screen?"/></Expander.Header>
                 <StackPanel>
-                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>"System health → Blue screens and crashes": the bug check code and the "probably driver X" hint from the dump, matched against drivers installed in the last 30 days; then the hardware and disk error events. Usual order: update or roll back the matching driver, run "Check system files", and with many hardware errors run the memory diagnostic and check drive health.</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>"System health → Blue screens and crashes": the "Diagnosis" at the top reads all crashes, event logs and disk health together, tells you the most likely kind of problem and offers fix buttons; each crash also has a one-line explanation. Usual order: if the disk drops out, back up first, turn off disk power saving and update the storage driver; if one driver keeps being named, update or roll it back; then run "Check system files", and for memory-type crashes run the memory diagnostic. To get help from someone, click "Export diagnostics package".</Run></TextBlock>
                 </StackPanel>
               </Expander>
               <Expander Style="{StaticResource HelpQ}">
@@ -10050,6 +10932,13 @@ if ($script:mode -match '(?i)/autoclean') {
       <!-- 列表自己不滚动（没有内部滚动条），所有项目都排开，跟着整页滚 -->
       <ListView x:Name="List" Background="Transparent" BorderThickness="0" Padding="0"
                 ItemTemplate="{StaticResource CleanRow}" ItemContainerStyle="{StaticResource PlainRow}">
+        <ListView.ContextMenu>
+          <ContextMenu x:Name="CleanMenu" Style="{StaticResource Menu}">
+            <MenuItem x:Name="CmOpen" Header="打开所在文件夹" Style="{StaticResource MenuRow}"/>
+            <MenuItem x:Name="CmOpenAll" Header="打开全部位置" Style="{StaticResource MenuRow}"/>
+            <MenuItem x:Name="CmCopy" Header="复制路径" Style="{StaticResource MenuRow}"/>
+          </ContextMenu>
+        </ListView.ContextMenu>
         <ListView.Template>
           <ControlTemplate TargetType="ListView"><ItemsPresenter/></ControlTemplate>
         </ListView.Template>
@@ -10354,7 +11243,7 @@ if ($script:mode -match '(?i)/autoclean') {
             <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
             <ItemsControl.ItemTemplate>
               <DataTemplate>
-                <Border Style="{StaticResource Card}" Width="300" Margin="0,0,12,8" Padding="0" Cursor="Hand" ToolTip="{Binding Tip}" Tag="{Binding}">
+                <Border x:Name="DcCard" Style="{StaticResource Card}" Width="300" Margin="0,0,12,8" Padding="0" Cursor="Hand" ToolTip="{Binding Tip}" Tag="{Binding}">
                   <DockPanel>
                     <Border DockPanel.Dock="Left" Width="5" Background="{Binding Stripe}" CornerRadius="12,0,0,12"/>
                     <StackPanel Margin="14,10,14,10">
@@ -10377,6 +11266,7 @@ if ($script:mode -match '(?i)/autoclean') {
                   </DockPanel>
                 </Border>
                 <DataTemplate.Triggers>
+                  <DataTrigger Binding="{Binding Sel}" Value="True"><Setter TargetName="DcCard" Property="BorderBrush" Value="#0071E3"/><Setter TargetName="DcCard" Property="BorderThickness" Value="2"/></DataTrigger>
                   <DataTrigger Binding="{Binding HasTemp}" Value="False"><Setter TargetName="TempChip" Property="Visibility" Value="Collapsed"/></DataTrigger>
                   <DataTrigger Binding="{Binding HasWear}" Value="False"><Setter TargetName="WearChip" Property="Visibility" Value="Collapsed"/></DataTrigger>
                   <DataTrigger Binding="{Binding HasHours}" Value="False"><Setter TargetName="HoursText" Property="Visibility" Value="Collapsed"/></DataTrigger>
@@ -10773,20 +11663,35 @@ if ($script:mode -match '(?i)/autoclean') {
 
     <!-- ==================== 软件管理 ==================== -->
     <!-- ===== 系统健康：硬件、启动、蓝屏、活动监控、事件。读不到的明说读不到 ===== -->
-    <Grid x:Name="PageHealth" Grid.Column="1" Grid.Row="0" Visibility="Collapsed">
-      <ScrollViewer x:Name="HealthScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
-        <StackPanel Margin="30,24,30,28" MaxWidth="960" HorizontalAlignment="Left">
-          <DockPanel>
-            <Button x:Name="BtnHealthRefresh" DockPanel.Dock="Right" Content="刷新" VerticalAlignment="Top" Margin="16,4,0,0"/>
-            <StackPanel>
-              <TextBlock Text="系统健康" Style="{StaticResource PageTitle}"/>
-              <TextBlock Style="{StaticResource PageSub}" Text="硬件状态、开机用时、蓝屏原因、谁在吃资源。只看不改；读不到的数据直接写明读不到，不用估算冒充。"/>
+    <Grid x:Name="PageHealth" Grid.Column="1" Grid.Row="0" Visibility="Collapsed" Margin="30,24,30,10">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
+      </Grid.RowDefinitions>
+      <!-- 标题和选项卡在一排：点哪一项只显示哪一项，各自有自己的滚动条 -->
+      <DockPanel Grid.Row="0">
+        <Button x:Name="BtnHealthRefresh" DockPanel.Dock="Right" Content="刷新" VerticalAlignment="Center" Margin="16,0,0,0"/>
+        <WrapPanel VerticalAlignment="Center">
+          <TextBlock Text="系统健康" Style="{StaticResource PageTitle}" VerticalAlignment="Center" Margin="0,0,22,4" ToolTip="硬件状态、开机用时、蓝屏原因、常见问题的修法、谁在吃资源。读不到的数据直接写明读不到，不用估算冒充"/>
+          <Border x:Name="HealthTabBox" Style="{StaticResource SegBox}" VerticalAlignment="Center" Margin="0,2,0,4">
+            <StackPanel Orientation="Horizontal">
+              <RadioButton x:Name="HTabHw" GroupName="htab" Content="硬件" IsChecked="True" Style="{StaticResource Seg}"/>
+              <RadioButton x:Name="HTabBoot" GroupName="htab" Content="开机用时" Style="{StaticResource Seg}"/>
+              <RadioButton x:Name="HTabCrash" GroupName="htab" Content="蓝屏和崩溃" Style="{StaticResource Seg}"/>
+              <RadioButton x:Name="HTabFix" GroupName="htab" Content="常见问题修复" Style="{StaticResource Seg}"/>
+              <RadioButton x:Name="HTabMon" GroupName="htab" Content="活动监控" Style="{StaticResource Seg}"/>
+              <RadioButton x:Name="HTabEvents" GroupName="htab" Content="Windows 事件" Style="{StaticResource Seg}"/>
             </StackPanel>
-          </DockPanel>
-          <TextBlock x:Name="HealthNote" Style="{StaticResource Caption}" Margin="0,10,0,0" Text="正在读取…"/>
-
+          </Border>
+        </WrapPanel>
+      </DockPanel>
+      <TextBlock Grid.Row="1" x:Name="HealthNote" Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap" Text="正在读取…"/>
+      <Grid Grid.Row="2" Margin="0,12,0,0">
+        <ScrollViewer x:Name="HealthViewHw" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+          <StackPanel MaxWidth="980" HorizontalAlignment="Left" Margin="0,0,6,14">
           <!-- 硬件：每一项一张小卡片 -->
-          <Border x:Name="HealthCardHw" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+          <Border x:Name="HealthCardHw" Style="{StaticResource Card}" Padding="24,20">
             <StackPanel>
               <TextBlock Text="硬件" Style="{StaticResource CardHead}"/>
               <ItemsControl x:Name="HealthCards" Margin="0,12,0,0">
@@ -10827,8 +11732,12 @@ if ($script:mode -match '(?i)/autoclean') {
             </StackPanel>
           </Border>
 
+          </StackPanel>
+        </ScrollViewer>
+        <ScrollViewer x:Name="HealthViewBoot" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+          <StackPanel MaxWidth="980" HorizontalAlignment="Left" Margin="0,0,6,14">
           <!-- 开机 -->
-          <Border x:Name="HealthCardBoot" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+          <Border x:Name="HealthCardBoot" Style="{StaticResource Card}" Padding="24,20">
             <StackPanel>
               <TextBlock Text="开机用时" Style="{StaticResource CardHead}"/>
               <TextBlock x:Name="HealthBootText" Style="{StaticResource Body}" Margin="0,8,0,0" TextWrapping="Wrap" Text=""/>
@@ -10846,13 +11755,49 @@ if ($script:mode -match '(?i)/autoclean') {
             </StackPanel>
           </Border>
 
+          </StackPanel>
+        </ScrollViewer>
+        <ScrollViewer x:Name="HealthViewCrash" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+          <StackPanel MaxWidth="980" HorizontalAlignment="Left" Margin="0,0,6,14">
+          <!-- 诊断结论：几次蓝屏、事件、硬盘健康放在一起看 -->
+          <Border x:Name="HealthCardVerdict" Style="{StaticResource Card}" Padding="24,20">
+            <StackPanel>
+              <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top" Margin="20,0,0,0">
+                  <Button x:Name="BtnCopyReport" Content="复制报告" Margin="0,0,8,0" ToolTip="把这一页的诊断结论、每次蓝屏的说明、相关事件和硬盘状态复制成文字，可以直接粘贴给别人"/>
+                  <Button x:Name="BtnDiagPack" Content="导出诊断包…" ToolTip="把蓝屏转储、最近 30 天的系统和应用日志、系统信息、驱动列表和诊断结论打成一个 zip，方便发给懂的人看。只读不改"/>
+                </StackPanel>
+                <TextBlock Text="诊断结论" Style="{StaticResource CardHead}"/>
+              </DockPanel>
+              <ItemsControl x:Name="HealthVerdicts" Margin="0,12,0,0">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <Border Background="{Binding Bg}" CornerRadius="10" Padding="16,12" Margin="0,0,0,10">
+                      <StackPanel>
+                        <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="SemiBold" Foreground="{Binding Fg}" TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding Body}" Style="{StaticResource Body}" Margin="0,6,0,0"/>
+                        <ItemsControl x:Name="VdFixes" ItemsSource="{Binding Fixes}" Margin="0,10,0,0">
+                          <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                          <ItemsControl.ItemTemplate><DataTemplate><Button Content="{Binding Name}" Tag="{Binding Id}" ToolTip="{Binding Tip}" IsEnabled="{Binding Enabled}" Style="{StaticResource Small}" Margin="0,0,8,6"/></DataTemplate></ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                      </StackPanel>
+                    </Border>
+                    <DataTemplate.Triggers>
+                      <DataTrigger Binding="{Binding HasFixes}" Value="False"><Setter TargetName="VdFixes" Property="Visibility" Value="Collapsed"/></DataTrigger>
+                    </DataTemplate.Triggers>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Text="结论是按错误码、状态码、事件日志和硬盘健康推出来的，是排查方向，不是定论。按钮和「常见问题修复」里的是同一套：只看的直接运行，会改动的先说明要改什么。"/>
+            </StackPanel>
+          </Border>
           <!-- 蓝屏和崩溃 -->
           <Border x:Name="HealthCardCrash" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
             <StackPanel>
               <DockPanel>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top" Margin="20,0,0,0">
                   <Button x:Name="BtnSfcCheck" Content="检查系统文件（只看）" Margin="0,0,8,0" ToolTip="在终端窗口里运行 sfc /verifyonly 和 DISM /ScanHealth：只检查，不改任何东西。要几分钟"/>
-                  <Button x:Name="BtnSfcRepair" Content="修复系统文件…" ToolTip="在终端窗口里运行 sfc /scannow 和 DISM /RestoreHealth：会把损坏的系统文件换成正常的副本（会改系统文件，可能要联网下载）。点了会先确认"/>
+                  <Button x:Name="BtnSfcRepair" Content="修复系统文件…" ToolTip="在终端窗口里运行 DISM /RestoreHealth 和 sfc /scannow：会把损坏的系统文件换成正常的副本（会改系统文件，可能要联网下载）。点了会先确认"/>
                 </StackPanel>
                 <TextBlock Text="蓝屏和崩溃" Style="{StaticResource CardHead}"/>
               </DockPanel>
@@ -10869,6 +11814,7 @@ if ($script:mode -match '(?i)/autoclean') {
                             <TextBlock Text="{Binding Code}" Margin="10,0,0,0" FontFamily="Consolas"/>
                             <TextBlock Text="{Binding Suspect}" Margin="10,0,0,0" FontWeight="SemiBold" Foreground="{Binding SuspectBrush}"/>
                           </StackPanel>
+                          <TextBlock Text="{Binding Plain}" Style="{StaticResource Body}" Margin="0,3,0,0"/>
                           <TextBlock Text="{Binding Detail}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,3,0,0"/>
                         </StackPanel>
                       </DockPanel>
@@ -10898,12 +11844,65 @@ if ($script:mode -match '(?i)/autoclean') {
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
-              <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap" Text="转储文件是本工具自己解析的（错误码、参数、出事时加载的驱动、栈上出现的驱动），不如 WinDbg 准确；「可能的驱动」只是提示，不是定论。蓝屏时间和最近装的驱动对得上的，优先怀疑那个驱动。"/>
+              <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap" Text="转储文件是本工具自己解析的（错误码、参数、状态码、出事时加载的驱动、栈上出现的驱动），不如 WinDbg 准确；「可能的驱动」只是提示，不是定论。蓝屏时间和最近装的驱动对得上的，优先怀疑那个驱动。"/>
             </StackPanel>
           </Border>
+          </StackPanel>
+        </ScrollViewer>
+        <ScrollViewer x:Name="HealthViewFix" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+          <StackPanel MaxWidth="980" HorizontalAlignment="Left" Margin="0,0,6,14">
+          <!-- 常见问题修复：按问题列出论坛里最常用的修法，每一步标明改不改东西 -->
+          <Border x:Name="HealthCardFix" Style="{StaticResource Card}" Padding="24,20">
+            <StackPanel>
+              <TextBlock Text="常见问题修复" Style="{StaticResource CardHead}"/>
+              <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,0" Text="按问题找对应的修法，从上往下、从轻到重地试。「只看」不改任何东西；「会改动」点了会先说明要改什么，能撤销的写明怎么撤销；「要重启」重启后才生效。用的都是 Windows 自带的命令，在看得见的窗口里运行。"/>
+              <Border x:Name="FixRecBox" Background="#E3EEFF" CornerRadius="10" Padding="16,12" Margin="0,12,0,0" Visibility="Collapsed">
+                <StackPanel>
+                  <TextBlock x:Name="FixRecHead" Text="根据这台电脑的蓝屏诊断，建议先做" FontWeight="SemiBold" Foreground="#0A5BC4"/>
+                  <ItemsControl x:Name="FixRec" Margin="0,8,0,0">
+                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate><DataTemplate><Button Content="{Binding Name}" Tag="{Binding Id}" ToolTip="{Binding Tip}" IsEnabled="{Binding Enabled}" Style="{StaticResource Small}" Margin="0,0,8,6"/></DataTemplate></ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+              </Border>
+              <ItemsControl x:Name="FixGroups" Margin="0,12,0,0" Grid.IsSharedSizeScope="True">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <Border Background="#F7F7F9" CornerRadius="10" Padding="16,12" Margin="0,0,0,10">
+                      <StackPanel>
+                        <TextBlock Text="{Binding Title}" FontSize="14.5" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding Desc}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,3,0,4"/>
+                        <ItemsControl ItemsSource="{Binding Steps}">
+                          <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                              <Grid Margin="0,6,0,0">
+                                <Grid.ColumnDefinitions>
+                                  <ColumnDefinition Width="Auto" SharedSizeGroup="FixBtn"/>
+                                  <ColumnDefinition Width="Auto" SharedSizeGroup="FixTag"/>
+                                  <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Button Grid.Column="0" Content="{Binding Name}" Tag="{Binding Id}" IsEnabled="{Binding Enabled}" ToolTip="{Binding Desc}" Style="{StaticResource Small}" HorizontalAlignment="Stretch" VerticalAlignment="Top"/>
+                                <Border Grid.Column="1" Background="{Binding TagBg}" CornerRadius="6" Padding="7,2" Margin="10,3,0,0" VerticalAlignment="Top"><TextBlock Text="{Binding Tag}" FontSize="11.5" FontWeight="SemiBold" Foreground="{Binding TagFg}" HorizontalAlignment="Center"/></Border>
+                                <TextBlock Grid.Column="2" Text="{Binding Desc}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="10,4,0,0"/>
+                              </Grid>
+                            </DataTemplate>
+                          </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                      </StackPanel>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,0" Text="这里的修复不删除任何文件、不结束任何程序、不装驱动；Windows 更新组件是改名留底，硬盘省电和快速启动随时能改回来。系统还原、内存诊断、设备管理器是 Windows 自己的工具，里面每一步都由你确认。每次运行都记在操作日志里。"/>
+            </StackPanel>
+          </Border>
+          </StackPanel>
+        </ScrollViewer>
 
+        <ScrollViewer x:Name="HealthViewMon" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+          <StackPanel MaxWidth="980" HorizontalAlignment="Left" Margin="0,0,6,14">
           <!-- 活动监控 -->
-          <Border x:Name="HealthCardMon" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+          <Border x:Name="HealthCardMon" Style="{StaticResource Card}" Padding="24,20">
             <StackPanel>
               <DockPanel>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top" Margin="20,0,0,0">
@@ -10942,8 +11941,12 @@ if ($script:mode -match '(?i)/autoclean') {
             </StackPanel>
           </Border>
 
+          </StackPanel>
+        </ScrollViewer>
+        <ScrollViewer x:Name="HealthViewEvents" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+          <StackPanel MaxWidth="980" HorizontalAlignment="Left" Margin="0,0,6,14">
           <!-- Windows 事件 -->
-          <Border x:Name="HealthCardEvents" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+          <Border x:Name="HealthCardEvents" Style="{StaticResource Card}" Padding="24,20">
             <StackPanel>
               <TextBlock Text="Windows 事件：最近 7 天的严重错误" Style="{StaticResource CardHead}"/>
               <TextBlock x:Name="HealthWinText" Style="{StaticResource Body}" Margin="0,8,0,0" TextWrapping="Wrap" Text=""/>
@@ -10960,8 +11963,9 @@ if ($script:mode -match '(?i)/autoclean') {
               <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap" Text="系统日志里「严重」和「错误」两级，按来源归并。很多错误是无害的（比如某个服务启动慢了一次）；同一个来源反复出现、时间又和故障对得上的才值得查。详细内容在 Windows 的「事件查看器」里。"/>
             </StackPanel>
           </Border>
-        </StackPanel>
-      </ScrollViewer>
+          </StackPanel>
+        </ScrollViewer>
+      </Grid>
     </Grid>
     <Grid x:Name="PageApps" Grid.Column="1" Grid.Row="0" Margin="30,24,30,14" Visibility="Collapsed">
       <Grid.RowDefinitions>
@@ -11676,6 +12680,10 @@ if ($script:mode -match '(?i)/autoclean') {
                   <TextBlock Style="{StaticResource HelpBody}"><Run>每一项都记在操作日志里：删了什么、删前删后 C 盘剩余多少、有没有放进回收站、哪些没删掉和原因。</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="打开所在文件夹"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>扫描后双击任意一行，直接在资源管理器里打开它所在的文件夹，方便把日志、转储这类文件拷出来分析；右键可以「打开全部位置」（一项有好几个位置时）或「复制路径」。回收站、传递优化缓存、搜索索引、Installer、驱动存储、事件日志、WinSxS 这些由系统命令处理的项目，打开的是 Windows 存放它们的地方。只是打开查看，不改动任何东西。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="扫完一目了然"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>列表上方写明一共扫到几项、分成几类，每组标题旁也标着几项。项目多时整页往下滚动，底部会提示「下面还有几项」。</Run></TextBlock>
                 </StackPanel>
@@ -11951,6 +12959,10 @@ if ($script:mode -match '(?i)/autoclean') {
                   <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>一层里东西很多时（比如 WinSxS 有上万个），只列最大的 500 项，其余合成最后一行；点「打开位置」可以在资源管理器里看全部。</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="点盘卡片"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>页面上方每块盘一张卡片（用量、温度、磨损、健康）。点哪一张就选中哪块盘并开始扫描，下面换成这块盘的详细情况；选中的卡片有蓝色描边。下面已经是这块盘的结果时不重复扫描，要重扫点「扫描」。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="盘的概览"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>扫完整块盘后，列表上方一行概览：已用 / 总量、百分比，以及系统与软件、个人文件、可清理的缓存、其他、剩余空间各占多少的分段条。缓存按清理页「安全清理」里的目录估算。</Run></TextBlock>
                 </StackPanel>
@@ -12120,12 +13132,16 @@ if ($script:mode -match '(?i)/autoclean') {
                   <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE95E;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                   <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="系统健康" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
-                    <TextBlock Text="硬件状态、开机用时、蓝屏原因、谁在吃资源；只看不改" Style="{StaticResource HelpSum}"/>
+                    <TextBlock Text="硬件状态、开机用时、蓝屏诊断、常见问题修复、谁在吃资源" Style="{StaticResource HelpSum}"/>
                   </StackPanel>
                 </DockPanel>
               </Expander.Header>
               <StackPanel>
                 <StackPanel Margin="0,14,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="选项卡"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>标题旁一排选项卡：硬件、开机用时、蓝屏和崩溃、常见问题修复、活动监控、Windows 事件。点哪一项只显示哪一项，各自上下滚动，不用把整页拉到底。下次打开停在上次看的那一项。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="硬件"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>每一项一张卡片，按档位标色（绿正常、橙留意、红有问题、灰读不到）：CPU 的负载、当前和最高频率、性能计数器（持续低于标称频率说明在降频）、ACPI 温度；内存的已用、提交、硬错误、WHEA 记录过的内存错误；每块盘的 SMART 健康状态、温度、磨损、读错误、通电时间；电池的设计容量、现在充满能到多少、循环次数；显卡的占用、显存、驱动版本；Windows 开机多久、等待重启、最近更新、有问题的设备。</Run></TextBlock>
                   <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>读不到的直接写「读不到」，不用估算冒充：CPU 内核温度和显卡温度 Windows 不提供，要厂商工具；台式机没有电池；USB 硬盘盒和部分虚拟机不报 SMART。</Run></TextBlock></DockPanel>
@@ -12136,9 +13152,21 @@ if ($script:mode -match '(?i)/autoclean') {
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="蓝屏和崩溃"/>
-                  <TextBlock Style="{StaticResource HelpBody}"><Run>本工具自己解析 C:\Windows\Minidump 里的转储文件：错误码和名字、四个参数、出事时加载的驱动、异常地址落在哪个驱动里、调用栈上出现的驱动，给出「可能是某驱动」的提示。再列最近 30 天的意外关机、蓝屏记录、WHEA 硬件错误、磁盘和文件系统错误事件，以及最近 30 天装的驱动：蓝屏时间和装驱动的时间对得上的，优先怀疑那个驱动。</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>本工具自己解析 C:\Windows\Minidump 里的转储文件：错误码和名字、四个参数、读盘失败时的状态码（比如 0xC000000E 是硬盘掉线）、出事时的进程、出事时加载的驱动、异常地址落在哪个驱动里、调用栈上出现的驱动。每次蓝屏下面用一句话说明是什么错、常见原因是什么；栈上只有 Windows 自带驱动的，不会冤枉某个驱动。再列最近 30 天的意外关机、蓝屏记录、WHEA 硬件错误、磁盘和文件系统错误事件，以及最近 30 天装的驱动。</Run></TextBlock>
                   <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>这是提示不是定论，准确度不如 WinDbg。</Run></TextBlock></DockPanel>
-                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>「检查系统文件（只看）」在终端里跑 sfc /verifyonly 和 DISM /ScanHealth，只检查不改；「修复系统文件」跑 sfc /scannow 和 DISM /RestoreHealth，会把损坏的系统文件换成正常副本（只动 Windows 自己的文件），点了先确认。</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="诊断结论"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>几次蓝屏、事件日志、硬盘健康、系统时钟和 Windows 版本放在一起看，给出几条结论：比如「读盘失败 + 系统进程反复退出 + 磁盘错误」就是硬盘或硬盘连接不稳定，同一个第三方驱动在两次以上蓝屏里被点名就是它嫌疑最大，还有内存、显卡、硬件错误、睡眠唤醒、时钟不准、系统版本太旧。每条结论下面直接带着建议的修复按钮。</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>「复制报告」把结论和每次蓝屏的说明复制成文字；「导出诊断包」把转储、最近 30 天的系统和应用日志、systeminfo、驱动列表、硬盘信息和这份报告打成一个 zip（存到你选的位置，不覆盖已有文件），方便发给懂的人看。诊断包可能包含电脑名、用户名、装过的软件和内存片段，只发给你信任的人。</Run></TextBlock></DockPanel>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="常见问题修复"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>按问题列出论坛里最常用、确实有效的修法，从轻到重：蓝屏和死机、硬盘掉线和卡顿、系统文件损坏、Windows 更新失败、上不了网、时间不准、关机变重启和唤醒失败、没有声音、图标和应用商店、开机慢、把信息发给别人。每一步标明「只看」「会改动」「要重启」，鼠标放上去看具体做什么。</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>用的都是 Windows 自带的命令（sfc、DISM、chkdsk、netsh、ipconfig、w32tm、powercfg 等），在看得见的终端窗口里运行，每次都记进操作日志。</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>会改动的先弹出说明再确认：修复系统文件（DISM /RestoreHealth 再 sfc /scannow）、下次开机检查 C 盘（可用「取消开机检查」撤销）、重置 Windows 更新组件（更新缓存改名留底，不删除）、重置网络（要重启，固定 IP 要重填）。</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>「关闭硬盘省电」把电源计划里的 PCIe 链路电源管理、AHCI 链路电源管理和「关闭硬盘」改成不省电，治掉盘最常用；改之前记下原值，「恢复硬盘省电」原样改回。「关闭快速启动」随时能再打开。</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>不删除任何文件、不结束任何程序、不装驱动、不改和这些修复无关的设置。系统还原、内存诊断、设备管理器是 Windows 自己的工具，每一步由你确认。</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="谁在让电脑变慢"/>
@@ -12153,8 +13181,8 @@ if ($script:mode -match '(?i)/autoclean') {
                   <DockPanel>
                     <TextBlock DockPanel.Dock="Left" Text="&#xEA18;" FontFamily="{StaticResource Icons}" FontSize="15" Foreground="#248A3D" VerticalAlignment="Top" Margin="0,2,12,0"/>
                     <StackPanel>
-                      <TextBlock Style="{StaticResource HelpLead}" Text="这一页什么都不改"/>
-                      <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>全部是读取。会改系统的只有「修复系统文件」，而且分开放、点了先确认。</Run></TextBlock>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="读取什么都不改，修复先确认"/>
+                      <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>硬件、开机、蓝屏、事件、活动监控全部是读取。会改系统的只在修复按钮里，点了先说明要改什么、能不能撤销，再由你确认。</Run></TextBlock>
                     </StackPanel>
                   </DockPanel>
                 </Border>
@@ -12283,9 +13311,9 @@ if ($script:mode -match '(?i)/autoclean') {
                 <StackPanel Margin="0,14,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="使用模式"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>三种，按你的需要决定界面上有多少东西。第一次打开时会问一句，之后在「设置」最上面随时换，换了不丢任何设置和记录。左下角版本号下面写着当前模式，点一下就到设置。</Run></TextBlock>
-                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">普通用户</Run><Run>：清理 C 盘、省空间、空间地图、软件管理、帮助。清理列表里只有常见的缓存和临时文件，删了软件会自动重建；有代价的项目仍然默认跳过。</Run></TextBlock></DockPanel>
-                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">工程师</Run><Run>：再加上重复文件、搬家管理、自动提醒、操作日志；空间地图的找文件、和上次比、最近改动、导出、压缩；省空间的页面文件、还原点、压缩文件夹、虚拟磁盘、合并重复文件；软件管理的开机启动、残留文件夹、检查新版本、搬到其他盘；系统健康的开机用时、蓝屏诊断、活动监控；清理列表里多出开发工具的缓存和驱动残留。</Run></TextBlock></DockPanel>
-                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">开发者和 IT</Run><Run>：全部功能。再加上计划任务、右键菜单、保留的存储、组件存储分析、蓝屏转储、临时文件夹位置、自定义清理列表和排除、快速扫描开关、空间明细、检查扫描功能、运行记录、修复系统文件、Windows 事件汇总，以及 Installer 孤儿安装包、事件日志、旧版驱动包、NuGet / Gradle / Maven / JetBrains 缓存这类项目。</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">普通用户</Run><Run>：清理 C 盘、省空间、空间地图、软件管理、系统健康（硬件、蓝屏和崩溃、常见问题修复）、帮助。清理列表里只有常见的缓存和临时文件，删了软件会自动重建；有代价的项目仍然默认跳过。</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">工程师</Run><Run>：再加上重复文件、搬家管理、自动提醒、操作日志；空间地图的找文件、和上次比、最近改动、导出、压缩；省空间的页面文件、还原点、压缩文件夹、虚拟磁盘、合并重复文件；软件管理的开机启动、残留文件夹、检查新版本、搬到其他盘；系统健康的开机用时、活动监控，以及常见问题修复里重置网络、重置更新组件、开机检查 C 盘、关闭硬盘省电、关闭快速启动这几步；清理列表里多出开发工具的缓存和驱动残留。</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">开发者和 IT</Run><Run>：全部功能。再加上计划任务、右键菜单、保留的存储、组件存储分析、蓝屏转储、临时文件夹位置、自定义清理列表和排除、快速扫描开关、空间明细、检查扫描功能、运行记录、Windows 事件汇总，以及 Installer 孤儿安装包、事件日志、旧版驱动包、NuGet / Gradle / Maven / JetBrains 缓存这类项目。</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="外观和语言"/>
@@ -12333,7 +13361,7 @@ if ($script:mode -match '(?i)/autoclean') {
               <Expander Style="{StaticResource HelpQ}">
                 <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="蓝屏了怎么查？"/></Expander.Header>
                 <StackPanel>
-                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>「系统健康 → 蓝屏和崩溃」：转储文件解析出的错误码和「可能是某驱动」，和最近 30 天装的驱动对一对；再看硬件错误和磁盘错误事件。常见的处理顺序：先更新或回退对得上的驱动，再跑「检查系统文件」，硬件错误多的跑内存诊断、看硬盘健康。</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>「系统健康 → 蓝屏和崩溃」：最上面的「诊断结论」把几次蓝屏、事件日志和硬盘健康放在一起看，告诉你最可能是哪一类问题，下面带着修复按钮；每次蓝屏下面还有一句话的解释。常见的处理顺序：硬盘掉线的先备份、关硬盘省电、更新存储驱动；驱动被反复点名的先更新或回退它；再跑「检查系统文件」，内存类的跑内存诊断。要找人帮忙，点「导出诊断包」。</Run></TextBlock>
                 </StackPanel>
               </Expander>
               <Expander Style="{StaticResource HelpQ}">
@@ -12617,7 +13645,8 @@ foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageM
                'BtnAppsRefresh','AppsAll','AppsC','AppsStore','AppsInfo','AppsSearch','AppsLeftBox','BtnAppsLeftClose','BtnAppsLeft','AppsLeftText','AppsList','EmptyApps','EmptyAppsText',
                'BtnAppsUpdates','AppsViewApps','AppsViewStartup','AppsViewTasks','AppsViewMenu','AppsViewLeft','AppsViewBox','AppsFilterBox','StartList','MapHealthBox','MapHealth','MapHealthNote','SetMapHealth',
                'MapViewTypes','MapViewRecent','MapOwner','MapSort','MapGrowBar','MapGrowBase','MapRecentBar','MapRecentDays','BtnMapRecent','MapGrid','MapOverview','MapOvPct','MapOvTitle','MapOvUsed','MapOvBar','MapOvLegend',
-               'NavHealth','PageHealth','HealthScroll','BtnHealthRefresh','HealthNote','HealthCardHw','HealthCards','HealthCardBoot','HealthBootText','HealthSlow','HealthCardCrash','BtnSfcCheck','BtnSfcRepair','HealthCrashText','HealthDumps','HealthEventsHead','HealthEvents','HealthDriversHead','HealthDrivers',
+               'NavHealth','PageHealth','HTabHw','HTabBoot','HTabCrash','HTabFix','HTabMon','HTabEvents','HealthViewHw','HealthViewBoot','HealthViewCrash','HealthViewFix','HealthViewMon','HealthViewEvents',
+               'HealthCardVerdict','BtnCopyReport','BtnDiagPack','HealthVerdicts','HealthCardFix','FixRecBox','FixRecHead','FixRec','FixGroups','BtnHealthRefresh','HealthNote','HealthCardHw','HealthCards','HealthCardBoot','HealthBootText','HealthSlow','HealthCardCrash','BtnSfcCheck','BtnSfcRepair','HealthCrashText','HealthDumps','HealthEventsHead','HealthEvents','HealthDriversHead','HealthDrivers',
                'HealthCardMon','MonSortWrite','MonSortCpu','MonSortMem','BtnMonStart','BtnMonStop','HealthMonText','MonList','HealthCardEvents','HealthWinText','HealthErrors','SetPageHealth',
                'SaveCardCos','SaveCardPf','SaveCardHib','SaveCardRp','SaveCardFc','SaveCardOd','SaveCardRs','SaveCardCs','SaveCardDump','SaveCardTmp','SaveCardVd','SaveCardMerge','SetCardMode','SetCardDisplay','SetCardScan','SetModeBasic','SetModePro','SetModeExpert','SetModeNote','ModeTag','AutoJunkRow','FbCopyDiag','FbSelfTest','FbCheckUpdate','MapViewBox',
                'BtnOdFree','SaveOdState','BtnRsOn','BtnRsOff','SaveRsState','BtnCsAnalyze','BtnCsClean','SaveCsState','BtnDumpSmall','BtnDumpAuto','SaveDumpState','SaveTmpState','SaveTmpDrive','BtnTmpMove','BtnTmpAuto','BtnCleanCustom','AutoJunkGB','AutoCleanWhen','SetCleanCard','SetRecycle','SetRecycleRow','SetCustomHead','SetCustomNote','SetExcludeHead','SetExcludeNote','SetCustomList','SetCustomEmpty','BtnSetCustomAdd','SetExcludeList','SetExcludeEmpty','BtnSetExcludeAdd',
@@ -12627,7 +13656,7 @@ foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageM
                'BtnLang','BtnLangText','BtnTheme','BtnThemeText','NavHelp','PageHelp','HelpScroll','HelpSections','HelpFaq','BtnHelpExpand','FeedbackCard','RiskCard','BtnFeedback','BtnGitHub','BtnIssue','BtnCopyDiag','BtnOpenLog','CopyHint','BtnSelfTest','BtnCheckUpdate','MapFast','MapChat',
                'NavClean','NavDup','PageClean','PageDup','AppVer','BtnLog','BtnLogText','BtnLogHide','LogPanel','Dim',
                'CapFree','CapTotal','CapBar','CapReclaim','EmptyClean','EmptyCleanText','EmptyDup','EmptyDupText','SizeCustomRow',
-               'DestPick','BtnDestBrowse','DestHint','BtnOneClick','BtnScan','BtnRun','BtnHogs','Hint','List','Summary','Log',
+               'DestPick','BtnDestBrowse','DestHint','BtnOneClick','BtnScan','BtnRun','BtnHogs','Hint','List','CleanMenu','CmOpen','CmOpenAll','CmCopy','Summary','Log',
                'Roots','BtnAddRoot','BtnDupScan','BtnDupStop',
                'FilterExpander','FilterSummary','TypeChips','TypeReset','ExtraExt','SizeChips',
                'SizeMin','SizeMinUnit','SizeMax','SizeMaxUnit','SizeHint','ModeName','ModeContent','SpeedFast','SpeedExact',
@@ -13265,13 +14294,90 @@ function Update-CleanOverview {
     $order = New-Object System.Collections.Generic.List[string]; $cnt = @{}
     foreach ($r in $col) { if (-not $cnt.ContainsKey($r.GroupTitle)) { $order.Add($r.GroupTitle); $cnt[$r.GroupTitle] = 0 }; $cnt[$r.GroupTitle]++ }
     $parts = @($order | ForEach-Object { (T "{0} {1} 项") -f $_, $cnt[$_] })
-    $ctl.CleanOverviewText.Text = (T "扫描到 {0} 项，分成 {1} 类：{2}。每一项都可以单独选「删除」「搬走」或「跳过」，往下滚动查看全部。") -f $col.Count, $order.Count, ($parts -join (T '、'))
+    $ctl.CleanOverviewText.Text = (T "扫描到 {0} 项，分成 {1} 类：{2}。每一项都可以单独选「删除」「搬走」或「跳过」，往下滚动查看全部。双击一行打开它所在的文件夹，右键可以复制路径。") -f $col.Count, $order.Count, ($parts -join (T '、'))
     $ctl.CleanOverview.Visibility = 'Visible'
     $script:cleanItems = $null
     $ctl.CleanScroll.ScrollToTop()
     $ctl.CleanScroll.UpdateLayout()
     Update-CleanMore
 }
+# ---------- 清理页：双击一行打开它的文件夹，右键打开全部位置或复制路径（只看不改，方便把文件拷出来分析） ----------
+# 没有固定路径、由系统命令处理的几项，指到 Windows 存放它们的地方
+function Get-CleanExtraPaths([string]$n) {
+    $m = @{
+        (T '清空回收站') = @('shell:RecycleBinFolder')
+        (T 'Windows 传递优化缓存') = @("$env:SystemRoot\SoftwareDistribution\DeliveryOptimization", "$env:SystemRoot\ServiceProfiles\NetworkService\AppData\Local\Microsoft\Windows\DeliveryOptimization\Cache")
+        (T '重建 Windows 搜索索引') = @("$env:ProgramData\Microsoft\Search\Data\Applications\Windows")
+        (T 'Windows Installer 孤儿安装包') = @("$env:SystemRoot\Installer")
+        (T '驱动存储里的旧版驱动包') = @("$env:SystemRoot\System32\DriverStore\FileRepository")
+        (T '开始菜单里失效的快捷方式') = @("$env:APPDATA\Microsoft\Windows\Start Menu\Programs", "$env:ProgramData\Microsoft\Windows\Start Menu\Programs")
+        (T 'Windows 事件日志') = @("$env:SystemRoot\System32\winevt\Logs")
+        (T 'WinSxS 组件清理 (DISM)') = @("$env:SystemRoot\WinSxS")
+    }
+    if ($m.ContainsKey($n)) { return $m[$n] } else { return @() }
+}
+# 一行对应的、现在确实存在的位置（带 * 的展开成真实的文件夹，最多 30 个）
+function Get-CleanOpenPaths($it) {
+    $out = New-Object System.Collections.Generic.List[string]
+    if (-not $it) { return ,$out.ToArray() }
+    foreach ($p in (@($it.Paths) + @(Get-CleanExtraPaths ([string]$it.N)))) {
+        if (-not $p) { continue }
+        $p = [Environment]::ExpandEnvironmentVariables([string]$p)
+        if ($p -like 'shell:*') { if (-not $out.Contains($p)) { $out.Add($p) }; continue }
+        $cands = if ($p -match '[\*\?]') { @(Get-PathItems $p | Select-Object -First 30 | ForEach-Object { $_.FullName }) } else { @($p) }
+        foreach ($c in $cands) { if ($c -and -not $out.Contains($c) -and (Test-Path -LiteralPath $c)) { $out.Add($c) } }
+        if ($out.Count -ge 30) { break }
+    }
+    return ,$out.ToArray()
+}
+function Get-CleanRowFrom($src) {
+    $v = $src
+    while ($v -and $v -isnot [System.Windows.Controls.ListViewItem]) {
+        if ($v -is [System.Windows.Controls.ListBox] -and $v -isnot [System.Windows.Controls.ListView]) { return $null }   # 点在「删除 / 跳过」上
+        if ($v -is [System.Windows.Controls.Primitives.ScrollBar]) { return $null }
+        $v = if ($v -is [System.Windows.Media.Visual] -or $v -is [System.Windows.Media.Media3D.Visual3D]) { [System.Windows.Media.VisualTreeHelper]::GetParent($v) } else { $null }
+    }
+    if ($v -and $v.DataContext -is [RowItem]) { return $v.DataContext }
+    return $null
+}
+function Get-CleanItemOf($row) { if (-not $row) { return $null }; foreach ($c in $catalog) { if ($c.Idx -eq $row.Idx) { return $c } }; return $null }
+function Open-CleanPath([string]$p) {
+    if ($script:uiTest) { $script:uiOpened.Add($p); return }
+    if ($p -like 'shell:*') { Start-Process -FilePath "$env:SystemRoot\explorer.exe" -ArgumentList $p } else { Open-Location $p }
+}
+$script:uiOpened = New-Object System.Collections.Generic.List[string]
+$script:cleanMenuRow = $null
+function Open-CleanRow($row, [bool]$all) {
+    $it = Get-CleanItemOf $row
+    $ps = @(Get-CleanOpenPaths $it)
+    if ($ps.Count -eq 0) { Show-Sheet -Title ([string]$row.Name) -Text (T '这一项现在没有可以打开的文件夹：要么已经清空了，要么是由系统命令处理、没有固定的位置。') | Out-Null; return }
+    if (-not $all) { Open-CleanPath $ps[0]; if ($ps.Count -gt 1) { UI-Log ((T "「{0}」还有 {1} 个位置，右键可以全部打开") -f $row.Name, ($ps.Count - 1)) }; return }
+    foreach ($p in ($ps | Select-Object -First 8)) { Open-CleanPath $p }
+    if ($ps.Count -gt 8) { UI-Log ((T "「{0}」一共 {1} 个位置，打开了前 8 个；全部路径可以右键「复制路径」") -f $row.Name, $ps.Count) }
+}
+$ctl.List.Add_MouseDoubleClick({
+    param($s, $e)
+    if ($e.ChangedButton -ne [System.Windows.Input.MouseButton]::Left) { return }
+    $row = Get-CleanRowFrom $e.OriginalSource
+    if ($row) { $e.Handled = $true; Open-CleanRow $row $false }
+})
+$ctl.List.Add_ContextMenuOpening({
+    param($s, $e)
+    $row = Get-CleanRowFrom $e.OriginalSource
+    if (-not $row) { $e.Handled = $true; return }
+    $script:cleanMenuRow = $row
+    $n = @(Get-CleanOpenPaths (Get-CleanItemOf $row)).Count
+    $ctl.CmOpen.IsEnabled = $n -gt 0; $ctl.CmCopy.IsEnabled = $n -gt 0
+    $ctl.CmOpenAll.Visibility = $(if ($n -gt 1) { 'Visible' } else { 'Collapsed' })
+    $ctl.CmOpenAll.Header = (T "打开全部位置（{0} 个）") -f $n
+})
+$ctl.CmOpen.Add_Click({ if ($script:cleanMenuRow) { Open-CleanRow $script:cleanMenuRow $false } })
+$ctl.CmOpenAll.Add_Click({ if ($script:cleanMenuRow) { Open-CleanRow $script:cleanMenuRow $true } })
+$ctl.CmCopy.Add_Click({
+    if (-not $script:cleanMenuRow) { return }
+    $ps = @(Get-CleanOpenPaths (Get-CleanItemOf $script:cleanMenuRow) | Where-Object { $_ -notlike 'shell:*' })
+    if ($ps.Count -gt 0) { try { [System.Windows.Clipboard]::SetText(($ps -join "`r`n")); UI-Log ((T "已复制 {0} 个路径") -f $ps.Count) } catch {} }
+})
 # 下面还有没看到的内容时，底部浮一个「下面还有 N 项」
 function Update-CleanMore {
     $sv = $ctl.CleanScroll
@@ -14405,7 +15511,7 @@ function Show-DiskHealth($list) {
         }
         if ($h.Ok -and $h.Hours -gt 0) { $c.HoursText = (T "通电 {0:N0} 小时") -f $h.Hours }
         $c.Stripe = if (-not $h.Ok) { '#C7C7CC' } elseif ($worst -eq 2) { '#FF3B30' } elseif ($worst -eq 1) { '#FF9F0A' } else { '#34C759' }
-        $tip = @((T '点一下选这块盘。'))
+        $tip = @((T '点一下扫描这块盘，下面显示它的详细情况。'))
         if ($h.Ok) {
             $tip += (T '温度：45 °C 以下正常，60 °C 以上偏高，长期高温会缩短固态硬盘寿命。')
             $tip += (T '磨损：固态硬盘已用掉的写入寿命，到 100% 厂商就不保了；10% 以下很新，50% 以上要开始考虑备份。')
@@ -14416,17 +15522,38 @@ function Show-DiskHealth($list) {
         $col.Add($c)
     }
     $ctl.MapHealth.ItemsSource = $col
+    Update-MapCardSel
     $ctl.MapHealthNote.Visibility = if ($col.Count -gt 0) { 'Collapsed' } else { 'Visible' }
     if ($col.Count -eq 0) { $ctl.MapHealthNote.Text = (T '读不到磁盘的健康信息（型号、磨损、温度）') }
 }
-# 点卡片 = 选这块盘
+# 选中的盘：卡片描边跟着下拉框走
+function Update-MapCardSel {
+    $sel = if ($ctl.MapDrive.SelectedItem) { ([string]$ctl.MapDrive.SelectedItem.Tag).TrimEnd('\') } else { '' }
+    $any = $false
+    foreach ($c in @($ctl.MapHealth.ItemsSource)) { if (-not $c) { continue }; $on = $sel -and ([string]$c.Letter).TrimEnd('\') -ieq $sel; if ($c.Sel -ne $on) { $c.Sel = $on; $any = $true } }
+    if ($any) { try { $ctl.MapHealth.Items.Refresh() } catch {} }
+}
+$ctl.MapDrive.Add_SelectionChanged({ Update-MapCardSel })
+# 点卡片 = 选这块盘并扫描它（已经显示的就是这块盘时不重扫；正在忙别的就只选上）
+function Select-MapDriveCard([string]$letter, [bool]$scan = $true) {
+    $hit = $null
+    foreach ($it in $ctl.MapDrive.Items) { if (([string]$it.Tag).StartsWith($letter, [StringComparison]::OrdinalIgnoreCase)) { $hit = $it } }
+    if (-not $hit) { return }
+    $ctl.MapDrive.SelectedItem = $hit
+    if (-not $scan) { return }
+    $root = [string]$hit.Tag
+    $shown = if ($script:mapRoot) { try { $script:mapRoot.FullPath() } catch { '' } } else { '' }
+    if ($shown -and $shown.TrimEnd('\') -ieq $root.TrimEnd('\')) { UI-Log ((T "空间地图：下面已经是 {0} 的结果；要重新扫描点「扫描」") -f $root.TrimEnd('\')); return }
+    if ($script:worker) { UI-Log (T '空间地图：正在忙别的，等它做完再点「扫描」'); return }
+    if ($script:uiTest) { $script:uiOpened.Add('scan:' + $root); return }
+    Start-MapScan $root
+}
 $ctl.MapHealth.AddHandler([System.Windows.UIElement]::MouseLeftButtonUpEvent, [System.Windows.Input.MouseButtonEventHandler]{
     param($s, $e)
     $el = $e.OriginalSource
     while ($el -and -not ($el -is [System.Windows.Controls.Border] -and $el.Tag -is [DiskCard])) { $el = [System.Windows.Media.VisualTreeHelper]::GetParent($el) }
     if (-not $el) { return }
-    $letter = [string]$el.Tag.Letter
-    foreach ($it in $ctl.MapDrive.Items) { if (([string]$it.Tag).StartsWith($letter, [StringComparison]::OrdinalIgnoreCase)) { $ctl.MapDrive.SelectedItem = $it } }
+    Select-MapDriveCard ([string]$el.Tag.Letter) $true
 })
 function Start-MapScan([string]$root) {
     if ($script:worker -or -not $root) { return }
@@ -16154,6 +17281,8 @@ function Load-Health {
         if (-not $r) { $ctl.HealthNote.Text = (T '没能读取：') + $err; return }
         $script:healthData = $r
         Show-Health $r
+        Show-Verdicts $r
+        Show-Fixes $r.Power
     }
     if (-not $ok) { $ctl.BtnHealthRefresh.IsEnabled = $true }
 }
@@ -16164,7 +17293,9 @@ function New-Chip([string]$text, $tier) { $c = New-Object HealthChip; $c.Text = 
 function New-HealthCard([string]$title, [string]$sub, $tier) { $c = New-Object HealthCard; $c.Title = $title; $c.Sub = $sub; $c.Stripe = $tier[0]; $c.BarBrush = $tier[0]; return $c }
 function Tier-Worst($a, $b) { $rank = @{ ($script:hcGrey[0]) = 0; ($script:hcGreen[0]) = 1; ($script:hcBlue[0]) = 1; ($script:hcAmber[0]) = 2; ($script:hcRed[0]) = 3 }; if ($rank[$b[0]] -gt $rank[$a[0]]) { $b } else { $a } }
 function Show-Health($r) {
-    $ctl.HealthNote.Text = (T "读取于 {0:HH:mm}，用了 {1:N0} 秒。只看不改。") -f $r.At, $r.Secs
+    $ctl.HealthNote.Text = (T "读取于 {0:HH:mm}，用了 {1:N0} 秒。读取只看不改；修复的按钮点了会先说明要改什么。") -f $r.At, $r.Secs
+    $bad = @($r.Verdicts | Where-Object { $_.Level -eq 'red' })
+    if ($bad.Count -gt 0 -and $ctl.HTabCrash.Visibility -eq 'Visible') { $ctl.HealthNote.Text += ' ' + ((T '发现 {0} 个要注意的问题：「{1}」，详情和修法在「蓝屏和崩溃」里。') -f $bad.Count, ((@($bad | ForEach-Object { $_.Title })) -join (T '」「'))) }
     $cards = New-Object 'System.Collections.ObjectModel.ObservableCollection[HealthCard]'
     # CPU
     $c = $r.Cpu
@@ -16243,7 +17374,9 @@ function Show-Health($r) {
     # Windows
     $w = $r.Win
     $tier = if ($w.BadDevices.Count -gt 0) { $script:hcAmber } else { $script:hcGreen }
-    $card = New-HealthCard 'Windows' ((T "版本 {0}") -f $w.Build) $tier
+    $card = New-HealthCard 'Windows' $(if ($w.Release) { (T "{0} {1}（{2}.{3}）") -f $w.Product, $w.Release, $w.BuildNo, $w.Ubr } else { (T "版本 {0}") -f $w.Build }) $tier
+    if ($w.BuildNo -gt 0 -and $w.BuildNo -lt 19045 -and [string]$w.Product -notmatch 'Server|LTSC|LTSB') { $card.Chips.Add((New-Chip (T '版本太旧') $script:hcAmber)); $tier = Tier-Worst $tier $script:hcAmber }
+    if ($r.Clock -and $r.Clock.Wrong) { $card.Chips.Add((New-Chip (T '时间可能不准') $script:hcAmber)); $card.Lines.Add(((T '有系统文件的修改时间比现在还晚 {0} 天：时钟被往回调过，或者主板电池没电了') -f $r.Clock.AheadDays)); $tier = Tier-Worst $tier $script:hcAmber }
     if ($w.Uptime) { $card.Chips.Add((New-Chip ((T "开机 {0}") -f (FmtSpan $w.Uptime)) $(if ($w.Uptime.TotalDays -ge 14) { $script:hcAmber } else { $script:hcBlue }))) }
     if ($w.PendingReboot) { $card.Chips.Add((New-Chip (T '等待重启') $script:hcAmber)); $tier = Tier-Worst $tier $script:hcAmber }
     if ($w.LastUpdate) { $card.Chips.Add((New-Chip ((T "更新 {0:yyyy-MM-dd}") -f $w.LastUpdate) $(if (((Get-Date) - $w.LastUpdate).TotalDays -gt 60) { $script:hcAmber } else { $script:hcGreen }))) }
@@ -16271,9 +17404,13 @@ function Show-Health($r) {
         $row = New-Object DumpRow
         $row.When = '{0:yyyy-MM-dd HH:mm}' -f $d.Time; $row.File = $d.File
         $row.Code = if ($d.Ok) { ('0x{0:X} {1}' -f $d.Code, $d.CodeName).Trim() } else { (T '没解析出来') }
-        $row.Suspect = if ($d.Suspect) { (T "可能是 {0}") -f $d.Suspect } else { '' }
-        $row.SuspectBrush = '#C0101C'
-        $det = @()
+        $xp = Get-DumpExplain $d
+        $row.Plain = $xp.Plain + (T '。') + $(if ($d.Ok) { (T '常见原因：') + $xp.Causes + (T '。') } else { '' })
+        $row.Suspect = ''; $row.SuspectBrush = '#C0101C'
+        if ($d.Suspect -and $d.SuspectFrom -eq 'address' -and -not $d.SuspectMs) { $row.Suspect = (T "可能是 {0}") -f $d.Suspect }
+        elseif ($d.Suspect) { $row.Suspect = (T "可能和 {0} 有关") -f $d.Suspect; $row.SuspectBrush = '#995700' }
+        elseif ($xp.Kind -eq 'storage') { $row.Suspect = (T '读盘失败'); $row.SuspectBrush = '#C0101C' }
+        $det = @($xp.Detail)
         if ($d.Ok) { $det += (T "参数 {0}") -f ($d.Params -join ' ') }
         if ($d.Stack.Count -gt 0) { $det += (T "栈上的驱动：{0}") -f (($d.Stack | Select-Object -First 6) -join ', ') }
         if ($d.Ok) { $det += (T "出事时加载了 {0} 个驱动") -f $d.Drivers }
@@ -16300,22 +17437,186 @@ function Show-Health($r) {
     $ctl.HealthWinText.Text = if ($w.ErrorCount -gt 0) { (T "最近 7 天系统日志里有 {0} 条严重或错误事件，来源最多的几个：") -f $w.ErrorCount } else { (T '最近 7 天系统日志里没有严重或错误事件。') }
 }
 $ctl.HealthDumps.AddHandler([System.Windows.Controls.Button]::ClickEvent, [System.Windows.RoutedEventHandler]{ param($s, $e) $b = $e.OriginalSource; if ($b -is [System.Windows.Controls.Button] -and $b.Tag -is [DumpRow]) { Open-Location $b.Tag.File } })
-# SFC / DISM：检查只看不改；修复会改系统文件，先确认。都在终端窗口里跑，过程看得见
-function Start-SystemFileTool([bool]$repair) {
-    $cmd = if ($repair) { 'echo === sfc /scannow === && sfc /scannow && echo === DISM /RestoreHealth === && DISM /Online /Cleanup-Image /RestoreHealth' }
-           else { 'echo === sfc /verifyonly === && sfc /verifyonly && echo === DISM /ScanHealth === && DISM /Online /Cleanup-Image /ScanHealth' }
-    if ($repair) {
-        $ans = Show-Sheet -Kind warn -Title (T '修复系统文件？') -Text (T "会运行 sfc /scannow 和 DISM /RestoreHealth：把损坏的系统文件换成正常的副本。这会改动系统文件（只动 Windows 自己的文件，不碰你的资料），DISM 可能要联网下载，一共要十几分钟到半小时。`n`n先用「检查系统文件（只看）」看一眼有没有问题，再决定要不要修复。") -Buttons @((T '取消'), (T '修复')) -Primary (T '修复') -Cancel (T '取消')
-        if ($ans -ne (T '修复')) { return }
-    }
-    try {
-        Start-Process -FilePath "$env:SystemRoot\System32\cmd.exe" -ArgumentList ('/k ' + $cmd)
-        OpLog '系统设置' $(if ($repair) { (T '修复系统文件（sfc /scannow、DISM /RestoreHealth）') } else { (T '检查系统文件（sfc /verifyonly、DISM /ScanHealth）') }) '' $cmd
-        UI-Log ((T "已在终端里开始：{0}") -f $cmd)
-    } catch { Show-Sheet -Kind warn -Title (T '没能打开终端') -Text $_.Exception.Message | Out-Null }
+# ---------- 选项卡：点哪一项只显示哪一项 ----------
+$script:healthTabs = [ordered]@{ hw = @('HTabHw', 'HealthViewHw'); boot = @('HTabBoot', 'HealthViewBoot'); crash = @('HTabCrash', 'HealthViewCrash'); fix = @('HTabFix', 'HealthViewFix'); mon = @('HTabMon', 'HealthViewMon'); events = @('HTabEvents', 'HealthViewEvents') }
+$script:healthTab = Get-Setting 'HealthTab' 'hw'; $script:htabQuiet = $false
+function Select-HealthTab([string]$k) {
+    if (-not $script:healthTabs.Contains($k) -or $ctl[$script:healthTabs[$k][0]].Visibility -ne 'Visible') { $k = 'hw' }
+    foreach ($t in $script:healthTabs.Keys) { $ctl[$script:healthTabs[$t][1]].Visibility = $(if ($t -eq $k) { 'Visible' } else { 'Collapsed' }) }
+    $rb = $ctl[$script:healthTabs[$k][0]]
+    if (-not $rb.IsChecked) { $script:htabQuiet = $true; try { $rb.IsChecked = $true } finally { $script:htabQuiet = $false } }
+    $script:healthTab = $k
 }
+foreach ($t in $script:healthTabs.Keys) {
+    $rb = $ctl[$script:healthTabs[$t][0]]; $rb.Tag = $t
+    $rb.Add_Checked({ if ($script:htabQuiet) { return }; Select-HealthTab ([string]$this.Tag); Set-Setting 'HealthTab' $script:healthTab })
+}
+# ---------- 诊断结论和常见问题修复 ----------
+$script:fixCat = $null
+function Get-FixCat { if (-not $script:fixCat) { $script:fixCat = Get-FixCatalog }; return $script:fixCat }
+# 一步修复在界面上的样子：标签写明只看 / 会改动 / 要重启；硬盘省电、快速启动按现在的状态换说法
+function New-FixStepRow([string]$id, $st) {
+    $s = (Get-FixCat).Steps[$id]
+    $row = New-Object FixStepRow; $row.Id = $id; $row.Name = $s.Name; $row.Desc = $s.Desc; $row.Enabled = $true
+    $tier = $script:hcGrey; $tag = ''
+    switch ($s.Kind) {
+        'check' { $tag = (T '只看'); $tier = $script:hcGreen }
+        'fix' { if ($s.Reboot) { $tag = (T '要重启'); $tier = $script:hcRed } elseif ($s.Harmless) { $tag = (T '马上生效'); $tier = $script:hcBlue } else { $tag = (T '会改动'); $tier = $script:hcAmber } }
+        'open' { $tag = (T '打开工具') }
+        'go' { $tag = (T '跳转') }
+        'special' { $tag = (T '可恢复'); $tier = $script:hcAmber }
+    }
+    switch ($id) {
+        'diagpack' { $tag = (T '只读'); $tier = $script:hcGreen }
+        'diskpowerundo' { $tag = (T '恢复'); $tier = $script:hcBlue; $row.Enabled = [bool]($st -and $st.DiskFix); if (-not $row.Enabled) { $row.Desc = $s.Desc + (T '（现在没改过，不用恢复）') } }
+        'diskpower' { if ($st -and $st.DiskFix) { $row.Name = (T '已关闭硬盘省电'); $row.Enabled = $false; $tag = (T '已改') } }
+        'faststartup' {
+            if ($st -and $st.FastStartup -eq 'off') { $row.Name = (T '打开快速启动…'); $row.Desc = (T '快速启动现在是关着的。打开后「关机」变成半休眠，开机快几秒；关机变重启、唤醒失败的问题可能会回来') }
+            elseif ($st -and $st.FastStartup -eq 'na') { $row.Name = (T '没有快速启动'); $row.Enabled = $false; $row.Desc = (T '休眠关着，所以没有快速启动，不用管'); $tag = (T '不用改'); $tier = $script:hcGrey }
+        }
+    }
+    $row.Tag = $tag; $row.TagFg = $tier[0]; $row.TagBg = $tier[1]
+    return $row
+}
+function New-FixBtn([string]$id, $st) {
+    if (-not (Get-FixCat).Steps.Contains($id)) { return $null }
+    $x = New-FixStepRow $id $st
+    $b = New-Object FixBtn; $b.Id = $id; $b.Name = $x.Name; $b.Tip = $x.Desc; $b.Enabled = $x.Enabled
+    return $b
+}
+function Show-Fixes($st) {
+    $c = Get-FixCat; $m = Get-Mode
+    $col = New-Object 'System.Collections.ObjectModel.ObservableCollection[FixGroupRow]'
+    foreach ($p in $c.Problems) {
+        $g = New-Object FixGroupRow; $g.Id = $p.Id; $g.Title = $p.Title; $g.Desc = $p.Desc
+        foreach ($id in $p.Steps) {
+            $s = $c.Steps[$id]; if (-not $s) { continue }
+            $show = [int]$s.Lvl -le $m
+            if ($id -eq 'diskpowerundo') { $show = ($st -and $st.DiskFix) -or $m -ge [int]$c.Steps['diskpower'].Lvl }   # 改过了就一直能恢复，不管什么模式
+            if ($show) { $g.Steps.Add((New-FixStepRow $id $st)) }
+        }
+        if ($g.Steps.Count -gt 0) { $col.Add($g) }
+    }
+    $ctl.FixGroups.ItemsSource = $col
+}
+function Show-Verdicts($r) {
+    $col = New-Object 'System.Collections.ObjectModel.ObservableCollection[VerdictRow]'
+    $rec = New-Object 'System.Collections.ObjectModel.ObservableCollection[FixBtn]'; $seen = @{}
+    foreach ($v in @($r.Verdicts)) {
+        $row = New-Object VerdictRow; $row.Title = $v.Title; $row.Body = $v.Body
+        $tier = switch ($v.Level) { 'red' { $script:hcRed } 'amber' { $script:hcAmber } 'green' { $script:hcGreen } default { $script:hcBlue } }
+        $row.Fg = $tier[0]; $row.Bg = $tier[1]
+        foreach ($id in @($v.Fixes)) {
+            $b = New-FixBtn $id $r.Power; if (-not $b) { continue }
+            $row.Fixes.Add($b)
+            if ($v.Id -ne 'none' -and -not $seen.ContainsKey($id)) { $seen[$id] = $true; $rec.Add((New-FixBtn $id $r.Power)) }
+        }
+        $row.HasFixes = $row.Fixes.Count -gt 0
+        $col.Add($row)
+    }
+    $ctl.HealthVerdicts.ItemsSource = $col
+    $ctl.FixRec.ItemsSource = $rec
+    $ctl.FixRecBox.Visibility = $(if ($rec.Count -gt 0) { 'Visible' } else { 'Collapsed' })
+}
+# 改完硬盘省电、快速启动后重新读一下状态，按钮跟着变
+function Refresh-FixState {
+    $st = Get-PowerFixState
+    if ($script:healthData) { $script:healthData.Power = $st; Show-Verdicts $script:healthData }
+    Show-Fixes $st
+}
+$script:uiFixRuns = New-Object System.Collections.Generic.List[string]
+# 运行一步修复。会改动的先确认（界面自测时 Show-Sheet 当作点了取消）；命令都在看得见的终端窗口里跑
+function Invoke-FixStep([string]$id) {
+    $c = Get-FixCatalog; if (-not $c.Steps.Contains($id)) { return }   # 每次现取：命令里的时间戳（改名留底用）要是现在的
+    $s = $c.Steps[$id]; $name = ([string]$s.Name).TrimEnd('…')
+    if ($s.Kind -eq 'go') {
+        switch ($s.Go) { 'startup' { Show-Page 'apps'; if ($ctl.AppsViewStartup.Visibility -eq 'Visible') { $ctl.AppsViewStartup.IsChecked = $true } } default { Select-HealthTab $s.Go } }
+        return
+    }
+    if ($s.Kind -eq 'special') {
+        switch ($id) {
+            'diagpack' { Start-DiagPack }
+            'diskpower' {
+                $ans = Show-Sheet -Kind warn -Title (T '关闭硬盘省电？') -Text $s.Confirm -Buttons @((T '取消'), (T '关闭省电')) -Primary (T '关闭省电') -Cancel (T '取消')
+                if ($ans -ne (T '关闭省电')) { return }
+                $res = Set-DiskPowerFix $true
+                if ($res.Ok) { Show-Sheet -Kind done -Title (T '已关闭硬盘省电') -Text ((T "改了：{0}。马上生效，不用重启。想改回去，点「恢复硬盘省电」。") -f ($res.Names -join (T '、'))) | Out-Null }
+                else { Show-Sheet -Kind warn -Title (T '没有改') -Text $res.Why | Out-Null }
+                Refresh-FixState
+            }
+            'diskpowerundo' {
+                $res = Set-DiskPowerFix $false
+                if ($res.Ok) { Show-Sheet -Kind done -Title (T '已恢复硬盘省电') -Text (T '三项设置都改回了原来的值。') | Out-Null } else { Show-Sheet -Kind warn -Title (T '没有恢复') -Text $res.Why | Out-Null }
+                Refresh-FixState
+            }
+            'faststartup' {
+                $cur = Get-FastStartup
+                if ($cur -eq 'na') { return }
+                if ($cur -eq 'on') {
+                    $ans = Show-Sheet -Kind warn -Title (T '关闭快速启动？') -Text $s.Confirm -Buttons @((T '取消'), (T '关闭快速启动')) -Primary (T '关闭快速启动') -Cancel (T '取消')
+                    if ($ans -ne (T '关闭快速启动')) { return }
+                } else {
+                    $ans = Show-Sheet -Title (T '打开快速启动？') -Text (T '会重新打开快速启动：「关机」变成半休眠，下次开机快几秒。') -Buttons @((T '取消'), (T '打开')) -Primary (T '打开') -Cancel (T '取消')
+                    if ($ans -ne (T '打开')) { return }
+                }
+                try { Set-FastStartup ($cur -ne 'on'); UI-Log $(if ($cur -eq 'on') { (T '已关闭快速启动') } else { (T '已打开快速启动') }) } catch { Show-Sheet -Kind warn -Title (T '没能改') -Text $_.Exception.Message | Out-Null }
+                Refresh-FixState
+            }
+        }
+        return
+    }
+    if ($s.Kind -eq 'fix' -and -not $s.Harmless) {
+        $ans = Show-Sheet -Kind warn -Title ((T '{0}？') -f $name) -Text $(if ($s.Confirm) { $s.Confirm } else { $s.Desc }) -Buttons @((T '取消'), (T '开始')) -Primary (T '开始') -Cancel (T '取消')
+        if ($ans -ne (T '开始')) { return }
+    }
+    if ($script:uiTest) { $script:uiFixRuns.Add($id); return }   # 界面自测：不真的运行
+    try {
+        if ($s.Cmd) { Start-Process -FilePath "$env:SystemRoot\System32\cmd.exe" -ArgumentList ('/k title ClearC - {0} & {1} & echo. & echo {2}' -f $name, $s.Cmd, (T '运行完了，可以关掉这个窗口。')) }
+        elseif ($s.Uri) { Start-Process $s.Uri }
+        elseif ($s.Folder) { Open-Location $s.Folder; return }
+        elseif ($s.Exe -and $s.Args) { Start-Process -FilePath $s.Exe -ArgumentList $s.Args }
+        elseif ($s.Exe) { Start-Process -FilePath $s.Exe }
+        if ($s.Kind -in 'fix', 'check') { OpLog '系统设置' $name '' $(if ($s.Cmd) { $s.Cmd } else { $s.Exe }) }
+        UI-Log ((T "已打开：{0}") -f $name)
+    } catch { Show-Sheet -Kind warn -Title ((T '没能打开：{0}') -f $name) -Text $_.Exception.Message | Out-Null }
+}
+foreach ($ic in @($ctl.HealthVerdicts, $ctl.FixRec, $ctl.FixGroups)) {
+    $ic.AddHandler([System.Windows.Controls.Button]::ClickEvent, [System.Windows.RoutedEventHandler]{ param($s, $e) $b = $e.OriginalSource; if ($b -is [System.Windows.Controls.Button] -and $b.Tag -is [string] -and $b.Tag) { Invoke-FixStep ([string]$b.Tag) } })
+}
+# 原来的两个按钮：和「常见问题修复」里的是同一步
+function Start-SystemFileTool([bool]$repair) { Invoke-FixStep $(if ($repair) { 'sfcrepair' } else { 'sfccheck' }) }
 $ctl.BtnSfcCheck.Add_Click({ Start-SystemFileTool $false })
 $ctl.BtnSfcRepair.Add_Click({ Start-SystemFileTool $true })
+# 诊断包：在后台打包，存到你选的位置（默认桌面），不覆盖已有的文件
+function Start-DiagPack {
+    if (-not $script:healthData) { Show-Sheet -Kind warn -Title (T '还在读取') -Text (T '等系统健康读完再导出。') | Out-Null; return }
+    if ($script:uiTest) { $script:uiFixRuns.Add('diagpack'); return }
+    $dlg = New-Object Microsoft.Win32.SaveFileDialog
+    $dlg.Title = (T '诊断包保存到'); $dlg.Filter = (T 'zip 压缩包') + ' (*.zip)|*.zip'; $dlg.OverwritePrompt = $false
+    $dlg.FileName = ('ClearC-diag-{0}-{1:yyyyMMdd-HHmm}.zip' -f $env:COMPUTERNAME, (Get-Date)); $dlg.InitialDirectory = [Environment]::GetFolderPath('Desktop')
+    if (-not $dlg.ShowDialog($win)) { return }
+    $zip = $dlg.FileName
+    if (Test-Path -LiteralPath $zip) { Show-Sheet -Kind warn -Title (T '已经有这个文件') -Text (T '换一个文件名再导出：不会覆盖已有的文件。') | Out-Null; return }
+    $ctl.BtnDiagPack.IsEnabled = $false
+    $ctl.HealthNote.Text = (T '正在导出诊断包，要半分钟到几分钟（systeminfo 比较慢）…')
+    $ok = Start-BgEngine 'diagpack' 'Export-DiagPack $arg.Zip $arg.Health' @{ Zip = $zip; Health = $script:healthData } {
+        param($res, $err)
+        $ctl.BtnDiagPack.IsEnabled = $true
+        if ($res -and $res.Ok) {
+            $ctl.HealthNote.Text = (T "诊断包已导出：{0}（{1} 个文件，{2}）") -f $res.Path, $res.Count, (Fmt $res.Bytes)
+            OpLog '系统设置' (T '导出诊断包') $res.Path ((T '{0} 个文件，{1}') -f $res.Count, (Fmt $res.Bytes))
+            $ans = Show-Sheet -Kind done -Title (T '诊断包已导出') -Text ((T "{0}`n`n{1} 个文件，{2}。里面有蓝屏转储、日志和系统信息，可能包含电脑名、用户名、装过的软件和内存片段，只发给你信任的人。") -f $res.Path, $res.Count, (Fmt $res.Bytes)) -Buttons @((T '好'), (T '打开所在位置')) -Primary (T '打开所在位置') -Cancel (T '好')
+            if ($ans -eq (T '打开所在位置')) { Open-Location $res.Path }
+        } else { $ctl.HealthNote.Text = (T '没能导出诊断包'); Show-Sheet -Kind warn -Title (T '没能导出诊断包') -Text $(if ($res -and $res.Error) { $res.Error } else { [string]$err }) | Out-Null }
+    }
+    if (-not $ok) { $ctl.BtnDiagPack.IsEnabled = $true }
+}
+$ctl.BtnDiagPack.Add_Click({ Start-DiagPack })
+$ctl.BtnCopyReport.Add_Click({
+    if (-not $script:healthData) { return }
+    try { [System.Windows.Clipboard]::SetText((Get-HealthReportText $script:healthData)); UI-Log (T '诊断报告已复制，可以直接粘贴') ; $ctl.HealthNote.Text = (T '诊断报告已复制，可以直接粘贴给别人。') } catch { Show-Sheet -Kind warn -Title (T '没能复制') -Text $_.Exception.Message | Out-Null }
+})
+Show-Fixes $null
 # 活动监控：后台线程每 3 秒采一次样，把结果放进共享表；界面每秒看一眼
 $script:monShared = $null; $script:monSeen = -1; $script:monTimer = $null
 function Start-Monitor {
@@ -17595,8 +18896,11 @@ function Apply-Mode {
     # 清理页、自动提醒、帮助、设置
     $ctl.BtnCleanCustom.Visibility = & $v 2
     $ctl.AutoJunkRow.Visibility = & $v 1
-    foreach ($n in 'HealthCardBoot', 'HealthCardCrash', 'HealthCardMon') { $ctl[$n].Visibility = & $v 1 }
-    $ctl.BtnSfcRepair.Visibility = & $v 2; $ctl.HealthCardEvents.Visibility = & $v 2
+    # 系统健康：开机用时、活动监控给工程师，Windows 事件给开发者和 IT；蓝屏诊断和常见问题修复谁都能用
+    foreach ($n in 'HTabBoot', 'HTabMon') { $ctl[$n].Visibility = & $v 1 }
+    $ctl.HTabEvents.Visibility = & $v 2
+    Select-HealthTab $script:healthTab
+    Show-Fixes $(if ($script:healthData) { $script:healthData.Power } else { $null })
     $ctl.FbCopyDiag.Visibility = & $v 1; $ctl.FbSelfTest.Visibility = & $v 2
     $ctl.SetCardDisplay.Visibility = & $v 1; $ctl.SetCardScan.Visibility = & $v 2
     foreach ($n in 'SetCustomList', 'SetCustomEmpty', 'BtnSetCustomAdd', 'SetExcludeList', 'SetExcludeEmpty', 'BtnSetExcludeAdd', 'SetCustomHead', 'SetCustomNote', 'SetExcludeHead', 'SetExcludeNote') { $ctl[$n].Visibility = & $v 2 }
@@ -17625,7 +18929,27 @@ foreach ($rb in @($ctl.SetModeBasic, $ctl.SetModePro, $ctl.SetModeExpert)) {
         Set-Mode $(if ([object]::ReferenceEquals($this, $ctl.SetModeBasic)) { 'basic' } elseif ([object]::ReferenceEquals($this, $ctl.SetModePro)) { 'pro' } else { 'expert' })
     })
 }
-$ctl.ModeTag.Add_MouseLeftButtonUp({ Show-Page 'settings'; $ctl.SetScroll.ScrollToTop() })
+# 点侧边栏的模式标签：到设置里，「使用模式」那张卡片亮一下，告诉你在哪儿换
+function Flash-Card($el) {
+    try {
+        $orig = $el.Background
+        $c0 = if ($orig -is [System.Windows.Media.SolidColorBrush]) { $orig.Color } else { [System.Windows.Media.Colors]::White }
+        $hi = (Brush '#DCEBFF' 'b').Color
+        $b = New-Object System.Windows.Media.SolidColorBrush $hi
+        $el.Background = $b; $el.BorderBrush = (Brush '#0071E3' 'b'); $el.BorderThickness = New-Object System.Windows.Thickness 2
+        $an = New-Object System.Windows.Media.Animation.ColorAnimation $hi, $c0, (New-Object System.Windows.Duration ([TimeSpan]::FromMilliseconds(1400)))
+        $an.BeginTime = [TimeSpan]::FromMilliseconds(2200)
+        $script:flashEl = $el
+        $an.Add_Completed({ $x = $script:flashEl; if ($x) { $x.ClearValue([System.Windows.Controls.Border]::BackgroundProperty); $x.ClearValue([System.Windows.Controls.Border]::BorderBrushProperty); $x.ClearValue([System.Windows.Controls.Border]::BorderThicknessProperty) } })
+        $b.BeginAnimation([System.Windows.Media.SolidColorBrush]::ColorProperty, $an)
+    } catch {}
+}
+function Show-ModeCard {
+    Show-Page 'settings'; $ctl.SetScroll.ScrollToTop()
+    $ctl.SetCardMode.BringIntoView()
+    Flash-Card $ctl.SetCardMode
+}
+$ctl.ModeTag.Add_MouseLeftButtonUp({ Show-ModeCard })
 function Apply-Display {
     $m = Get-Mode
     $vis = { param([bool]$on) if ($on) { [System.Windows.Visibility]::Visible } else { [System.Windows.Visibility]::Collapsed } }
@@ -18024,13 +19348,15 @@ function Invoke-UiTest {
             Set-Mode 'basic'
             if ($ctl.NavDup.Visibility -ne 'Collapsed' -or $ctl.NavLog.Visibility -ne 'Collapsed' -or $ctl.BtnLog.Visibility -ne 'Collapsed') { throw 'basic mode still shows advanced pages' }
             if ($ctl.SaveCardRs.Visibility -ne 'Collapsed' -or $ctl.AppsViewBox.Visibility -ne 'Collapsed' -or $ctl.MapViewFiles.Visibility -ne 'Collapsed' -or $ctl.BtnSetCustomAdd.Visibility -ne 'Collapsed') { throw 'basic mode still shows advanced cards' }
-            if ($ctl.NavClean.Visibility -ne 'Visible' -or $ctl.SaveCardCos.Visibility -ne 'Visible' -or $ctl.SaveCardOd.Visibility -ne 'Visible' -or $ctl.NavHealth.Visibility -ne 'Visible' -or $ctl.HealthCardHw.Visibility -ne 'Visible') { throw 'basic mode hides basic things' }
-            if ($ctl.HealthCardBoot.Visibility -ne 'Collapsed' -or $ctl.HealthCardMon.Visibility -ne 'Collapsed') { throw 'basic mode shows advanced health cards' }
+            if ($ctl.NavClean.Visibility -ne 'Visible' -or $ctl.SaveCardCos.Visibility -ne 'Visible' -or $ctl.SaveCardOd.Visibility -ne 'Visible' -or $ctl.NavHealth.Visibility -ne 'Visible' -or $ctl.HTabHw.Visibility -ne 'Visible' -or $ctl.HTabCrash.Visibility -ne 'Visible' -or $ctl.HTabFix.Visibility -ne 'Visible') { throw 'basic mode hides basic things' }
+            if ($ctl.HTabBoot.Visibility -ne 'Collapsed' -or $ctl.HTabMon.Visibility -ne 'Collapsed' -or $ctl.HTabEvents.Visibility -ne 'Collapsed') { throw 'basic mode shows advanced health tabs' }
+            $basicSteps = @(@($ctl.FixGroups.Items) | ForEach-Object { @($_.Steps) } | ForEach-Object { $_.Id })
+            if ($basicSteps -contains 'netreset' -or $basicSteps -contains 'wureset' -or $basicSteps -notcontains 'sfcrepair') { throw ('basic mode repair steps: ' + ($basicSteps -join ',')) }
             if ($ctl.ModeTag.Text -ne ((T '普通用户') + (T '模式'))) { throw ('mode tag: ' + $ctl.ModeTag.Text) }
             Set-Mode 'pro'
             if ($ctl.NavDup.Visibility -ne 'Visible' -or $ctl.AppsViewStartup.Visibility -ne 'Visible' -or $ctl.AppsViewTasks.Visibility -ne 'Collapsed' -or $ctl.SaveCardPf.Visibility -ne 'Visible' -or $ctl.SaveCardRs.Visibility -ne 'Collapsed') { throw 'pro mode wrong' }
             Set-Mode 'expert'
-            if ($ctl.AppsViewTasks.Visibility -ne 'Visible' -or $ctl.SaveCardRs.Visibility -ne 'Visible' -or $ctl.BtnLog.Visibility -ne 'Visible' -or $ctl.BtnSetCustomAdd.Visibility -ne 'Visible' -or $ctl.BtnSfcRepair.Visibility -ne 'Visible' -or $ctl.HealthCardEvents.Visibility -ne 'Visible') { throw 'expert mode wrong' }
+            if ($ctl.AppsViewTasks.Visibility -ne 'Visible' -or $ctl.SaveCardRs.Visibility -ne 'Visible' -or $ctl.BtnLog.Visibility -ne 'Visible' -or $ctl.BtnSetCustomAdd.Visibility -ne 'Visible' -or $ctl.BtnSfcRepair.Visibility -ne 'Visible' -or $ctl.HTabEvents.Visibility -ne 'Visible') { throw 'expert mode wrong' }
             if (@($catalog | Where-Object { [int]$_.Lvl -eq 2 }).Count -lt 5 -or @($catalog | Where-Object { [int]$_.Lvl -eq 1 }).Count -lt 5) { throw 'catalog levels missing' }
         }
         & $step 'cleanup tiers: careful group, delete preview, recycle switch' {
@@ -18074,6 +19400,62 @@ function Invoke-UiTest {
             if (-not (& $waitUi { -not $script:bg['monitor'] } 15000)) { throw 'monitor thread did not end' }
             # 系统文件检查按钮只是起终端：不点，查它在不在
             if ($ctl.BtnSfcCheck.Visibility -ne 'Visible') { throw 'sfc check button hidden' }
+        }
+        & $step 'cleanup rows open their folders; drive cards scan; mode card lights up' {
+            # 清理页：每一行都能找到要打开的位置（找不到的只能是没有固定位置的系统命令项）
+            $withPaths = 0
+            foreach ($it in $catalog) { $ps = @(Get-CleanOpenPaths $it); if ($ps.Count -gt 0) { $withPaths++ }; foreach ($p in $ps) { if ($p -notlike 'shell:*' -and -not (Test-Path -LiteralPath $p)) { throw "open path does not exist: $p" } } }
+            if ($withPaths -lt 5) { throw "only $withPaths cleanup items have a folder to open" }
+            $rb = @($catalog | Where-Object { $_.N -eq (T '清空回收站') })
+            if ($rb.Count -and @(Get-CleanOpenPaths $rb[0]) -notcontains 'shell:RecycleBinFolder') { throw 'recycle bin has no location' }
+            $script:uiOpened.Clear()
+            $row = New-Object RowItem; $row.Idx = @($catalog | Where-Object { @(Get-CleanOpenPaths $_).Count -gt 0 })[0].Idx; $row.Name = 'x'
+            Open-CleanRow $row $false
+            if ($script:uiOpened.Count -ne 1) { throw ('double-click opened {0} locations' -f $script:uiOpened.Count) }
+            # 空间地图：点盘卡片 = 选中并扫描
+            Show-Page 'map'; $win.UpdateLayout()
+            $cards = @($ctl.MapHealth.ItemsSource)
+            if ($cards.Count -gt 0 -and $ctl.MapDrive.Items.Count -gt 0) {
+                $script:uiOpened.Clear(); $saved = $script:mapRoot; $script:mapRoot = $null
+                try { Select-MapDriveCard ([string]$cards[0].Letter) $true } finally { $script:mapRoot = $saved }
+                if (-not ([string]$ctl.MapDrive.SelectedItem.Tag).StartsWith([string]$cards[0].Letter, [StringComparison]::OrdinalIgnoreCase)) { throw 'card click did not select the drive' }
+                if (-not $script:worker -and @($script:uiOpened | Where-Object { $_ -like 'scan:*' }).Count -ne 1) { throw 'card click did not start a scan' }
+                if (-not $cards[0].Sel) { throw 'selected card is not highlighted' }
+            }
+            # 模式标签：到设置页，「使用模式」卡片亮起来
+            Show-ModeCard; $win.UpdateLayout()
+            if ($ctl.PageSettings.Visibility -ne 'Visible') { throw 'mode tag did not open settings' }
+            if ($ctl.SetCardMode.ReadLocalValue([System.Windows.Controls.Border]::BackgroundProperty) -eq [System.Windows.DependencyProperty]::UnsetValue) { throw 'mode card not highlighted' }
+        }
+        & $step 'health tabs, verdicts and repair steps' {
+            Show-Page 'health'
+            foreach ($k in @($script:healthTabs.Keys)) {
+                $ctl[$script:healthTabs[$k][0]].IsChecked = $true; $win.UpdateLayout()
+                foreach ($j in @($script:healthTabs.Keys)) { $want = if ($j -eq $k) { 'Visible' } else { 'Collapsed' }; if ($ctl[$script:healthTabs[$j][1]].Visibility -ne $want) { throw "tab ${k}: $j is not $want" } }
+                if ($script:healthTab -ne $k) { throw "current tab is $($script:healthTab), not $k" }
+                & $snap $ctl.PageHealth ('health-' + $k)
+            }
+            if ($ctl.HealthVerdicts.Items.Count -lt 1) { throw 'no verdict shown' }
+            $L.Add(('  verdicts: ' + (@($ctl.HealthVerdicts.Items | ForEach-Object { $_.Title }) -join ' | ')))
+            if ($ctl.FixGroups.Items.Count -lt 8) { throw ('only {0} problem groups' -f $ctl.FixGroups.Items.Count) }
+            # 只看的步骤直接运行（自测里只记下来，不开窗口）；会改动的先确认（自测里当作点了取消，所以不会运行）
+            $script:uiFixRuns.Clear(); $n0 = $script:uiSheets.Count; $undo0 = Get-Setting 'PowerFixUndo' ''; $fs0 = Get-FastStartup
+            foreach ($id in 'sfccheck', 'wureset', 'netreset', 'chkfix', 'sfcrepair', 'diskpower', 'faststartup') { Invoke-FixStep $id }
+            if (-not $script:uiFixRuns.Contains('sfccheck')) { throw 'a check step did not run' }
+            foreach ($id in 'wureset', 'netreset', 'chkfix', 'sfcrepair') { if ($script:uiFixRuns.Contains($id)) { throw "$id ran without confirmation" } }
+            if ($script:uiSheets.Count -lt $n0 + 5) { throw ('changing steps did not all ask first ({0} sheets)' -f ($script:uiSheets.Count - $n0)) }
+            if ((Get-Setting 'PowerFixUndo' '') -ne $undo0 -or (Get-FastStartup) -ne $fs0) { throw 'power settings changed without confirmation' }
+            # 列表里的按钮点下去走同一套
+            Select-HealthTab 'fix'; $win.UpdateLayout(); $script:uiFixRuns.Clear()
+            $q = New-Object System.Collections.Queue; $q.Enqueue($ctl.FixGroups); $hit = $null
+            while ($q.Count -gt 0 -and -not $hit) { $v = $q.Dequeue(); if ($v -is [System.Windows.Controls.Button] -and [string]$v.Tag -eq 'timecheck') { $hit = $v; break }; for ($i = 0; $i -lt [System.Windows.Media.VisualTreeHelper]::GetChildrenCount($v); $i++) { $q.Enqueue([System.Windows.Media.VisualTreeHelper]::GetChild($v, $i)) } }
+            if (-not $hit) { throw 'repair button not found in the list' }
+            & $click $hit
+            if (-not $script:uiFixRuns.Contains('timecheck')) { throw 'clicking a repair button did nothing' }
+            # 报告文字
+            $rep = Get-HealthReportText $script:healthData
+            if ($rep.Length -lt 200 -or $rep -notmatch [regex]::Escape((T '诊断结论'))) { throw 'report text too short' }
+            Select-HealthTab 'hw'
         }
         & $step 'similar photos and keep rules' {
             if (-not ('PhotoHash' -as [type])) { throw 'PhotoHash did not compile' }

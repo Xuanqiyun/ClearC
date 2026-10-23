@@ -156,6 +156,313 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+复制报告	Copy report
+在终端窗口里运行 DISM /RestoreHealth 和 sfc /scannow：会把损坏的系统文件换成正常的副本（会改系统文件，可能要联网下载）。点了会先确认	Runs DISM /RestoreHealth and sfc /scannow in a terminal window to replace damaged system files with good copies (changes system files, may download from the internet). Asks first
+把蓝屏转储、最近 30 天的系统和应用日志、系统信息、驱动列表和诊断结论打成一个 zip，方便发给懂的人看。只读不改	Packs crash dumps, the last 30 days of System and Application logs, system information, the driver list and the diagnosis into one zip to send to someone who can help. Read-only
+把这一页的诊断结论、每次蓝屏的说明、相关事件和硬盘状态复制成文字，可以直接粘贴给别人	Copies the diagnosis, the notes on each crash, related events and disk status as text you can paste into a message
+打开全部位置	Open all locations
+打开所在文件夹	Open folder
+Windows 事件	Windows events
+常见问题修复	Common fixes
+活动监控	Activity monitor
+按问题找对应的修法，从上往下、从轻到重地试。「只看」不改任何东西；「会改动」点了会先说明要改什么，能撤销的写明怎么撤销；「要重启」重启后才生效。用的都是 Windows 自带的命令，在看得见的窗口里运行。	Find your problem and try the fixes from top to bottom, lightest first. "Read-only" changes nothing; "Changes system" explains what it changes before doing it, and how to undo it where possible; "Needs restart" takes effect after a restart. All of them are built-in Windows commands that run in a visible window.
+根据这台电脑的蓝屏诊断，建议先做	Based on this PC's crash diagnosis, start with
+结论是按错误码、状态码、事件日志和硬盘健康推出来的，是排查方向，不是定论。按钮和「常见问题修复」里的是同一套：只看的直接运行，会改动的先说明要改什么。	The diagnosis is worked out from stop codes, status codes, event logs and disk health. It points you in a direction; it is not a verdict. The buttons are the same as under "Common fixes": read-only ones run straight away, ones that change things explain what they change first.
+转储文件是本工具自己解析的（错误码、参数、状态码、出事时加载的驱动、栈上出现的驱动），不如 WinDbg 准确；「可能的驱动」只是提示，不是定论。蓝屏时间和最近装的驱动对得上的，优先怀疑那个驱动。	ClearC reads the dump files itself (stop code, parameters, status code, drivers loaded at the time, drivers on the stack), which is less precise than WinDbg; "may be" drivers are hints, not verdicts. If a crash lines up with a recently installed driver, suspect that driver first.
+这里的修复不删除任何文件、不结束任何程序、不装驱动；Windows 更新组件是改名留底，硬盘省电和快速启动随时能改回来。系统还原、内存诊断、设备管理器是 Windows 自己的工具，里面每一步都由你确认。每次运行都记在操作日志里。	These fixes never delete files, end programs or install drivers; Windows Update caches are renamed and kept, and disk power saving and Fast Startup can be changed back any time. System Restore, Memory Diagnostic and Device Manager are Windows tools where you confirm every step. Every run is recorded in the activity log.
+硬件状态、开机用时、蓝屏原因、常见问题的修法、谁在吃资源。读不到的数据直接写明读不到，不用估算冒充	Hardware status, start-up time, crash causes, fixes for common problems and what is using resources. Anything that cannot be read is shown as unreadable, never guessed
+扫描到 {0} 项，分成 {1} 类：{2}。每一项都可以单独选「删除」「搬走」或「跳过」，往下滚动查看全部。双击一行打开它所在的文件夹，右键可以复制路径。	Found {0} items in {1} groups: {2}. Each item can be set to "Delete", "Move" or "Skip" on its own; scroll down to see them all. Double-click a row to open its folder; right-click to copy the path.
+这一项现在没有可以打开的文件夹：要么已经清空了，要么是由系统命令处理、没有固定的位置。	There is no folder to open for this item right now: either it is already empty, or it is handled by a system command and has no fixed location.
+「{0}」还有 {1} 个位置，右键可以全部打开	"{0}" has {1} more location(s); right-click to open them all
+「{0}」一共 {1} 个位置，打开了前 8 个；全部路径可以右键「复制路径」	"{0}" has {1} locations; opened the first 8. Right-click "Copy path" to get them all
+打开全部位置（{0} 个）	Open all locations ({0})
+点一下扫描这块盘，下面显示它的详细情况。	Click to scan this drive and show its details below.
+空间地图：下面已经是 {0} 的结果；要重新扫描点「扫描」	Space map: the results below are already for {0}; click "Scan" to scan again
+空间地图：正在忙别的，等它做完再点「扫描」	Space map: busy with something else; click "Scan" when it is done
+读取于 {0:HH:mm}，用了 {1:N0} 秒。读取只看不改；修复的按钮点了会先说明要改什么。	Read at {0:HH:mm} in {1:N0} s. Reading changes nothing; repair buttons explain what they change before doing it.
+发现 {0} 个要注意的问题：「{1}」，详情和修法在「蓝屏和崩溃」里。	Found {0} issue(s) to look at: "{1}". Details and fixes are under "Blue screens and crashes".
+」「	", "
+{0} {1}（{2}.{3}）	{0} {1} ({2}.{3})
+版本太旧	Outdated version
+时间可能不准	Clock may be wrong
+有系统文件的修改时间比现在还晚 {0} 天：时钟被往回调过，或者主板电池没电了	Some system files were modified {0} days later than "now": the clock was set back, or the motherboard battery is flat
+常见原因：	Common causes: 
+可能和 {0} 有关	May involve {0}
+读盘失败	Disk read failed
+只看	Read-only
+要重启	Needs restart
+马上生效	Instant
+会改动	Changes system
+打开工具	Opens a tool
+跳转	Go to
+可恢复	Reversible
+只读	Read-only
+（现在没改过，不用恢复）	 (nothing changed yet, nothing to restore)
+已关闭硬盘省电	Disk power saving is off
+已改	Done
+打开快速启动…	Turn on Fast Startup…
+快速启动现在是关着的。打开后「关机」变成半休眠，开机快几秒；关机变重启、唤醒失败的问题可能会回来	Fast Startup is off. Turning it on makes "Shut down" a partial hibernation and starts up a few seconds faster; restart-instead-of-shutdown and wake-up problems may come back
+没有快速启动	No Fast Startup
+休眠关着，所以没有快速启动，不用管	Hibernation is off, so there is no Fast Startup; nothing to do
+不用改	Not needed
+关闭硬盘省电？	Turn off disk power saving?
+关闭省电	Turn off power saving
+改了：{0}。马上生效，不用重启。想改回去，点「恢复硬盘省电」。	Changed: {0}. This takes effect now, no restart needed. To change it back, click "Restore disk power saving".
+没有改	Nothing changed
+已恢复硬盘省电	Disk power saving restored
+三项设置都改回了原来的值。	All three settings are back to their earlier values.
+没有恢复	Nothing restored
+关闭快速启动？	Turn off Fast Startup?
+关闭快速启动	Turn off Fast Startup
+打开快速启动？	Turn on Fast Startup?
+会重新打开快速启动：「关机」变成半休眠，下次开机快几秒。	Fast Startup will be turned back on: "Shut down" becomes a partial hibernation and the next start-up is a few seconds faster.
+已关闭快速启动	Fast Startup turned off
+已打开快速启动	Fast Startup turned on
+没能改	Could not change it
+{0}？	{0}?
+运行完了，可以关掉这个窗口。	Finished. You can close this window.
+已打开：{0}	Opened: {0}
+没能打开：{0}	Could not open: {0}
+还在读取	Still reading
+等系统健康读完再导出。	Wait until System health has finished reading, then export.
+诊断包保存到	Save diagnostics package to
+zip 压缩包	Zip archive
+已经有这个文件	This file already exists
+换一个文件名再导出：不会覆盖已有的文件。	Pick another file name: an existing file is never overwritten.
+正在导出诊断包，要半分钟到几分钟（systeminfo 比较慢）…	Exporting the diagnostics package; this takes half a minute to a few minutes (systeminfo is slow)…
+诊断包已导出：{0}（{1} 个文件，{2}）	Diagnostics package exported: {0} ({1} files, {2})
+导出诊断包	Export diagnostics package
+诊断包已导出	Diagnostics package exported
+{0}\n\n{1} 个文件，{2}。里面有蓝屏转储、日志和系统信息，可能包含电脑名、用户名、装过的软件和内存片段，只发给你信任的人。	{0}\n\n{1} files, {2}. It contains crash dumps, logs and system information, which can include the computer name, user name, installed software and pieces of memory. Only send it to people you trust.
+没能导出诊断包	Could not export the diagnostics package
+诊断报告已复制，可以直接粘贴	Diagnostics report copied; ready to paste
+诊断报告已复制，可以直接粘贴给别人。	Diagnostics report copied; you can paste it straight into a message.
+没能复制	Could not copy
+诊断结论	Diagnosis
+系统要从硬盘读回一块数据时读失败了	Windows could not read data back from the disk
+硬盘或它的连接出了问题（看状态码）；少数是内存	a problem with the disk or its connection (see the status code); occasionally memory
+Windows 离不开的系统进程意外退出了，只能蓝屏	A system process Windows cannot run without stopped unexpectedly, so Windows had to stop
+系统文件损坏，或者硬盘读不出系统文件（和读盘失败、磁盘错误一起出现时多半是这个）；也可能是内存问题或安全软件误杀	damaged system files, or the disk could not deliver system files (most likely when disk read failures or disk errors also show up); sometimes memory problems or security software ending the process
+系统访问了一块不存在的内存	Windows accessed memory that does not exist
+点名的驱动不是微软的时候多半是它的错；否则常见于内存条问题、硬盘读不回换出去的内存、安全软件	if the driver named is not from Microsoft, usually that driver; otherwise faulty RAM, the disk failing to read back paged-out memory, or security software
+内存里的数据被破坏了	Data in memory was corrupted
+内存条或内存超频（XMP）不稳定，或者某个驱动写坏了内存	unstable RAM or memory overclocking (XMP), or a driver writing over memory
+有个驱动在不允许的时候访问了内存	A driver accessed memory when it was not allowed to
+几乎都是驱动的错：有线和无线网卡、VPN、安全软件、虚拟光驱的驱动最常见	almost always a driver bug; network and Wi-Fi adapters, VPNs, security software and virtual drive tools are the usual suspects
+系统或某个驱动里出了没处理的错误	An unhandled error in Windows or a driver
+多是驱动的错（尤其显卡、安全软件），也可能是系统文件损坏	usually a driver (graphics and security software especially), sometimes damaged system files
+睡眠、唤醒或关机的时候，有个驱动迟迟不响应	A driver stopped responding during sleep, wake-up or shutdown
+芯片组、存储、无线网卡、显卡驱动太旧，或者快速启动和驱动不兼容	outdated chipset, storage, Wi-Fi or graphics drivers, or Fast Startup not getting along with a driver
+某个驱动占着处理器太久不放	A driver held on to the processor for too long
+常见于硬盘控制器驱动（比如 Intel RST）、固态硬盘固件太旧、显卡驱动	common with disk controller drivers (such as Intel RST), outdated SSD firmware, and graphics drivers
+CPU、内存或主板报告了没法纠正的硬件错误	The CPU, memory or motherboard reported a hardware error it could not correct
+超频或 XMP 不稳定、温度太高、电源供电不足、BIOS 太旧；少数是 CPU 或内存坏了	unstable overclocking or XMP, overheating, an underpowered supply, an outdated BIOS; occasionally a failing CPU or RAM
+显卡驱动没响应，系统重置它也没恢复	The graphics driver stopped responding and did not recover after Windows reset it
+显卡驱动版本有问题、显卡温度过高或超频；笔记本双显卡切换时也常见	a bad graphics driver version, an overheating or overclocked graphics card; also common when laptops switch between two GPUs
+内存压缩存储出错	The compressed memory store failed
+多是硬盘读写不稳，或者内存有问题	usually unreliable disk reads and writes, or a memory problem
+文件系统出错	File system error
+磁盘上的文件系统有损坏，或者安全软件、加密软件的过滤驱动有问题	a damaged file system on disk, or a filter driver from security or encryption software
+「驱动程序验证程序」抓到了驱动的错	Driver Verifier caught a driver bug
+只有开着 Driver Verifier（verifier.exe）时才会出现，被点名的驱动就是有问题的那个；查完记得用 verifier /reset 关掉	only happens while Driver Verifier (verifier.exe) is on, and the driver named is the faulty one; turn it off with verifier /reset when you are done
+硬盘在运行中掉线了，系统找不到它	the disk dropped out while running and Windows could no longer find it
+硬盘在运行中断开了连接	the disk disconnected while running
+硬盘读到了坏的扇区（坏道）	the disk hit bad sectors
+硬盘读写操作失败，多是坏道	a disk operation failed, usually because of bad sectors
+硬盘读写出错，常见于数据线或接口接触不良	a disk I/O error, often a loose cable or connector
+硬盘报告了自身的硬件错误	the disk reported a hardware fault of its own
+硬盘很久没有响应（超时）	the disk did not respond for too long (timeout)
+数据校验出错（CRC），多是数据线或接口的问题	a data check (CRC) error, usually the cable or connector
+系统资源（内存）耗尽，没法完成读盘	system resources (memory) ran out, so the read could not finish
+这个错误码没有现成的解释	No ready explanation for this stop code
+可以把转储文件交给懂的人用 WinDbg 分析	someone familiar with WinDbg can analyse the dump file
+转储文件没解析出来	The dump file could not be read
+{0}（0x{1:X8}{2}）	{0} (0x{1:X8}{2})
+读不回来的那一块属于 {0}：它只是碰上了，不是原因	the data that could not be read belongs to {0}; it was just unlucky, not the cause
+退出的是 {0}	the process that stopped was {0}
+出事时的进程是 {0}	the process running at the time was {0}
+出事的地址在 Windows 自带的 {0} 里：它常常是被别的驱动连累的	the failing address is inside {0}, which is part of Windows; it is often a victim of another driver
+出事的地址在 {0} 里：最值得怀疑	the failing address is inside {0}: the main suspect
+栈上出现的第一个非微软驱动是 {0}：可以怀疑，但不确定	the first non-Microsoft driver on the stack is {0}: worth suspecting, but not certain
+栈上只有 Windows 自带的驱动（{0}）：这种多半不是驱动的错，更像内存或硬盘的问题	only Windows drivers are on the stack ({0}); this is rarely a driver bug and looks more like a memory or disk problem
+• {0:MM-dd HH:mm} {1}：{2}（0x{3:X8}）	• {0:MM-dd HH:mm} {1}: {2} (0x{3:X8})
+• {0} 次系统进程退出（{1}）：系统进程读不到自己的文件时就会这样	• {0} crash(es) where a system process stopped ({1}): this happens when a system process cannot read its own files
+• 最近 30 天系统日志里有 {0} 条磁盘或文件系统错误	• {0} disk or file system errors in the System log in the last 30 days
+• {0} {1}：健康状态「{2}」{3}	• {0} {1}: health "{2}"{3}
+，读错误 {0} 次	, {0} read errors
+• 硬盘用的是 Intel RST 存储驱动（{0}）：这类掉盘很多和它的版本或省电设置有关	• The disk uses the Intel RST storage driver ({0}); dropouts like these are often tied to its version or power-saving settings
+最可能的原因：硬盘数据线或电源线接触不良、硬盘省电后唤醒失败、存储驱动太旧，或者硬盘本身在坏。	Most likely causes: a loose data or power cable, the disk failing to wake up from power saving, an outdated storage driver, or the disk itself failing.
+建议按顺序做：① 先把重要资料备份到别的盘或网盘；② 在「硬件」里看这块盘的健康和读错误；③ 关闭硬盘省电（下面的按钮，随时能恢复）；④ 更新存储驱动（到电脑或主板厂商的网站下载最新的芯片组 / RST 驱动）；⑤ 台式机关机断电后重新插一下硬盘的数据线和电源线，换个接口；⑥ 还是掉线，就是硬盘本身的问题，尽快换盘。	Suggested order: ① back up important files to another drive or the cloud first; ② check this disk's health and read errors under "Hardware"; ③ turn off disk power saving (button below, can be undone any time); ④ update the storage driver (latest chipset / RST driver from the PC or motherboard maker's website); ⑤ on a desktop, power off, reseat the disk's data and power cables and try another port; ⑥ if it still drops out, the disk itself is failing: replace it soon.
+硬盘或硬盘连接不稳定（最可能）	Unstable disk or disk connection (most likely)
+这是显卡驱动：到显卡厂商（NVIDIA、AMD、Intel）官网下载最新驱动重新安装；刚更新完才出现的，就回退到上一个版本。	This is a graphics driver: download and reinstall the latest driver from the card maker (NVIDIA, AMD, Intel); if the crashes started right after an update, roll back to the previous version.
+这是网卡驱动：到电脑或网卡厂商网站下载最新版；VPN、加速器类软件也会装网络驱动，最近装过的先卸掉试试。	This is a network driver: get the latest version from the PC or adapter maker; VPN and network accelerator apps also install network drivers, so try uninstalling any you added recently.
+这是安全软件的驱动：先升级这款安全软件；还蓝屏就暂时卸载它（Windows 自带的 Defender 会自动接管）。	This is a security software driver: update that product first; if the crashes continue, uninstall it for now (the built-in Windows Defender takes over automatically).
+这是游戏反作弊的驱动：更新或重新安装对应的游戏；不玩了就卸载。	This is a game anti-cheat driver: update or reinstall that game, or uninstall it if you no longer play.
+这是硬盘控制器驱动：到电脑或主板厂商网站下载最新的芯片组 / 存储驱动。	This is a disk controller driver: get the latest chipset / storage driver from the PC or motherboard maker's website.
+到这个驱动的厂商网站下载最新版本；刚装或刚更新过的，在设备管理器里「回退驱动程序」，或者卸载对应的软件。	Get the latest version from the driver maker's website; if it was just installed or updated, use "Roll Back Driver" in Device Manager, or uninstall the software it came with.
+{0} 在 {1} 次蓝屏里被点名（{2}）。	{0} was named in {1} crash(es) ({2}).
+最近 30 天装过相关的驱动：{0} {1}（{2:MM-dd}）	A related driver was installed in the last 30 days: {0} {1} ({2:MM-dd})
+驱动 {0} 嫌疑最大	Driver {0} is the main suspect
+显卡驱动出问题	Graphics driver problems
+{0}：显卡驱动没响应被系统重置过。	{0}: the graphics driver stopped responding and was reset by Windows.
+到显卡厂商官网下载最新驱动，安装时选「清洁安装」；看看「硬件」里显卡占用和散热；超频过的先恢复默认频率。	Download the latest driver from the card maker and choose a "clean install"; check graphics load and cooling under "Hardware"; if it is overclocked, go back to default clocks.
+{0}：这类蓝屏点名的驱动各不相同，或者只有 Windows 自带的驱动，内存出问题的可能性比较大。	{0}: these crashes name different drivers each time, or only Windows drivers, which points to memory.
+最近 30 天 Windows 记录了 {0} 次内存硬件错误（WHEA）。	Windows logged {0} memory hardware errors (WHEA) in the last 30 days.
+用 Windows 内存诊断查一次（重启后自动检测，大约 15 分钟）；在 BIOS 里开过 XMP / 超频的先关掉；台式机可以把内存条拔下来擦一下金手指重新插，或者一根一根地试。	Run Windows Memory Diagnostic once (it checks after a restart, about 15 minutes); turn off XMP / overclocking in the BIOS if enabled; on a desktop, reseat the memory sticks after cleaning the contacts, or test them one at a time.
+可能是内存不稳定	Memory may be unstable
+CPU、内存或主板报告了硬件错误	The CPU, memory or motherboard reported hardware errors
+硬件错误蓝屏 {0} 次，系统日志里的硬件错误 {1} 条。	{0} hardware-error crash(es), {1} hardware errors in the System log.
+先恢复 BIOS 默认设置（取消超频和 XMP），看「硬件」里 CPU 温度；清一下散热器的灰；台式机检查电源功率是否够；再去主板厂商网站更新 BIOS。	Restore BIOS defaults first (no overclocking or XMP) and check the CPU temperature under "Hardware"; clean the dust out of the cooler; on a desktop, check the power supply is big enough; then update the BIOS from the motherboard maker's website.
+睡眠、唤醒或关机时驱动没响应	A driver hangs during sleep, wake-up or shutdown
+{0}。	{0}.
+先关闭快速启动试试（随时能再打开）；再更新芯片组、无线网卡、显卡驱动。	Try turning off Fast Startup first (it can be turned back on any time), then update chipset, Wi-Fi and graphics drivers.
+多次没有正常关机	Several unexpected shutdowns
+最近 30 天有 {0} 次意外关机或重启，比蓝屏转储（{1} 个）多。	{0} unexpected shutdowns or restarts in the last 30 days, more than the crash dumps ({1}).
+多出来的那些是直接断电、死机后按了电源键，或者蓝屏时没能写出转储。台式机检查电源和插线板；笔记本检查电池；死机时屏幕定住不动的，多半是显卡、内存或硬盘的问题。	The extra ones are power cuts, holding the power button after a freeze, or crashes that could not write a dump. On a desktop, check the power supply and power strip; on a laptop, the battery. If the screen freezes in place, it is usually the graphics card, memory or disk.
+系统进程意外退出	A system process stopped unexpectedly
+先检查系统文件，有损坏就修复；最近装过更新、驱动或软件之后才开始的，可以用系统还原回到之前。	Check the system files first and repair them if damaged; if it started after installing an update, driver or app, System Restore can take you back.
+系统时间不准	The system clock is wrong
+系统自己写的文件里有比「现在」还晚 {0} 天的（{1:yyyy-MM-dd}）：时钟被往回调过，或者主板电池没电后时间重置了。	Windows has written files dated {0} days after "now" ({1:yyyy-MM-dd}): the clock was set back, or it reset after the motherboard battery ran flat.
+时间不对会让网页提示证书错误、Windows 更新失败，蓝屏记录的时间也跟着不准。同步一次时间；台式机每次断电后时间都变回去，就是主板上的纽扣电池（CR2032）该换了。	A wrong clock causes certificate errors on websites and failed Windows updates, and crash times are wrong too. Sync the time once; if a desktop loses the time every time it is unplugged, replace the coin battery (CR2032) on the motherboard.
+Windows 版本太旧	Windows is outdated
+这台电脑是 {0} {1}（版本号 {2}），早就收不到安全更新和修复补丁了：很多蓝屏和驱动问题在新版本里已经修好。	This PC runs {0} {1} (build {2}), which stopped getting security updates and fixes long ago; many crash and driver problems are fixed in newer versions.
+建议先备份资料，再升级到 Windows 11（硬件不满足时至少升到 Windows 10 22H2）。如果硬盘有问题，先把硬盘的问题解决掉再升级，否则升级到一半掉盘会更麻烦。	Back up your files, then upgrade to Windows 11 (or at least Windows 10 22H2 if the hardware does not qualify). If the disk has problems, fix those first: a disk dropping out halfway through an upgrade makes things worse.
+有蓝屏记录，但看不出集中在哪一类：先检查系统文件，再看每次蓝屏下面的说明。	There are crashes, but no clear pattern: check the system files first, then read the notes under each crash.
+最近没有蓝屏转储，也没有意外关机、硬件错误和磁盘错误的记录。	No recent crash dumps, unexpected shutdowns, hardware errors or disk errors.
+没有明显的规律	No clear pattern
+没发现问题	No problems found
+看蓝屏诊断	See crash diagnosis
+本页「蓝屏和崩溃」：每次蓝屏是什么错、可能是谁，几次放在一起的结论	"Blue screens and crashes" on this page: what each crash was, the likely cause, and the conclusion across all of them
+看硬盘健康	See disk health
+本页「硬件」：硬盘的健康状态、温度、磨损、读错误	"Hardware" on this page: disk health, temperature, wear and read errors
+看开机用时	See boot time
+本页「开机用时」：Windows 点名拖慢开机的程序	"Boot time" on this page: programs Windows says slow down booting
+管理开机启动	Manage startup apps
+「软件管理 → 开机启动」：关掉不需要开机就运行的程序	"Apps → Startup": turn off programs that do not need to start with Windows
+检查系统文件	Check system files
+sfc /verifyonly 和 DISM /ScanHealth：只检查系统文件和系统映像有没有损坏，不改任何东西。要几分钟	sfc /verifyonly and DISM /ScanHealth: only check whether system files and the system image are damaged; nothing is changed. Takes a few minutes
+快速检查系统映像	Quick image check
+DISM /CheckHealth：几秒钟看一下系统映像有没有被标记为损坏，不改东西	DISM /CheckHealth: a few seconds to see whether the system image is flagged as damaged; nothing is changed
+先 DISM /RestoreHealth 修好系统映像（可能要联网下载），再 sfc /scannow 把损坏的系统文件换成正常的。只动 Windows 自己的文件，不碰你的资料。十几分钟到半小时	First DISM /RestoreHealth repairs the system image (may download from the internet), then sfc /scannow replaces damaged system files with good copies. Only Windows' own files are touched, never your data. 10 to 30 minutes
+会运行 DISM /RestoreHealth 和 sfc /scannow：把损坏的系统文件换成正常的副本。这会改动系统文件（只动 Windows 自己的文件，不碰你的资料），DISM 可能要联网下载，一共要十几分钟到半小时，中途不要关窗口。\n\n可以先用「检查系统文件」看一眼有没有问题，再决定要不要修复。	This runs DISM /RestoreHealth and sfc /scannow to replace damaged system files with good copies. It changes system files (only Windows' own files, never your data); DISM may download from the internet. It takes 10 to 30 minutes; do not close the window in the middle.\n\nYou can run "Check system files" first to see whether anything is wrong.
+扫描 C 盘文件系统	Scan C: file system
+chkdsk /scan：在线扫描 C 盘的文件系统，不用重启、不锁盘。发现问题会提示下一步	chkdsk /scan: scans the file system on C: online, with no restart and no locking. It tells you the next step if it finds problems
+下次开机检查并修复 C 盘…	Check and repair C: at next start…
+重启电脑后会先检查 {0}，期间不要断电。不想检查了可以运行 chkntfs /x {0}	{0} will be checked when the PC restarts; do not cut the power during the check. To cancel it, run chkntfs /x {0}
+chkdsk /f：安排在下次开机时检查并修复 C 盘的文件系统。开机会多花几分钟到一小时，期间不能断电。可以撤销	chkdsk /f: schedules a check and repair of the C: file system at the next start. Start-up takes a few minutes to an hour longer; do not cut the power. Can be cancelled
+会安排在下次开机时检查并修复 C 盘（chkdsk /f）。开机时会先检查，可能要几分钟到一小时，期间不要断电、不要强制关机。\n\n如果硬盘可能在坏（蓝屏诊断说硬盘掉线、硬件页里硬盘健康报警），请先把重要资料备份出来再做：检查会大量读写硬盘。\n\n不想检查了，可以用「取消开机检查」撤销。	This schedules a check and repair of C: at the next start (chkdsk /f). The check runs during start-up and can take a few minutes to an hour; do not cut the power or force a shutdown.\n\nIf the disk may be failing (the crash diagnosis says the disk dropped out, or Hardware shows a health warning), back up important files first: the check reads and writes the disk a lot.\n\nTo change your mind, use "Cancel startup check".
+取消开机检查	Cancel startup check
+已取消 {0} 的开机检查。	The startup check of {0} is cancelled.
+chkntfs /x：撤销上面安排的开机检查	chkntfs /x: cancels the startup check scheduled above
+Windows 内存诊断	Windows Memory Diagnostic
+打开 Windows 自带的内存诊断：选「立即重新启动并检查」或「下次启动时检查」，大约 15 分钟，结果在重启后右下角提示	Opens the built-in memory test: choose "Restart now and check" or "Check the next time I start", about 15 minutes; the result shows in the corner after the restart
+关闭硬盘省电…	Turn off disk power saving…
+把当前电源计划里的「PCI Express 链路状态电源管理」「AHCI 链路电源管理」「关闭硬盘」改成不省电。治硬盘掉线、卡顿最常用的一招；笔记本续航会少一点。改之前记下原来的值，随时能恢复	Sets "PCI Express Link State Power Management", "AHCI Link Power Management" and "Turn off hard disk after" in the current power plan to no power saving. The most common fix for disks dropping out or stalling; laptop battery life drops a little. The old values are saved first and can be restored any time
+会把当前电源计划里这三项改成不省电：\n• PCI Express 链路状态电源管理 → 关闭\n• AHCI 链路电源管理（HIPM/DIPM）→ 活动\n• 在此时间后关闭硬盘 → 从不\n\n硬盘、固态硬盘不再进入省电状态，能避免省电后唤醒失败导致的掉盘和卡顿。笔记本用电池时续航会少一点。原来的值会记下来，随时可以点「恢复硬盘省电」改回去。	These three settings in the current power plan will be set to no power saving:\n• PCI Express Link State Power Management → Off\n• AHCI Link Power Management (HIPM/DIPM) → Active\n• Turn off hard disk after → Never\n\nHard disks and SSDs no longer enter power-saving states, which avoids dropouts and stalls when they fail to wake up. Laptops get a little less battery life. The old values are saved, and "Restore disk power saving" puts them back any time.
+恢复硬盘省电	Restore disk power saving
+把上面改过的三项恢复成改之前的值	Puts the three settings above back to their earlier values
+设备管理器	Device Manager
+更新、回退或卸载驱动：右键设备 →「属性」→「驱动程序」。带黄色感叹号的设备有问题	Update, roll back or uninstall drivers: right-click a device → "Properties" → "Driver". Devices with a yellow exclamation mark have problems
+系统还原	System Restore
+回到以前的还原点：会撤销那之后装的程序、驱动和更新，你的文档、照片不受影响。向导里每一步都可以取消	Go back to an earlier restore point: undoes apps, drivers and updates installed since then; your documents and photos are not affected. Every step of the wizard can be cancelled
+打开 Windows 更新：装最新的补丁和驱动	Opens Windows Update to install the latest fixes and drivers
+更新疑难解答	Update troubleshooter
+打开 Windows 自带的疑难解答，运行「Windows 更新」那一项	Opens the built-in troubleshooters; run the "Windows Update" one
+重置 Windows 更新组件…	Reset Windows Update components…
+旧的更新缓存改了名留在原处（{0}、{1}），确认更新正常后可以手动删掉。	The old update caches were renamed and kept in place ({0}, {1}); you can delete them by hand once updates work again.
+更新一直失败、卡在百分之几时最常用的修法：暂停更新服务，把更新缓存文件夹改名（不删除），再启动服务，Windows 会重新下载。更新历史的显示会变空，已装的更新不受影响	The usual fix when updates keep failing or get stuck: stops the update services, renames the update cache folders (nothing is deleted) and starts the services again so Windows downloads afresh. The update history list becomes empty; installed updates are not affected
+会暂停 Windows 更新、加密、后台传输、安装程序这四个服务，把 SoftwareDistribution 和 catroot2 两个更新缓存文件夹改名留底（不删除），再把服务启动起来。\n\nWindows 会重新下载需要的更新；「更新历史」的列表会变空，已经装好的更新不受影响。正在安装更新时不要做。	This stops four services (Windows Update, Cryptographic, Background Intelligent Transfer and Windows Installer), renames the SoftwareDistribution and catroot2 update caches (nothing is deleted), and starts the services again.\n\nWindows downloads the updates it needs again; the "Update history" list becomes empty, and installed updates are not affected. Do not do this while updates are installing.
+清除 DNS 缓存	Flush DNS cache
+ipconfig /flushdns：网站换了地址、个别网站打不开时用。只清缓存，马上生效	ipconfig /flushdns: for when a site moved or a few sites will not open. Only clears the cache; takes effect at once
+查看网络状态	Check network status
+ipconfig /all、ping、nslookup：看网卡有没有拿到地址、能不能解析域名和连上外网。不改东西	ipconfig /all, ping, nslookup: shows whether the adapter has an address, whether names resolve and whether the internet is reachable. Changes nothing
+重置网络…	Reset network…
+重启电脑后生效。	Takes effect after a restart.
+netsh winsock reset 和 netsh int ip reset：网络设置被软件改乱、能连上 Wi-Fi 却上不了网时用。要重启；手动设的固定 IP 要重新填	netsh winsock reset and netsh int ip reset: for when software has scrambled the network settings, or Wi-Fi connects but nothing loads. Needs a restart; a manually set static IP must be entered again
+会把 Winsock 和 TCP/IP 设置恢复成默认（netsh winsock reset、netsh int ip reset），并清除 DNS 缓存，重启电脑后生效。\n\n• 手动设置的固定 IP 地址和 DNS 可能要重新填，先记下来\n• 部分 VPN、加速器类软件可能要重新安装\n\n只在上不了网、其他办法都试过时再用。	This resets Winsock and TCP/IP to defaults (netsh winsock reset, netsh int ip reset) and flushes the DNS cache; it takes effect after a restart.\n\n• A manually set static IP address and DNS may have to be entered again: note them down first\n• Some VPN and network accelerator apps may need reinstalling\n\nOnly use it when the internet does not work and the other steps have not helped.
+网络和 Internet 设置	Network & internet settings
+打开网络设置：里面有网络疑难解答和「网络重置」	Opens network settings, which include the network troubleshooter and "Network reset"
+网络连接	Network connections
+打开网络连接：禁用再启用网卡、看网卡属性	Opens Network Connections: disable and re-enable an adapter, see its properties
+检查时间准不准	Check the clock
+和 time.windows.com 比较，o: 后面是相差的秒数	Compared with time.windows.com; the number after o: is the difference in seconds
+w32tm /stripchart：和微软的时间服务器比一比差多少秒。只看不改，要联网	w32tm /stripchart: compares the clock with Microsoft's time server. Changes nothing; needs the internet
+同步系统时间	Sync the clock
+如果上面提示时间差太大、没有同步：请在打开的「日期和时间」里手动改，或者先关再开「自动设置时间」。	If it says the time difference is too big and did not sync: set the time by hand in the "Date and time" settings that open, or turn "Set time automatically" off and on again.
+启动 Windows 时间服务并马上同步一次。差得太多时 Windows 不肯自动改，会打开「日期和时间」让你手动改	Starts the Windows Time service and syncs once. If the clock is too far off, Windows will not change it by itself, so "Date and time" settings open for you to set it
+日期和时间设置	Date & time settings
+手动改时间、时区，开关「自动设置时间」	Set the time and time zone by hand, and switch "Set time automatically"
+关闭快速启动…	Turn off Fast Startup…
+快速启动让「关机」其实是半休眠：驱动出错会一直带到下次开机。关掉后关机就是真关机，开机慢几秒。随时能再打开	Fast Startup makes "Shut down" a partial hibernation, so a driver in a bad state carries over to the next start. Turning it off makes shutdown a real shutdown; start-up is a few seconds slower. Can be turned back on any time
+会关闭快速启动（控制面板 → 电源选项 →「启用快速启动」）。\n\n关掉以后「关机」就是真正的关机，驱动和设备每次都重新初始化：能解决关机变重启、睡眠唤醒失败、开机后设备不正常这类问题。代价是开机慢几秒。\n\n随时可以在这里再打开。	This turns off Fast Startup (Control Panel → Power Options → "Turn on fast startup").\n\nAfter that, "Shut down" is a real shutdown and drivers and devices start fresh every time, which fixes restarts instead of shutdowns, failed wake-ups and devices misbehaving after start-up. The cost is a few seconds longer start-up.\n\nYou can turn it back on here any time.
+查看谁不让电脑睡眠	See what blocks sleep
+powercfg /requests、/lastwake、/waketimers：哪个程序或设备阻止睡眠、上次是谁唤醒的。不改东西	powercfg /requests, /lastwake, /waketimers: which program or device keeps the PC awake and what woke it last. Changes nothing
+重启音频服务	Restart audio service
+已重启 Windows Audio 服务。	The Windows Audio service was restarted.
+突然没声音时先试这个：重启 Windows Audio 服务，几秒钟，正在播放的声音会断一下	Try this first when sound suddenly stops: restarts the Windows Audio service in a few seconds; anything playing cuts out briefly
+声音设置	Sound settings
+看默认的播放设备对不对，耳机和音箱是不是选反了	Check the default playback device, for example headphones versus speakers
+刷新图标缓存	Refresh icon cache
+已刷新。还不对的话，注销再登录一次。	Refreshed. If it still looks wrong, sign out and back in.
+ie4uinit -show：图标显示成白块或者是别的程序的图标时用。马上生效，不用重启	ie4uinit -show: for icons that show as blank squares or as another program's icon. Takes effect at once, no restart
+重置应用商店缓存	Reset Store cache
+wsreset：应用商店打不开、下载一直卡住时用。会清掉商店的缓存并重新打开商店，不影响装好的应用	wsreset: for when the Microsoft Store will not open or downloads get stuck. Clears the Store cache and reopens it; installed apps are not affected
+可靠性监视器	Reliability Monitor
+按天列出程序崩溃、蓝屏、更新失败，看问题从哪天开始	Lists app crashes, blue screens and failed updates by day, so you can see when problems started
+事件查看器	Event Viewer
+Windows 的全部日志：「Windows 日志 → 系统」里看错误和警告	All of Windows' logs: errors and warnings are under "Windows Logs → System"
+打开转储文件夹	Open dump folder
+蓝屏转储所在的文件夹（C:\\Windows\\Minidump）：可以拷出来给别人分析	The folder with crash dumps (C:\\Windows\\Minidump); copy them out for someone to analyse
+导出诊断包…	Export diagnostics package…
+把蓝屏转储、最近 30 天的系统和应用日志、系统信息、驱动列表、本工具的诊断结论打成一个 zip，方便发给懂的人看。只读不改	Packs crash dumps, the last 30 days of System and Application logs, system information, the driver list and this tool's diagnosis into one zip to send to someone who can help. Read-only
+蓝屏、死机、自动重启	Blue screens, freezes, random restarts
+先看蓝屏诊断的结论；再按「系统文件 → 硬盘 → 内存 → 驱动」的顺序排查。一次只改一样，改完用几天看还会不会出现。	Start with the crash diagnosis, then work through "system files → disk → memory → drivers". Change one thing at a time and use the PC for a few days to see whether it happens again.
+硬盘掉线、卡顿、读写出错	Disk drops out, stalls or has read errors
+蓝屏代码 0x7A、0xEF、0xF4，系统突然卡住几十秒又恢复，磁盘占用一直 100%，都可能是硬盘或硬盘连接的问题。先备份资料。	Stop codes 0x7A, 0xEF, 0xF4, the system freezing for tens of seconds and then recovering, or disk usage stuck at 100% can all mean a disk or connection problem. Back up your files first.
+系统文件损坏	Damaged system files
+系统设置或自带程序打不开、提示缺少某个 dll、装完更新后出怪问题。	Settings or built-in apps will not open, a missing dll error appears, or odd problems start after an update.
+Windows 更新失败或一直卡住	Windows Update fails or gets stuck
+更新报错、反复安装同一个更新、卡在某个百分比不动。系统时间不对也会让更新失败，先看时间。	Update errors, the same update installing again and again, or progress stuck at a percentage. A wrong clock also makes updates fail, so check the time first.
+上不了网、个别网站打不开	No internet, or some sites will not open
+从轻到重：先看网络状态，再清 DNS 缓存，最后才重置网络。	From light to heavy: check the network status, then flush the DNS cache, and only then reset the network.
+时间不准	Wrong clock
+网页提示证书错误或「你的时钟快了 / 慢了」、更新失败、文件时间对不上。台式机每次断电后时间都变回去，是主板纽扣电池（CR2032）没电了，要换电池。	Websites show certificate errors or "your clock is ahead / behind", updates fail, file times do not match. If a desktop loses the time every time it is unplugged, the motherboard coin battery (CR2032) is flat and needs replacing.
+关机变重启、睡眠后醒不来、开机后设备不正常	Shutdown restarts, sleep will not wake, devices act up after start-up
+多半和快速启动、驱动的电源管理有关。	Usually related to Fast Startup or driver power management.
+没有声音	No sound
+先看是不是选错了播放设备，再重启音频服务；还不行就到设备管理器里更新声卡驱动。	Check the playback device first, then restart the audio service; if that does not help, update the sound driver in Device Manager.
+图标显示不对、应用商店打不开	Wrong icons, Store will not open
+图标变白块或显示成别的程序的图标；应用商店转圈、下载卡住。	Icons show as blank squares or as another program's icon; the Store keeps spinning or downloads get stuck.
+开机慢	Slow start-up
+看 Windows 点名的拖慢开机的程序，把不需要的开机启动关掉。	See which programs Windows says slow down start-up, and turn off startup apps you do not need.
+把信息发给别人帮忙看	Send details to someone who can help
+诊断包里有转储、日志和系统信息，可能包含电脑名、用户名、装过的软件和内存片段，只发给你信任的人。	The diagnostics package contains dumps, logs and system information, which can include the computer name, user name, installed software and pieces of memory. Only send it to people you trust.
+PCI Express 链路状态电源管理	PCI Express Link State Power Management
+AHCI 链路电源管理（HIPM/DIPM）	AHCI Link Power Management (HIPM/DIPM)
+在此时间后关闭硬盘	Turn off hard disk after
+读不到当前的电源计划	Could not read the current power plan
+当前电源计划里没有这几项设置	The current power plan does not have these settings
+没能记下原来的设置，所以没有改	The current settings could not be saved, so nothing was changed
+关闭硬盘和 PCIe 省电	Turn off disk and PCIe power saving
+没有改过，不用恢复	Nothing was changed, nothing to restore
+记下的原值读不出来	The saved values could not be read
+恢复硬盘和 PCIe 省电	Restore disk and PCIe power saving
+打开快速启动	Turn on Fast Startup
+（{0} 秒没运行完，没等它）	(did not finish within {0} s; not waited for)
+腾挪 ClearC 系统健康报告	ClearC system health report
+开机已经 {0:N1} 天	Up for {0:N1} days
+最近一次更新 {0:yyyy-MM-dd} {1}	Last update {0:yyyy-MM-dd} {1}
+时钟可能不准：有比现在晚 {0} 天的系统文件（{1}）	Clock may be wrong: a system file is dated {0} days after now ({1})
+（没有）	(none)
+硬盘	Disks
+有问题的设备	Devices with problems
+这个文件已经存在	This file already exists
+健康报告	Health report
+太大，没放进去	too large, left out
+完整转储太大，没放进去；需要的话单独拷	the full dump is too large and was left out; copy it separately if needed
+系统和应用日志	System and Application logs
+导出失败	export failed
+系统信息	System information
 这里不能放搬过去的数据	Moved data can't go here
 {0} 在 {1} 里面。那是清理列表里的文件夹或临时文件夹，清理时会被清空，搬过去的数据会一起被删。请换一个位置。	{0} is inside {1}. That is a cleanup-list folder or a temporary folder, which gets emptied during cleanup, so moved data would be deleted with it. Please choose another location.
 \n但其中 {0} 项（{1}）由系统命令处理，不能放进回收站，会直接删除。	\nBut {0} of them ({1}) are handled by system commands and can't go to the Recycle Bin; they are deleted permanently.

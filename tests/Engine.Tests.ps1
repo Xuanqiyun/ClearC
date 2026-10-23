@@ -148,36 +148,72 @@ try { & {
     $x = [Theme]::Xaml('<Border Background="White" BorderBrush="#E5E5EA"><TextBlock Foreground="#1D1D1F" Text="a #FFFFFF b"/><Border.Background><SolidColorBrush Color="#F5F5F7"/></Border.Background></Border>')
     Check "XAML colors replaced by role ($x)" ($x -match 'Background="#2' -and $x -match 'Foreground="#F' -and $x -match 'Text="a #FFFFFF b"' -and $x -notmatch 'Color="#F5F5F7"')
     [Theme]::Dark = $false
-    # 蓝屏转储解析：自己拼一个 64 位小转储（头部、驱动表、异常记录、调用栈）
-    $dmp = New-Object byte[] 0x3000
-    [Text.Encoding]::ASCII.GetBytes('PAGEDU64').CopyTo($dmp, 0)
-    [BitConverter]::GetBytes([uint32]26100).CopyTo($dmp, 0x0C)
-    [BitConverter]::GetBytes([uint32]0xD1).CopyTo($dmp, 0x38)
-    [BitConverter]::GetBytes([uint64]0x10).CopyTo($dmp, 0x40); [BitConverter]::GetBytes([uint64]2).CopyTo($dmp, 0x48); [BitConverter]::GetBytes([uint64]0).CopyTo($dmp, 0x50); [BitConverter]::GetBytes([Convert]::ToUInt64('FFFFF80012345678', 16)).CopyTo($dmp, 0x58)
-    [BitConverter]::GetBytes(([DateTime]'2026-10-20 08:00:00').ToFileTime()).CopyTo($dmp, 0xFA8)
-    $tri = 0x2000
-    [BitConverter]::GetBytes([uint32]0x2500).CopyTo($dmp, $tri + 0x10)   # 异常记录
-    [BitConverter]::GetBytes([uint32]0x2600).CopyTo($dmp, $tri + 0x28); [BitConverter]::GetBytes([uint32]32).CopyTo($dmp, $tri + 0x2C)   # 调用栈：4 个地址
-    [BitConverter]::GetBytes([uint32]0x2100).CopyTo($dmp, $tri + 0x30); [BitConverter]::GetBytes([uint32]3).CopyTo($dmp, $tri + 0x34)    # 3 个驱动
-    $drv = @(@('ntoskrnl.exe', [Convert]::ToUInt64('FFFFF80000000000', 16), 0x1000000), @('nvlddmkm.sys', [Convert]::ToUInt64('FFFFF80012000000', 16), 0x2000000), @('wdf01000.sys', [Convert]::ToUInt64('FFFFF80030000000', 16), 0x100000))
-    $strAt = 0x2400
-    for ($i = 0; $i -lt 3; $i++) {
-        $o = 0x2100 + $i * 0x98
-        [BitConverter]::GetBytes([uint32]$strAt).CopyTo($dmp, $o)
-        [BitConverter]::GetBytes([uint64]$drv[$i][1]).CopyTo($dmp, $o + 8 + 0x30); [BitConverter]::GetBytes([uint32]$drv[$i][2]).CopyTo($dmp, $o + 8 + 0x40)
-        $nb = [Text.Encoding]::Unicode.GetBytes([string]$drv[$i][0])
-        [BitConverter]::GetBytes([uint32]($nb.Length / 2)).CopyTo($dmp, $strAt); $nb.CopyTo($dmp, $strAt + 4); $strAt += 4 + $nb.Length + 2
+    # 蓝屏转储解析：自己拼一个 64 位小转储（头部、驱动表、异常记录、调用栈、当前进程和线程）。
+    # 和真的转储一样：驱动表每项 0x90 字节，名字是完整路径（\SystemRoot\system32\...）
+    function New-TestDump([uint32]$code, [string[]]$params, [string]$exAddr, [string[]]$stack, [string]$proc) {
+        $dmp = New-Object byte[] 0x4000
+        [Text.Encoding]::ASCII.GetBytes('PAGEDU64').CopyTo($dmp, 0)
+        [BitConverter]::GetBytes([uint32]26100).CopyTo($dmp, 0x0C)
+        [BitConverter]::GetBytes($code).CopyTo($dmp, 0x38)
+        for ($i = 0; $i -lt 4; $i++) { [BitConverter]::GetBytes([Convert]::ToUInt64($params[$i], 16)).CopyTo($dmp, 0x40 + 8 * $i) }
+        [BitConverter]::GetBytes(([DateTime]'2026-10-20 08:00:00').ToFileTime()).CopyTo($dmp, 0xFA8)
+        $tri = 0x2000
+        [BitConverter]::GetBytes([uint32]0x2500).CopyTo($dmp, $tri + 0x10)   # 异常记录
+        [BitConverter]::GetBytes([uint32]0x2800).CopyTo($dmp, $tri + 0x20); [BitConverter]::GetBytes([uint32]0x3000).CopyTo($dmp, $tri + 0x24)   # 进程、线程
+        [BitConverter]::GetBytes([uint32]0x2600).CopyTo($dmp, $tri + 0x28); [BitConverter]::GetBytes([uint32](8 * $stack.Count)).CopyTo($dmp, $tri + 0x2C)
+        [BitConverter]::GetBytes([uint32]0x2100).CopyTo($dmp, $tri + 0x30); [BitConverter]::GetBytes([uint32]3).CopyTo($dmp, $tri + 0x34)    # 3 个驱动
+        $drv = @(@('\SystemRoot\system32\ntoskrnl.exe', 'FFFFF80000000000', 0x1000000), @('\SystemRoot\System32\DriverStore\FileRepository\nv.inf_amd64_1\nvlddmkm.sys', 'FFFFF80012000000', 0x2000000), @('\SystemRoot\System32\drivers\Wdf01000.sys', 'FFFFF80030000000', 0x100000))
+        $strAt = 0x2300
+        for ($i = 0; $i -lt 3; $i++) {
+            $o = 0x2100 + $i * 0x90
+            [BitConverter]::GetBytes([uint32]$strAt).CopyTo($dmp, $o)
+            [BitConverter]::GetBytes([Convert]::ToUInt64($drv[$i][1], 16)).CopyTo($dmp, $o + 8 + 0x30); [BitConverter]::GetBytes([uint32]$drv[$i][2]).CopyTo($dmp, $o + 8 + 0x40)
+            $nb = [Text.Encoding]::Unicode.GetBytes([string]$drv[$i][0])
+            [BitConverter]::GetBytes([uint32]($nb.Length / 2)).CopyTo($dmp, $strAt); $nb.CopyTo($dmp, $strAt + 4); $strAt += 4 + $nb.Length + 2
+        }
+        [BitConverter]::GetBytes([Convert]::ToUInt32('80000003', 16)).CopyTo($dmp, 0x2500); [BitConverter]::GetBytes([Convert]::ToUInt64($exAddr, 16)).CopyTo($dmp, 0x2510)
+        for ($i = 0; $i -lt $stack.Count; $i++) { [BitConverter]::GetBytes([Convert]::ToUInt64($stack[$i], 16)).CopyTo($dmp, 0x2600 + 8 * $i) }
+        if ($proc) { [Text.Encoding]::ASCII.GetBytes($proc).CopyTo($dmp, 0x2800 + 0x5A8); $dmp[0x2800 + 0x5A8 + 15] = 2 }   # EPROCESS.ImageFileName，后面一个字节是 PriorityClass
+        [BitConverter]::GetBytes([Convert]::ToUInt64('FFFF8000AAAA0080', 16)).CopyTo($dmp, 0x3000 + 0xB8)                    # KTHREAD.ApcState.Process
+        return ,$dmp
     }
-    [BitConverter]::GetBytes([Convert]::ToUInt32('C0000005', 16)).CopyTo($dmp, 0x2500); [BitConverter]::GetBytes([Convert]::ToUInt64('FFFFF80012345678', 16)).CopyTo($dmp, 0x2510)
-    [BitConverter]::GetBytes([Convert]::ToUInt64('FFFFF80000001234', 16)).CopyTo($dmp, 0x2600); [BitConverter]::GetBytes([Convert]::ToUInt64('FFFFF80030000100', 16)).CopyTo($dmp, 0x2608); [BitConverter]::GetBytes([Convert]::ToUInt64('FFFFF80012345678', 16)).CopyTo($dmp, 0x2610); [BitConverter]::GetBytes([uint64]0x12).CopyTo($dmp, 0x2618)
-    $di = [DumpInfo]::Parse($dmp, $null)
+    $di = [DumpInfo]::Parse((New-TestDump 0xD1 @('10', '2', '0', 'FFFFF80012345678') 'FFFFF80000001000' @('FFFFF80000001234', 'FFFFF80030000100', 'FFFFF80012345678', '12') 'game.exe'), $null)
     Check "dump: bug check and params ($('{0:X}' -f $di.BugCheck))" ($di.Ok -and $di.BugCheck -eq 0xD1 -and $di.Params[3] -eq [Convert]::ToUInt64('FFFFF80012345678', 16) -and $di.Build -eq 26100)
-    Check 'dump: drivers and names' ($di.Drivers.Count -eq 3 -and $di.Drivers[1].Name -eq 'nvlddmkm.sys' -and $di.Drivers[1].Base -eq [Convert]::ToUInt64('FFFFF80012000000', 16))
-    Check "dump: suspect driver from the fault address ($($di.Suspect))" ($di.Suspect -eq 'nvlddmkm.sys')
-    Check "dump: drivers on the stack, kernel excluded ($($di.StackDrivers -join ','))" (($di.StackDrivers -join ',') -eq 'wdf01000.sys,nvlddmkm.sys')
+    Check "dump: driver table with 0x90 entries, leaf names and full paths ($($di.Drivers.Count): $(@($di.Drivers | ForEach-Object { $_.Name }) -join ','))" ($di.Drivers.Count -eq 3 -and $di.Drivers[1].Name -eq 'nvlddmkm.sys' -and $di.Drivers[1].Path -like '\SystemRoot\*\nvlddmkm.sys' -and $di.Drivers[1].Base -eq [Convert]::ToUInt64('FFFFF80012000000', 16))
+    Check "dump: suspect driver from the fault address ($($di.Suspect)/$($di.SuspectFrom))" ($di.Suspect -eq 'nvlddmkm.sys' -and $di.SuspectFrom -eq 'address')
+    Check "dump: drivers on the stack, kernel excluded even with a full path ($($di.StackDrivers -join ','))" (($di.StackDrivers -join ',') -eq 'Wdf01000.sys,nvlddmkm.sys')
+    Check "dump: current process name ($($di.Process))" ($di.Process -eq 'game.exe' -and -not $di.ProcessIsParam1)
     Check 'dump: time from the header' ($di.Time.Year -eq 2026 -and $di.Time.Month -eq 10)
     Check 'dump: code name table' ([DumpInfo]::CodeName(0xD1) -eq 'DRIVER_IRQL_NOT_LESS_OR_EQUAL' -and [DumpInfo]::CodeName(0x7777) -eq '')
+    # 0x7A 读盘失败：状态码在参数 2；参数 4 落在哪个驱动里只说明它倒霉，不点名
+    $d7 = [DumpInfo]::Parse((New-TestDump 0x7A @('FFFFA78113151F38', 'FFFFFFFFC000000E', '148370860', 'FFFFF80012000100') 'FFFFF80000001000' @('FFFFF80012000100', 'FFFFF80030000100') 'System'), $null)
+    Check "dump 0x7A: status, page owner, nobody blamed ($('{0:X8}' -f $d7.Status) $($d7.PageOwner) [$($d7.Suspect)])" ($d7.Status -eq [Convert]::ToUInt32('C000000E', 16) -and [DumpInfo]::StatusName($d7.Status) -eq 'STATUS_NO_SUCH_DEVICE' -and [DumpInfo]::IsStorageStatus($d7.Status) -and $d7.PageOwner -eq 'nvlddmkm.sys' -and $d7.Suspect -eq '')
+    # 0xEF：参数 1 是死掉的进程，线程里记的当前进程就是它
+    $de = [DumpInfo]::Parse((New-TestDump 0xEF @('FFFF8000AAAA0080', '0', '0', '0') 'FFFFF80000001000' @('FFFFF80000001234') 'svchost.exe'), $null)
+    Check "dump 0xEF: the critical process that died ($($de.Process), $($de.ProcessIsParam1))" ($de.Process -eq 'svchost.exe' -and $de.ProcessIsParam1 -and $de.Suspect -eq '')
+    # 0x50：参数 3 是出事的指令；栈上只有微软驱动时不点名
+    $d5 = [DumpInfo]::Parse((New-TestDump 0x50 @('FFFFB02FD15E21F8', '0', 'FFFFF80000001500', '2') 'FFFFF80000001000' @('FFFFF80030000100') ''), $null)
+    $x5 = ConvertFrom-DumpInfo $d5 'x.dmp' 'x.dmp' (Get-Date) 1000
+    Check "dump 0x50: a Windows-only stack names nobody ($($d5.Suspect)/$($d5.SuspectFrom) -> [$($x5.Suspect)])" ($d5.SuspectFrom -eq 'stack' -and $x5.Suspect -eq '' -and (Test-MsDriverName 'Wdf01000.sys') -and -not (Test-MsDriverName 'nvlddmkm.sys'))
     Check 'dump: garbage is rejected' (-not ([DumpInfo]::Parse((New-Object byte[] 100), $null)).Ok)
+    # 几次蓝屏放在一起看：读盘失败 + 系统进程退出 → 硬盘；同一个第三方驱动两次 → 点名它；Windows 太旧、时钟往回走
+    $x7 = ConvertFrom-DumpInfo $d7 'a.dmp' 'a.dmp' (Get-Date) 1000; $xe = ConvertFrom-DumpInfo $de 'b.dmp' 'b.dmp' (Get-Date) 1000; $xd = ConvertFrom-DumpInfo $di 'c.dmp' 'c.dmp' (Get-Date) 1000; $xd2 = ConvertFrom-DumpInfo $di 'd.dmp' 'd.dmp' (Get-Date) 1000
+    $hv = @{ Crash = @{ Dumps = @($x7, $xe, $xd, $xd2); Events = @(@{ Source = 'disk'; Count = 3 }); Drivers = @() }; Disks = @(); Mem = @{ Whea = 0 }; Clock = @{ Wrong = $true; AheadDays = 500; Newest = (Get-Date).AddDays(500) }; Win = @{ BuildNo = 18362; Release = '1903'; Product = 'Windows 10 Pro' } }
+    $vd = @(Get-CrashVerdict $hv); $ids = @($vd | ForEach-Object { $_.Id })
+    Check "verdicts: storage first, the repeated driver, clock, old Windows ($($ids -join ','))" ($ids[0] -eq 'storage' -and $ids -contains 'driver-nvlddmkm.sys' -and $ids -contains 'clock' -and $ids -contains 'oldwin' -and $ids -notcontains 'sysfile')
+    Check 'verdicts: the storage verdict offers the disk power fix and names the storage status' (@($vd[0].Fixes) -contains 'diskpower' -and $vd[0].Body -match '0xC000000E')
+    $quiet = @(Get-CrashVerdict @{ Crash = @{ Dumps = @(); Events = @(); Drivers = @() }; Disks = @(); Win = @{ BuildNo = 26100 } })
+    Check 'verdicts: nothing to report gives one "no problems" line' ($quiet.Count -eq 1 -and $quiet[0].Id -eq 'none' -and $quiet[0].Level -eq 'green')
+    $ex7 = Get-DumpExplain $x7
+    Check 'explain 0x7A: storage kind with the status in words' ($ex7.Kind -eq 'storage' -and (@($ex7.Detail) -join ' ') -match 'C000000E' -and @($ex7.Fixes) -contains 'diskpower')
+    # 常见问题修复目录：每个问题里的步骤都存在；会改动的都写了确认文字或是无害的
+    $fc = Get-FixCatalog; $bad = @()
+    foreach ($pb in $fc.Problems) { foreach ($sid in $pb.Steps) { if (-not $fc.Steps.Contains($sid)) { $bad += "$($pb.Id)/$sid" } } }
+    foreach ($k in $fc.Steps.Keys) { $st = $fc.Steps[$k]; if ($st.Kind -notin 'check', 'fix', 'open', 'go', 'special') { $bad += "$k kind" }; if ($st.Kind -eq 'fix' -and -not $st.Harmless -and -not $st.Confirm) { $bad += "$k no confirm" }; if (-not $st.Name -or -not $st.Desc) { $bad += "$k text" } }
+    foreach ($v in @($vd)) { foreach ($f in @($v.Fixes)) { if (-not $fc.Steps.Contains($f)) { $bad += "verdict $($v.Id)/$f" } } }
+    Check ("repair catalog: steps exist, changing steps ask first ({0} steps, {1} problems) {2}" -f $fc.Steps.Count, $fc.Problems.Count, ($bad -join ' ')) ($bad.Count -eq 0 -and $fc.Problems.Count -ge 10)
+    $rt = Get-HealthReportText ($hv + @{ At = (Get-Date); Verdicts = $vd })
+    Check 'health report text has the diagnosis and every dump' ($rt -match [regex]::Escape((T '诊断结论')) -and ([regex]::Matches($rt, 'KERNEL_DATA_INPAGE_ERROR')).Count -ge 1 -and ([regex]::Matches($rt, 'a\.dmp|b\.dmp|c\.dmp|d\.dmp')).Count -ge 4)
     # 进程采样对比
     $p1 = @{ At = (Get-Date).AddSeconds(-3); Procs = @{ 10 = @{ Pid = 10; Name = 'a.exe'; Path = ''; Cpu100ns = 0; Ws = 100; Write = 1000; Read = 0 }; 11 = @{ Pid = 11; Name = 'b.exe'; Path = ''; Cpu100ns = 0; Ws = 50; Write = 500; Read = 0 } } }
     $p2 = @{ At = (Get-Date); Procs = @{ 10 = @{ Pid = 10; Name = 'a.exe'; Path = ''; Cpu100ns = 30000000; Ws = 120; Write = 4000; Read = 0 }; 12 = @{ Pid = 12; Name = 'c.exe'; Path = ''; Cpu100ns = 0; Ws = 10; Write = 700; Read = 0 } } }
