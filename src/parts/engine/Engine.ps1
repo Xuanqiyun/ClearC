@@ -153,7 +153,10 @@ function Est-Bytes([string]$p, $tree) {
     if ($tree) {
         try { $n = [DiskMap]::Find($tree, $p); if ($n -and -not $n.IsLink) { return [double]$n.Size } } catch {}
     }
-    return DirBytes $p
+    $t0 = [Environment]::TickCount
+    $b = DirBytes $p
+    if ($null -ne $script:walkLog) { [void]$script:walkLog.Add(@{ Path = $p; Ms = [Environment]::TickCount - $t0 }) }   # 记下哪些是逐个文件夹统计的（排查扫描为什么慢）
+    return $b
 }
 # ---------- 个人文件夹保护 ----------
 # C 盘上的个人文件夹（桌面、文档、下载、图片、视频、音乐、收藏夹、OneDrive 等）以及用户目录本身，清理时一律不删

@@ -3478,7 +3478,10 @@ function Est-Bytes([string]$p, $tree) {
     if ($tree) {
         try { $n = [DiskMap]::Find($tree, $p); if ($n -and -not $n.IsLink) { return [double]$n.Size } } catch {}
     }
-    return DirBytes $p
+    $t0 = [Environment]::TickCount
+    $b = DirBytes $p
+    if ($null -ne $script:walkLog) { [void]$script:walkLog.Add(@{ Path = $p; Ms = [Environment]::TickCount - $t0 }) }   # 记下哪些是逐个文件夹统计的（排查扫描为什么慢）
+    return $b
 }
 # ---------- 个人文件夹保护 ----------
 # C 盘上的个人文件夹（桌面、文档、下载、图片、视频、音乐、收藏夹、OneDrive 等）以及用户目录本身，清理时一律不删
@@ -15402,7 +15405,8 @@ function Start-Worker([string]$code, $arg) {
     $rs = [runspacefactory]::CreateRunspace(); $rs.ApartmentState = 'STA'; $rs.ThreadOptions = 'ReuseThread'; $rs.Open()
     $rs.SessionStateProxy.SetVariable('sync', $sync)
     $ps = [powershell]::Create(); $ps.Runspace = $rs
-    $ps.AddScript("param(`$arg)`n" + $engine + "`nInit-DriveThreads`n" + $code).AddArgument($arg) | Out-Null
+    $sync.WCall = [DateTime]::UtcNow; $sync.WEngine = $null; $sync.WReady = $null   # 后台开始用了多久（读引擎、查盘的线程数）：排查慢在哪
+    $ps.AddScript("param(`$arg)`n" + $engine + "`n`$sync.WEngine = [DateTime]::UtcNow`nInit-DriveThreads`n`$sync.WReady = [DateTime]::UtcNow`n" + $code).AddArgument($arg) | Out-Null
     $script:worker = @{ PS = $ps; Handle = $ps.BeginInvoke(); RS = $rs }
 }
 
@@ -15681,11 +15685,13 @@ function Do-Scan([switch]$Quiet) {
     if (-not $Quiet) { Start-Op (T '扫描可清理项') }
     UI-Busy $true
     Start-Worker @'
-$sizes = @{}
+$sizes = @{}; $sw = [Diagnostics.Stopwatch]::StartNew(); $times = New-Object System.Collections.ArrayList; $script:walkLog = New-Object System.Collections.ArrayList
 $cat = Get-Catalog; $i = 1; $steps = $cat.Count + 1
+[void]$times.Add(@{ N = 'catalog'; Ms = $sw.ElapsedMilliseconds })
 SetP @{ Steps = $steps; Step = 1; StepName = (T '读取 C 盘的文件表') }
-$tree = Get-SysTree
-foreach ($it in $cat) { if (Stopping) { break }; $i++; SetP @{ Steps = $steps; Step = $i; StepName = $it.N; SubKind = 'measure'; SubStart = (Get-Date); Detail = (T '统计大小') }; $sizes[$it.Idx] = Measure-Item $it $tree }
+$t0 = $sw.ElapsedMilliseconds; $tree = Get-SysTree; [void]$times.Add(@{ N = 'MFT'; Ms = $sw.ElapsedMilliseconds - $t0 })
+foreach ($it in $cat) { if (Stopping) { break }; $i++; SetP @{ Steps = $steps; Step = $i; StepName = $it.N; SubKind = 'measure'; SubStart = (Get-Date); Detail = (T '统计大小') }; $t0 = $sw.ElapsedMilliseconds; $sizes[$it.Idx] = Measure-Item $it $tree; [void]$times.Add(@{ N = $it.N; Ms = $sw.ElapsedMilliseconds - $t0 }) }
+$sync.ScanTimes = $times; $sync.ScanMs = $sw.ElapsedMilliseconds; $sync.ScanWalks = $script:walkLog; $script:walkLog = $null
 if (-not (Stopping)) { $sync.Sizes = $sizes }
 '@ $null
 }
@@ -21869,8 +21875,9 @@ function Invoke-UiTest {
                 $win.Width = 1240; $win.Height = 860
                 $shot = { param([string]$n) $win.UpdateLayout(); [void](& $waitUi { $false } 300); & $snap $root ('shot-' + $n) 2 }
                 # 清理 C 盘：真的扫一遍（只统计大小，不删东西）
-                Show-Page 'clean'; & $click $ctl.BtnScan
+                Show-Page 'clean'; $tsc = [Diagnostics.Stopwatch]::StartNew(); & $click $ctl.BtnScan
                 if (-not (& $waitUi { -not $script:worker } 150000)) { throw 'cleanup scan did not finish' }
+                $L.Add(("timing cleanup scan (first, this mode): {0:N1} s, inside the worker {1:N1} s" -f ($tsc.ElapsedMilliseconds / 1000), ([double]$sync.ScanMs / 1000)))
                 if (-not $script:rows) { throw 'cleanup scan found nothing' }
                 $ctl.OpPanel.Visibility = 'Collapsed'; & $shot 'clean'
                 # 空间地图：扫整个 C 盘
@@ -21911,6 +21918,55 @@ function Invoke-UiTest {
                 $y = $sec.TransformToAncestor($ctl.HelpScroll.Content).Transform((New-Object System.Windows.Point 0, 0)).Y
                 $ctl.HelpScroll.ScrollToVerticalOffset([math]::Max(0, $y - 16)); & $shot 'help-map'
                 $sec.IsExpanded = $false; $ctl.HelpScroll.ScrollToTop(); Show-Page 'clean'
+            }
+        }
+        # 各种扫描用了多久（CLEANC_SPEED=1 时；开发者和 IT 模式，只统计不删）：报告里以 timing 开头的几行
+        if ($env:CLEANC_SPEED -eq '1') {
+            & $step 'speed: how long each scan takes (developer mode, nothing is deleted)' {
+                $keepMode = Get-Setting 'Mode' 'basic'
+                $tm = {
+                    param([string]$name, [scriptblock]$go, [int]$limit)
+                    $t = [Diagnostics.Stopwatch]::StartNew(); & $go
+                    $ok = & $waitUi { -not $script:worker } $limit
+                    $L.Add(("timing {0}: {1:N1} s{2}" -f $name, ($t.ElapsedMilliseconds / 1000), $(if ($ok) { '' } else { ' (did not finish)' })))
+                }
+                $wk = {
+                    param([string]$label)
+                    $a = if ($sync.WEngine -and $sync.WCall) { ([datetime]$sync.WEngine - [datetime]$sync.WCall).TotalSeconds } else { -1 }
+                    $b = if ($sync.WReady -and $sync.WEngine) { ([datetime]$sync.WReady - [datetime]$sync.WEngine).TotalSeconds } else { -1 }
+                    $L.Add(("timing   {0}: worker start {1:N2} s, drive threads {2:N2} s" -f $label, $a, $b))
+                }
+                $top = {
+                    param([string]$label)
+                    & $wk $label
+                    $L.Add(("timing   {0}: inside the worker {1:N1} s" -f $label, ([double]$sync.ScanMs / 1000)))
+                    foreach ($x in @(@($sync.ScanTimes) | Sort-Object { - [double]$_.Ms } | Select-Object -First 14)) { $L.Add(("timing     {0,7:N0} ms  {1}" -f [double]$x.Ms, $x.N)) }
+                    $w = @($sync.ScanWalks)
+                    if ($w.Count) { $L.Add(("timing     walked {0} folders, {1:N0} ms; slowest: {2}" -f $w.Count, [double](($w | ForEach-Object { [double]$_.Ms } | Measure-Object -Sum).Sum), ((@($w | Sort-Object { - [double]$_.Ms } | Select-Object -First 6 | ForEach-Object { '{0} {1} ms' -f $_.Path, $_.Ms })) -join '; '))) }
+                }
+                try {
+                    Set-Setting 'Mode' 'expert'
+                    Show-Page 'clean'
+                    & $tm 'cleanup scan (developer mode)' { Do-Scan } 240000; & $top 'cleanup'
+                    & $tm 'cleanup scan again' { Do-Scan } 240000; & $top 'again'
+                    & $tm 'apps list' { Load-Apps } 240000; & $wk 'apps'
+                    & $tm 'leftover folders' { Load-StartRows 'leftover' } 240000
+                    & $tm 'startup items' { Load-StartRows 'startup' } 60000
+                    & $tm 'scheduled tasks' { Load-StartRows 'task' } 60000
+                    & $tm 'context menu' { Load-StartRows 'shellex' } 60000
+                    & $tm 'move candidates' { Start-CandScan } 240000
+                    & $tm 'space map C: (again)' { Start-MapScan "$env:SystemDrive\" } 240000
+                    $th = [Diagnostics.Stopwatch]::StartNew(); Load-Health
+                    $hok = & $waitUi { $ctl.BtnHealthRefresh.IsEnabled } 180000
+                    $L.Add(("timing system health: {0:N1} s (reported {1}){2}" -f ($th.ElapsedMilliseconds / 1000), $(if ($script:healthData) { $script:healthData.Secs } else { '?' }), $(if ($hok) { '' } else { ' (did not finish)' })))
+                    # 重复文件：在 Program Files 里找（只找不删）
+                    [DupFinder]::Cancel = $false
+                    $td = [Diagnostics.Stopwatch]::StartNew()
+                    $dg = [DupFinder]::Find([string[]]@($env:ProgramFiles, ${env:ProgramFiles(x86)}), [long]1MB, [long]0, $false, $null, $false, [string[]]@('C:=4'))
+                    $L.Add(("timing duplicates in Program Files (1 MB+): {0:N1} s, {1} groups" -f ($td.ElapsedMilliseconds / 1000), @($dg).Count))
+                    $tw = [Diagnostics.Stopwatch]::StartNew(); $wb = [DirStat]::Measure("$env:SystemRoot\System32")
+                    $L.Add(("timing walk System32: {0:N1} s, {1}" -f ($tw.ElapsedMilliseconds / 1000), (Fmt $wb)))
+                } finally { Set-Setting 'Mode' $keepMode }
             }
         }
     } catch { $L.Add('FAIL test run: ' + $_.Exception.Message); $script:uiFail++ }

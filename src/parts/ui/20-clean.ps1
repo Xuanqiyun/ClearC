@@ -273,11 +273,13 @@ function Do-Scan([switch]$Quiet) {
     if (-not $Quiet) { Start-Op (T '扫描可清理项') }
     UI-Busy $true
     Start-Worker @'
-$sizes = @{}
+$sizes = @{}; $sw = [Diagnostics.Stopwatch]::StartNew(); $times = New-Object System.Collections.ArrayList; $script:walkLog = New-Object System.Collections.ArrayList
 $cat = Get-Catalog; $i = 1; $steps = $cat.Count + 1
+[void]$times.Add(@{ N = 'catalog'; Ms = $sw.ElapsedMilliseconds })
 SetP @{ Steps = $steps; Step = 1; StepName = (T '读取 C 盘的文件表') }
-$tree = Get-SysTree
-foreach ($it in $cat) { if (Stopping) { break }; $i++; SetP @{ Steps = $steps; Step = $i; StepName = $it.N; SubKind = 'measure'; SubStart = (Get-Date); Detail = (T '统计大小') }; $sizes[$it.Idx] = Measure-Item $it $tree }
+$t0 = $sw.ElapsedMilliseconds; $tree = Get-SysTree; [void]$times.Add(@{ N = 'MFT'; Ms = $sw.ElapsedMilliseconds - $t0 })
+foreach ($it in $cat) { if (Stopping) { break }; $i++; SetP @{ Steps = $steps; Step = $i; StepName = $it.N; SubKind = 'measure'; SubStart = (Get-Date); Detail = (T '统计大小') }; $t0 = $sw.ElapsedMilliseconds; $sizes[$it.Idx] = Measure-Item $it $tree; [void]$times.Add(@{ N = $it.N; Ms = $sw.ElapsedMilliseconds - $t0 }) }
+$sync.ScanTimes = $times; $sync.ScanMs = $sw.ElapsedMilliseconds; $sync.ScanWalks = $script:walkLog; $script:walkLog = $null
 if (-not (Stopping)) { $sync.Sizes = $sizes }
 '@ $null
 }

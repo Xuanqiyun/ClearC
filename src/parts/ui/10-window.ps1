@@ -862,7 +862,8 @@ function Start-Worker([string]$code, $arg) {
     $rs = [runspacefactory]::CreateRunspace(); $rs.ApartmentState = 'STA'; $rs.ThreadOptions = 'ReuseThread'; $rs.Open()
     $rs.SessionStateProxy.SetVariable('sync', $sync)
     $ps = [powershell]::Create(); $ps.Runspace = $rs
-    $ps.AddScript("param(`$arg)`n" + $engine + "`nInit-DriveThreads`n" + $code).AddArgument($arg) | Out-Null
+    $sync.WCall = [DateTime]::UtcNow; $sync.WEngine = $null; $sync.WReady = $null   # 后台开始用了多久（读引擎、查盘的线程数）：排查慢在哪
+    $ps.AddScript("param(`$arg)`n" + $engine + "`n`$sync.WEngine = [DateTime]::UtcNow`nInit-DriveThreads`n`$sync.WReady = [DateTime]::UtcNow`n" + $code).AddArgument($arg) | Out-Null
     $script:worker = @{ PS = $ps; Handle = $ps.BeginInvoke(); RS = $rs }
 }
 
