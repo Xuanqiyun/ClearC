@@ -285,10 +285,11 @@ $par = Start-Parallel $bg 4
 foreach ($it in $cat) { if (Stopping) { break }; if ($par.Run.ContainsKey([string]$it.Idx)) { continue }; $i++; SetP @{ Steps = $steps; Step = $i; StepName = $it.N; SubKind = 'measure'; SubStart = (Get-Date); Detail = (T '统计大小') }; $t0 = $sw.ElapsedMilliseconds; $sizes[$it.Idx] = Measure-Item $it $tree; [void]$times.Add(@{ N = $it.N; Ms = $sw.ElapsedMilliseconds - $t0 }) }
 if ($par.Run.Count -gt 0) {
     SetP @{ Steps = $steps; Step = $steps; StepName = (T '等系统回答安装包、驱动包这几项'); SubKind = 'measure'; SubStart = (Get-Date); Detail = (T '统计大小') }
-    $t0 = $sw.ElapsedMilliseconds; $got = Wait-Parallel $par; [void]$times.Add(@{ N = 'wait for the parallel ones'; Ms = $sw.ElapsedMilliseconds - $t0 })
+    $t0 = $sw.ElapsedMilliseconds; $got = Wait-Parallel $par 90; [void]$times.Add(@{ N = 'wait for the parallel ones'; Ms = $sw.ElapsedMilliseconds - $t0 })
     foreach ($it in $cat) {
         $k = [string]$it.Idx; if (-not $bg.ContainsKey($k) -or (Stopping)) { continue }
         if ($got.ContainsKey($k)) { $sizes[$it.Idx] = [double]$got[$k].V; [void]$times.Add(@{ N = $it.N + ' (alongside)'; Ms = [double]$got[$k].Ms }) }
+        elseif (@($par.Late) -contains $k) { $sizes[$it.Idx] = 0; Log ((T "  {0}：等了一分半钟系统还没回答，这次先不列（下次扫描再问）") -f $it.N); [void]$times.Add(@{ N = $it.N + ' (no answer)'; Ms = 90000 }) }
         else { $t0 = $sw.ElapsedMilliseconds; $sizes[$it.Idx] = Measure-Item $it $tree; [void]$times.Add(@{ N = $it.N; Ms = $sw.ElapsedMilliseconds - $t0 }) }
     }
 }

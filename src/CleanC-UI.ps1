@@ -3536,20 +3536,31 @@ function Start-Parallel($jobs, [int]$max = 4) {
     }
     return $h
 }
-# 等一起做的那几件做完：返回 键 → @{ V = 结果; Ms = 用了多少毫秒 }。出错的、没开成的不在里面（调用的地方自己再做一遍）。点了取消就停下不等
-function Wait-Parallel($h) {
+# 等一起做的那几件做完：返回 键 → @{ V = 结果; Ms = 用了多少毫秒 }。出错的、没开成的不在里面（调用的地方自己再做一遍）。
+# 点了取消就停下不等；超过 $limitSec 秒还没回答的（系统那边卡住了）也不等了，放进 $h.Late，调用的地方当作没问到
+function Wait-Parallel($h, [int]$limitSec = 120) {
     $res = @{}
     if (-not $h -or -not $h.Run) { return $res }
+    $h.Late = @()
+    $until = (Get-Date).AddSeconds($limitSec)
+    $hung = $false
     try {
         foreach ($k in @($h.Run.Keys)) {
             $j = $h.Run[$k]
-            while (-not $j.AR.AsyncWaitHandle.WaitOne(200)) { if (Stopping) { foreach ($x in @($h.Run.Values)) { try { $x.PS.Stop() } catch {} }; break } }
+            $late = $false
+            while (-not $j.AR.AsyncWaitHandle.WaitOne(200)) {
+                if (Stopping) { break }
+                if ((Get-Date) -gt $until) { $late = $true; break }
+            }
             if (Stopping) { break }
+            if ($late) { $h.Late += $k; $hung = $true; try { [void]$j.PS.BeginStop($null, $null) } catch {}; continue }
             try { $out = $j.PS.EndInvoke($j.AR); if ($out.Count -gt 0 -and $out[$out.Count - 1] -is [hashtable]) { $res[$k] = $out[$out.Count - 1] } } catch {}
+            try { $j.PS.Dispose() } catch {}; $j.Done = $true
         }
+        if (Stopping) { foreach ($x in @($h.Run.Values)) { if (-not $x.Done) { $hung = $true; try { [void]$x.PS.BeginStop($null, $null) } catch {} } } }
     } finally {
-        foreach ($j in @($h.Run.Values)) { try { $j.PS.Dispose() } catch {} }
-        if ($h.Pool) { try { $h.Pool.Close(); $h.Pool.Dispose() } catch {} }
+        # 卡住的那个不等它（关掉它的后台会一直等下去）：留着让它自己结束
+        if ($h.Pool -and -not $hung) { try { $h.Pool.Close(); $h.Pool.Dispose() } catch {} }
         $h.Run = @{}; $h.Pool = $null
     }
     return $res
@@ -6989,6 +7000,7 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+  {0}：等了一分半钟系统还没回答，这次先不列（下次扫描再问）	  {0}: Windows had not answered after a minute and a half; left out this time (asked again on the next scan)
 读取 {0} 盘的文件表	Reading the file table of {0}
 {0} 个查找位置从文件表里列出文件（不用逐个文件夹去看）	{0} search locations were listed from the file table (no need to go through every folder)
 正在扫描，一般几秒钟…	Scanning, usually a few seconds…
@@ -16035,10 +16047,11 @@ $par = Start-Parallel $bg 4
 foreach ($it in $cat) { if (Stopping) { break }; if ($par.Run.ContainsKey([string]$it.Idx)) { continue }; $i++; SetP @{ Steps = $steps; Step = $i; StepName = $it.N; SubKind = 'measure'; SubStart = (Get-Date); Detail = (T '统计大小') }; $t0 = $sw.ElapsedMilliseconds; $sizes[$it.Idx] = Measure-Item $it $tree; [void]$times.Add(@{ N = $it.N; Ms = $sw.ElapsedMilliseconds - $t0 }) }
 if ($par.Run.Count -gt 0) {
     SetP @{ Steps = $steps; Step = $steps; StepName = (T '等系统回答安装包、驱动包这几项'); SubKind = 'measure'; SubStart = (Get-Date); Detail = (T '统计大小') }
-    $t0 = $sw.ElapsedMilliseconds; $got = Wait-Parallel $par; [void]$times.Add(@{ N = 'wait for the parallel ones'; Ms = $sw.ElapsedMilliseconds - $t0 })
+    $t0 = $sw.ElapsedMilliseconds; $got = Wait-Parallel $par 90; [void]$times.Add(@{ N = 'wait for the parallel ones'; Ms = $sw.ElapsedMilliseconds - $t0 })
     foreach ($it in $cat) {
         $k = [string]$it.Idx; if (-not $bg.ContainsKey($k) -or (Stopping)) { continue }
         if ($got.ContainsKey($k)) { $sizes[$it.Idx] = [double]$got[$k].V; [void]$times.Add(@{ N = $it.N + ' (alongside)'; Ms = [double]$got[$k].Ms }) }
+        elseif (@($par.Late) -contains $k) { $sizes[$it.Idx] = 0; Log ((T "  {0}：等了一分半钟系统还没回答，这次先不列（下次扫描再问）") -f $it.N); [void]$times.Add(@{ N = $it.N + ' (no answer)'; Ms = 90000 }) }
         else { $t0 = $sw.ElapsedMilliseconds; $sizes[$it.Idx] = Measure-Item $it $tree; [void]$times.Add(@{ N = $it.N; Ms = $sw.ElapsedMilliseconds - $t0 }) }
     }
 }
@@ -22316,13 +22329,14 @@ function Invoke-UiTest {
         # 各种扫描用了多久（CLEANC_SPEED=1 时；开发者和 IT 模式，只统计不删）：报告里以 timing 开头的几行
         if ($env:CLEANC_SPEED -eq '1') {
             & $step 'speed: how long each scan takes (developer mode, nothing is deleted)' {
-                $keepMode = Get-Setting 'Mode' 'basic'
+                $keepMode = Get-Setting 'Mode' 'basic'; $script:speedStuck = $false
                 $tm = {
                     param([string]$name, [scriptblock]$go, [int]$limit)
                     $sync.PhaseTimes = $null
                     $t = [Diagnostics.Stopwatch]::StartNew(); & $go
                     $ok = & $waitUi { -not $script:worker } $limit
-                    $L.Add(("timing {0}: {1:N1} s{2}" -f $name, ($t.ElapsedMilliseconds / 1000), $(if ($ok) { '' } else { ' (did not finish)' })))
+                    $L.Add(("timing {0}: {1:N1} s{2}" -f $name, ($t.ElapsedMilliseconds / 1000), $(if ($ok) { '' } else { (' (did not finish; at step {0}: {1} / {2})' -f $sync.P.Step, $sync.P.StepName, $sync.P.Detail) })))
+                    if (-not $ok) { Set-CancelFlags; [void](& $waitUi { -not $script:worker } 60000); $script:speedStuck = $true }
                     if ($sync.PhaseTimes) { $L.Add(('timing     ' + ((@($sync.PhaseTimes) | ForEach-Object { '{0} {1:N0} ms' -f $_.N, [double]$_.Ms }) -join '; '))) }
                 }
                 $wk = {
@@ -22376,6 +22390,7 @@ function Invoke-UiTest {
                     }
                     $tw = [Diagnostics.Stopwatch]::StartNew(); $wb = [DirStat]::Measure("$env:SystemRoot\System32")
                     $L.Add(("timing walk System32: {0:N1} s, {1}" -f ($tw.ElapsedMilliseconds / 1000), (Fmt $wb)))
+                    if ($script:speedStuck) { throw 'a scan did not finish in time (see the timing lines)' }
                 } finally { Set-Setting 'Mode' $keepMode }
             }
         }

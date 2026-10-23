@@ -156,6 +156,7 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+  {0}：等了一分半钟系统还没回答，这次先不列（下次扫描再问）	  {0}: Windows had not answered after a minute and a half; left out this time (asked again on the next scan)
 读取 {0} 盘的文件表	Reading the file table of {0}
 {0} 个查找位置从文件表里列出文件（不用逐个文件夹去看）	{0} search locations were listed from the file table (no need to go through every folder)
 正在扫描，一般几秒钟…	Scanning, usually a few seconds…
