@@ -892,7 +892,7 @@ function Invoke-UiTest {
                 # 清理 C 盘：真的扫一遍（只统计大小，不删东西）
                 Show-Page 'clean'; $tsc = [Diagnostics.Stopwatch]::StartNew(); & $click $ctl.BtnScan
                 if (-not (& $waitUi { -not $script:worker } 150000)) { throw 'cleanup scan did not finish' }
-                $L.Add(("timing cleanup scan (first, this mode): {0:N1} s, inside the worker {1:N1} s" -f ($tsc.ElapsedMilliseconds / 1000), ([double]$sync.ScanMs / 1000)))
+                $L.Add(("timing cleanup scan (first, this mode): {0:N1} s, inside the worker {1:N1} s; {2}" -f ($tsc.ElapsedMilliseconds / 1000), ([double]$sync.ScanMs / 1000), ((@(@($sync.ScanTimes) | Sort-Object { - [double]$_.Ms } | Select-Object -First 5) | ForEach-Object { '{0} {1:N0} ms' -f $_.N, [double]$_.Ms }) -join '; ')))
                 if (-not $script:rows) { throw 'cleanup scan found nothing' }
                 $ctl.OpPanel.Visibility = 'Collapsed'; & $shot 'clean'
                 # 空间地图：扫整个 C 盘
@@ -979,7 +979,20 @@ function Invoke-UiTest {
                     $td = [Diagnostics.Stopwatch]::StartNew()
                     $dg = [DupFinder]::Find([string[]]@($env:ProgramFiles, ${env:ProgramFiles(x86)}), [long]1MB, [long]0, $false, $null, $false, [string[]]@('C:=4'))
                     $L.Add(("timing duplicates in Program Files (1 MB+): {0:N1} s, {1} groups" -f ($td.ElapsedMilliseconds / 1000), @($dg).Count))
-                    $L.Add(("timing     list {0:N1} s ({1:N0} files); quick {2:N1} s ({3:N0} files, {4}); deep {5:N1} s ({6:N0} files, {7})" -f ([DupFinder]::ListMs / 1000), [DupFinder]::FilesSeen, ([DupFinder]::QuickMs / 1000), [DupFinder]::QuickFiles, (Fmt ([double][DupFinder]::QuickBytes)), ([DupFinder]::DeepMs / 1000), [DupFinder]::DeepFiles, (Fmt ([double][DupFinder]::DeepBytes))))
+                    $dph = { "timing     list {0:N1} s ({1:N0} files); quick {2:N1} s ({3:N0} files, {4}); deep {5:N1} s ({6:N0} files, {7})" -f ([DupFinder]::ListMs / 1000), [DupFinder]::FilesSeen, ([DupFinder]::QuickMs / 1000), [DupFinder]::QuickFiles, (Fmt ([double][DupFinder]::QuickBytes)), ([DupFinder]::DeepMs / 1000), [DupFinder]::DeepFiles, (Fmt ([double][DupFinder]::DeepBytes)) }
+                    $L.Add((& $dph))
+                    # 同样的查找，这次从 C 盘的文件表列出文件：结果必须和逐个文件夹列举的完全一样
+                    $ct = [DiskMap]::GetTree($env:SystemDrive, [DirStat]::ThreadsFor($env:SystemDrive), $false, $false)
+                    $td2 = [Diagnostics.Stopwatch]::StartNew()
+                    $dg2 = [DupFinder]::Find([string[]]@($env:ProgramFiles, ${env:ProgramFiles(x86)}), [long]1MB, [long]0, $false, $null, $false, [string[]]@('C:=4'), [DmNode[]]@($ct))
+                    $L.Add(("timing duplicates again, listed from the file table ({0} of 2 places): {1:N1} s, {2} groups" -f [DupFinder]::FromTreeRoots, ($td2.ElapsedMilliseconds / 1000), @($dg2).Count))
+                    $L.Add((& $dph))
+                    $p1 = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase); foreach ($g in @($dg)) { foreach ($f in $g.Files) { [void]$p1.Add([string]$f.Path) } }
+                    $p2 = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase); foreach ($g in @($dg2)) { foreach ($f in $g.Files) { [void]$p2.Add([string]$f.Path) } }
+                    if ([DupFinder]::FromTreeRoots -ne 2 -or -not $p1.SetEquals($p2)) {
+                        $only1 = @($p1 | Where-Object { -not $p2.Contains($_) } | Select-Object -First 4); $only2 = @($p2 | Where-Object { -not $p1.Contains($_) } | Select-Object -First 4)
+                        throw ("file-table listing differs: {0} vs {1} files; only walking: {2}; only the file table: {3}" -f $p1.Count, $p2.Count, ($only1 -join ' | '), ($only2 -join ' | '))
+                    }
                     $tw = [Diagnostics.Stopwatch]::StartNew(); $wb = [DirStat]::Measure("$env:SystemRoot\System32")
                     $L.Add(("timing walk System32: {0:N1} s, {1}" -f ($tw.ElapsedMilliseconds / 1000), (Fmt $wb)))
                 } finally { Set-Setting 'Mode' $keepMode }

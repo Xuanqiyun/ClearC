@@ -515,7 +515,24 @@ foreach ($L in $letters) {
     [void]$spec.Add("$($L):=$n"); $notes += "$($L): $desc"
 }
 if ($notes) { Log ((T "磁盘：") + ($notes -join (T '；'))); $sync.DriveNote = ($notes -join (T '；')) }
-$sync.DupResult = [DupFinder]::Find([string[]]$arg.Roots, [long]$arg.Min, [long]$arg.Max, [bool]$arg.MatchName, $ext, [bool]$arg.Exact, [string[]]$spec)
+# NTFS 盘的文件表（已经在内存里的按变更日志补读；查整块盘时现读一次）：1 MB 以上的文件直接从里面列，不用逐个文件夹去看
+$trees = New-Object 'System.Collections.Generic.List[DmNode]'
+if ([long]$arg.Min -ge 1MB) {
+    foreach ($L in $letters) {
+        if (Stopping) { break }
+        $whole = @($arg.Roots | Where-Object { ([string]$_).TrimEnd('\') -ieq "$($L):" }).Count -gt 0
+        if (-not $whole -and -not [DiskMap]::HasIndex("$($L):")) { continue }   # 只查一个文件夹、文件表又不在手上：逐个看更快
+        if ([FsTools]::IsSubst("$($L):")) { continue }
+        try {
+            SetP @{ Detail = ((T "读取 {0} 盘的文件表") -f $L) }
+            $t = [DiskMap]::GetTree("$($L):", [DirStat]::ThreadsFor("$($L):"), $false, $false)
+            $m = [string][DiskMap]::LastMethod
+            if ($t -and $t.HasDisk -and ($m -eq 'mft' -or $m -eq 'mft-usn')) { $trees.Add($t); Log ((T "读取 {0} 盘的文件表：{1:N0} 个文件，用时 {2:N1} 秒") -f $L, $t.Files, ([double][DiskMap]::LastMs / 1000)) }
+        } catch {}
+    }
+}
+$sync.DupResult = [DupFinder]::Find([string[]]$arg.Roots, [long]$arg.Min, [long]$arg.Max, [bool]$arg.MatchName, $ext, [bool]$arg.Exact, [string[]]$spec, [DmNode[]]$trees.ToArray())
+if ([DupFinder]::FromTreeRoots -gt 0) { Log ((T "{0} 个查找位置从文件表里列出文件（不用逐个文件夹去看）") -f [DupFinder]::FromTreeRoots) }
 if (-not [DupFinder]::UsedFastEnum) { Log (T '提示：快速列举不可用，已改用普通方式列举文件（结果相同，只是慢一些）。') }
 '@ $arg
 })

@@ -472,6 +472,7 @@ public static class DupFinder {
         FileStream fs = Open(f.Path, false);
         if (fs == null) { f.Bad = true; return; }
         try {
+            if (fs.Length != f.Size) { f.Bad = true; return; }   // 列出来以后变过（或者列的时候就不准）：不比
             w.H.Reset();
             if (f.Size <= 2 * BLOCK) {
                 int n = ReadFull(fs, w.Buf, (int)f.Size);
@@ -499,6 +500,7 @@ public static class DupFinder {
         FileStream fs = Open(f.Path, full);
         if (fs == null) { f.Bad = true; return; }
         try {
+            if (fs.Length != f.Size) { f.Bad = true; return; }
             w.H.Reset();
             if (full) {
                 long left = f.Size;
@@ -584,8 +586,68 @@ public static class DupFinder {
         return d;
     }
 
+    // ================= 从文件表列出文件 =================
+    // NTFS 盘的文件表已经读进内存（DiskMap）：1 MB 以上的文件都在里面，按和逐个文件夹列举完全一样的规则挑，不用再一个个文件夹去看
+    // （同样跳过系统、软件、开发环境的文件夹，链接和云端文件夹不进，系统、脱机、云端占位、重解析点文件不比，扩展名和大小一样筛）
+    public static volatile int FromTreeRoots;          // 这次有几个查找位置是从文件表列出的
+    static DmNode TreeFor(DmNode[] trees, string root) {
+        if (trees == null || root == null || root.Length < 2 || root[1] != ':') return null;
+        foreach (DmNode t in trees) {
+            if (t == null || !t.HasDisk || t.Big == null || string.IsNullOrEmpty(t.Name) || t.Name.Length < 2) continue;
+            if (char.ToUpperInvariant(t.Name[0]) == char.ToUpperInvariant(root[0]) && t.Name[1] == ':') return t;
+        }
+        return null;
+    }
+    static void ListFromTree(DmNode tree, List<DmNode> tops, EnumJob job, Dictionary<string, List<DupFile>> local) {
+        HashSet<DmNode> ok = new HashSet<DmNode>();
+        string sysLeaf = job.SysRoot.Length > 0 ? System.IO.Path.GetFileName(job.SysRoot) : "";
+        Stack<DmNode> st = new Stack<DmNode>();
+        foreach (DmNode top in tops) {
+            st.Push(top);
+            while (st.Count > 0 && !Cancel) {
+                DmNode n = st.Pop();
+                if (ok.Contains(n)) continue;
+                if (!object.ReferenceEquals(n, top)) {
+                    if (n.IsLink || n.Cloud) continue;                       // 链接、云端文件夹不进（逐个列举时带重解析点的文件夹都不进）
+                    if (SkipDirs.ContainsKey(n.Name)) continue;
+                    if (object.ReferenceEquals(n.Parent, tree) && string.Equals(n.Name, "Windows", StringComparison.OrdinalIgnoreCase)) continue;
+                }
+                if (sysLeaf.Length > 0 && string.Equals(n.Name, sysLeaf, StringComparison.OrdinalIgnoreCase) && string.Equals(n.FullPath().TrimEnd('\\', '/'), job.SysRoot, StringComparison.OrdinalIgnoreCase)) continue;
+                ok.Add(n); Interlocked.Increment(ref DirsSeen);
+                foreach (DmNode k in n.Kids) st.Push(k);
+            }
+        }
+        Dictionary<DmNode, string> dirPath = new Dictionary<DmNode, string>();
+        foreach (DmFile f in tree.Big) {
+            if (Cancel) break;
+            if (f.Dir == null || !ok.Contains(f.Dir)) continue;
+            if (!f.HasAttr) continue;
+            if ((f.Attr & (ATTR_REPARSE | ATTR_SYSTEM | ATTR_OFFLINE | ATTR_RECALL)) != 0) continue;
+            if (f.Size > 0 && f.Disk == 0) continue;                       // 盘上没有数据（只在云端）：读它会触发下载
+            long size = f.Size; string name = f.Name;
+            if (size < job.MinSize) continue;
+            if (job.MaxSize > 0 && size > job.MaxSize) continue;
+            int dot = name.LastIndexOf('.');
+            string ext = dot >= 0 ? name.Substring(dot) : "";
+            if (SkipExt.ContainsKey(ext)) continue;
+            if (job.Allow != null && !job.Allow.ContainsKey(ext)) continue;
+            string dp;
+            if (!dirPath.TryGetValue(f.Dir, out dp)) { dp = f.Dir.FullPath().TrimEnd('\\', '/'); dirPath[f.Dir] = dp; }
+            Interlocked.Increment(ref FilesSeen);
+            string k = (job.MatchName ? name.ToLowerInvariant() : "") + "|" + size.ToString();
+            List<DupFile> lst;
+            if (!local.TryGetValue(k, out lst)) { lst = new List<DupFile>(1); local[k] = lst; }
+            DupFile df = new DupFile();
+            df.Path = dp + System.IO.Path.DirectorySeparatorChar + name; df.Size = size; df.Key = k; df.Modified = f.Modified;
+            lst.Add(df);
+        }
+    }
+
     // ================= 主流程 =================
     public static List<DupGroup> Find(string[] roots, long minSize, long maxSize, bool matchName, string[] onlyExt, bool exact, string[] driveThreads) {
+        return Find(roots, minSize, maxSize, matchName, onlyExt, exact, driveThreads, null);
+    }
+    public static List<DupGroup> Find(string[] roots, long minSize, long maxSize, bool matchName, string[] onlyExt, bool exact, string[] driveThreads, DmNode[] trees) {
         FilesSeen = 0; DirsSeen = 0; CandidateFiles = 0; BytesDone = 0; BytesTotal = 0;
         GroupsFound = 0; FilesDone = 0; FilesTotal = 0;
         ListMs = 0; QuickMs = 0; DeepMs = 0; QuickFiles = 0; DeepFiles = 0; QuickBytes = 0; DeepBytes = 0;
@@ -600,14 +662,32 @@ public static class DupFinder {
         job.Allow = (onlyExt != null && onlyExt.Length > 0) ? MakeSet(onlyExt) : null;
         job.SysRoot = (Environment.GetFolderPath(Environment.SpecialFolder.Windows) ?? "").TrimEnd('\\', '/');
         string probe = null;
+        FromTreeRoots = 0;
+        Dictionary<DmNode, List<DmNode>> fromTree = new Dictionary<DmNode, List<DmNode>>();
         if (roots != null) {
             for (int i = roots.Length - 1; i >= 0; i--) {
                 // 根本身是链接（比如本工具搬走后留下的）：它和指向的地方是同一份东西，一起扫会把同一个文件当成两份
-                try { if (Directory.Exists(roots[i]) && (File.GetAttributes(roots[i]) & FileAttributes.ReparsePoint) == 0) { job.Push(roots[i]); probe = roots[i]; } } catch { }
+                try {
+                    if (!Directory.Exists(roots[i]) || (File.GetAttributes(roots[i]) & FileAttributes.ReparsePoint) != 0) continue;
+                    // 这块盘的文件表在手上（只有 1 MB 以上的文件有名字，所以最小大小要 1 MB 以上）：从文件表列，不用逐个文件夹看
+                    DmNode tr = minSize >= Mft.BigMin ? TreeFor(trees, roots[i]) : null;
+                    DmNode top = tr != null ? DiskMap.Find(tr, roots[i]) : null;
+                    if (top != null && !top.IsLink && !top.Cloud) {
+                        List<DmNode> l; if (!fromTree.TryGetValue(tr, out l)) { l = new List<DmNode>(); fromTree[tr] = l; }
+                        l.Add(top); FromTreeRoots++;
+                        continue;
+                    }
+                    job.Push(roots[i]); probe = roots[i];
+                } catch { }
             }
         }
+        foreach (KeyValuePair<DmNode, List<DmNode>> kv in fromTree) {
+            Dictionary<string, List<DupFile>> local = new Dictionary<string, List<DupFile>>();
+            lock (job.Results) job.Results.Add(local);
+            ListFromTree(kv.Key, kv.Value, job, local);
+        }
         job.Fast = System.IO.Path.DirectorySeparatorChar == '\\' && probe != null && FastEnumWorks(probe);
-        UsedFastEnum = job.Fast;
+        UsedFastEnum = job.Fast || probe == null;
         int nEnum = Math.Max(2, Math.Min(8, Environment.ProcessorCount));
         List<Thread> ets = new List<Thread>();
         for (int i = 0; i < nEnum; i++) {
@@ -619,11 +699,13 @@ public static class DupFinder {
         if (Cancel) return new List<DupGroup>();
 
         Dictionary<string, List<DupFile>> buckets = new Dictionary<string, List<DupFile>>();
+        // 同一个路径只留一次（几个查找位置互相包含、一部分从文件表列出时，同一个文件不能自己和自己算重复）
+        HashSet<string> seenPath = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (Dictionary<string, List<DupFile>> part in job.Results) {
             foreach (KeyValuePair<string, List<DupFile>> kv in part) {
                 List<DupFile> l;
-                if (!buckets.TryGetValue(kv.Key, out l)) buckets[kv.Key] = kv.Value;
-                else l.AddRange(kv.Value);
+                if (!buckets.TryGetValue(kv.Key, out l)) { l = new List<DupFile>(kv.Value.Count); buckets[kv.Key] = l; }
+                foreach (DupFile f in kv.Value) if (seenPath.Add(f.Path)) l.Add(f);
             }
         }
 
@@ -1190,6 +1272,7 @@ public sealed class MftIndex {
     public long[] Size, Write;
     public long[] Disk;                               // 这条记录里的数据实际占的盘（主记录和续页各记各的；压缩、稀疏、只在云端的文件比文件大小小，很小的文件放在记录里不另占）
     public byte[] Flag;                               // 1 在用  2 文件夹  4 链接（重解析点）  8 有属性列表
+    public uint[] Attr;                               // $STANDARD_INFORMATION 里的文件属性（系统、脱机、云端占位、重解析点……），查重复文件时按它跳过
     public byte[] Cat;                                // 文件类别（FileCats）
     public string[] Name;                             // 只存文件夹、1 MB 以上的文件和有属性列表的文件的名字
     public Dictionary<int, List<MftLink>> Extra = new Dictionary<int, List<MftLink>>();   // 第二个起的名字（硬链接）
@@ -1202,19 +1285,19 @@ public sealed class MftIndex {
     public void Alloc(int n) {
         Count = n;
         Parent = new int[n]; ParentSeq = new ushort[n]; Seq = new ushort[n];
-        Size = new long[n]; Write = new long[n]; Disk = new long[n]; Flag = new byte[n]; Name = new string[n]; Cat = new byte[n];
+        Size = new long[n]; Write = new long[n]; Disk = new long[n]; Flag = new byte[n]; Name = new string[n]; Cat = new byte[n]; Attr = new uint[n];
         for (int i = 0; i < n; i++) Parent[i] = -1;
     }
     public void Grow(int n) {
         if (n <= Count) return;
         int old = Count;
         Array.Resize(ref Parent, n); Array.Resize(ref ParentSeq, n); Array.Resize(ref Seq, n);
-        Array.Resize(ref Size, n); Array.Resize(ref Write, n); Array.Resize(ref Disk, n); Array.Resize(ref Flag, n); Array.Resize(ref Name, n); Array.Resize(ref Cat, n);
+        Array.Resize(ref Size, n); Array.Resize(ref Write, n); Array.Resize(ref Disk, n); Array.Resize(ref Flag, n); Array.Resize(ref Name, n); Array.Resize(ref Cat, n); Array.Resize(ref Attr, n);
         for (int i = old; i < n; i++) Parent[i] = -1;
         Count = n;
     }
     public void Clear(int frn) {
-        Parent[frn] = -1; ParentSeq[frn] = 0; Seq[frn] = 0; Size[frn] = 0; Write[frn] = 0; Disk[frn] = 0; Flag[frn] = 0; Name[frn] = null; Cat[frn] = 0;
+        Parent[frn] = -1; ParentSeq[frn] = 0; Seq[frn] = 0; Size[frn] = 0; Write[frn] = 0; Disk[frn] = 0; Flag[frn] = 0; Name[frn] = null; Cat[frn] = 0; Attr[frn] = 0;
         Extra.Remove(frn); ExtOf.Remove(frn);
     }
     public Dictionary<int, List<int>> ExtOf = new Dictionary<int, List<int>>();   // 主记录 → 读到过的续页
@@ -1486,7 +1569,7 @@ public static class Mft {
             int attrNameLen = b[a + 9];
             if (type == 0x10 && !nonRes && !ext) {
                 int c = a + U16(b, a + 0x14);
-                if (c + 0x24 <= a + len) ix.Write[frn] = I64(b, c + 8);
+                if (c + 0x24 <= a + len) { ix.Write[frn] = I64(b, c + 8); ix.Attr[frn] = U32(b, c + 0x20); }
             } else if (type == 0x20) {
                 ix.Flag[owner] |= 8;
             } else if (type == 0x30 && !nonRes) {
@@ -1763,8 +1846,9 @@ public static class Mft {
             long size = ix.Size[i], wt = ix.Write[i], disk = FileDisk(ix, i);
             List<MftLink> l;
             bool multi = ix.Extra.TryGetValue(i, out l) && l.Count > 0;   // 有不止一个名字（硬链接）：每个名字下都算，但盘上只有一份
-            bool any = AddFile(ix, nodes, reach, ix.Parent[i], ix.ParentSeq[i], ix.Name[i], size, disk, multi, wt, big, ref files);
-            if (multi) foreach (MftLink k in l) any |= AddFile(ix, nodes, reach, k.Parent, k.ParentSeq, k.Name, size, disk, true, wt, big, ref files);
+            uint at = ix.Attr != null && i < ix.Attr.Length ? ix.Attr[i] : 0; bool ha = ix.Attr != null;
+            bool any = AddFile(ix, nodes, reach, ix.Parent[i], ix.ParentSeq[i], ix.Name[i], size, disk, multi, wt, at, ha, big, ref files);
+            if (multi) foreach (MftLink k in l) any |= AddFile(ix, nodes, reach, k.Parent, k.ParentSeq, k.Name, size, disk, true, wt, at, ha, big, ref files);
             if (any) { uniq += size; uniqDisk += disk; if (multi) linked += size; byte c = ix.Cat[i]; tc[c]++; tb[c] += size; td[c] += disk; }
         }
         root.TypeCount = tc; root.TypeBytes = tb; root.TypeDisk = td;
@@ -1778,7 +1862,8 @@ public static class Mft {
         if (ix.ExtOf.TryGetValue(i, out el)) foreach (int s in el) { ushort c; if (s < ix.Count && (!ix.ExtClaim.TryGetValue(s, out c) || c == ix.Seq[i])) d += ix.Disk[s]; }
         return d;
     }
-    static bool AddFile(MftIndex ix, DmNode[] nodes, bool[] reach, int p, ushort ps, string name, long size, long disk, bool shared, long wt, List<DmFile> big, ref long files) {
+    static bool AddFile(MftIndex ix, DmNode[] nodes, bool[] reach, int p, ushort ps, string name, long size, long disk, bool shared, long wt, List<DmFile> big, ref long files) { return AddFile(ix, nodes, reach, p, ps, name, size, disk, shared, wt, 0, false, big, ref files); }
+    static bool AddFile(MftIndex ix, DmNode[] nodes, bool[] reach, int p, ushort ps, string name, long size, long disk, bool shared, long wt, uint attr, bool hasAttr, List<DmFile> big, ref long files) {
         if (p < 0 || p >= nodes.Length || nodes[p] == null || !reach[p] || ix.Seq[p] != ps) return false;
         DmNode d = nodes[p];
         if (d.IsLink) return false;
@@ -1786,7 +1871,7 @@ public static class Mft {
         d.OwnDisk += disk; if (shared) d.OwnShared += size;
         if (wt > d.LastWrite) d.LastWrite = wt;
         if (size >= BigMin && name != null) {
-            DmFile x = new DmFile(); x.Dir = d; x.Name = name; x.Size = size; x.Disk = disk; x.Shared = shared;
+            DmFile x = new DmFile(); x.Dir = d; x.Name = name; x.Size = size; x.Disk = disk; x.Shared = shared; x.Attr = attr; x.HasAttr = hasAttr;
             try { x.Modified = DateTime.FromFileTime(wt); } catch { }
             big.Add(x);
         }
@@ -1867,6 +1952,7 @@ public class DmNode {
 public class DmFile {
     public DmNode Dir; public string Name; public long Size; public DateTime Modified;
     public long Disk = -1; public bool Shared;        // 实际占用（-1 不知道）；有不止一个名字（硬链接）
+    public uint Attr; public bool HasAttr;            // 文件属性（只有读文件表得来的才有）
     public string Path { get { string d = Dir.FullPath(); return (d.EndsWith("\\") || d.EndsWith("/")) ? d + Name : d + System.IO.Path.DirectorySeparatorChar + Name; } }
 }
 public class DmFind { public List<DmFile> Files = new List<DmFile>(); public long Count, Bytes; }
@@ -1937,6 +2023,8 @@ public static class DiskMap {
     }
 
     public static volatile bool MftOff;              // 用户在设置里关掉了「直接读文件表」
+    // 这块盘的文件表已经在内存里（再要时只按变更日志补读，很快）
+    public static bool HasIndex(string root) { if (string.IsNullOrEmpty(root)) return false; lock (cacheLock) return mftIdx.ContainsKey(root.Substring(0, 1)); }
     static bool MftAllowed(string root) {
         if (MftOff || !Win || root == null || root.Length < 2 || root[1] != ':' || root.TrimEnd('\\').Length != 2) return false;   // 只认整块盘
         lock (cacheLock) { if (mftBroken.ContainsKey(root.Substring(0, 1))) return false; }
@@ -6893,6 +6981,8 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+读取 {0} 盘的文件表	Reading the file table of {0}
+{0} 个查找位置从文件表里列出文件（不用逐个文件夹去看）	{0} search locations were listed from the file table (no need to go through every folder)
 正在扫描，一般几秒钟…	Scanning, usually a few seconds…
 正在读取硬件、事件日志和转储文件，要几秒…	Reading hardware, event logs and dump files, this takes a few seconds…
 正在找已卸载软件可能留下的文件夹…	Looking for folders left behind by uninstalled apps…
@@ -16774,7 +16864,24 @@ foreach ($L in $letters) {
     [void]$spec.Add("$($L):=$n"); $notes += "$($L): $desc"
 }
 if ($notes) { Log ((T "磁盘：") + ($notes -join (T '；'))); $sync.DriveNote = ($notes -join (T '；')) }
-$sync.DupResult = [DupFinder]::Find([string[]]$arg.Roots, [long]$arg.Min, [long]$arg.Max, [bool]$arg.MatchName, $ext, [bool]$arg.Exact, [string[]]$spec)
+# NTFS 盘的文件表（已经在内存里的按变更日志补读；查整块盘时现读一次）：1 MB 以上的文件直接从里面列，不用逐个文件夹去看
+$trees = New-Object 'System.Collections.Generic.List[DmNode]'
+if ([long]$arg.Min -ge 1MB) {
+    foreach ($L in $letters) {
+        if (Stopping) { break }
+        $whole = @($arg.Roots | Where-Object { ([string]$_).TrimEnd('\') -ieq "$($L):" }).Count -gt 0
+        if (-not $whole -and -not [DiskMap]::HasIndex("$($L):")) { continue }   # 只查一个文件夹、文件表又不在手上：逐个看更快
+        if ([FsTools]::IsSubst("$($L):")) { continue }
+        try {
+            SetP @{ Detail = ((T "读取 {0} 盘的文件表") -f $L) }
+            $t = [DiskMap]::GetTree("$($L):", [DirStat]::ThreadsFor("$($L):"), $false, $false)
+            $m = [string][DiskMap]::LastMethod
+            if ($t -and $t.HasDisk -and ($m -eq 'mft' -or $m -eq 'mft-usn')) { $trees.Add($t); Log ((T "读取 {0} 盘的文件表：{1:N0} 个文件，用时 {2:N1} 秒") -f $L, $t.Files, ([double][DiskMap]::LastMs / 1000)) }
+        } catch {}
+    }
+}
+$sync.DupResult = [DupFinder]::Find([string[]]$arg.Roots, [long]$arg.Min, [long]$arg.Max, [bool]$arg.MatchName, $ext, [bool]$arg.Exact, [string[]]$spec, [DmNode[]]$trees.ToArray())
+if ([DupFinder]::FromTreeRoots -gt 0) { Log ((T "{0} 个查找位置从文件表里列出文件（不用逐个文件夹去看）") -f [DupFinder]::FromTreeRoots) }
 if (-not [DupFinder]::UsedFastEnum) { Log (T '提示：快速列举不可用，已改用普通方式列举文件（结果相同，只是慢一些）。') }
 '@ $arg
 })
@@ -22146,7 +22253,7 @@ function Invoke-UiTest {
                 # 清理 C 盘：真的扫一遍（只统计大小，不删东西）
                 Show-Page 'clean'; $tsc = [Diagnostics.Stopwatch]::StartNew(); & $click $ctl.BtnScan
                 if (-not (& $waitUi { -not $script:worker } 150000)) { throw 'cleanup scan did not finish' }
-                $L.Add(("timing cleanup scan (first, this mode): {0:N1} s, inside the worker {1:N1} s" -f ($tsc.ElapsedMilliseconds / 1000), ([double]$sync.ScanMs / 1000)))
+                $L.Add(("timing cleanup scan (first, this mode): {0:N1} s, inside the worker {1:N1} s; {2}" -f ($tsc.ElapsedMilliseconds / 1000), ([double]$sync.ScanMs / 1000), ((@(@($sync.ScanTimes) | Sort-Object { - [double]$_.Ms } | Select-Object -First 5) | ForEach-Object { '{0} {1:N0} ms' -f $_.N, [double]$_.Ms }) -join '; ')))
                 if (-not $script:rows) { throw 'cleanup scan found nothing' }
                 $ctl.OpPanel.Visibility = 'Collapsed'; & $shot 'clean'
                 # 空间地图：扫整个 C 盘
@@ -22233,7 +22340,20 @@ function Invoke-UiTest {
                     $td = [Diagnostics.Stopwatch]::StartNew()
                     $dg = [DupFinder]::Find([string[]]@($env:ProgramFiles, ${env:ProgramFiles(x86)}), [long]1MB, [long]0, $false, $null, $false, [string[]]@('C:=4'))
                     $L.Add(("timing duplicates in Program Files (1 MB+): {0:N1} s, {1} groups" -f ($td.ElapsedMilliseconds / 1000), @($dg).Count))
-                    $L.Add(("timing     list {0:N1} s ({1:N0} files); quick {2:N1} s ({3:N0} files, {4}); deep {5:N1} s ({6:N0} files, {7})" -f ([DupFinder]::ListMs / 1000), [DupFinder]::FilesSeen, ([DupFinder]::QuickMs / 1000), [DupFinder]::QuickFiles, (Fmt ([double][DupFinder]::QuickBytes)), ([DupFinder]::DeepMs / 1000), [DupFinder]::DeepFiles, (Fmt ([double][DupFinder]::DeepBytes))))
+                    $dph = { "timing     list {0:N1} s ({1:N0} files); quick {2:N1} s ({3:N0} files, {4}); deep {5:N1} s ({6:N0} files, {7})" -f ([DupFinder]::ListMs / 1000), [DupFinder]::FilesSeen, ([DupFinder]::QuickMs / 1000), [DupFinder]::QuickFiles, (Fmt ([double][DupFinder]::QuickBytes)), ([DupFinder]::DeepMs / 1000), [DupFinder]::DeepFiles, (Fmt ([double][DupFinder]::DeepBytes)) }
+                    $L.Add((& $dph))
+                    # 同样的查找，这次从 C 盘的文件表列出文件：结果必须和逐个文件夹列举的完全一样
+                    $ct = [DiskMap]::GetTree($env:SystemDrive, [DirStat]::ThreadsFor($env:SystemDrive), $false, $false)
+                    $td2 = [Diagnostics.Stopwatch]::StartNew()
+                    $dg2 = [DupFinder]::Find([string[]]@($env:ProgramFiles, ${env:ProgramFiles(x86)}), [long]1MB, [long]0, $false, $null, $false, [string[]]@('C:=4'), [DmNode[]]@($ct))
+                    $L.Add(("timing duplicates again, listed from the file table ({0} of 2 places): {1:N1} s, {2} groups" -f [DupFinder]::FromTreeRoots, ($td2.ElapsedMilliseconds / 1000), @($dg2).Count))
+                    $L.Add((& $dph))
+                    $p1 = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase); foreach ($g in @($dg)) { foreach ($f in $g.Files) { [void]$p1.Add([string]$f.Path) } }
+                    $p2 = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase); foreach ($g in @($dg2)) { foreach ($f in $g.Files) { [void]$p2.Add([string]$f.Path) } }
+                    if ([DupFinder]::FromTreeRoots -ne 2 -or -not $p1.SetEquals($p2)) {
+                        $only1 = @($p1 | Where-Object { -not $p2.Contains($_) } | Select-Object -First 4); $only2 = @($p2 | Where-Object { -not $p1.Contains($_) } | Select-Object -First 4)
+                        throw ("file-table listing differs: {0} vs {1} files; only walking: {2}; only the file table: {3}" -f $p1.Count, $p2.Count, ($only1 -join ' | '), ($only2 -join ' | '))
+                    }
                     $tw = [Diagnostics.Stopwatch]::StartNew(); $wb = [DirStat]::Measure("$env:SystemRoot\System32")
                     $L.Add(("timing walk System32: {0:N1} s, {1}" -f ($tw.ElapsedMilliseconds / 1000), (Fmt $wb)))
                 } finally { Set-Setting 'Mode' $keepMode }

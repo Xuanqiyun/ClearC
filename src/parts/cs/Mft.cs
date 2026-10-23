@@ -146,6 +146,7 @@ public sealed class MftIndex {
     public long[] Size, Write;
     public long[] Disk;                               // 这条记录里的数据实际占的盘（主记录和续页各记各的；压缩、稀疏、只在云端的文件比文件大小小，很小的文件放在记录里不另占）
     public byte[] Flag;                               // 1 在用  2 文件夹  4 链接（重解析点）  8 有属性列表
+    public uint[] Attr;                               // $STANDARD_INFORMATION 里的文件属性（系统、脱机、云端占位、重解析点……），查重复文件时按它跳过
     public byte[] Cat;                                // 文件类别（FileCats）
     public string[] Name;                             // 只存文件夹、1 MB 以上的文件和有属性列表的文件的名字
     public Dictionary<int, List<MftLink>> Extra = new Dictionary<int, List<MftLink>>();   // 第二个起的名字（硬链接）
@@ -158,19 +159,19 @@ public sealed class MftIndex {
     public void Alloc(int n) {
         Count = n;
         Parent = new int[n]; ParentSeq = new ushort[n]; Seq = new ushort[n];
-        Size = new long[n]; Write = new long[n]; Disk = new long[n]; Flag = new byte[n]; Name = new string[n]; Cat = new byte[n];
+        Size = new long[n]; Write = new long[n]; Disk = new long[n]; Flag = new byte[n]; Name = new string[n]; Cat = new byte[n]; Attr = new uint[n];
         for (int i = 0; i < n; i++) Parent[i] = -1;
     }
     public void Grow(int n) {
         if (n <= Count) return;
         int old = Count;
         Array.Resize(ref Parent, n); Array.Resize(ref ParentSeq, n); Array.Resize(ref Seq, n);
-        Array.Resize(ref Size, n); Array.Resize(ref Write, n); Array.Resize(ref Disk, n); Array.Resize(ref Flag, n); Array.Resize(ref Name, n); Array.Resize(ref Cat, n);
+        Array.Resize(ref Size, n); Array.Resize(ref Write, n); Array.Resize(ref Disk, n); Array.Resize(ref Flag, n); Array.Resize(ref Name, n); Array.Resize(ref Cat, n); Array.Resize(ref Attr, n);
         for (int i = old; i < n; i++) Parent[i] = -1;
         Count = n;
     }
     public void Clear(int frn) {
-        Parent[frn] = -1; ParentSeq[frn] = 0; Seq[frn] = 0; Size[frn] = 0; Write[frn] = 0; Disk[frn] = 0; Flag[frn] = 0; Name[frn] = null; Cat[frn] = 0;
+        Parent[frn] = -1; ParentSeq[frn] = 0; Seq[frn] = 0; Size[frn] = 0; Write[frn] = 0; Disk[frn] = 0; Flag[frn] = 0; Name[frn] = null; Cat[frn] = 0; Attr[frn] = 0;
         Extra.Remove(frn); ExtOf.Remove(frn);
     }
     public Dictionary<int, List<int>> ExtOf = new Dictionary<int, List<int>>();   // 主记录 → 读到过的续页
@@ -442,7 +443,7 @@ public static class Mft {
             int attrNameLen = b[a + 9];
             if (type == 0x10 && !nonRes && !ext) {
                 int c = a + U16(b, a + 0x14);
-                if (c + 0x24 <= a + len) ix.Write[frn] = I64(b, c + 8);
+                if (c + 0x24 <= a + len) { ix.Write[frn] = I64(b, c + 8); ix.Attr[frn] = U32(b, c + 0x20); }
             } else if (type == 0x20) {
                 ix.Flag[owner] |= 8;
             } else if (type == 0x30 && !nonRes) {
@@ -719,8 +720,9 @@ public static class Mft {
             long size = ix.Size[i], wt = ix.Write[i], disk = FileDisk(ix, i);
             List<MftLink> l;
             bool multi = ix.Extra.TryGetValue(i, out l) && l.Count > 0;   // 有不止一个名字（硬链接）：每个名字下都算，但盘上只有一份
-            bool any = AddFile(ix, nodes, reach, ix.Parent[i], ix.ParentSeq[i], ix.Name[i], size, disk, multi, wt, big, ref files);
-            if (multi) foreach (MftLink k in l) any |= AddFile(ix, nodes, reach, k.Parent, k.ParentSeq, k.Name, size, disk, true, wt, big, ref files);
+            uint at = ix.Attr != null && i < ix.Attr.Length ? ix.Attr[i] : 0; bool ha = ix.Attr != null;
+            bool any = AddFile(ix, nodes, reach, ix.Parent[i], ix.ParentSeq[i], ix.Name[i], size, disk, multi, wt, at, ha, big, ref files);
+            if (multi) foreach (MftLink k in l) any |= AddFile(ix, nodes, reach, k.Parent, k.ParentSeq, k.Name, size, disk, true, wt, at, ha, big, ref files);
             if (any) { uniq += size; uniqDisk += disk; if (multi) linked += size; byte c = ix.Cat[i]; tc[c]++; tb[c] += size; td[c] += disk; }
         }
         root.TypeCount = tc; root.TypeBytes = tb; root.TypeDisk = td;
@@ -734,7 +736,8 @@ public static class Mft {
         if (ix.ExtOf.TryGetValue(i, out el)) foreach (int s in el) { ushort c; if (s < ix.Count && (!ix.ExtClaim.TryGetValue(s, out c) || c == ix.Seq[i])) d += ix.Disk[s]; }
         return d;
     }
-    static bool AddFile(MftIndex ix, DmNode[] nodes, bool[] reach, int p, ushort ps, string name, long size, long disk, bool shared, long wt, List<DmFile> big, ref long files) {
+    static bool AddFile(MftIndex ix, DmNode[] nodes, bool[] reach, int p, ushort ps, string name, long size, long disk, bool shared, long wt, List<DmFile> big, ref long files) { return AddFile(ix, nodes, reach, p, ps, name, size, disk, shared, wt, 0, false, big, ref files); }
+    static bool AddFile(MftIndex ix, DmNode[] nodes, bool[] reach, int p, ushort ps, string name, long size, long disk, bool shared, long wt, uint attr, bool hasAttr, List<DmFile> big, ref long files) {
         if (p < 0 || p >= nodes.Length || nodes[p] == null || !reach[p] || ix.Seq[p] != ps) return false;
         DmNode d = nodes[p];
         if (d.IsLink) return false;
@@ -742,7 +745,7 @@ public static class Mft {
         d.OwnDisk += disk; if (shared) d.OwnShared += size;
         if (wt > d.LastWrite) d.LastWrite = wt;
         if (size >= BigMin && name != null) {
-            DmFile x = new DmFile(); x.Dir = d; x.Name = name; x.Size = size; x.Disk = disk; x.Shared = shared;
+            DmFile x = new DmFile(); x.Dir = d; x.Name = name; x.Size = size; x.Disk = disk; x.Shared = shared; x.Attr = attr; x.HasAttr = hasAttr;
             try { x.Modified = DateTime.FromFileTime(wt); } catch { }
             big.Add(x);
         }
