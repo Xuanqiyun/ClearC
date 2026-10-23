@@ -2654,7 +2654,7 @@
                 <CheckBox x:Name="SetRecycle" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
                 <StackPanel>
                   <TextBlock Text="删除时先放进回收站" Style="{StaticResource SetName}"/>
-                  <TextBlock Style="{StaticResource SetNote}" Text="手动清理删掉的文件先放进回收站，删错了可以从回收站恢复。慢一些，回收站会变大（清空回收站才真正腾出空间）；太大放不进回收站的文件，Windows 会问你。定期自动清理不受这个影响，照样直接删。"/>
+                  <TextBlock Style="{StaticResource SetNote}" Text="手动清理删掉的文件先放进回收站，删错了可以从回收站恢复。慢一些，回收站会变大（清空回收站才真正腾出空间）；放不进回收站的（网络位置、U 盘、比回收站还大）不删。定期自动清理不受这个影响，照样直接删。"/>
                 </StackPanel>
               </DockPanel>
               <TextBlock x:Name="SetCustomHead" Text="自己加的文件夹" Style="{StaticResource SetName}" Margin="0,14,0,0"/>
@@ -2803,7 +2803,7 @@
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="可恢复删除"/>
-                  <TextBlock Style="{StaticResource HelpBody}"><Run>设置「清理列表」里打开「删除时先放进回收站」：手动清理删掉的文件先进回收站，删错了能恢复。慢一些、回收站会变大，太大放不进回收站的文件 Windows 会问你。定期自动清理不受影响。</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>设置「清理列表」里打开「删除时先放进回收站」：手动清理删掉的文件先进回收站，删错了能恢复。慢一些、回收站会变大。放不进回收站的（网络位置、U 盘、回收站被关掉、比这块盘的回收站还大）不删，日志里写明原因，绝不会悄悄变成永久删除。回收站满了时，新放进去的会挤掉回收站里更早的东西（Windows 本来就这样）。定期自动清理不受影响。</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="清理审计"/>
@@ -3502,7 +3502,7 @@
               <Expander Style="{StaticResource HelpQ}">
                 <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="释放的空间比预计少？"/></Expander.Header>
                 <StackPanel>
-                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>放进回收站的文件，要清空回收站后才真正释放空间；正被其他程序占用的文件会被跳过。</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>放进回收站的文件，要清空回收站后才真正释放空间；正被其他程序占用的文件会被跳过；打开了「删除时先放进回收站」时，放不进回收站的不删（日志里有原因）。</Run></TextBlock>
                 </StackPanel>
               </Expander>
               <Expander Style="{StaticResource HelpQ}">

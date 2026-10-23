@@ -110,7 +110,7 @@
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Recoverable deletion"/>
-                  <TextBlock Style="{StaticResource HelpBody}"><Run>Turn on "Recycle Bin first" under Settings → Cleanup list: files deleted by a manual cleanup go to the Recycle Bin, so a mistake can be undone. Slower, the Recycle Bin grows, and Windows asks about files too large for it. Scheduled cleanup is not affected.</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Turn on "Recycle Bin first" under Settings → Cleanup list: files deleted by a manual cleanup go to the Recycle Bin, so a mistake can be undone. Slower, and the Recycle Bin grows. Anything that can't go to the Recycle Bin (a network location, a USB stick, a Recycle Bin that is turned off, or an item larger than that drive's Recycle Bin) is not deleted, and the log says why; it never silently becomes a permanent delete. When the Recycle Bin is full, new items push out older ones (that is how Windows works). Scheduled cleanup is not affected.</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Cleanup audit"/>
@@ -809,7 +809,7 @@
               <Expander Style="{StaticResource HelpQ}">
                 <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="Less space freed than expected?"/></Expander.Header>
                 <StackPanel>
-                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Files moved to the Recycle Bin only free up space after you empty the Recycle Bin, and files in use by other programs are skipped.</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Files moved to the Recycle Bin only free up space after you empty the Recycle Bin, files in use by other programs are skipped, and with "Recycle Bin first" on, anything that can't go to the Recycle Bin is not deleted (the log says why).</Run></TextBlock>
                 </StackPanel>
               </Expander>
               <Expander Style="{StaticResource HelpQ}">

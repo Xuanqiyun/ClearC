@@ -408,7 +408,7 @@ Windows 事件：最近 7 天的严重错误	Windows events: critical errors in 
 （剩余 {0} → {1}）	 (free {0} → {1})
 ，已放进回收站	, moved to the Recycle Bin
 删除时先放进回收站	Recycle Bin first
-手动清理删掉的文件先放进回收站，删错了可以从回收站恢复。慢一些，回收站会变大（清空回收站才真正腾出空间）；太大放不进回收站的文件，Windows 会问你。定期自动清理不受这个影响，照样直接删。	Files deleted by a manual cleanup go to the Recycle Bin first, so a mistake can be undone there. Slower, and the Recycle Bin grows (space is only freed when you empty it); for files too large for the Recycle Bin, Windows asks you. Scheduled automatic cleanup is not affected and deletes directly.
+手动清理删掉的文件先放进回收站，删错了可以从回收站恢复。慢一些，回收站会变大（清空回收站才真正腾出空间）；放不进回收站的（网络位置、U 盘、比回收站还大）不删。定期自动清理不受这个影响，照样直接删。	Files deleted by a manual cleanup go to the Recycle Bin first, so a mistake can be undone. Slower, and the Recycle Bin grows (space is only freed when you empty it); anything that can't go to the Recycle Bin (network locations, USB sticks, items larger than the Recycle Bin) is not deleted. Scheduled cleanup is not affected and still deletes directly.
 谨慎清理（删了要重新下载或重新生成，第一次打开会慢一点；默认也清，执行前会单独列出来）	Careful cleanup (downloaded or generated again after deletion, so the first start is slower; cleaned by default, listed separately before running)
 谨慎清理	Careful cleanup
 这一行是统计，不是文件；双击查看	This row is a statistic, not a file; double-click to look

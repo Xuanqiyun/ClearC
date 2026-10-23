@@ -6062,7 +6062,7 @@ Windows 事件：最近 7 天的严重错误	Windows events: critical errors in 
 （剩余 {0} → {1}）	 (free {0} → {1})
 ，已放进回收站	, moved to the Recycle Bin
 删除时先放进回收站	Recycle Bin first
-手动清理删掉的文件先放进回收站，删错了可以从回收站恢复。慢一些，回收站会变大（清空回收站才真正腾出空间）；太大放不进回收站的文件，Windows 会问你。定期自动清理不受这个影响，照样直接删。	Files deleted by a manual cleanup go to the Recycle Bin first, so a mistake can be undone there. Slower, and the Recycle Bin grows (space is only freed when you empty it); for files too large for the Recycle Bin, Windows asks you. Scheduled automatic cleanup is not affected and deletes directly.
+手动清理删掉的文件先放进回收站，删错了可以从回收站恢复。慢一些，回收站会变大（清空回收站才真正腾出空间）；放不进回收站的（网络位置、U 盘、比回收站还大）不删。定期自动清理不受这个影响，照样直接删。	Files deleted by a manual cleanup go to the Recycle Bin first, so a mistake can be undone. Slower, and the Recycle Bin grows (space is only freed when you empty it); anything that can't go to the Recycle Bin (network locations, USB sticks, items larger than the Recycle Bin) is not deleted. Scheduled cleanup is not affected and still deletes directly.
 谨慎清理（删了要重新下载或重新生成，第一次打开会慢一点；默认也清，执行前会单独列出来）	Careful cleanup (downloaded or generated again after deletion, so the first start is slower; cleaned by default, listed separately before running)
 谨慎清理	Careful cleanup
 这一行是统计，不是文件；双击查看	This row is a statistic, not a file; double-click to look
@@ -7703,7 +7703,7 @@ $script:helpEnXaml = @'
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Recoverable deletion"/>
-                  <TextBlock Style="{StaticResource HelpBody}"><Run>Turn on "Recycle Bin first" under Settings → Cleanup list: files deleted by a manual cleanup go to the Recycle Bin, so a mistake can be undone. Slower, the Recycle Bin grows, and Windows asks about files too large for it. Scheduled cleanup is not affected.</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Turn on "Recycle Bin first" under Settings → Cleanup list: files deleted by a manual cleanup go to the Recycle Bin, so a mistake can be undone. Slower, and the Recycle Bin grows. Anything that can't go to the Recycle Bin (a network location, a USB stick, a Recycle Bin that is turned off, or an item larger than that drive's Recycle Bin) is not deleted, and the log says why; it never silently becomes a permanent delete. When the Recycle Bin is full, new items push out older ones (that is how Windows works). Scheduled cleanup is not affected.</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Cleanup audit"/>
@@ -8402,7 +8402,7 @@ $script:helpEnXaml = @'
               <Expander Style="{StaticResource HelpQ}">
                 <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="Less space freed than expected?"/></Expander.Header>
                 <StackPanel>
-                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Files moved to the Recycle Bin only free up space after you empty the Recycle Bin, and files in use by other programs are skipped.</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Files moved to the Recycle Bin only free up space after you empty the Recycle Bin, files in use by other programs are skipped, and with "Recycle Bin first" on, anything that can't go to the Recycle Bin is not deleted (the log says why).</Run></TextBlock>
                 </StackPanel>
               </Expander>
               <Expander Style="{StaticResource HelpQ}">
@@ -11324,7 +11324,7 @@ if ($script:mode -match '(?i)/autoclean') {
                 <CheckBox x:Name="SetRecycle" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
                 <StackPanel>
                   <TextBlock Text="删除时先放进回收站" Style="{StaticResource SetName}"/>
-                  <TextBlock Style="{StaticResource SetNote}" Text="手动清理删掉的文件先放进回收站，删错了可以从回收站恢复。慢一些，回收站会变大（清空回收站才真正腾出空间）；太大放不进回收站的文件，Windows 会问你。定期自动清理不受这个影响，照样直接删。"/>
+                  <TextBlock Style="{StaticResource SetNote}" Text="手动清理删掉的文件先放进回收站，删错了可以从回收站恢复。慢一些，回收站会变大（清空回收站才真正腾出空间）；放不进回收站的（网络位置、U 盘、比回收站还大）不删。定期自动清理不受这个影响，照样直接删。"/>
                 </StackPanel>
               </DockPanel>
               <TextBlock x:Name="SetCustomHead" Text="自己加的文件夹" Style="{StaticResource SetName}" Margin="0,14,0,0"/>
@@ -11473,7 +11473,7 @@ if ($script:mode -match '(?i)/autoclean') {
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="可恢复删除"/>
-                  <TextBlock Style="{StaticResource HelpBody}"><Run>设置「清理列表」里打开「删除时先放进回收站」：手动清理删掉的文件先进回收站，删错了能恢复。慢一些、回收站会变大，太大放不进回收站的文件 Windows 会问你。定期自动清理不受影响。</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>设置「清理列表」里打开「删除时先放进回收站」：手动清理删掉的文件先进回收站，删错了能恢复。慢一些、回收站会变大。放不进回收站的（网络位置、U 盘、回收站被关掉、比这块盘的回收站还大）不删，日志里写明原因，绝不会悄悄变成永久删除。回收站满了时，新放进去的会挤掉回收站里更早的东西（Windows 本来就这样）。定期自动清理不受影响。</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="清理审计"/>
@@ -12172,7 +12172,7 @@ if ($script:mode -match '(?i)/autoclean') {
               <Expander Style="{StaticResource HelpQ}">
                 <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="释放的空间比预计少？"/></Expander.Header>
                 <StackPanel>
-                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>放进回收站的文件，要清空回收站后才真正释放空间；正被其他程序占用的文件会被跳过。</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>放进回收站的文件，要清空回收站后才真正释放空间；正被其他程序占用的文件会被跳过；打开了「删除时先放进回收站」时，放不进回收站的不删（日志里有原因）。</Run></TextBlock>
                 </StackPanel>
               </Expander>
               <Expander Style="{StaticResource HelpQ}">
