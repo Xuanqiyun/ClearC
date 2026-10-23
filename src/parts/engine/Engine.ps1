@@ -2,6 +2,7 @@
 function T([string]$s) {
     $d = $script:L10n
     if ($null -eq $d -and $sync) { $d = $sync.L10n }
+    if ($null -eq $d) { try { $d = [L10n]::Map } catch {} }   # 后台线程（Start-BgEngine）没有 $sync：用界面启动时填好的那份
     if ($null -ne $d) { $v = $null; if ($d.TryGetValue($s, [ref]$v)) { return $v } }
     return $s
 }

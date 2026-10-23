@@ -3290,6 +3290,7 @@ $engine = @'
 function T([string]$s) {
     $d = $script:L10n
     if ($null -eq $d -and $sync) { $d = $sync.L10n }
+    if ($null -eq $d) { try { $d = [L10n]::Map } catch {} }   # 后台线程（Start-BgEngine）没有 $sync：用界面启动时填好的那份
     if ($null -ne $d) { $v = $null; if ($d.TryGetValue($s, [ref]$v)) { return $v } }
     return $s
 }
@@ -19437,6 +19438,8 @@ function Invoke-UiTest {
             }
             if ($ctl.HealthVerdicts.Items.Count -lt 1) { throw 'no verdict shown' }
             $L.Add(('  verdicts: ' + (@($ctl.HealthVerdicts.Items | ForEach-Object { $_.Title }) -join ' | ')))
+            # 后台线程里算出来的文字也要跟着界面语言走
+            if ($script:Lang -eq 'en' -and @(@($ctl.HealthVerdicts.Items) + @($ctl.HealthCards.Items) | Where-Object { ([string]$_.Title + [string]$_.Body + [string]$_.Sub) -match '[\u4e00-\u9fff]' }).Count -gt 0) { throw 'background health text is not translated' }
             if ($ctl.FixGroups.Items.Count -lt 8) { throw ('only {0} problem groups' -f $ctl.FixGroups.Items.Count) }
             # 只看的步骤直接运行（自测里只记下来，不开窗口）；会改动的先确认（自测里当作点了取消，所以不会运行）
             $script:uiFixRuns.Clear(); $n0 = $script:uiSheets.Count; $undo0 = Get-Setting 'PowerFixUndo' ''; $fs0 = Get-FastStartup
