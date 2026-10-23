@@ -141,6 +141,29 @@ function Invoke-UiTest {
             & $click $ctl.BtnCleanCustom; $win.UpdateLayout()
             if ($ctl.PageSettings.Visibility -ne 'Visible') { throw 'link did not open Settings' }
         }
+        & $step 'editing the cleanup list voids the old scan; one-click skips risky items' {
+            $d1 = Join-Path $script:appDir 'uitest-c1'; $d2 = Join-Path $script:appDir 'uitest-c2'
+            New-Item -ItemType Directory -Force -Path $d1, $d2 | Out-Null
+            foreach ($d in $d1, $d2) { [IO.File]::WriteAllBytes((Join-Path $d 'x.tmp'), (New-Object byte[] 4096)) }
+            try {
+                Save-CleanList 'CustomClean' @($d1, $d2)
+                $sizes = @{}; foreach ($c in $catalog) { $sizes[$c.Idx] = [double]1MB }
+                $sync.Sizes = $sizes; Build-Rows $sizes
+                if (-not $script:rows -or $script:rows.Count -lt 3) { throw 'no rows' }
+                Apply-OneClick
+                $bad = @($script:rows | Where-Object { $_.Action -ne (T '跳过') -and (([string]$_.Group).StartsWith('需确认') -or ([string]$_.Group).StartsWith('自定义')) })
+                if ($bad.Count) { throw ("one-click picked: {0}" -f (($bad | ForEach-Object { $_.Name }) -join ', ')) }
+                if (@($script:rows | Where-Object { $_.Action -eq (T '删除') -and ([string]$_.Group).StartsWith('安全清理') }).Count -lt 3) { throw 'one-click picked no safe items' }
+                foreach ($r in $script:rows) { $it = @($catalog | Where-Object { $_.Idx -eq $r.Idx })[0]; if ((Get-ItemSig $it) -ne $script:rowSig[$r.Idx]) { throw ("fingerprint mismatch: {0}" -f $r.Name) } }
+                Save-CleanList 'CustomClean' @($d2)
+                if ($script:rows -or $sync.Sizes) { throw 'old scan rows still usable after the list changed' }
+                Invoke-RunSelected
+                if ($script:worker) { throw 'a run started without a fresh scan' }
+            } finally {
+                Save-CleanList 'CustomClean' @(); $sync.Sizes = $null; $script:rows = $null; $ctl.List.ItemsSource = $null
+                Remove-Item -LiteralPath $d1, $d2 -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        }
         & $step 'reminders: junk limit and cleanup day' {
             Show-Page 'auto'; $win.UpdateLayout()
             $ctl.AutoJunkGB.SelectedIndex = 2; if ((Get-Setting 'JunkGB' '0') -ne '2') { throw 'junk limit not saved' }

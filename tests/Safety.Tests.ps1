@@ -159,6 +159,89 @@ try {
     try { Remove-Contents @($tmpd) '' $false } finally { $script:autoMinAge = $null }
     Check 'automatic cleanup leaves files written in the last day alone' ((Test-Path (Join-Path $tmpd 'fresh.tmp')) -and -not (Test-Path (Join-Path $tmpd 'stale.tmp')))
     Check 'the Recycle Bin is not emptied in the same run that moved files into it' ($engineText -match 'recycledThisRun\) \{ Log')
+    # ============ 7c. 「放进回收站」不会悄悄变成永久删除 ============
+    Check 'recycle verdict: a Fixed drive with default settings is fine' ((Get-RecycleVerdict 10MB 'Fixed' $false 0 -1 500GB) -eq '')
+    Check 'recycle verdict: network, removable and CD drives have no Recycle Bin' ((Get-RecycleVerdict 1 'Network' $false 0 -1 0) -and (Get-RecycleVerdict 1 'Removable' $false 0 -1 0) -and (Get-RecycleVerdict 1 'CDRom' $false 0 -1 0))
+    Check 'recycle verdict: Recycle Bin turned off by policy' ([bool](Get-RecycleVerdict 1 'Fixed' $true 0 -1 500GB))
+    Check 'recycle verdict: the drive is set to delete immediately (NukeOnDelete)' ([bool](Get-RecycleVerdict 1 'Fixed' $false 1 -1 500GB))
+    Check 'recycle verdict: bigger than the Recycle Bin of that drive' ((Get-RecycleVerdict 2GB 'Fixed' $false 0 1024 500GB) -and -not (Get-RecycleVerdict 500MB 'Fixed' $false 0 1024 500GB))
+    Check 'recycle verdict: a 0 MB Recycle Bin takes nothing' ([bool](Get-RecycleVerdict 1KB 'Fixed' $false 0 0 500GB))
+    Check 'recycle verdict: no settings yet means about 5% of the drive' ((Get-RecycleVerdict 30GB 'Fixed' $false 0 -1 500GB) -and -not (Get-RecycleVerdict 10GB 'Fixed' $false 0 -1 500GB))
+    Check 'Test-RecycleOk refuses UNC paths' ((Test-RecycleOk '\\server\share\a.txt' 1) -and (Test-RecycleOk '\\?\UNC\server\share\a.txt' 1))
+    # 每一处调用 Recycle / RecycleMany 之前都先问过 Test-RecycleOk（数调用点：多了一处没问的就报）
+    $recCalls = [regex]::Matches($src, '\[FsTools\]::Recycle(Many)?\(').Count
+    $recGuards = [regex]::Matches($src, 'Test-RecycleOk ').Count
+    Check ("every Recycle call is preceded by Test-RecycleOk ({0} calls, {1} checks)" -f $recCalls, $recGuards) ($recCalls -eq 5 -and $recGuards -ge 5)
+    if ($win) {
+        Check 'Test-RecycleOk: a small file on the system drive can be recycled' (-not (Test-RecycleOk (Join-Path $env:SystemDrive '\x.txt') 1KB))
+        # 回收模式下清一个里面有链接的缓存文件夹：链接目标不动，文件进了回收站
+        $rt = Join-Path $T 'rec-target'; $rc = Join-Path $T 'rec-cache'
+        New-Item -ItemType Directory -Force -Path $rt, (Join-Path $rc 'sub') | Out-Null
+        [IO.File]::WriteAllText((Join-Path $rt 'precious.txt'), 'keep'); [IO.File]::WriteAllText((Join-Path $rc 'sub\c.tmp'), 'x')
+        New-Item -ItemType Junction -Path (Join-Path $rc 'sub\lnk') -Target $rt | Out-Null
+        $script:recycleNow = $true
+        try { Remove-Contents @($rc) '' $false } finally { $script:recycleNow = $false }
+        Check 'recycle-mode cleanup of a folder holding a junction keeps the junction target' ((Test-Path (Join-Path $rt 'precious.txt')) -and -not (Test-Path -LiteralPath (Join-Path $rc 'sub')))
+    } else { Skip 'Test-RecycleOk on the system drive, recycle-mode cleanup with a junction' }
+    # ============ 7d. 审计第二轮 ============
+    # 路径里的 [ ] 不当通配符（用户名是 a[1] 时不会删到 a1 的东西）
+    $b1 = Join-Path $T 'a[1]'; $b2 = Join-Path $T 'a1'
+    [void][IO.Directory]::CreateDirectory($b1); [void][IO.Directory]::CreateDirectory($b2)
+    [IO.File]::WriteAllText((Join-Path $b1 'f.tmp'), 'x'); [IO.File]::WriteAllText((Join-Path $b2 'f.tmp'), 'y')
+    $g1 = @(Get-PathItems (Join-Path $b1 'f.tmp')); $g2 = @(Get-PathItems (Join-Path $b1 '*.tmp'))
+    Check ("brackets in a path are not wildcards (literal {0}, with * {1})" -f $g1.Count, $g2.Count) ($g1.Count -eq 1 -and $g2.Count -eq 1 -and $g1[0].FullName -eq (Join-Path $b1 'f.tmp') -and $g2[0].FullName -eq (Join-Path $b1 'f.tmp'))
+    Remove-Contents @($b1) '' $false
+    Check 'cleaning a folder named a[1] leaves the folder a1 alone' ((Test-Path -LiteralPath (Join-Path $b2 'f.tmp')) -and -not (Test-Path -LiteralPath (Join-Path $b1 'f.tmp')))
+    Check 'every wildcard Get-Item in the program goes through Get-PathItems' ($src -notmatch 'Get-Item -Path \$p -Force')
+    # TEMP 被改到 D:\Work 这类地方：不当临时文件夹清
+    if ([Environment]::ExpandEnvironmentVariables('%TEMP%') -ne '%TEMP%') {
+        $savedTemp = $env:TEMP
+        try { $env:TEMP = Join-Path $T 'Work'; $w = @(Expand-LibPath '%TEMP%'); $env:TEMP = Join-Path $T 'Temp'; $t2 = @(Expand-LibPath '%TEMP%') } finally { $env:TEMP = $savedTemp }
+        Check 'a TEMP that points at a non-temp folder (like D:\Work) is not emptied' ($w.Count -eq 0 -and $t2.Count -eq 1)
+    } else { "skip TEMP expansion test (no %VAR% expansion here)" }
+    # 清理的路径本身是链接：不跟进去
+    $lt = Join-Path $T 'lt-target'; New-Item -ItemType Directory -Force -Path $lt | Out-Null; [IO.File]::WriteAllText((Join-Path $lt 'p.txt'), 'keep')
+    $ll = Join-Path $T 'lt-link'
+    if ($win) { New-Item -ItemType Junction -Path $ll -Target $lt | Out-Null } else { New-Item -ItemType SymbolicLink -Path $ll -Target $lt | Out-Null }
+    Remove-Contents @($ll) '' $false; Remove-Contents @($ll) '' $true
+    Check 'a cleanup path that is itself a link is skipped and its target keeps its files' ((Test-Path (Join-Path $lt 'p.txt')) -and (Test-Path -LiteralPath $ll))
+    # 自己加的清理文件夹：删的时候再查
+    Check 'custom cleanup folders are re-checked (Get-DeleteBlock, IsLink) at delete time' ($engineText -match '(?s)if \(\$it\.Custom\) \{\s*\$paths = @\(\$paths \| Where-Object \{ \$why = Get-DeleteBlock \$_; if \(-not \$why -and \(IsLink \$_\)\)')
+    # found.000 只认三位编号，而且要确认
+    $fl = @($lib | Where-Object { $_.N -like '*found.000*' })[0]
+    Check 'chkdsk leftovers match found.??? only and need confirmation' ($fl -and $fl.Confirm -and $fl.Whole -and @($fl.Paths | Where-Object { $_ -match 'found\.\?\?\?$' }).Count -eq 1)
+    # 一键清理不碰「需确认」和自己加的
+    Check 'one-click cleanup never selects needs-confirmation or custom items' ($src -match "StartsWith\('需确认'\) -or \`$it\.Custom\) \{ \`$want = \(T '跳过'\) \}")
+    # 行和后台的项对不上就不动
+    Check 'item fingerprints tell two custom folders with the same name apart' ((Get-ItemSig @{ N = 'cache'; Paths = @('D:\a\cache') }) -ne (Get-ItemSig @{ N = 'cache'; Paths = @('E:\b\cache') }))
+    Check 'the run worker compares each item fingerprint before acting' ($src -match '\(Get-ItemSig \$it\) -ne \$p\.Sig')
+    Check 'editing the cleanup list voids the old scan rows' ($src -match '(?s)function Save-CleanList.*?\$script:rows = \$null')
+    # Hyper-V：有检查点的磁盘不压缩
+    $vd = Join-Path $T 'vd'; New-Item -ItemType Directory -Force -Path $vd | Out-Null
+    foreach ($n in 'base.vhdx', 'base_6B1F2C.avhdx', 'solo.vhdx') { [IO.File]::WriteAllText((Join-Path $vd $n), 'x') }
+    Check 'Hyper-V: a disk with a checkpoint is never compacted, a lone disk can be' ((Test-HasCheckpoint (Join-Path $vd 'base.vhdx')) -and (Test-HasCheckpoint (Join-Path $vd 'base_6B1F2C.avhdx')) -and -not (Test-HasCheckpoint (Join-Path $vd 'solo.vhdx')))
+    $vres = @{}; Invoke-CompactVdisk (Join-Path $vd 'base.vhdx') 'hyperv' $vres
+    Check 'Invoke-CompactVdisk refuses a disk with a checkpoint before calling diskpart' (-not $vres.Ok -and $vres.Out -and $vres.After -eq $vres.Before)
+    # 商店版聊天软件的数据在空间地图里也只看不删
+    Check 'Microsoft Store chat apps are locked in the space map' ($src -match "'\*WhatsAppDesktop\*', 'MSTeams\*'")
+    # 搬回 C 盘后，目标盘上的那份只有是本工具搬过去的才删
+    $mr = Join-Path $T 'CDriveMoved'; New-Item -ItemType Directory -Force -Path (Join-Path $mr 'Tencent') | Out-Null
+    Set-Setting 'MoveRoots' $mr
+    try {
+        Check 'move-back deletes the far copy only inside a ClearC move root, never a folder the user linked by hand' ((Test-OurMoveCopy 'C:\Users\me\AppData\Roaming\Tencent' (Join-Path $mr 'Tencent')) -and -not (Test-OurMoveCopy 'C:\Users\me\Documents\xwechat_files' (Join-Path $T 'WeChat')))
+    } finally { Set-Setting 'MoveRoots' '' }
+    Check 'move-back asks Test-OurMoveCopy before deleting the far copy' ($engineText -match '(?s)if \(-not \(Test-OurMoveCopy \$src \$dst\)\).{0,600}rd /s /q')
+    # 相似照片：根重叠、根是链接时，每张照片只列一次（否则勾掉一份就是唯一一份）
+    if ($win) {
+        $photoCode = [regex]::Match($src, "(?s)\`$script:photoCode = @'\r?\n(.*?)\r?\n'@").Groups[1].Value
+        if (-not ('PhotoHash' -as [type])) { Add-Type -TypeDefinition $photoCode -ReferencedAssemblies PresentationCore, WindowsBase, System.Xaml }
+        $ph = Join-Path $T 'photos'; New-Item -ItemType Directory -Force -Path (Join-Path $ph 'sub') | Out-Null
+        foreach ($n in 'a.jpg', 'sub\b.jpg') { [IO.File]::WriteAllBytes((Join-Path $ph $n), (New-Object byte[] 20000)) }
+        $phl = Join-Path $T 'photos-link'; New-Item -ItemType Junction -Path $phl -Target $ph | Out-Null
+        $pitems = @([PhotoHash]::Scan([string[]]@($ph, (Join-Path $ph 'sub'), $phl), 1, 0, 1000))
+        $ppaths = @($pitems | ForEach-Object { $_.Path })
+        Check ("similar photos: overlapping and linked roots list each photo once ({0})" -f $ppaths.Count) ($ppaths.Count -eq 2 -and @($ppaths | Select-Object -Unique).Count -eq 2)
+    } else { Skip 'similar photo root dedup' }
     # ============ 8. 源码锁：改坏了就报 ============
     Check 'recycle bin: SHFileOperation asks when a file is too big instead of nuking it (ALLOWUNDO|NOCONFIRMATION|WANTNUKEWARNING)' (([regex]::Matches($dupCode, '0x40 \| 0x10 \| 0x4000')).Count -ge 2)
     Check 'restore points are never deleted (no vssadmin delete / Win32_ShadowCopy.Delete / Remove-ComputerRestorePoint)' ($src -notmatch '(?i)vssadmin\s+delete|Remove-ComputerRestorePoint|Disable-ComputerRestore|ShadowCopy[^\r\n]*\.Delete\(')

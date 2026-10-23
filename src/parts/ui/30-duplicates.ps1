@@ -563,6 +563,8 @@ foreach ($p in $arg.Plan) {
     try {
         if ($fi.Attributes -band [IO.FileAttributes]::ReadOnly) { $fi.Attributes = $fi.Attributes -bxor [IO.FileAttributes]::ReadOnly }
         if ($arg.Recycle) {
+            $why = Test-RecycleOk $p.Path ([double]$p.Size)
+            if ($why) { throw ((T "没有删：{0}") -f $why) }
             $rc = [FsTools]::Recycle($p.Path, [long]$sync.Hwnd)
             if (Test-Path -LiteralPath $p.Path) { throw ((T "没能放进回收站（代码 {0}）：可能回收站放不下或被禁用，这个文件没有删") -f $rc) }
         } else {

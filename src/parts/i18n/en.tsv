@@ -156,6 +156,27 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+磁盘检查（chkdsk）修复时从损坏的文件里抢救出来的碎片，一般都没用；偶尔能从里面找回丢失的文件，删之前可以先打开看看	Fragments that a disk check (chkdsk) recovered from damaged files. Usually useless; occasionally a lost file can be recovered from them, so take a look before deleting
+已搬回 C 盘。{0} 不是本工具搬过去的（或者还有别的地方链接着它），没有删；确认不需要的话可以自己删	Moved back to C:. {0} was not moved there by ClearC (or another location still links to it), so it was not deleted; delete it yourself if you no longer need it
+搬回后保留目标盘上的文件夹	Kept the folder on the target drive after moving back
+  跳过（是链接，不跟进去删）：{0}	  skipped (it is a link; not followed): {0}
+是链接	it is a link
+  跳过（{0}）：{1}	  skipped ({0}): {1}
+这块磁盘有检查点（.avhdx），压缩它会让检查点失效，所以不能在这里压缩。先在 Hyper-V 里删除或合并检查点	This disk has checkpoints (.avhdx); compacting it would invalidate them, so it can't be compacted here. Delete or merge the checkpoints in Hyper-V first
+这块磁盘有检查点（.avhdx），压缩它会让检查点失效，没有压缩	This disk has checkpoints (.avhdx); compacting it would invalidate them, so it was not compacted
+没有删	Not deleted
+{0}\n\n{1}。这个文件夹只能放进回收站，所以没有删。	{0}\n\n{1}. This folder can only go to the Recycle Bin, so it was not deleted.
+这个位置没有回收站（网络位置、U 盘或光盘），放进回收站会变成永久删除	This location has no Recycle Bin (network location, USB stick or disc); "move to Recycle Bin" would delete permanently
+组策略关掉了回收站，放进回收站会变成永久删除	The Recycle Bin is turned off by policy; "move to Recycle Bin" would delete permanently
+这块盘的回收站设成了「不移到回收站，直接删除」	The Recycle Bin of this drive is set to "Don't move files to the Recycle Bin, remove files immediately"
+比这块盘的回收站容量（{0}）还大，放进回收站会变成永久删除	Larger than the Recycle Bin of this drive ({0}); "move to Recycle Bin" would delete permanently
+  有 {0} 项没能放进回收站（错误 {1}），这些没有删	  {0} items could not be moved to the Recycle Bin (error {1}); they were not deleted
+  没删（{0}）：{1}	  not deleted ({0}): {1}
+  另有 {0} 项因为放不进回收站没有删	  {0} more items were not deleted because they could not go to the Recycle Bin
+列表在扫描后变了，没有处理，请重新扫描	The list changed after the scan; not processed. Please scan again
+没有删：{0}	Not deleted: {0}
+{0}：{1}。要删的话选「永久删除」	{0}: {1}. To delete it, choose "Delete permanently"
+软件残留：没删（{0}）	App leftovers: not deleted ({0})
   C:\\Windows.old 本身是链接，不删	  C:\\Windows.old is itself a link; not deleted
   先拆掉了 Windows.old 里的 {0} 个链接（它们指向现在系统的文件夹，不能跟进去删）	  Removed {0} links inside Windows.old first (they point at folders of the current system and must not be followed)
   这一轮刚把文件放进回收站，不清空回收站（下次再清）	  Files were just moved to the Recycle Bin in this run, so it is not emptied (next time)

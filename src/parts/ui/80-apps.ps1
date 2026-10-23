@@ -247,6 +247,8 @@ foreach ($x in $arg.Items) {
     $i++
     SetP @{ Steps = $arg.Items.Count; Step = $i; StepName = $x.Path; SubKind = 'none' }
     if (Get-DeleteBlock $x.Path -Leftover) { continue }
+    $why = Test-RecycleOk $x.Path ([double]$x.Bytes)
+    if ($why) { OpLog '删除' ((T "软件残留：没删（{0}）") -f $why) $x.Path ''; Log ((T "  没删（{0}）：{1}") -f $why, $x.Path); continue }
     [void][FsTools]::Recycle($x.Path, [long]$sync.Hwnd)
     $ok = -not (Test-Path -LiteralPath $x.Path)
     if ($ok) { $n++ }
@@ -392,6 +394,8 @@ $ctl.StartList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::Click
             -Confirm (T '我看过了，这是已卸载软件留下的，删除不会给我带来损失。') -Buttons @((T '先不删'), (T '移到回收站')) -Primary (T '移到回收站') -Cancel (T '先不删')
         if ($ans -ne (T '移到回收站')) { return }
         if (Get-DeleteBlock $r.Detail -Leftover) { Show-Sheet -Kind warn -Title (T '不能删') -Text (Get-DeleteBlock $r.Detail -Leftover) | Out-Null; return }
+        $why = Test-RecycleOk $r.Detail ([double][FsTools]::OnDiskTree($r.Detail))
+        if ($why) { Show-Sheet -Kind warn -Title (T '没有删') -Text ((T "{0}`n`n{1}。这个文件夹只能放进回收站，所以没有删。") -f $r.Detail, $why) | Out-Null; return }
         [void][FsTools]::Recycle($r.Detail, [long]$sync.Hwnd)
         $gone = -not (Test-Path -LiteralPath $r.Detail)
         OpLog '删除' (T '残留文件夹：移到回收站') $r.Detail $(if ($gone) { $r.Size } else { (T '没删掉，可能被占用') })
