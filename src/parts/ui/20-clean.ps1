@@ -266,7 +266,7 @@ function Update-CleanSummary {
 }
 
 function Do-Scan([switch]$Quiet) {
-    $ctl.Summary.Text = (T '正在扫描，大目录可能要一两分钟…')
+    $ctl.Summary.Text = (T '正在扫描，一般几秒钟…')
     if (-not $script:rows) { $ctl.EmptyCleanText.Text = (T '正在扫描…') }
     $script:prevSizes = $sync.Sizes   # 扫描中途取消时，列表还用上一次的结果
     $sync.Mode = 'scan'; $sync.Sizes = $null

@@ -156,6 +156,9 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+正在扫描，一般几秒钟…	Scanning, usually a few seconds…
+正在读取硬件、事件日志和转储文件，要几秒…	Reading hardware, event logs and dump files, this takes a few seconds…
+正在找已卸载软件可能留下的文件夹…	Looking for folders left behind by uninstalled apps…
 {0:N0} 个文件，用时 {1:N1} 秒	{0:N0} files in {1:N1} s
 空闲时在后台读了 C 盘的文件表：	Read the file table of C: in the background while idle: 
   没能同时做几件事，改成一件一件做（{0}）	  Could not run these side by side, doing them one by one ({0})
