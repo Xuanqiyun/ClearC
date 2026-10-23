@@ -11,7 +11,7 @@ function Log($m) { if ($sync -and $sync.Log) { $sync.Log.Enqueue($m) } else { Wr
 # 向界面报告进度（界面每 0.3 秒读一次）
 function SetP([hashtable]$h) { if ($sync -and $sync.P) { foreach ($k in $h.Keys) { $sync.P[$k] = $h[$k] } } }
 $sys32 = "$env:SystemRoot\System32"
-$script:AppBuilt = [DateTime]'2026-10-23'   # 这一版的发布日期（发版时改）：系统时间比它还早，时钟肯定不对
+$script:AppBuilt = [DateTime]'2026-10-24'   # 这一版的发布日期（发版时改）：系统时间比它还早，时钟肯定不对
 function GB($b) { "{0:N2} GB" -f ([double]$b / 1GB) }
 function FreeC { (Get-PSDrive C).Free }
 function DirBytes($p) { [double][DirStat]::Measure([string]$p) }

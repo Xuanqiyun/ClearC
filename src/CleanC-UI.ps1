@@ -6,7 +6,7 @@
 param()
 
 $ErrorActionPreference = 'SilentlyContinue'
-$script:AppVersion = '3.5'
+$script:AppVersion = '3.5.1'
 $script:AppBuildStamp = ''   # 构建 exe 时由 build 脚本填上构建时间（UTC）：写进诊断信息和运行记录，反馈问题时好对上是哪一次构建的
 $script:startClock = [Diagnostics.Stopwatch]::StartNew()   # 记下启动各阶段用了多久，写进运行记录
 
@@ -3507,7 +3507,7 @@ function Log($m) { if ($sync -and $sync.Log) { $sync.Log.Enqueue($m) } else { Wr
 # 向界面报告进度（界面每 0.3 秒读一次）
 function SetP([hashtable]$h) { if ($sync -and $sync.P) { foreach ($k in $h.Keys) { $sync.P[$k] = $h[$k] } } }
 $sys32 = "$env:SystemRoot\System32"
-$script:AppBuilt = [DateTime]'2026-10-23'   # 这一版的发布日期（发版时改）：系统时间比它还早，时钟肯定不对
+$script:AppBuilt = [DateTime]'2026-10-24'   # 这一版的发布日期（发版时改）：系统时间比它还早，时钟肯定不对
 function GB($b) { "{0:N2} GB" -f ([double]$b / 1GB) }
 function FreeC { (Get-PSDrive C).Free }
 function DirBytes($p) { [double][DirStat]::Measure([string]$p) }
@@ -7022,6 +7022,31 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+决定界面上有多少功能。换模式不会丢任何设置和记录。	Decides how many features the window shows. Switching keeps all settings and records.
+跟随系统时照 Windows 的「选择应用模式」。更改后本工具会重新打开。	Follow Windows uses its "Choose your app mode" setting. ClearC reopens after a change.
+更改后本工具会重新打开。	ClearC reopens after a change.
+「清理 C 盘」「空间地图」「帮助」和「设置」一直显示。关掉的页面只是不在左边列出，设置和记录都照旧。	"Clean up C:", "Space map", "Help" and "Settings" always show. Hidden pages only leave the sidebar; their settings and records stay.
+外观和语言在这一页上面也能改；「使用反馈」和「运行记录」在帮助里也有。	Appearance and language can also be changed at the top of this page; Feedback and the Run log are also in Help.
+每一页标题下面那行灰色的说明。关掉后列表能多显示几行。	The grey line under each page title. Turn it off to see a few more rows.
+每一行前面显示一个复选框，点方框才选中，按 Esc 全部取消。关掉就照 Windows 原来的做法：单击选中，按住 Ctrl 或 Shift 多选。都可以按住鼠标上下拖，一次选中连着的几行。	Shows a check box in front of each row: only clicking the box selects it, and Esc clears all. Turned off, rows work the Windows way: click to select, hold Ctrl or Shift for more. Either way, drag with the mouse to select a run of rows.
+名字右边的蓝色横条，表示占了多少。	The blue bar next to the name, showing how much it takes.
+快速扫描时注明压缩、稀疏和只在云端的文件实际占多少，以及硬链接（删了也不腾空间）。	With the fast scan, shows what compressed, sparse and cloud-only files really take, and hard links (deleting them frees nothing).
+页面上方每块盘一张卡片：用量、健康状态，固态硬盘还有温度和磨损。	A card for each drive at the top: usage and health, plus temperature and wear for SSDs.
+只是不在空间地图上显示这个开关；快速扫描本身在「扫描和查重」里开关。	Only hides the switch on the space map; the fast scan itself is under "Scanning and duplicates".
+直接读 NTFS 的文件表，比逐个文件夹查看快得多。少数安全软件会提示，可以关掉。	Reads the NTFS file table directly, much faster than going folder by folder. A few security programs warn about it; you can turn it off.
+读文件时用 Windows 的后台模式，不拖慢正在用的程序。同时做别的事时会查得慢一些。	Reads files in Windows' background mode so it doesn't slow down what you are using. It is slower while you do other things.
+手动清理删掉的文件先放进回收站，删错了能恢复。放不进回收站的不删。定期自动清理不受影响。	Files deleted by a manual cleanup go to the Recycle Bin first, so mistakes can be undone. Anything that can't go there is not deleted. Scheduled cleanup is not affected.
+清理时删掉这些文件夹里的东西，文件夹本身保留。个人文件夹、系统文件夹和软件的安装文件夹加不进来。	Cleanup deletes the contents of these folders and keeps the folders. Personal, system and app installation folders can't be added.
+清理时一律不碰这些文件夹，估算大小时也不算。	Cleanup never touches these folders, and they are left out of size estimates.
+一键清理缓存和临时文件，或者先扫描，再逐项选择。	Clean caches and temporary files in one go, or scan first and choose item by item.
+找出内容完全相同的文件，每组留一份。	Find files with identical content and keep one copy of each.
+看清每个文件夹和文件占了多少空间。	See how much space every folder and file takes.
+不删文件也能腾出空间：压缩，或者换个位置放。	Free up space without deleting anything: compress, or keep things elsewhere.
+看软件占了多少，卸载、清残留，或者搬到其他盘。	See what your apps take; uninstall them, clean up leftovers or move them to another drive.
+把聊天记录、软件和大文件夹搬到其他盘，软件照常使用。	Move chat history, apps and large folders to another drive; the apps keep working.
+C 盘快满时提醒你，定期自动清理缓存。默认都关着。	A warning when C: is nearly full, and scheduled cache cleanup. Both are off by default.
+每一次删除、搬家和设置改动都记在这里。	Every delete, move and settings change is recorded here.
+外观、语言，以及界面上显示什么。	Appearance, language and what the window shows.
   {0}：等了一分半钟系统还没回答，这次先不列（下次扫描再问）	  {0}: Windows had not answered after a minute and a half; left out this time (asked again on the next scan)
 读取 {0} 盘的文件表	Reading the file table of {0}
 {0} 个查找位置从文件表里列出文件（不用逐个文件夹去看）	{0} search locations were listed from the file table (no need to go through every folder)
@@ -9393,7 +9418,7 @@ $script:helpEnXaml = @'
       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
       <StackPanel Grid.Row="0" Margin="0,0,0,16">
         <TextBlock Text="Help" Style="{StaticResource PageTitle}"/>
-        <TextBlock Style="{StaticResource PageSub}" Text="How to use ClearC, the safety notice, and how to report problems."/>
+        <TextBlock Style="{StaticResource PageSub}" Text="How to use ClearC, what it never touches, and how to report problems."/>
       </StackPanel>
       <Grid Grid.Row="1">
         <Grid.ColumnDefinitions><ColumnDefinition Width="214"/><ColumnDefinition Width="*" MaxWidth="900"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
@@ -9424,69 +9449,69 @@ $script:helpEnXaml = @'
         <ScrollViewer x:Name="HelpScroll" Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
           <StackPanel Margin="0,0,6,14">
             <StackPanel x:Name="HelpPaneStart">
-              <Border x:Name="RiskCard" Background="#FFF6F6" BorderBrush="#F3C4C8" BorderThickness="1" CornerRadius="12" Padding="24,20,24,20" Margin="0">
+              <Border x:Name="RiskCard" Background="#FFF6F6" BorderBrush="#F3C4C8" BorderThickness="1" CornerRadius="14" Padding="32,28,32,30" Margin="0">
                 <DockPanel>
-                  <TextBlock DockPanel.Dock="Left" Text="&#xE7BA;" FontFamily="{StaticResource Icons}" FontSize="20" Foreground="#D70015" VerticalAlignment="Top" Margin="0,1,14,0"/>
+                  <TextBlock DockPanel.Dock="Left" Text="&#xE7BA;" FontFamily="{StaticResource Icons}" FontSize="20" Foreground="#D70015" VerticalAlignment="Top" Margin="0,3,16,0"/>
                   <StackPanel>
                     <TextBlock Text="Safety notice" Style="{StaticResource HelpHead}" Foreground="#A1000F"/>
-                    <DockPanel Margin="0,8,0,0">
-                      <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                    <DockPanel Margin="0,10,0,0">
+                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
                       <TextBlock Style="{StaticResource HelpPara}"><Run>Deleting removes files from your PC. Files that aren't moved to the Recycle Bin usually can't be recovered after deletion, which may lead to data loss.</Run></TextBlock>
                     </DockPanel>
-                    <DockPanel Margin="0,8,0,0">
-                      <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                    <DockPanel Margin="0,10,0,0">
+                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
                       <TextBlock Style="{StaticResource HelpPara}"><Run>Before each deletion, make sure you really no longer need these files and that deleting them won't cause you any loss. Back up important files first.</Run></TextBlock>
                     </DockPanel>
-                    <DockPanel Margin="0,8,0,0">
-                      <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                    <DockPanel Margin="0,10,0,0">
+                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
                       <TextBlock Style="{StaticResource HelpPara}"><Run>ClearC only does what you choose. For any data loss or other damage caused by deleting or moving files with ClearC, </Run><Run FontWeight="SemiBold" Foreground="#A1000F">you are solely responsible; the developer accepts no liability</Run><Run>.</Run></TextBlock>
                     </DockPanel>
-                    <DockPanel Margin="0,8,0,0">
-                      <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                    <DockPanel Margin="0,10,0,0">
+                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
                       <TextBlock Style="{StaticResource HelpPara}"><Run>By continuing to use ClearC, you confirm that you understand and accept these risks.</Run></TextBlock>
                     </DockPanel>
                   </StackPanel>
                 </DockPanel>
               </Border>
-              <Border Style="{StaticResource Card}" Padding="22,18,22,22" Margin="0,16,0,0">
+              <Border Style="{StaticResource Card}" Padding="36,30,36,36" Margin="0,20,0,0">
                 <StackPanel>
-                  <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE768;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/><TextBlock Text="Getting started" Style="{StaticResource HelpHead}"/></StackPanel>
-                  <Grid Margin="0,14,0,0">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="10"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                  <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE768;" FontFamily="{StaticResource Icons}" FontSize="19" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,1,12,0"/><TextBlock Text="Getting started" Style="{StaticResource HelpHead}"/></StackPanel>
+                  <Grid Margin="0,20,0,0">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                     <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource HelpTile}">
                       <DockPanel>
-                        <Border DockPanel.Dock="Left" Width="22" Height="22" CornerRadius="11" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,11,0"><TextBlock Text="1" Foreground="White" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                        <Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0"><TextBlock Text="1" Foreground="White" FontSize="12.5" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                         <StackPanel>
-                          <TextBlock Style="{StaticResource HelpLead}" Text="One-click cleanup" Margin="0,2,0,0"/>
-                          <TextBlock Style="{StaticResource HelpBody}"><Run>On the "Clean up C:" page, click "One-click cleanup". ClearC scans first, then handles the items selected by default: it deletes caches, temporary files and logs, and moves chat history from WeChat, QQ and similar apps to the other drive with the most free space. Before it starts, it lists every item for you to confirm.</Run></TextBlock>
+                          <TextBlock Style="{StaticResource HelpLead}" Text="One-click cleanup" Margin="0,1,0,0"/>
+                          <TextBlock Style="{StaticResource HelpBody}"><Run>On "Clean up C:", click "One-click cleanup": caches and temporary files are deleted and chat history moves to the drive with the most free space. Everything is listed for you to confirm first.</Run></TextBlock>
                         </StackPanel>
                       </DockPanel>
                     </Border>
                     <Border Grid.Row="0" Grid.Column="2" Style="{StaticResource HelpTile}">
                       <DockPanel>
-                        <Border DockPanel.Dock="Left" Width="22" Height="22" CornerRadius="11" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,11,0"><TextBlock Text="2" Foreground="White" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                        <Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0"><TextBlock Text="2" Foreground="White" FontSize="12.5" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                         <StackPanel>
-                          <TextBlock Style="{StaticResource HelpLead}" Text="Choose for yourself" Margin="0,2,0,0"/>
-                          <TextBlock Style="{StaticResource HelpBody}"><Run>Click "Scan" first, choose "Delete", "Move to another drive" or "Skip" on each row, then click "Run selected" at the bottom right.</Run></TextBlock>
+                          <TextBlock Style="{StaticResource HelpLead}" Text="Choose for yourself" Margin="0,1,0,0"/>
+                          <TextBlock Style="{StaticResource HelpBody}"><Run>Click "Scan", choose "Delete", "Move to another drive" or "Skip" on each row, then click "Run selected".</Run></TextBlock>
                         </StackPanel>
                       </DockPanel>
                     </Border>
                     <Border Grid.Row="2" Grid.Column="0" Style="{StaticResource HelpTile}">
                       <DockPanel>
-                        <Border DockPanel.Dock="Left" Width="22" Height="22" CornerRadius="11" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,11,0"><TextBlock Text="3" Foreground="White" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                        <Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0"><TextBlock Text="3" Foreground="White" FontSize="12.5" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                         <StackPanel>
-                          <TextBlock Style="{StaticResource HelpLead}" Text="Find duplicates" Margin="0,2,0,0"/>
-                          <TextBlock Style="{StaticResource HelpBody}"><Run>Switch to "Duplicates" on the left, choose the locations and criteria, then click "Start search". After checking the selection, click "Delete checked files".</Run></TextBlock>
+                          <TextBlock Style="{StaticResource HelpLead}" Text="Find duplicates" Margin="0,1,0,0"/>
+                          <TextBlock Style="{StaticResource HelpBody}"><Run>In "Duplicates", choose where to look, click "Start search", check the results and delete the checked files.</Run></TextBlock>
                         </StackPanel>
                       </DockPanel>
                     </Border>
                     <Border Grid.Row="2" Grid.Column="2" Style="{StaticResource HelpTile}">
                       <DockPanel>
-                        <Border DockPanel.Dock="Left" Width="22" Height="22" CornerRadius="11" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,11,0"><TextBlock Text="4" Foreground="White" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                        <Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0"><TextBlock Text="4" Foreground="White" FontSize="12.5" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                         <StackPanel>
-                          <TextBlock Style="{StaticResource HelpLead}" Text="See what takes space" Margin="0,2,0,0"/>
-                          <TextBlock Style="{StaticResource HelpBody}"><Run>Switch to "Space map" on the left, choose C: and click "Scan", then double-click folders to look inside, level by level.</Run></TextBlock>
+                          <TextBlock Style="{StaticResource HelpLead}" Text="See what takes space" Margin="0,1,0,0"/>
+                          <TextBlock Style="{StaticResource HelpBody}"><Run>In "Space map", scan a drive and double-click folders to look inside, level by level.</Run></TextBlock>
                         </StackPanel>
                       </DockPanel>
                     </Border>
@@ -9495,856 +9520,628 @@ $script:helpEnXaml = @'
               </Border>
             </StackPanel>
             <StackPanel x:Name="HelpSections">
-              <Border x:Name="HelpSec0" Style="{StaticResource Card}" Padding="24,20,24,24" Visibility="Collapsed">
+              <Border x:Name="HelpSec0" Style="{StaticResource Card}" Padding="36,30,36,36" Visibility="Collapsed">
                 <StackPanel>
                   <DockPanel>
-                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xEDA2;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xEDA2;" FontFamily="{StaticResource Icons}" FontSize="20" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                     <StackPanel VerticalAlignment="Center">
                       <TextBlock Text="Clean up C:" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
-                      <TextBlock Text="Delete caches and temporary files; move chat history to another drive as a whole" Style="{StaticResource HelpSum}"/>
+                      <TextBlock Text="Delete caches and temporary files, and move chat history to another drive" Style="{StaticResource HelpSum}"/>
                     </StackPanel>
                   </DockPanel>
-                  <Border Height="1" Background="#EDEDF0" Margin="0,16,0,2"/>
-                  <DockPanel Margin="0,16,0,0"><TextBlock DockPanel.Dock="Left" Text="What the list holds" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
-                  <Grid Margin="0,10,0,0">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="180"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                  <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
+                  <TextBlock Text="Scan results" Style="{StaticResource HelpGroup}" Margin="0,22,0,0"/>
+                  <Grid Margin="0,14,0,0">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="140"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                    <Border Grid.Row="0" Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="Safe to clean" FontSize="12.5" Foreground="#1D7A35" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>Caches, temporary files and logs, which apps rebuild automatically.</Run></TextBlock>
-                    <Border Grid.Row="1" Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="Careful cleanup" FontSize="12.5" Foreground="#995700" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>Browser caches, thumbnails, shader caches and download caches: downloaded or generated again after deletion, so the first start is slower. Cleaned by default, but in their own group and listed separately before running.</Run></TextBlock>
-                    <Border Grid.Row="2" Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="Needs confirmation" FontSize="12.5" Foreground="#995700" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>Items that come at a cost. They are skipped by default; read the description before selecting them. For example, after deleting Windows.old you can't go back to your previous version of Windows, and after emptying the Recycle Bin you can't get back files you deleted earlier.</Run></TextBlock>
-                    <Border Grid.Row="3" Style="{StaticResource HelpPill}" Background="#E8F1FC"><TextBlock Text="Move only" FontSize="12.5" Foreground="#0B5CAD" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="3" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>"Chat history" and "Other movable folders": this data can't be deleted, only moved as a whole to another drive.</Run></TextBlock>
-                    <Border Grid.Row="4" Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="Protected" FontSize="12.5" Foreground="#1D7A35" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="4" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Personal folders, system folders, app installation folders and data in use: no cleanup touches them, and a wrong selection is skipped automatically.</Run></TextBlock>
+                    <Border Grid.Row="0" Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="Safe to clean" FontSize="13" Foreground="#1D7A35" TextWrapping="Wrap"/></Border>
+                    <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,16"><Run>Caches, temporary files and logs. Apps rebuild them automatically.</Run></TextBlock>
+                    <Border Grid.Row="1" Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="Careful cleanup" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border>
+                    <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,16"><Run>Browser caches, thumbnails, shader and download caches. They are generated again, so the first start is a little slower.</Run></TextBlock>
+                    <Border Grid.Row="2" Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="Needs confirmation" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border>
+                    <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,16"><Run>Items that come at a cost, skipped by default. After deleting Windows.old, for example, you can no longer go back to the previous Windows.</Run></TextBlock>
+                    <Border Grid.Row="3" Style="{StaticResource HelpPill}" Background="#E8F1FC"><TextBlock Text="Move only" FontSize="13" Foreground="#0B5CAD" TextWrapping="Wrap"/></Border>
+                    <TextBlock Grid.Row="3" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,16"><Run>Chat history and other large folders. They can't be deleted, only moved to another drive as a whole.</Run></TextBlock>
+                    <Border Grid.Row="4" Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="Protected" FontSize="13" Foreground="#1D7A35" TextWrapping="Wrap"/></Border>
+                    <TextBlock Grid.Row="4" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Personal folders, system folders and app installation folders are never touched.</Run></TextBlock>
                   </Grid>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="File list before deleting"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Click "View file list" in the confirmation: which files and folders the current selection deletes. The largest 60 are shown; the full list is saved as a text file you can open.</Run></TextBlock>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="See the list before deleting"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>When you confirm, click "View file list" to see which files will be deleted; the full list can be saved as a text file.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Recoverable deletion"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Turn on "Recycle Bin first" under Settings → Cleanup list: files deleted by a manual cleanup go to the Recycle Bin, so a mistake can be undone. Slower, and the Recycle Bin grows. Anything that can't go to the Recycle Bin (a network location, a USB stick, a Recycle Bin that is turned off, or an item larger than that drive's Recycle Bin) is not deleted, and the log says why; it never silently becomes a permanent delete. When the Recycle Bin is full, new items push out older ones (that is how Windows works). Scheduled cleanup is not affected.</Run></TextBlock>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="Recycle Bin first"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Turn this on under "Cleanup list" in Settings and files deleted by a manual cleanup go to the Recycle Bin, so mistakes can be undone. Anything that can't go there is not deleted, and the log says why.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Cleanup audit"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Every item is in the operation log: what was deleted, free space on C: before and after, whether it went to the Recycle Bin, and what was not deleted and why.</Run></TextBlock>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="Open the location"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Double-click a row to open its folder; right-click to copy the path.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Open the folder"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>After a scan, double-click any row to open its folder in File Explorer, handy for copying logs, dumps and similar files out for analysis; right-click for "Open all locations" (when an item has several) or "Copy path". Items handled by system commands (Recycle Bin, Delivery Optimization cache, search index, Installer, driver store, event logs, WinSxS) open the place where Windows keeps them. This only opens and looks; nothing is changed.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Easy to see after a scan"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>The top of the list shows how many items were found and how many groups they fall into. A row of tabs below (Safe to clean, Careful cleanup, Needs confirmation, Other movable folders and so on) shows one group at a time, with its item count on the tab. Scroll down and the tabs stop at the top edge while the list keeps scrolling, so switching groups needs no scrolling back. "Run selected" handles every group, not only the one you are looking at.</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Click "Name" in the header to sort by name or "Size" to sort largest first; click again to reverse, and a third time to go back to the original order (by how safe each item is).</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>The drop-down on the right of the header shows only items with one action, for example only the ones to delete or only the skipped ones; the sort order stays as it is.</Run></TextBlock></DockPanel>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Why the scan is quick"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Folder sizes come straight from the file table (MFT) of C: instead of counting folder by folder; a few seconds after ClearC opens, while it is idle, the file table is read in the background, and later scans only re-read what changed. The items that need Windows to answer (orphaned installer packages, old driver packages, Delivery Optimization cache, broken shortcuts) are asked at the same time. Only the items your mode lists are measured. A scan usually takes a few seconds.</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>The file table is only used to show sizes; when deleting, every item is checked and measured again.</Run></TextBlock></DockPanel>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Analyze usage"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Opens the "Space map" and scans drive C:, so you can see which folders and files take up the most space.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="Which caches are cleaned"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Dozens: Windows' own temporary files, update cache, crash dumps and logs; the web cache of Chrome, Edge, Firefox, Brave, 360, QQ and other browsers; graphics shader caches; Steam and Epic caches; Adobe media cache; the caches of Teams, Discord, Slack, VS Code, Spotify, NetEase Cloud Music and more; and the download caches of pip, npm, NuGet, Go, Rust and other developer tools. Whatever is on your PC shows up after a scan.</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Only caches are deleted; cookies, history, passwords, settings and saved data are left alone.</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Items that are slow to download or regenerate (the NuGet global packages folder, Gradle, Maven, JetBrains indexes, Unreal Engine cache and so on) are under "Needs confirmation" and skipped by default.</Run></TextBlock></DockPanel>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Windows' temporary files, update cache and logs, the caches of common browsers, game launchers and apps, and the download caches of developer tools. Only caches: never cookies, history, passwords or settings.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Driver leftovers, broken shortcuts, event logs"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>All under "Needs confirmation" and skipped by default: installer files that graphics and OEM drivers unpack into the root of C:; Start menu shortcuts whose program no longer exists (the desktop is left alone); Windows event logs (engineers read them when investigating problems; skip if unsure).</Run></TextBlock>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="Items that need confirmation"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Windows.old, the Recycle Bin, orphaned Windows Installer packages, old driver packages, broken shortcuts, event logs and more. Skipped by default; read the description before selecting them.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Orphaned Windows Installer packages"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Under "Needs confirmation". Packages in C:\Windows\Installer that no installed app or patch refers to any more, often several GB, detected the same way PatchCleaner does. Skipped by default; read the description before selecting it.</Run></TextBlock>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="Your own folders"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Under "Cleanup list" in Settings, add folders to clean or to exclude. For added folders only the contents are deleted; the folder itself stays.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Your own folders and exclusions"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>On the "Settings" page under "Cleanup list" ("Custom items" at the top right of the page takes you there). Folders you add form their own group; their contents are deleted and the folders themselves kept. Excluded folders are never touched and not counted in the estimates.</Run></TextBlock>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="Quick scans"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Folder sizes are read straight from the file table of C:, so a scan usually takes a few seconds. When deleting, every item is checked again.</Run></TextBlock>
                   </StackPanel>
-                  <Border Background="#EFF8F1" BorderBrush="#CFE9D6" BorderThickness="1" CornerRadius="10" Padding="14,11,16,12" Margin="0,16,0,0">
+                  <Border Background="#EFF8F1" BorderBrush="#CFE9D6" BorderThickness="1" CornerRadius="12" Padding="18,16,22,17" Margin="0,26,0,0">
                     <DockPanel>
-                      <TextBlock DockPanel.Dock="Left" Text="&#xEA18;" FontFamily="{StaticResource Icons}" FontSize="15" Foreground="#248A3D" VerticalAlignment="Top" Margin="0,2,12,0"/>
+                      <TextBlock DockPanel.Dock="Left" Text="&#xEA18;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#248A3D" VerticalAlignment="Top" Margin="0,3,14,0"/>
                       <StackPanel>
-                        <TextBlock Style="{StaticResource HelpLead}" Text="Nothing in your personal folders is ever deleted"/>
-                        <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>Cleanup never deletes any file in your personal folders on C: (Desktop, Documents, Downloads, Pictures, Videos, Music, Favorites, OneDrive and so on); even if you select one by mistake, it is skipped automatically. Desktop and Downloads offer only "Move to another drive" (your files are kept as they are), and they are skipped by default.</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpLead}" Text="Nothing in your personal folders is deleted"/>
+                        <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>Desktop, Documents, Downloads, Pictures, Videos, Music, OneDrive and similar folders are always skipped.</Run></TextBlock>
                       </StackPanel>
                     </DockPanel>
                   </Border>
-                  <DockPanel Margin="0,26,0,0"><TextBlock DockPanel.Dock="Left" Text="Moving chat history" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
-                  <StackPanel Margin="0,10,0,0">
+                  <TextBlock Text="Moving chat history" Style="{StaticResource HelpGroup}" Margin="0,40,0,0"/>
+                  <StackPanel Margin="0,14,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="Supported apps"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>WeChat (new and old versions), QQ, WeCom, Tencent Meeting, Feishu and DingTalk, plus Telegram, Discord, Slack, Signal, LINE, Viber, KakaoTalk and Zoom. The scan lists whichever of these are installed on your PC.</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Apps installed from the Microsoft Store (such as WhatsApp and Microsoft Teams) are managed by Windows; use "Move" in Windows Settings → Apps to move them.</Run></TextBlock></DockPanel>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>WeChat, QQ, WeCom, Tencent Meeting, Feishu, DingTalk, Telegram, Discord, Slack, Signal, LINE, Viber, KakaoTalk and Zoom. For Store versions, use "Move" under Apps in Windows Settings.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Where to"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>The local drive with the most free space is chosen by default. You can pick a different drive from the drop-down list, or click "Choose folder…". Only local hard drives can be used; network drives, cloud drives and USB flash drives can't.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="How moving works"/>
-                    <WrapPanel Margin="0,8,0,0">
-                      <Border Style="{StaticResource HelpPill}" Background="#E8F1FC" Margin="0,0,0,6"><StackPanel Orientation="Horizontal"><TextBlock Text="1" FontSize="12.5" FontWeight="SemiBold" Foreground="#0B5CAD"/><TextBlock Text="Close the apps using it" FontSize="12.5" Foreground="#0B5CAD" Margin="6,0,0,0"/></StackPanel></Border>
-                      <TextBlock Text="&#xE76C;" FontFamily="{StaticResource Icons}" FontSize="10" Foreground="#86868B" VerticalAlignment="Center" Margin="8,0,8,6"/>
-                      <Border Style="{StaticResource HelpPill}" Background="#E8F1FC" Margin="0,0,0,6"><StackPanel Orientation="Horizontal"><TextBlock Text="2" FontSize="12.5" FontWeight="SemiBold" Foreground="#0B5CAD"/><TextBlock Text="Copy to the target drive" FontSize="12.5" Foreground="#0B5CAD" Margin="6,0,0,0"/></StackPanel></Border>
-                      <TextBlock Text="&#xE76C;" FontFamily="{StaticResource Icons}" FontSize="10" Foreground="#86868B" VerticalAlignment="Center" Margin="8,0,8,6"/>
-                      <Border Style="{StaticResource HelpPill}" Background="#E8F1FC" Margin="0,0,0,6"><StackPanel Orientation="Horizontal"><TextBlock Text="3" FontSize="12.5" FontWeight="SemiBold" Foreground="#0B5CAD"/><TextBlock Text="Verify both sides" FontSize="12.5" Foreground="#0B5CAD" Margin="6,0,0,0"/></StackPanel></Border>
-                      <TextBlock Text="&#xE76C;" FontFamily="{StaticResource Icons}" FontSize="10" Foreground="#86868B" VerticalAlignment="Center" Margin="8,0,8,6"/>
-                      <Border Style="{StaticResource HelpPill}" Background="#E8F1FC" Margin="0,0,0,6"><StackPanel Orientation="Horizontal"><TextBlock Text="4" FontSize="12.5" FontWeight="SemiBold" Foreground="#0B5CAD"/><TextBlock Text="Replace the original with a link" FontSize="12.5" Foreground="#0B5CAD" Margin="6,0,0,0"/></StackPanel></Border>
-                      <TextBlock Text="&#xE76C;" FontFamily="{StaticResource Icons}" FontSize="10" Foreground="#86868B" VerticalAlignment="Center" Margin="8,0,8,6"/>
-                      <Border Style="{StaticResource HelpPill}" Background="#E8F1FC" Margin="0,0,0,6"><StackPanel Orientation="Horizontal"><TextBlock Text="5" FontSize="12.5" FontWeight="SemiBold" Foreground="#0B5CAD"/><TextBlock Text="Delete the original folder on C:" FontSize="12.5" Foreground="#0B5CAD" Margin="6,0,0,0"/></StackPanel></Border>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="How a move works"/>
+                    <WrapPanel Margin="0,12,0,0">
+                      <Border Style="{StaticResource HelpPill}" Background="#E8F1FC" Margin="0,0,0,8"><StackPanel Orientation="Horizontal"><TextBlock Text="1" FontSize="13" FontWeight="SemiBold" Foreground="#0B5CAD"/><TextBlock Text="Close the app" FontSize="13" Foreground="#0B5CAD" Margin="7,0,0,0"/></StackPanel></Border>
+                      <TextBlock Text="&#xE76C;" FontFamily="{StaticResource Icons}" FontSize="10" Foreground="#8E8E93" VerticalAlignment="Center" Margin="8,0,8,8"/>
+                      <Border Style="{StaticResource HelpPill}" Background="#E8F1FC" Margin="0,0,0,8"><StackPanel Orientation="Horizontal"><TextBlock Text="2" FontSize="13" FontWeight="SemiBold" Foreground="#0B5CAD"/><TextBlock Text="Copy to the target drive" FontSize="13" Foreground="#0B5CAD" Margin="7,0,0,0"/></StackPanel></Border>
+                      <TextBlock Text="&#xE76C;" FontFamily="{StaticResource Icons}" FontSize="10" Foreground="#8E8E93" VerticalAlignment="Center" Margin="8,0,8,8"/>
+                      <Border Style="{StaticResource HelpPill}" Background="#E8F1FC" Margin="0,0,0,8"><StackPanel Orientation="Horizontal"><TextBlock Text="3" FontSize="13" FontWeight="SemiBold" Foreground="#0B5CAD"/><TextBlock Text="Verify" FontSize="13" Foreground="#0B5CAD" Margin="7,0,0,0"/></StackPanel></Border>
+                      <TextBlock Text="&#xE76C;" FontFamily="{StaticResource Icons}" FontSize="10" Foreground="#8E8E93" VerticalAlignment="Center" Margin="8,0,8,8"/>
+                      <Border Style="{StaticResource HelpPill}" Background="#E8F1FC" Margin="0,0,0,8"><StackPanel Orientation="Horizontal"><TextBlock Text="4" FontSize="13" FontWeight="SemiBold" Foreground="#0B5CAD"/><TextBlock Text="Replace with a link" FontSize="13" Foreground="#0B5CAD" Margin="7,0,0,0"/></StackPanel></Border>
+                      <TextBlock Text="&#xE76C;" FontFamily="{StaticResource Icons}" FontSize="10" Foreground="#8E8E93" VerticalAlignment="Center" Margin="8,0,8,8"/>
+                      <Border Style="{StaticResource HelpPill}" Background="#E8F1FC" Margin="0,0,0,8"><StackPanel Orientation="Horizontal"><TextBlock Text="5" FontSize="13" FontWeight="SemiBold" Foreground="#0B5CAD"/><TextBlock Text="Delete the original on C:" FontSize="13" Foreground="#0B5CAD" Margin="7,0,0,0"/></StackPanel></Border>
                     </WrapPanel>
-                    <TextBlock Style="{StaticResource HelpBody}" Margin="0,1,0,0"><Run>Afterwards only a link remains at the original location on C:, taking up almost no space. When an app opens the original path, Windows redirects reads and writes to the target drive, so the app notices no change and you don't need to change any settings.</Run></TextBlock>
+                    <TextBlock Style="{StaticResource HelpBody}" Margin="0,4,0,0"><Run>The app keeps reading and writing at the original location; no settings change. If the copy doesn't match, the original folder is not deleted.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Deleted only when nothing is missing"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>If the chat app is still open, you'll be asked to quit it first. After copying, ClearC verifies the number of files and their size on both sides again, and deletes the original folder on C: only if not a single file is missing.</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>If the original folder is still in use by another program, the copy already made is kept; quit the related apps and run the move again, and only changed files are copied, so it finishes quickly.</Run></TextBlock></DockPanel>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="Target drive"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>The local drive with the most free space is chosen; you can pick another drive or a folder. Network drives, cloud drives and USB sticks can't be used.</Run></TextBlock>
                   </StackPanel>
-                  <Border Background="#FFF8EC" BorderBrush="#F5E1BC" BorderThickness="1" CornerRadius="10" Padding="14,11,16,12" Margin="0,16,0,0">
+                  <Border Background="#FFF8EC" BorderBrush="#F5E1BC" BorderThickness="1" CornerRadius="12" Padding="18,16,22,17" Margin="0,26,0,0">
                     <DockPanel>
-                      <TextBlock DockPanel.Dock="Left" Text="&#xE7BA;" FontFamily="{StaticResource Icons}" FontSize="15" Foreground="#B25E00" VerticalAlignment="Top" Margin="0,2,12,0"/>
+                      <TextBlock DockPanel.Dock="Left" Text="&#xE7BA;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#B25E00" VerticalAlignment="Top" Margin="0,3,14,0"/>
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Leave the CDriveMoved folder on the target drive alone"/>
-                        <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>If you delete, rename or move it, WeChat, QQ and other apps won't be able to find their chat history and files.</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>If it is deleted, renamed or moved, the apps can no longer find their chat history.</Run></TextBlock>
                       </StackPanel>
                     </DockPanel>
                   </Border>
                 </StackPanel>
               </Border>
-              <Border x:Name="HelpSec1" Style="{StaticResource Card}" Padding="24,20,24,24" Visibility="Collapsed">
+              <Border x:Name="HelpSec1" Style="{StaticResource Card}" Padding="36,30,36,36" Visibility="Collapsed">
                 <StackPanel>
                   <DockPanel>
-                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE8C8;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE8C8;" FontFamily="{StaticResource Icons}" FontSize="20" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                     <StackPanel VerticalAlignment="Center">
                       <TextBlock Text="Duplicates" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
-                      <TextBlock Text="Find files with identical content; keep one copy and delete the rest" Style="{StaticResource HelpSum}"/>
+                      <TextBlock Text="Find files with identical content; keep one copy, delete the rest" Style="{StaticResource HelpSum}"/>
                     </StackPanel>
                   </DockPanel>
-                  <Border Height="1" Background="#EDEDF0" Margin="0,16,0,2"/>
-                  <DockPanel Margin="0,16,0,0"><TextBlock DockPanel.Dock="Left" Text="Search criteria" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
-                  <StackPanel Margin="0,10,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Tabs"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Search locations, file types, file size and what counts as a duplicate each have a tab that shows the current choice. When you click "Start search" the options fold away and only the row of tabs stays, so the results fill the page; click any tab to open it again, and click the open tab or "Hide" on the right to fold it.</Run></TextBlock>
+                  <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
+                  <TextBlock Text="Searching" Style="{StaticResource HelpGroup}" Margin="0,22,0,0"/>
+                  <StackPanel Margin="0,14,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="Locations and criteria"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Choose where to look, the file types and the size. System, app and development folders are skipped automatically.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Search locations"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Click a chip to select or deselect it. Use "Add folder…" to add your own locations; those with a small × can be removed. System folders, program folders and development environments are skipped automatically.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="File type and size"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Only the selected types and size range are searched; the narrower the range, the faster the search. Choose "Custom" to enter a size yourself.</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>On NTFS drives, when looking for files of 1 MB or more, the files are listed straight from the drive's file table (with the same rules as going through the folders), which is much faster on large drives.</Run></TextBlock></DockPanel>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="What counts as a duplicate"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>By default, both the file name and the content must match. With "Content only", files with different names but the same content also count. Either way, the content must be identical byte for byte.</Run></TextBlock>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>By default both the name and the content must match; with "Content only", names may differ. Content must match byte for byte.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Comparison method"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>"Quick" reads only samples of large files; "Full comparison" reads every file completely, which is slower but more thorough.</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>In Quick mode, files are still fully verified byte for byte before deletion, and nothing is deleted if there is any difference.</Run></TextBlock></DockPanel>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="Fast or full comparison"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>"Fast" samples large files and verifies them byte for byte before deleting; "Full comparison" reads every file completely.</Run></TextBlock>
                   </StackPanel>
-                  <DockPanel Margin="0,26,0,0"><TextBlock DockPanel.Dock="Left" Text="Results and deleting" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
-                  <StackPanel Margin="0,10,0,0">
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="Similar photos"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Choose "Similar photos" under "What counts as a duplicate": each picture is shrunk to a 9×8 grayscale thumbnail and turned into a 64-bit fingerprint; pictures within a few bits form a group. Different resolutions, recompressed and lightly cropped photos are recognised. Three levels: almost identical (4 bits), similar (8), roughly similar (12, which also groups bursts).</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Similar is not identical: each group is sorted by resolution and every photo shows its size and distance. Nothing is checked automatically; they can only go to the Recycle Bin or be archived, never deleted permanently or merged.</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Only jpg, png, bmp, gif, tif, webp and heic.</Run></TextBlock></DockPanel>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Finds photos that look the same, such as different resolutions or recompressed copies. Similar is not identical: nothing is checked automatically, and they can only go to the Recycle Bin or an archive.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <TextBlock Text="Handling the results" Style="{StaticResource HelpGroup}" Margin="0,40,0,0"/>
+                  <StackPanel Margin="0,14,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="Which copy to keep"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Each group lists all copies. By default the newest copy in each group is kept and the rest are selected; you can instead keep the oldest, prefer keeping copies outside C:, or select them yourself. "Open location" shows the file in File Explorer.</Run></TextBlock>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>By default the newest copy in each group is kept. You can also keep the oldest, the one outside C:, the one in a chosen folder, or check them yourself.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Keep the one in a folder, keep the shortest path"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>"Keep the one in a folder…" picks a folder and keeps the copy inside it (or its subfolders) in each group; "Keep shortest path" keeps the shallowest copy.</Run></TextBlock>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="Delete, archive or merge"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Files go to the Recycle Bin by default, so they can be restored. You can also move the extra copies to an archive folder, or "Merge into one copy": every location keeps its file, but the space is used once.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Archive the checked files"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Deletes nothing: moves the checked files into a folder you choose, laid out as "drive\original path" so nothing is overwritten; at least one copy per group stays put. Delete from the archive later once you are sure.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Recycle Bin"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Files are moved to the Recycle Bin by default, so anything deleted by mistake can be restored from there. Clearing "Move to Recycle Bin" deletes files permanently, and they can't be recovered.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Marked &quot;Caution&quot;"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>These copies are in program folders or WeChat data; check them carefully before deleting.</Run></TextBlock>
-                  </StackPanel>
-                  <Border Background="#EFF8F1" BorderBrush="#CFE9D6" BorderThickness="1" CornerRadius="10" Padding="14,11,16,12" Margin="0,16,0,0">
+                  <Border Background="#EFF8F1" BorderBrush="#CFE9D6" BorderThickness="1" CornerRadius="12" Padding="18,16,22,17" Margin="0,26,0,0">
                     <DockPanel>
-                      <TextBlock DockPanel.Dock="Left" Text="&#xEA18;" FontFamily="{StaticResource Icons}" FontSize="15" Foreground="#248A3D" VerticalAlignment="Top" Margin="0,2,12,0"/>
+                      <TextBlock DockPanel.Dock="Left" Text="&#xEA18;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#248A3D" VerticalAlignment="Top" Margin="0,3,14,0"/>
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Personal folders on C: are protected"/>
-                        <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>"Don't delete files in personal folders on C:" is on by default. Copies in Desktop, Documents, Downloads, Pictures, Videos, Music and similar locations show a small lock and can't be selected or deleted; only copies elsewhere are deleted. If you really want to delete copies in these locations, clear that checkbox and confirm again.</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>Copies in Desktop, Documents, Downloads and similar folders can't be checked by default. At least one copy of each group is always kept.</Run></TextBlock>
                       </StackPanel>
                     </DockPanel>
                   </Border>
                 </StackPanel>
               </Border>
-              <Border x:Name="HelpSec2" Style="{StaticResource Card}" Padding="24,20,24,24" Visibility="Collapsed">
+              <Border x:Name="HelpSec2" Style="{StaticResource Card}" Padding="36,30,36,36" Visibility="Collapsed">
                 <StackPanel>
                   <DockPanel>
-                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE7B8;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE7B8;" FontFamily="{StaticResource Icons}" FontSize="20" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                     <StackPanel VerticalAlignment="Center">
                       <TextBlock Text="Save space (without deleting files)" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
-                      <TextBlock Text="Compress or relocate; every file stays where you can use it" Style="{StaticResource HelpSum}"/>
+                      <TextBlock Text="Compress, or keep things elsewhere; every file stays" Style="{StaticResource HelpSum}"/>
                     </StackPanel>
                   </DockPanel>
-                  <Border Height="1" Background="#EDEDF0" Margin="0,16,0,2"/>
-                  <StackPanel Margin="0,14,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="List on the left"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>The list on the left is grouped into System files, Restore points and temp files, Files and folders, and Virtual disks. Click an item to show only its explanation and buttons on the right, with no scrolling through the page. The page reopens on the item you looked at last.</Run></TextBlock>
-                  </StackPanel>
-                  <Grid Margin="0,16,0,0">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="10"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                  <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
+                  <Grid Margin="0,18,0,0">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                     <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource HelpTile}">
                       <StackPanel>
-                        <TextBlock Style="{StaticResource HelpLead}" Text="System compression (CompactOS)"/>
-                        <TextBlock Style="{StaticResource HelpBody}"><Run>Built into Windows: stores system files compressed, usually saving 2 to 4 GB without affecting everyday use.</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpLead}" Text="CompactOS"/>
+                        <TextBlock Style="{StaticResource HelpBody}"><Run>Compresses the Windows system files, usually saving 2 to 4 GB with no effect on use.</Run></TextBlock>
                       </StackPanel>
                     </Border>
                     <Border Grid.Row="0" Grid.Column="2" Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Page file"/>
-                        <TextBlock Style="{StaticResource HelpBody}"><Run>Moves pagefile.sys to another drive, freeing a few GB on C:. It takes effect after a restart, and you can restore the Windows default at any time.</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpBody}"><Run>Moves pagefile.sys to another drive; takes effect after a restart.</Run></TextBlock>
                       </StackPanel>
                     </Border>
                     <Border Grid.Row="2" Grid.Column="0" Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Hibernation file"/>
-                        <TextBlock Style="{StaticResource HelpBody}"><Run>"Keep Fast Startup only" shrinks hiberfil.sys by about half; "Turn off hibernation" removes it entirely.</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpBody}"><Run>Keeping only Fast Startup halves it; turning hibernation off removes it.</Run></TextBlock>
                       </StackPanel>
                     </Border>
                     <Border Grid.Row="2" Grid.Column="2" Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Restore points"/>
-                        <TextBlock Style="{StaticResource HelpBody}"><Run>Shows how many restore points there are, how much space they take and the most they may use. To lower the limit or delete restore points, click "Open System Protection" and change it in Windows' own settings; ClearC never deletes restore points itself.</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpBody}"><Run>Shows how much they take; adjust them in Windows' System Protection. ClearC never deletes restore points.</Run></TextBlock>
                       </StackPanel>
                     </Border>
                     <Border Grid.Row="4" Grid.Column="0" Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Compress folders"/>
-                        <TextBlock Style="{StaticResource HelpBody}"><Run>NTFS compression: files open and edit as usual; they just take up less space. Good for documents, code and old projects.</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpBody}"><Run>NTFS compression: files work as usual but take less space. Good for documents and old projects.</Run></TextBlock>
                       </StackPanel>
                     </Border>
                     <Border Grid.Row="4" Grid.Column="2" Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Virtual disks"/>
-                        <TextBlock Style="{StaticResource HelpBody}"><Run>WSL and Docker virtual disks don't shrink when you delete files inside them; compacting them gives the space back to Windows. Android emulator and virtual machine folders can be moved to another drive as a whole.</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpBody}"><Run>Compacts WSL and Docker disks; emulators and virtual machines can be moved as a whole.</Run></TextBlock>
                       </StackPanel>
                     </Border>
                     <Border Grid.Row="6" Grid.Column="0" Style="{StaticResource HelpTile}">
                       <StackPanel>
-                        <TextBlock Style="{StaticResource HelpLead}" Text="Merge duplicate files"/>
-                        <TextBlock Style="{StaticResource HelpBody}"><Run>On the "Duplicates" page, click "Merge into one copy". Duplicate files on the same drive then take up the space of just one copy, while the file stays in every location. After merging, editing the file in one location changes it in all the others, so this suits photos, videos and installers you won't change again.</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpLead}" Text="Merge duplicates"/>
+                        <TextBlock Style="{StaticResource HelpBody}"><Run>Duplicates on the same drive take up space only once. Good for photos and videos you no longer edit.</Run></TextBlock>
                       </StackPanel>
                     </Border>
                     <Border Grid.Row="6" Grid.Column="2" Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="OneDrive online-only"/>
-                        <TextBlock Style="{StaticResource HelpBody}"><Run>Synced files keep a local copy. Once "online-only" they stay in the cloud, still show in File Explorer and download when opened. Nothing is deleted; files marked "Always keep on this device" are left alone.</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpBody}"><Run>Local copies become cloud-only and download when opened.</Run></TextBlock>
                       </StackPanel>
                     </Border>
                     <Border Grid.Row="8" Grid.Column="0" Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Reserved storage"/>
-                        <TextBlock Style="{StaticResource HelpBody}"><Run>The 7 GB or so Windows sets aside for updates. Turning it off gives the space back; Windows borrows free space when updating, and you can turn it back on at any time.</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpBody}"><Run>Gives back the roughly 7 GB Windows keeps for updates; can be turned back on at any time.</Run></TextBlock>
                       </StackPanel>
                     </Border>
                     <Border Grid.Row="8" Grid.Column="2" Style="{StaticResource HelpTile}">
                       <StackPanel>
-                        <TextBlock Style="{StaticResource HelpLead}" Text="Component store analysis"/>
-                        <TextBlock Style="{StaticResource HelpBody}"><Run>Lets Windows work out the actual size of WinSxS, how much is reclaimable and whether cleanup is advisable, before you run the DISM cleanup.</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpLead}" Text="Component store"/>
+                        <TextBlock Style="{StaticResource HelpBody}"><Run>Lets Windows work out how much WinSxS can free before you decide to clean it up.</Run></TextBlock>
                       </StackPanel>
                     </Border>
                     <Border Grid.Row="10" Grid.Column="0" Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Small crash dumps"/>
-                        <TextBlock Style="{StaticResource HelpBody}"><Run>Blue screens save only a 256 KB small dump instead of a MEMORY.DMP of several GB. Enough to tell which driver failed; automatic dumps can be restored at any time.</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpBody}"><Run>Blue screens write a 256 KB dump instead of a multi-GB file.</Run></TextBlock>
                       </StackPanel>
                     </Border>
                     <Border Grid.Row="10" Grid.Column="2" Style="{StaticResource HelpTile}">
                       <StackPanel>
-                        <TextBlock Style="{StaticResource HelpLead}" Text="Temp folder on another drive"/>
-                        <TextBlock Style="{StaticResource HelpBody}"><Run>Points the current user's TEMP to another drive so future temporary files don't take space on C:. Applies after you sign out and back in; restore the default if an installer doesn't like it.</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpLead}" Text="Temp folder"/>
+                        <TextBlock Style="{StaticResource HelpBody}"><Run>Moves TEMP to another drive; takes effect after signing out and in.</Run></TextBlock>
                       </StackPanel>
                     </Border>
                     <Border Grid.Row="12" Grid.Column="0" Grid.ColumnSpan="3" Style="{StaticResource HelpTile}">
                       <StackPanel>
-                        <TextBlock Style="{StaticResource HelpLead}" Text="Move WSL to another drive"/>
-                        <TextBlock Style="{StaticResource HelpBody}"><Run>Uses WSL's own wsl --manage --move to move a whole distribution; it works as before afterwards. Needs WSL 2.5 or later.</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpLead}" Text="Move WSL"/>
+                        <TextBlock Style="{StaticResource HelpBody}"><Run>Moves a whole distribution with wsl --manage --move; needs WSL 2.5 or later.</Run></TextBlock>
                       </StackPanel>
                     </Border>
                   </Grid>
                 </StackPanel>
               </Border>
-              <Border x:Name="HelpSec3" Style="{StaticResource Card}" Padding="24,20,24,24" Visibility="Collapsed">
+              <Border x:Name="HelpSec3" Style="{StaticResource Card}" Padding="36,30,36,36" Visibility="Collapsed">
                 <StackPanel>
                   <DockPanel>
-                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE9D9;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE9D9;" FontFamily="{StaticResource Icons}" FontSize="20" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                     <StackPanel VerticalAlignment="Center">
                       <TextBlock Text="Space map" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
                       <TextBlock Text="See which folders and files take up the most space" Style="{StaticResource HelpSum}"/>
                     </StackPanel>
                   </DockPanel>
-                  <Border Height="1" Background="#EDEDF0" Margin="0,16,0,2"/>
-                  <DockPanel Margin="0,16,0,0"><TextBlock DockPanel.Dock="Left" Text="Scanning" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
-                  <StackPanel Margin="0,10,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Start a scan"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Choose a drive and click "Scan" to measure the size of every folder. It only looks and changes nothing.</Run></TextBlock>
+                  <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
+                  <TextBlock Text="Scanning" Style="{StaticResource HelpGroup}" Margin="0,22,0,0"/>
+                  <StackPanel Margin="0,14,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="Scan a drive"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Choose a drive and click "Scan", or click a drive card at the top. Scanning only looks; nothing is changed.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Why scanning is fast"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>On NTFS drives (C: almost always is), ClearC reads the file table on the disk (the MFT) directly, so hundreds of thousands of files usually take seconds rather than minutes.</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>The result is checked against a direct folder listing. If it does not match or the table cannot be read (not NTFS, not enough permission and so on), ClearC goes back to scanning folder by folder, with several threads at once (more on SSDs, fewer on hard disks).</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Scanning again while ClearC is still open only updates what changed, using the Windows change journal.</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Reading the file table also sees folders that a folder-by-folder scan cannot open (such as System Volume Information), so the totals of the two methods can differ slightly.</Run></TextBlock></DockPanel>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="Fast scan"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>NTFS drives are read straight from the file table, so hundreds of thousands of files take seconds. If that isn't possible, folders are scanned one by one.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Prefer no direct disk reads"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>A few security programs warn about direct disk reads. Untick "Fast scan" at the top right to scan folder by folder from then on; Clean up, Moved folders and Apps follow the same setting.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Read once, shared by every page"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>"Clean up C:", "Moved folders" and "Apps" also read the C: file table once to look up how big each folder is. These numbers are only for display and estimates; when something is actually deleted or moved, every item is measured and checked again, never decided from this result.</Run></TextBlock>
-                  </StackPanel>
-                  <DockPanel Margin="0,26,0,0"><TextBlock DockPanel.Dock="Left" Text="Browsing" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
-                  <StackPanel Margin="0,10,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Back, forward and the path"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>The back and forward buttons at the top left (or the mouse side buttons, Alt+← and Alt+→) move between the folders you have looked at; Backspace goes up one level. Every level of the path can be clicked to go back to it.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Drill down"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Double-click a folder to open the next level, and click "Up one level" to go back. The blue bar on each row shows how large it is within the current level.</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>When a level holds a lot (WinSxS has tens of thousands of items), only the 500 largest are listed and the rest are combined into the last row; "Open location" shows everything in File Explorer.</Run></TextBlock></DockPanel>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Click a drive card"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Each drive has a card at the top of the page (usage, temperature, wear, health). Click one to select that drive and start scanning it; the details below switch to that drive, and the selected card gets a blue outline. If the results below are already for that drive it does not scan again; click "Scan" to rescan.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="Drive overview"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>After scanning a whole drive, a line above the list shows used / total and the percentage, with a bar split into system and apps, personal files, cleanable caches, other and free space. Caches are estimated from the "Safe to clean" folders of the cleanup page.</Run></TextBlock>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>After a whole drive is scanned, the top shows how the used space splits into system and apps, personal files, caches you can clean, and other.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Treemap"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Draws the folders and files of the current level as blocks; the bigger the block, the more space it takes, so the largest ones stand out at a glance. Click to select; double-click a folder to open it. The colour says what a folder holds (system, app data, documents, photos and videos, code, synced folders, games); caches and temporary files are hatched, meaning the space can be had back. A legend sits underneath.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="Worth a look"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>After scanning a whole drive, the overview lists large folders (300 MB or more) whose names say they are caches, packages (node_modules and the like), build output, Python virtual environments or temporary files. Click one to go there and look before deciding. They are recognized by name only.</Run></TextBlock>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Lists large folders such as caches, packages, build output and temporary files; click one to go there. They are recognized by name only, so look before deleting.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Delete list"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Pick what to delete in different folders and "Add to delete list" (also in the right-click menu) instead of deleting right away; a bar underneath keeps showing how big the list is, how much the drive has free now and roughly how much after. Adding a folder absorbs the items inside it that were already listed. Review the list, then "Delete the list…": it asks first as usual and can use the Recycle Bin, and afterwards says how much space the drive actually gained.</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>When a folder to delete is a git repository, the confirmation warns that changes never committed or pushed are gone for good.</Run></TextBlock></DockPanel>
+                  <TextBlock Text="Browsing" Style="{StaticResource HelpGroup}" Margin="0,40,0,0"/>
+                  <StackPanel Margin="0,14,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="Look inside"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Double-click a folder to open it. Use the mouse side buttons or Alt+← and Alt+→ to go back and forward, and click any level of the path.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="Treemap"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>The bigger the block, the more space it takes. The colour shows what a folder holds; hatched blocks are caches whose space can be had back.</Run></TextBlock>
+                  </StackPanel>
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="Find files"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Searches the files of 1 MB or more recorded during the scan, largest first.</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Filter by size, how long since they were modified (for example 6+ months), type (videos, archives and installers, disc images and virtual disks…) and name; names can use * and ?, for example *.mp4.</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Tick "Only in the current folder" to search just the folder you opened.</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Tick "Only in chat apps" to search only the chat data of WeChat, QQ, WeCom, Feishu, DingTalk, Telegram and others, and see which videos and files take up the space.</Run></TextBlock></DockPanel>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Search files of 1 MB or more by size, age, type and name, or only the large files inside chat apps.</Run></TextBlock>
                   </StackPanel>
-                  <Border Background="#EEF5FD" BorderBrush="#D2E3FA" BorderThickness="1" CornerRadius="10" Padding="14,11,16,12" Margin="0,16,0,0">
-                    <DockPanel>
-                      <TextBlock DockPanel.Dock="Left" Text="&#xE946;" FontFamily="{StaticResource Icons}" FontSize="15" Foreground="#0071E3" VerticalAlignment="Top" Margin="0,2,12,0"/>
-                      <StackPanel>
-                        <TextBlock Style="{StaticResource HelpLead}" Text="Files in chat data are view-only"/>
-                        <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>Here they can only be viewed and located, not deleted. To free up space, move the whole chat data to another drive on the "Moved folders" page.</Run></TextBlock>
-                      </StackPanel>
-                    </DockPanel>
-                  </Border>
-                  <StackPanel Margin="0,16,0,0">
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="By type"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>While scanning, every file on the drive is grouped by extension into ten types (video, pictures, music, documents, archives and installers, disk images, programs, logs and temporary files, code and developer files, other), with count and size per type. Double-click a type to see its largest files under "Find files".</Run></TextBlock>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Splits every file on the drive into ten kinds, such as videos, pictures, documents and archives, and shows how much each takes.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Owner and sorting"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>"Find files" lists up to 1,000 files, sorted by size or date, filtered by file owner (Windows account); NTFS-compressed files show their compressed size.</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Click "Name", "Modified" or "Size" in the header above the list to sort, again to reverse, and a third time to go back to the original order; other folders open in the same order. In "Since last scan", click a column name to sort.</Run></TextBlock></DockPanel>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="Recent changes and Since last scan"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>"Recent changes" lists the folders with the most new or rewritten files in the last few days; "Since last scan" finds the folders that grew and where the extra space went.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Recent changes"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Reads the file system change journal (USN) and lists the folders where the most files were created or written in the last 24 hours, 3, 7 or 30 days: that is usually where the extra space went. Sizes are the files' current sizes (the journal does not record bytes written); deleted files are only counted. Needs a fast scan that read the file table.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Since last scan"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Lists folders that grew or shrank by more than 100 MB since the previous scan, so you can find what has been slowly eating up your space; double-click a row to open that folder. The folder list also shows changes such as "+2.1 GB since last scan". Every scan keeps a dated snapshot (up to 40 per drive); "Compare with" picks 1, 3, 7 or 30 days ago or the earliest one. A sentence above the list says how much used space grew (or shrank) and where: Docker data, a WSL distribution, browser caches, Windows Update, a particular folder, and the rest.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="Export"/>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Export CSV</Run><Run>: saves the list you see (folders, found files or the comparison) as a CSV file you can open, sort and share in Excel.</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Export report</Run><Run>: saves the whole drive as a web page with a treemap, the largest folders and files, space by file type and changes since the last scan; press Ctrl+P in the browser to save it as PDF.</Run></TextBlock></DockPanel>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Save the list as CSV, or the whole drive as a web page report.</Run></TextBlock>
                   </StackPanel>
-                  <DockPanel Margin="0,26,0,0"><TextBlock DockPanel.Dock="Left" Text="Selecting and acting" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
-                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,10,0,0"><Run>Selected rows can be opened in File Explorer, compressed (keeps files) or deleted. Each row has a box at its start, like "Item check boxes" in File Explorer:</Run></TextBlock>
-                  <Grid Margin="0,10,0,0">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="200"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                    <Border Grid.Row="0" Style="{StaticResource HelpPill}"><TextBlock Text="Click the box" FontSize="12.5" Foreground="#1D1D1F" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>Selects or clears that row; tick one row or several</Run></TextBlock>
-                    <Border Grid.Row="1" Style="{StaticResource HelpPill}"><TextBlock Text="Click elsewhere on a row" FontSize="12.5" Foreground="#1D1D1F" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>Doesn't select it</Run></TextBlock>
-                    <Border Grid.Row="2" Style="{StaticResource HelpPill}"><TextBlock Text="Double-click a folder" FontSize="12.5" Foreground="#1D1D1F" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>Opens the next level</Run></TextBlock>
-                    <Border Grid.Row="3" Style="{StaticResource HelpPill}"><TextBlock Text="Shift + click a box" FontSize="12.5" Foreground="#1D1D1F" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="3" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>Ticks every row from the last one you ticked to this one</Run></TextBlock>
-                    <Border Grid.Row="4" Style="{StaticResource HelpPill}"><TextBlock Text="Drag with either button" FontSize="12.5" Foreground="#1D1D1F" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="4" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>Drag up or down to tick a run of rows at once; after a right-button drag, the right-click menu opens when you let go</Run></TextBlock>
-                    <Border Grid.Row="5" Style="{StaticResource HelpPill}"><TextBlock Text="Right-click a row" FontSize="12.5" Foreground="#1D1D1F" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="5" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>The menu acts on that row only, or on all ticked rows if you right-click a ticked one</Run></TextBlock>
-                    <Border Grid.Row="6" Style="{StaticResource HelpPill}"><TextBlock Text="Esc" FontSize="12.5" Foreground="#1D1D1F" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="6" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Clears them all</Run></TextBlock>
-                  </Grid>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Prefer no check boxes"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Turn them off in "Settings" to get the usual Windows list behavior: a click selects one row, Ctrl or Shift selects several.</Run></TextBlock>
+                  <TextBlock Text="Selecting and deleting" Style="{StaticResource HelpGroup}" Margin="0,40,0,0"/>
+                  <StackPanel Margin="0,14,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="Check boxes"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Click the box in front of a row; hold the left or right mouse button and drag to check a run of rows. The boxes can be turned off in Settings.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="Delete list"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Collect what to delete from different folders first; the bar underneath keeps showing roughly how much space the drive will have afterwards. Review it, then delete everything at once.</Run></TextBlock>
+                  </StackPanel>
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="Delete"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Choose "Move to Recycle Bin" (can be restored) or "Delete permanently" (frees space immediately); either way, you must tick the confirmation box first.</Run></TextBlock>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Move to the Recycle Bin or delete permanently; both ask first. You are warned when a folder is a git repository.</Run></TextBlock>
                   </StackPanel>
-                  <Border Background="#F5F5F7" BorderBrush="#E5E5EA" BorderThickness="1" CornerRadius="10" Padding="14,11,16,12" Margin="0,16,0,0">
+                  <Border Background="#F5F5F7" BorderBrush="#E5E5EA" BorderThickness="1" CornerRadius="12" Padding="18,16,22,17" Margin="0,26,0,0">
                     <DockPanel>
-                      <TextBlock DockPanel.Dock="Left" Text="&#xE72E;" FontFamily="{StaticResource Icons}" FontSize="15" Foreground="#6E6E73" VerticalAlignment="Top" Margin="0,2,12,0"/>
+                      <TextBlock DockPanel.Dock="Left" Text="&#xE72E;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#6E6E73" VerticalAlignment="Top" Margin="0,3,14,0"/>
                       <StackPanel>
-                        <TextBlock Style="{StaticResource HelpLead}" Text="Items with a small lock can't be deleted here"/>
-                        <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>System folders, app installation folders (uninstall those on the "Apps" page), personal folders on C:, and moved data (the CDriveMoved folder).</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpLead}" Text="Items with a lock can't be deleted here"/>
+                        <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>System folders, app installation folders, personal folders on C:, chat history and moved data.</Run></TextBlock>
                       </StackPanel>
                     </DockPanel>
                   </Border>
-                  <DockPanel Margin="0,26,0,0"><TextBlock DockPanel.Dock="Left" Text="Real space used" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
-                  <StackPanel Margin="0,10,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Size on disk and hard links"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>With the fast scan, the line under each name notes how little compressed, sparse and cloud-only (OneDrive and the like) files really take, and how much of folders such as WinSxS is hard links.</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>A hard link means the same file also has a name elsewhere, so deleting this name frees nothing.</Run></TextBlock></DockPanel>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Disk health cards"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>One card per drive at the top of the page: a usage bar, health status, and for SSDs temperature, wear and hours powered on, colored by level (green normal, amber worth watching, red a problem). Click a card to choose that drive. Read from Windows' storage reliability counters, read-only; it can be turned off in Settings.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Space breakdown"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Click "Space breakdown" to see how the used space splits into file data, the file table (MFT) and the rest, and why it differs from adding up file sizes. Deleting also tells you how much space you will really get back.</Run></TextBlock>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="Size on disk"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>With the fast scan, compressed and cloud-only files show what they really take, as do hard links. "Space breakdown" explains why the used space differs from adding up file sizes.</Run></TextBlock>
                   </StackPanel>
                 </StackPanel>
               </Border>
-              <Border x:Name="HelpSec4" Style="{StaticResource Card}" Padding="24,20,24,24" Visibility="Collapsed">
+              <Border x:Name="HelpSec4" Style="{StaticResource Card}" Padding="36,30,36,36" Visibility="Collapsed">
                 <StackPanel>
                   <DockPanel>
-                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE71D;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE71D;" FontFamily="{StaticResource Icons}" FontSize="20" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                     <StackPanel VerticalAlignment="Center">
                       <TextBlock Text="Apps" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
-                      <TextBlock Text="See how much each app takes; uninstall, clean up leftovers, move to another drive" Style="{StaticResource HelpSum}"/>
+                      <TextBlock Text="See what apps take; uninstall, clean leftovers, move to another drive" Style="{StaticResource HelpSum}"/>
                     </StackPanel>
                   </DockPanel>
-                  <Border Height="1" Background="#EDEDF0" Margin="0,16,0,2"/>
-                  <StackPanel Margin="0,14,0,0">
+                  <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
+                  <StackPanel Margin="0,18,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="App list"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Lists all installed apps (including Microsoft Store apps), sorted by size from largest to smallest. You can show only apps installed on C:, or search by name. Click "Name", "Publisher", "Installed" or "Size" in the header to sort, and again to reverse; startup items, scheduled tasks and context menu entries sort by name or status.</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Several at once</Run><Run>: tick the box in front of a row, or hold the left mouse button and drag over rows to tick them all; Shift-click a box to tick a run, and the box in the header ticks everything. Buttons then appear underneath. For apps, "Uninstall selected" opens each uninstaller in turn: when one finishes and its window closes, the next one opens, and you can stop at any time; Store apps are uninstalled directly. Startup items, scheduled tasks and context menu entries get "Disable selected" and "Enable selected"; leftovers get "Move to Recycle Bin". Each lists the items and asks once first.</Run></TextBlock></DockPanel>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>All installed apps, largest first. Search by name, or show only the apps on C:.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Uninstall"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Opens the app's own uninstaller; just follow its prompts.</Run></TextBlock>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="Several at once"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Tick several apps or drag over rows with the left mouse button. Uninstalling opens each app's own uninstaller in turn.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Check leftovers"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>When the uninstall is done, come back here and click "Check leftovers". ClearC looks for folders named after the app that remain after uninstalling, and moves them to the Recycle Bin once you confirm.</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>A publisher's top-level folder (such as Tencent or Microsoft) is never treated as leftovers, and neither are built-in Windows programs.</Run></TextBlock></DockPanel>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="Uninstall and leftovers"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>After uninstalling, click "Check leftovers" to find folders left behind and move them to the Recycle Bin.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="Move to another drive"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>For apps installed on C:, the whole installation folder can be moved to another drive, leaving a link at the original location on C:. Shortcuts, the Start menu, uninstalling and automatic updates all keep working, with no reinstall needed.</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>The copy on C: is deleted only after ClearC verifies that the files on both sides are identical; if the app is running, you'll be asked before it's closed.</Run></TextBlock></DockPanel>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Moves an app installed on C: to another drive as a whole; shortcuts, uninstalling and updates keep working. Apps with services or drivers, Microsoft's own apps and a few others aren't suited to moving, and ClearC says why.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Not suitable for moving"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>ClearC tells you why and never forces it:</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Apps with system services or drivers (antivirus, VPN, drivers, remote control and so on)</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Apps that add right-click menus to File Explorer, and input methods</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Microsoft's own software (Office, Visual Studio and so on) and built-in Windows components</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Apps whose folder contains links or files compressed with Windows compression (they could be missed when copying)</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Apps that don't state which folder they're installed in</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Microsoft Store apps: use "Move" in Windows Settings → Apps</Run></TextBlock></DockPanel>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="After moving"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Moved apps appear in "Moved folders", where you can "Move back to C:" at any time. When an app gets a major upgrade later, a few installers will reinstall it on C:; just move it again then.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Leftovers"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Finds folders that uninstalled apps may have left behind: the name matches no installed app, no program is using them, nothing changed for a month, and they are at least 1 MB. It is only a guess, so click "Open location" first; they go to the Recycle Bin and can be restored. Tick several to move them to the Recycle Bin together.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="Check for updates"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Uses Windows' own winget to see which installed apps have a newer version; it goes online only when you click. Apps with an update show "Update available" in the list and get an "Update" button, which runs winget in a terminal window so you can see the progress and prompts. You can also update everything at once.</Run></TextBlock>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Uses winget, which comes with Windows, and upgrades in a terminal. ClearC only goes online when you click it.</Run></TextBlock>
                   </StackPanel>
-                  <DockPanel Margin="0,26,0,0"><TextBlock DockPanel.Dock="Left" Text="Startup, scheduled tasks, context menu" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
-                  <StackPanel Margin="0,10,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Startup"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>The same sources as "Startup apps" in Task Manager: the Run keys in the registry and the two Startup folders. After "Disable", the program no longer starts with Windows; it is not deleted and can be enabled again at any time.</Run></TextBlock>
+                  <TextBlock Text="Startup and extensions" Style="{StaticResource HelpGroup}" Margin="0,40,0,0"/>
+                  <StackPanel Margin="0,14,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="Startup, scheduled tasks, context menu"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Third-party startup items, scheduled tasks and context menu extensions. Disabling deletes nothing and can be undone at any time.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Scheduled tasks"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Lists only third-party tasks (Windows' own tasks live in the Microsoft folder and are not listed). A disabled task no longer runs on schedule and can be enabled again at any time. ClearC's own tasks are switched on the "Reminders" page.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Context menu"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Lists only third-party extensions added to the File Explorer right-click menu; built-in ones are not listed. Disabling writes the entry to Windows' "Shell Extensions\Blocked" list and applies to newly opened windows; the app itself keeps working.</Run></TextBlock>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="Leftover folders"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Finds folders uninstalled apps may have left behind. It is only a guess, so open them first, then move them to the Recycle Bin.</Run></TextBlock>
                   </StackPanel>
                 </StackPanel>
               </Border>
-              <Border x:Name="HelpSec5" Style="{StaticResource Card}" Padding="24,20,24,24" Visibility="Collapsed">
+              <Border x:Name="HelpSec5" Style="{StaticResource Card}" Padding="36,30,36,36" Visibility="Collapsed">
                 <StackPanel>
                   <DockPanel>
-                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE95E;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE95E;" FontFamily="{StaticResource Icons}" FontSize="20" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                     <StackPanel VerticalAlignment="Center">
                       <TextBlock Text="System health" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
-                      <TextBlock Text="Hardware status, boot time, crash diagnosis, common fixes, what eats resources" Style="{StaticResource HelpSum}"/>
+                      <TextBlock Text="Hardware status, boot time, crash diagnosis and common fixes" Style="{StaticResource HelpSum}"/>
                     </StackPanel>
                   </DockPanel>
-                  <Border Height="1" Background="#EDEDF0" Margin="0,16,0,2"/>
-                  <StackPanel Margin="0,14,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Tabs"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>A row of tabs next to the title: Hardware, Boot time, Blue screens and crashes, Common fixes, Activity monitor, Windows events. Click one to show only that section, each with its own scroll bar, so you never scroll through the whole page. The page reopens on the tab you looked at last.</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>"Blue screens and crashes" has three smaller tabs: Diagnosis, Each crash, and Events and drivers, each showing how many entries it has.</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>"Common fixes" lists the problems on the left and shows the fixes for the selected one on the right; the activity monitor table fills the page and scrolls on its own.</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>A few seconds after ClearC opens, while nothing else is running, all this is read in the background, so the page is ready when you click it; after ten minutes it is refreshed in the background. Plug in or remove a drive and the hardware cards, the space map drives and the move targets follow.</Run></TextBlock></DockPanel>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
+                  <StackPanel Margin="0,18,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="Hardware"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>One card per item, colored by tier (green OK, amber watch, red problem, grey unavailable): CPU load, current and maximum clock, performance counter (persistently below the rated clock means throttling), ACPI temperature; memory used, commit, hard faults and WHEA memory errors; each drive's SMART health, temperature, wear, read errors and hours; battery design capacity, full-charge capacity and cycles; GPU load, VRAM and driver; Windows uptime, pending restart, last update and devices with problems.</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Anything that cannot be read says "unavailable" instead of an estimate: Windows does not provide CPU core or GPU temperatures (vendor tools do); desktops have no battery; USB enclosures and some virtual machines report no SMART.</Run></TextBlock></DockPanel>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>The state of the CPU, memory, drives, battery, graphics and Windows, marked green, amber or red; anything that can't be read says so. It is read in the background after ClearC opens.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="Boot time"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>From Windows' own Diagnostics-Performance log: how long the last boot took (to the desktop, and how long startup programs kept busy afterwards), the average of recent boots, and the programs Windows blamed for slowing boot down and by how many seconds. Disable them under "Apps → Startup".</Run></TextBlock>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>How long recent starts took, and which programs slowed them down.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="Blue screens and crashes"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>ClearC parses the dump files in C:\Windows\Minidump itself: bug check code and name, the four parameters, the status code of a failed disk read (0xC000000E means the disk dropped out, for example), the process running at the time, drivers loaded at the time, which driver the fault address falls in and which drivers appear on the stack. Each crash gets a one-line explanation and its common causes; when only Windows drivers are on the stack, no driver is wrongly blamed. It also lists the last 30 days of unexpected shutdowns, blue screen records, WHEA hardware errors, disk and file system errors, and recently installed drivers.</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>A hint, not a verdict, and less accurate than WinDbg.</Run></TextBlock></DockPanel>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Reads the crash dumps together with the event logs and drive health and gives a diagnosis, each with "Fix as suggested" and "Things to do yourself".</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Diagnosis"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Crashes, event logs, disk health, the system clock and the Windows version are read together into a few conclusions: "disk read failures + a system process stopping again and again + disk errors" means an unstable disk or disk connection; a third-party driver named in two or more crashes is the main suspect; plus memory, graphics, hardware errors, sleep and wake-up, a wrong clock and an outdated Windows. Under each conclusion, "Fix as suggested" does in one go everything ClearC can do itself (listed first for you to confirm, and all reversible: turning off disk power saving and Fast Startup, opening Date and time), and "Things to do yourself" lists, in order, what ClearC cannot do (backing up, updating the BIOS and drivers, the maker's hardware test, reseating the disk), naming how old this PC's BIOS and storage driver are. Crashes are counted from Windows' own crash records (only the latest few dumps are kept); read errors on USB sticks and external disks are not blamed on the system disk; a clock earlier than this version's release date, or a time service that never syncs, is reported too.</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>"Maker's driver page" opens the BIOS, driver and firmware downloads for this maker and model (straight to the service tag on Dell) and copies the link, so a PC without internet can get the files via another computer. "Switch to Windows' own disk driver" is for a disk on Intel RST (RAID On) that keeps dropping out: it checks that it is a single disk and whether BitLocker is on, then lists the steps to switch to AHCI in the BIOS and how to change back; ClearC does not make the change for you.</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>"Copy report" copies the diagnosis, what to do and the notes on each crash as text. "Export diagnostics package" packs the dumps, the last 30 days of System and Application logs, systeminfo, the driver list, disk information and this report into one zip (saved where you choose, never overwriting a file) to send to someone who can help. It may contain the computer name, user name, installed software and pieces of memory, so only send it to people you trust.</Run></TextBlock></DockPanel>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="Diagnostics package"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Packs the dumps, logs and system information into one zip to send to someone who can help. It includes the computer name and installed apps, so only share it with people you trust.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="Common fixes"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>The fixes most often recommended on help forums that actually work, grouped by problem and ordered lightest first: blue screens and freezes, disks dropping out or stalling, damaged system files, failing Windows updates, no internet, a wrong clock, restarts instead of shutdowns and failed wake-ups, no sound, icons and the Store, slow start-up, and sending details to someone. Every step is labelled "Read-only", "Changes system" or "Needs restart"; hover to see exactly what it does.</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>All of them are built-in Windows commands (sfc, DISM, chkdsk, netsh, ipconfig, w32tm, powercfg and so on) that run in a visible terminal window, and every run is recorded in the activity log.</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Steps that change things explain themselves and ask first: repair system files (DISM /RestoreHealth, then sfc /scannow), check C: at the next start (undo with "Cancel startup check"), reset Windows Update components (the caches are renamed and kept, not deleted), reset the network (needs a restart; a static IP must be entered again).</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>"Turn off disk power saving" sets PCIe link power management, AHCI link power management and "Turn off hard disk after" in the power plan to no power saving, the most common fix for disks dropping out; the old values are saved first and "Restore disk power saving" puts them back. "Turn off Fast Startup" can be turned back on any time.</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Nothing deletes files, ends programs, installs drivers or touches settings unrelated to the fix. System Restore, Memory Diagnostic and Device Manager are Windows tools where you confirm every step.</Run></TextBlock></DockPanel>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Proven fixes listed by problem, all built from Windows' own commands and run in a visible window. Anything that changes the system explains itself and asks first.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="What is slowing the PC down"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Click "Start monitoring" to sample every 3 seconds: how much CPU each program used, how much memory it holds, how fast it writes to disk, how much it wrote while monitoring and since it started; processes with the same name are combined. Click a column name (Program, CPU, Memory, Write rate, Written while monitoring, Written since start) to sort high to low, and again for low to high; the table lists the top 25 and picks the top 25 again by the new column. No resident service; it stops when ClearC closes.</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Bytes written are not the same as space used (temporary files get written and deleted). Which process wrote which file can only be matched while monitoring is on: compare the folders that grew under "Space map → Recent changes" with the programs that wrote the most here.</Run></TextBlock></DockPanel>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="Activity monitor"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Checks every 3 seconds how much CPU, memory and disk writing each program uses, to find what is slowing the PC down.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Windows events"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Critical and error events of the System log from the last 7 days, grouped by source. Many are harmless; a source that repeats and matches the time of a problem is worth a look.</Run></TextBlock>
-                  </StackPanel>
-                  <Border Background="#EFF8F1" BorderBrush="#CFE9D6" BorderThickness="1" CornerRadius="10" Padding="14,11,16,12" Margin="0,16,0,0">
+                  <Border Background="#EFF8F1" BorderBrush="#CFE9D6" BorderThickness="1" CornerRadius="12" Padding="18,16,22,17" Margin="0,26,0,0">
                     <DockPanel>
-                      <TextBlock DockPanel.Dock="Left" Text="&#xEA18;" FontFamily="{StaticResource Icons}" FontSize="15" Foreground="#248A3D" VerticalAlignment="Top" Margin="0,2,12,0"/>
+                      <TextBlock DockPanel.Dock="Left" Text="&#xEA18;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#248A3D" VerticalAlignment="Top" Margin="0,3,14,0"/>
                       <StackPanel>
-                        <TextBlock Style="{StaticResource HelpLead}" Text="Reading changes nothing; fixes ask first"/>
-                        <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>Hardware, boot time, crashes, events and the activity monitor only read. Changes happen only through the fix buttons, which explain what they change and whether it can be undone, and then ask you.</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpLead}" Text="Looking changes nothing"/>
+                        <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>Only the fix buttons change the system, and they first say what will change and whether it can be undone.</Run></TextBlock>
                       </StackPanel>
                     </DockPanel>
                   </Border>
                 </StackPanel>
               </Border>
-              <Border x:Name="HelpSec6" Style="{StaticResource Card}" Padding="24,20,24,24" Visibility="Collapsed">
+              <Border x:Name="HelpSec6" Style="{StaticResource Card}" Padding="36,30,36,36" Visibility="Collapsed">
                 <StackPanel>
                   <DockPanel>
-                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE8AB;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE8AB;" FontFamily="{StaticResource Icons}" FontSize="20" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                     <StackPanel VerticalAlignment="Center">
                       <TextBlock Text="Moved folders" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
-                      <TextBlock Text="Move several items at once; check that moved folders are OK" Style="{StaticResource HelpSum}"/>
+                      <TextBlock Text="Move several items at once and check the ones already moved" Style="{StaticResource HelpSum}"/>
                     </StackPanel>
                   </DockPanel>
-                  <Border Height="1" Background="#EDEDF0" Margin="0,16,0,2"/>
-                  <DockPanel Margin="0,16,0,0"><TextBlock DockPanel.Dock="Left" Text="Can be moved" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
-                  <StackPanel Margin="0,10,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Move several at once"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Automatically lists what can still be moved off C:, in three groups (chat histories, apps installed on C:, and other folders), each with its size. The list on the left shows one group at a time (plus "Apps not suited to moving" and "Moved"). Tick the items, choose the target drive at the bottom right and click "Move to another drive".</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Before starting, every item is listed, along with any apps that need to be closed first.</Run></TextBlock></DockPanel>
+                  <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
+                  <StackPanel Margin="0,18,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="Can be moved"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Chat history, apps and large folders on C: that can still be moved. Tick them, choose the target drive and click "Move to another drive".</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Apps that shouldn't be moved"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Apps with system services or drivers, apps that add right-click menu entries to File Explorer, Microsoft's own software and the like are listed separately under "Apps that shouldn't be moved" with the reason, and can't be ticked.</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Chat apps installed from the Microsoft Store (such as WhatsApp and Microsoft Teams) are managed by Windows; a note at the bottom of the page explains how to move them with "Move" in Windows Settings.</Run></TextBlock></DockPanel>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="Apps not suited to moving"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Listed separately, each with the reason.</Run></TextBlock>
                   </StackPanel>
-                  <DockPanel Margin="0,26,0,0"><TextBlock DockPanel.Dock="Left" Text="Moved" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
-                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,10,0,0"><Run>Every folder moved to another drive is listed here, each with its current status:</Run></TextBlock>
-                  <Grid Margin="0,10,0,0">
+                  <TextBlock Text="Moved" Style="{StaticResource HelpGroup}" Margin="0,40,0,0"/>
+                  <Grid Margin="0,14,0,0">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                    <Border Grid.Row="0" Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="OK" FontSize="12.5" Foreground="#1D7A35" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>The data is on the target drive, and the original location on C: holds only a link to it, which takes no space on C:. Apps work as usual. If needed, you can "Move back to C:": the data is copied back, the link is removed only after the copy is verified, and finally the copy on the target drive is deleted.</Run></TextBlock>
-                    <Border Grid.Row="1" Style="{StaticResource HelpPill}" Background="#FDEBEC"><TextBlock Text="Broken link" FontSize="12.5" Foreground="#C0101C" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>The target drive was unplugged or its drive letter changed. Plug the drive back in (or change the drive letter back) to fix it. If a copy with the same name is found on another drive, use "Repair link" to point the link to it.</Run></TextBlock>
-                    <Border Grid.Row="2" Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="Incomplete" FontSize="12.5" Foreground="#995700" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>The original folder is still on C:, and there is a copy on the target drive. You can move it again under "Can be moved" (only the differences are copied), or delete the extra copy.</Run></TextBlock>
+                    <Border Grid.Row="0" Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="OK" FontSize="13" Foreground="#1D7A35" TextWrapping="Wrap"/></Border>
+                    <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,16"><Run>The data is on the target drive and C: keeps only a link. You can move it back to C: whenever you like.</Run></TextBlock>
+                    <Border Grid.Row="1" Style="{StaticResource HelpPill}" Background="#FDEBEC"><TextBlock Text="Broken link" FontSize="13" Foreground="#C0101C" TextWrapping="Wrap"/></Border>
+                    <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,16"><Run>The target drive isn't connected or its letter changed. Plug it back in, or repair the link.</Run></TextBlock>
+                    <Border Grid.Row="2" Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="Unfinished" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border>
+                    <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>The original folder is still there and the target drive has a copy. Move it again, or delete the extra copy.</Run></TextBlock>
                   </Grid>
                 </StackPanel>
               </Border>
-              <Border x:Name="HelpSec7" Style="{StaticResource Card}" Padding="24,20,24,24" Visibility="Collapsed">
+              <Border x:Name="HelpSec7" Style="{StaticResource Card}" Padding="36,30,36,36" Visibility="Collapsed">
                 <StackPanel>
                   <DockPanel>
-                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE823;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE823;" FontFamily="{StaticResource Icons}" FontSize="20" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                     <StackPanel VerticalAlignment="Center">
                       <TextBlock Text="Reminders" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
-                      <TextBlock Text="A low-space reminder and a weekly cleanup; both are off by default" Style="{StaticResource HelpSum}"/>
+                      <TextBlock Text="A warning when space runs low, and scheduled cleanup" Style="{StaticResource HelpSum}"/>
                     </StackPanel>
                   </DockPanel>
-                  <Border Height="1" Background="#EDEDF0" Margin="0,16,0,2"/>
-                  <StackPanel Margin="0,14,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Tabs"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>A row of tabs next to the title: Low space alert, Scheduled cleanup and Space history. Click one to show only that part; the tabs show whether each one is on and how many days are recorded.</Run></TextBlock>
+                  <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
+                  <StackPanel Margin="0,18,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="Low space alert"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>A notice at the bottom right when C: drops below the amount you set, at most once a day.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Low-space reminder"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>When turned on, ClearC checks drive C: 2 minutes after each sign-in and again at noon every day. If free space falls below the value you set (20 GB by default), a reminder appears at the bottom right of the screen, at most once a day; if there is enough space, nothing is shown.</Run></TextBlock>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="Junk alert"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>A notice when temporary files and caches grow past the size you set. It only counts; nothing is deleted.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Junk reminder"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>You can set a second limit (for example 2 GB): the check also measures the temporary files, caches and logs under "Safe to clean" and reminds you when they exceed it, at most once a day. It only measures; nothing is deleted.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="Scheduled cleanup"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>When turned on, temporary files, caches and logs are cleaned up at the time you choose (a day of the week or every day, at 12:30 PM). It doesn't move anything, doesn't empty the Recycle Bin and doesn't touch personal folders or the folders you added yourself; files in use are simply skipped.</Run></TextBlock>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Cleans temporary files, caches and logs every week or every day. Personal folders are never touched, and nothing is moved.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Storage Sense"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>The page says whether Windows' own Storage Sense is on. If it is, it also cleans temporary files and the Recycle Bin on a schedule; it doesn't conflict with the cleanup here, both simply run.</Run></TextBlock>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="Space history"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Records the free space on C: each day as a 30-day bar chart.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Space on C: over time"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Free space is recorded each time you open ClearC and at each scheduled check, and shown as a bar chart of the last 30 days.</Run></TextBlock>
-                  </StackPanel>
-                  <Border Background="#EEF5FD" BorderBrush="#D2E3FA" BorderThickness="1" CornerRadius="10" Padding="14,11,16,12" Margin="0,16,0,0">
+                  <Border Background="#EEF5FD" BorderBrush="#D2E3FA" BorderThickness="1" CornerRadius="12" Padding="18,16,22,17" Margin="0,26,0,0">
                     <DockPanel>
-                      <TextBlock DockPanel.Dock="Left" Text="&#xE946;" FontFamily="{StaticResource Icons}" FontSize="15" Foreground="#0071E3" VerticalAlignment="Top" Margin="0,2,12,0"/>
+                      <TextBlock DockPanel.Dock="Left" Text="&#xE946;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Top" Margin="0,3,14,0"/>
                       <StackPanel>
-                        <TextBlock Style="{StaticResource HelpLead}" Text="No need to keep ClearC open"/>
-                        <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>Windows Task Scheduler runs ClearC on schedule for both, and you don't need to set it to start with Windows either. The task names start with CleanC. Both are off by default, and turning a switch off deletes its task.</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpLead}" Text="Both are off by default"/>
+                        <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>Once turned on, Windows Task Scheduler runs ClearC on time. Keep ClearC in a permanent place.</Run></TextBlock>
                       </StackPanel>
                     </DockPanel>
                   </Border>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Keep it in one place"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Please keep ClearC in a fixed location (such as D:\Tools) and don't delete it. If you move it, open it once and the tasks will switch to the new location automatically.</Run></TextBlock>
-                  </StackPanel>
                 </StackPanel>
               </Border>
-              <Border x:Name="HelpSec8" Style="{StaticResource Card}" Padding="24,20,24,24" Visibility="Collapsed">
+              <Border x:Name="HelpSec8" Style="{StaticResource Card}" Padding="36,30,36,36" Visibility="Collapsed">
                 <StackPanel>
                   <DockPanel>
-                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE81C;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE81C;" FontFamily="{StaticResource Icons}" FontSize="20" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                     <StackPanel VerticalAlignment="Center">
                       <TextBlock Text="Activity log" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
-                      <TextBlock Text="Every change is recorded, and you can search it" Style="{StaticResource HelpSum}"/>
+                      <TextBlock Text="Every change is recorded" Style="{StaticResource HelpSum}"/>
                     </StackPanel>
                   </DockPanel>
-                  <Border Height="1" Background="#EDEDF0" Margin="0,16,0,2"/>
-                  <StackPanel Margin="0,14,0,0">
+                  <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
+                  <StackPanel Margin="0,18,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="What is recorded"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Every change made by deleting, moving, merging, compressing, uninstalling and system settings: when, what was done, to which file or folder, and the result. Only the actions are recorded; file contents are never saved.</Run></TextBlock>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Every delete, move, merge, compression, uninstall and system setting change: when, what, on which folder and the result.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Finding records"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Filter by category (Delete, Move, Merge…), time (7 days, 30 days, All) and keyword. The logs are plain .txt files, one per month; click "Open log folder" to read them directly in Notepad.</Run></TextBlock>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="Finding entries"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Filter by category, time and keyword. The logs are plain text files, one per month.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="How long records are kept"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>6 months by default; you can change this to anywhere from 1 month to 2 years, or keep them forever.</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Each time you open ClearC, records older than the retention period are deleted automatically and can't be recovered.</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>When you shorten the retention period, ClearC first tells you the date before which records will be deleted.</Run></TextBlock></DockPanel>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="How long"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Half a year by default, and you can change it. Older entries are removed automatically.</Run></TextBlock>
                   </StackPanel>
                 </StackPanel>
               </Border>
-              <Border x:Name="HelpSec9" Style="{StaticResource Card}" Padding="24,20,24,24" Visibility="Collapsed">
+              <Border x:Name="HelpSec9" Style="{StaticResource Card}" Padding="36,30,36,36" Visibility="Collapsed">
                 <StackPanel>
                   <DockPanel>
-                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE713;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE713;" FontFamily="{StaticResource Icons}" FontSize="20" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                     <StackPanel VerticalAlignment="Center">
                       <TextBlock Text="Settings" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
                       <TextBlock Text="Appearance, language and what the window shows" Style="{StaticResource HelpSum}"/>
                     </StackPanel>
                   </DockPanel>
-                  <Border Height="1" Background="#EDEDF0" Margin="0,16,0,2"/>
-                  <StackPanel Margin="0,14,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Contents"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>The list on the left is grouped into General, Interface, and Cleanup and scanning; click an item to show only that part on the right.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
+                  <StackPanel Margin="0,18,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="Mode"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Three modes decide how much the window shows. ClearC asks once on first start; after that, change it at the top of Settings at any time. Switching never loses settings or records. The current mode is written under the version number at the bottom left; click it to go to Settings.</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Home user</Run><Run>: Clean C:, Save space, Space map, Apps, System health (hardware, blue screens and crashes, common fixes) and Help. The cleanup list only has common caches and temporary files that apps rebuild; items with a cost are still skipped by default.</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Engineer</Run><Run>: adds Duplicates, Moves, Reminders and the operation log; find files, compare with last time, recent changes, export and compress in the space map; page file, restore points, compressed folders, virtual disks and merge duplicates in Save space; startup, leftover folders, update check and move in Apps; boot time and the activity monitor in System health, plus the network reset, Windows Update reset, C: startup check, disk power saving and Fast Startup steps of Common fixes; developer tool caches and driver leftovers in the cleanup list.</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Developer and IT</Run><Run>: everything. Adds scheduled tasks, context menu, reserved storage, component store analysis, crash dumps, temp folder location, custom cleanup list and exclusions, the fast scan switch, space breakdown, scan check, the run log, the Windows event summary, and items such as orphaned Installer packages, event logs, old driver packages and NuGet / Gradle / Maven / JetBrains caches.</Run></TextBlock></DockPanel>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Decides how many features the window shows. Change it at any time without losing settings or records.</Run></TextBlock>
+                    <DockPanel Margin="0,10,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="20" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#8E8E93"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Home user</Run><Run>: Clean up C:, Save space, Space map, Apps, System health and Help.</Run></TextBlock></DockPanel>
+                    <DockPanel Margin="0,7,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="20" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#8E8E93"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Engineer</Run><Run>: adds Duplicates, Moved folders, Reminders, the Activity log and the advanced features on each page.</Run></TextBlock></DockPanel>
+                    <DockPanel Margin="0,7,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="20" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#8E8E93"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Developer and IT</Run><Run>: everything.</Run></TextBlock></DockPanel>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="Appearance and language"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Light, Dark or Follow Windows (the "Choose your app mode" setting), and 中文 or English. ClearC closes and reopens after you change them. "Appearance" and "Switch language" at the bottom left change them too.</Run></TextBlock>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Light, dark or follow Windows; Chinese or English. ClearC reopens after you change them.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="What the window shows"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Pages you don't use, the buttons at the bottom left, the descriptions under page titles, and the space map's check boxes, bars, percentages, details and "Fast scan" switch can all be hidden.</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Anything hidden can be turned back on at any time, and its settings and records are kept; "Restore default display" brings everything back at once.</Run></TextBlock></DockPanel>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Pages, buttons and descriptions you don't use can be hidden and brought back at any time.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Fast scan"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Reads the NTFS file table (MFT) directly, which is much faster than going through every folder and also shows the real space used and hard links. Turn it off to scan folder by folder.</Run></TextBlock>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="Scanning and duplicates"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Fast scan reads the file table directly; the duplicate search can make way for other programs so it doesn't slow down what you are using.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Give way to other programs when finding duplicates"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Files are read in Windows' background mode, behind other programs for both disk and memory, so the programs you are using don't slow down; the search is slower while you are doing other things.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Recycle Bin first"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>In the "Cleanup list" card. When on, files deleted by a manual cleanup go to the Recycle Bin first; scheduled cleanup is not affected.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="Cleanup list"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Add your own folders to clean (their contents are deleted, the folders themselves kept), or exclude folders that cleanup must leave alone. Personal folders, system folders and app installation folders can't be added.</Run></TextBlock>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Send deleted files to the Recycle Bin first, and add folders to clean or to exclude.</Run></TextBlock>
                   </StackPanel>
                 </StackPanel>
               </Border>
             </StackPanel>
-            <Border x:Name="HelpPaneFaq" Style="{StaticResource Card}" Padding="24,20,24,10" Visibility="Collapsed">
+            <Border x:Name="HelpPaneFaq" Style="{StaticResource Card}" Padding="36,30,36,20" Visibility="Collapsed">
               <StackPanel>
-                <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE897;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/><TextBlock Text="Common questions" Style="{StaticResource HelpHead}"/></StackPanel>
-                <StackPanel x:Name="HelpFaq" Margin="0,6,0,0">
+                <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE897;" FontFamily="{StaticResource Icons}" FontSize="19" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,1,12,0"/><TextBlock Text="Common questions" Style="{StaticResource HelpHead}"/></StackPanel>
+                <StackPanel x:Name="HelpFaq" Margin="0,14,0,0">
                   <Expander Style="{StaticResource HelpQ}" BorderThickness="0">
                     <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="Why can't I find some features?"/></Expander.Header>
                     <StackPanel>
-                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Usually the mode: Home user shows only the basics, Engineer adds more, and Developer and IT shows everything. Change it at the top of Settings. Anything hidden by hand under "What the window shows" is turned back on there too. The cleanup list is built by mode when scanning, so scan again after switching.</Run></TextBlock>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Probably because of the mode. Switch to Engineer or Developer and IT in Settings; anything hidden under "What the window shows" is turned back on there too.</Run></TextBlock>
                     </StackPanel>
                   </Expander>
                   <Expander Style="{StaticResource HelpQ}">
-                    <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="C: lost tens of GB this week. Where did it go?"/></Expander.Header>
+                    <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="C: lost a lot of space recently. Where did it go?"/></Expander.Header>
                     <StackPanel>
-                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Scan it under "Space map" and look at the overview and "Since last scan": it says how much used space grew in that time and where (Docker, WSL, browser caches, Windows Update or a particular folder). Then "Recent changes" lists, from the change journal, the folders where files were created or written most. To see which program is writing, run the activity monitor under "System health" for a while.</Run></TextBlock>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Scan C: in the space map and look at "Since last scan" and "Recent changes" to see where the extra space went. To find out which program is writing, run the activity monitor in System health for a while.</Run></TextBlock>
                     </StackPanel>
                   </Expander>
                   <Expander Style="{StaticResource HelpQ}">
-                    <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="How do I investigate a blue screen?"/></Expander.Header>
+                    <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="What should I do after a blue screen?"/></Expander.Header>
                     <StackPanel>
-                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>"System health → Blue screens and crashes": the "Diagnosis" at the top reads all crashes, event logs and disk health together and tells you the most likely kind of problem; click "Fix as suggested" to let ClearC do its part, then work through "Things to do yourself"; each crash also has a one-line explanation. Usual order: if the disk drops out, back up first, turn off disk power saving and update the storage driver; if one driver keeps being named, update or roll it back; then run "Check system files", and for memory-type crashes run the memory diagnostic. To get help from someone, click "Export diagnostics package".</Run></TextBlock>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Open "Blue screens and crashes" in System health, read the diagnosis, click "Fix as suggested", then work through "Things to do yourself". To get help, export a diagnostics package.</Run></TextBlock>
                     </StackPanel>
                   </Expander>
                   <Expander Style="{StaticResource HelpQ}">
                     <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="Why does ClearC need administrator rights?"/></Expander.Header>
                     <StackPanel>
-                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Cleaning locations such as system temporary files and the Windows Update cache requires administrator rights.</Run></TextBlock>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Cleaning system temporary files, the Windows Update cache and similar places requires them.</Run></TextBlock>
                     </StackPanel>
                   </Expander>
                   <Expander Style="{StaticResource HelpQ}">
-                    <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="Can I cancel partway?"/></Expander.Header>
+                    <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="Can I cancel halfway?"/></Expander.Header>
                     <StackPanel>
-                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Yes. The progress card and the bottom of the window both have a "Cancel" button. It stops at a safe point and doesn't undo what's already done:</Run></TextBlock>
-                      <DockPanel Margin="0,6,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Cleanup</Run><Run> stops.</Run></TextBlock></DockPanel>
-                      <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Moving</Run><Run>: if it is still copying, the original folder on C: is left untouched and the copied part stays on the target drive, so the next move picks up where it left off.</Run></TextBlock></DockPanel>
-                      <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Moving back to C:</Run><Run>: the partial copy is deleted and nothing is changed.</Run></TextBlock></DockPanel>
-                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,8,0,0"><Run>While it is creating a link, deleting a backup or running a system command (such as cleaning up Windows Update), the button is greyed out; you can cancel as soon as that step is done.</Run></TextBlock>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Yes. ClearC stops at a safe point and doesn't undo what is done. If a move is still copying, the original folder on C: is left alone and the next move continues where it stopped.</Run></TextBlock>
                     </StackPanel>
                   </Expander>
                   <Expander Style="{StaticResource HelpQ}">
-                    <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="Can I close the window while it's running?"/></Expander.Header>
+                    <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="Can I close the window while it's working?"/></Expander.Header>
                     <StackPanel>
-                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Please don't close the window until the work is done; to stop, click "Cancel". You can click "Continue in background" to collapse the progress card; progress is still shown at the bottom of the window and on the taskbar icon.</Run></TextBlock>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Please wait until it is done. Click "Cancel" to stop, or "Continue in background" to fold the progress away.</Run></TextBlock>
                     </StackPanel>
                   </Expander>
                   <Expander Style="{StaticResource HelpQ}">
                     <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="Where can I see the details?"/></Expander.Header>
                     <StackPanel>
-                      <DockPanel Margin="0,0,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Deletions and moves that were made: see "Activity log" on the left.</Run></TextBlock></DockPanel>
-                      <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Technical details of what the program did: see "Run log" at the bottom left; the full file is at %TEMP%\CleanC-run.log.</Run></TextBlock></DockPanel>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Deletes and moves are in the "Activity log"; technical details are in the "Run log" at the bottom left.</Run></TextBlock>
                     </StackPanel>
                   </Expander>
                   <Expander Style="{StaticResource HelpQ}">
-                    <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="Less space freed than expected?"/></Expander.Header>
+                    <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="Less space was freed than expected?"/></Expander.Header>
                     <StackPanel>
-                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Files moved to the Recycle Bin only free up space after you empty the Recycle Bin, files in use by other programs are skipped, and with "Recycle Bin first" on, anything that can't go to the Recycle Bin is not deleted (the log says why).</Run></TextBlock>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Files in the Recycle Bin free their space once it is emptied; files in use by other programs are skipped.</Run></TextBlock>
                     </StackPanel>
                   </Expander>
                   <Expander Style="{StaticResource HelpQ}">
-                    <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="Is there a dark mode?"/></Expander.Header>
+                    <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="Why doesn't the scan total match the used space?"/></Expander.Header>
                     <StackPanel>
-                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Yes. On the "Settings" page on the left (or with "Appearance" at the bottom left), choose Light, Dark or Follow Windows. ClearC closes and reopens after you change it.</Run></TextBlock>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Hard links are counted more than once, compressed and cloud-only files take less than their size, and system data such as the file table takes space too. After a fast scan, "Space breakdown" in the space map shows each part.</Run></TextBlock>
                     </StackPanel>
                   </Expander>
                   <Expander Style="{StaticResource HelpQ}">
-                    <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="Can I hide pages and buttons I don't use?"/></Expander.Header>
+                    <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="WinSxS is huge. Can I delete it?"/></Expander.Header>
                     <StackPanel>
-                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Yes, turn them off on the "Settings" page on the left. Anything hidden can be turned back on there at any time, and its settings and records are kept.</Run></TextBlock>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Not by hand. Many of its files are hard links, so it takes less than it seems. To free space, use "WinSxS component cleanup" on the cleanup page.</Run></TextBlock>
                     </StackPanel>
                   </Expander>
                   <Expander Style="{StaticResource HelpQ}">
-                    <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="Why doesn't the scanned total match the used space?"/></Expander.Header>
+                    <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="Why no Prefetch cleaning or memory boost?"/></Expander.Header>
                     <StackPanel>
-                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Adding up file sizes is not the same as the space really used on the drive:</Run></TextBlock>
-                      <DockPanel Margin="0,6,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Hard links (one file with several names, common in WinSxS and System32) are counted more than once.</Run></TextBlock></DockPanel>
-                      <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Compressed, sparse and cloud-only files take less space than their size.</Run></TextBlock></DockPanel>
-                      <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>The file table (MFT), the NTFS logs and the space Windows reserves for updates (reserved storage) take space without being ordinary files.</Run></TextBlock></DockPanel>
-                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,8,0,0"><Run>After a fast scan, click "Space breakdown" in the space map to see how big each part is.</Run></TextBlock>
-                    </StackPanel>
-                  </Expander>
-                  <Expander Style="{StaticResource HelpQ}">
-                    <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="WinSxS looks huge. Can I delete it?"/></Expander.Header>
-                    <StackPanel>
-                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Not by hand; that can break Windows.</Run></TextBlock>
-                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,8,0,0"><Run>Many of its files are the same files as in System32 and other places (hard links), so File Explorer counts them twice and WinSxS looks bigger than it is; with the fast scan, the space map notes how much of it is hard links.</Run></TextBlock>
-                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,8,0,0"><Run>What can really go is the old components left behind by updates: use "WinSxS component cleanup (DISM)" on the "Clean up C:" page.</Run></TextBlock>
-                    </StackPanel>
-                  </Expander>
-                  <Expander Style="{StaticResource HelpQ}">
-                    <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="Why doesn't ClearC clean the Prefetch folder or &quot;boost memory&quot;?"/></Expander.Header>
-                    <StackPanel>
-                      <DockPanel Margin="0,0,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Prefetch</Run><Run> records which files programs read when they start, so Windows can open your usual programs faster. It is only a few dozen MB, deleting it makes the next starts slower, and it grows back within days.</Run></TextBlock></DockPanel>
-                      <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Memory</Run><Run> is similar: Windows uses free memory to cache files you use often ("Cached" in Task Manager) and hands it over the moment another program needs it, so forcing it empty only slows the PC down.</Run></TextBlock></DockPanel>
-                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,8,0,0"><Run>That is why ClearC does neither.</Run></TextBlock>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Prefetch makes common apps start faster and only takes a few dozen MB; deleting it makes starts slower. Free memory is used by Windows to cache files, and emptying it only slows things down.</Run></TextBlock>
                     </StackPanel>
                   </Expander>
                   <Expander Style="{StaticResource HelpQ}">
                     <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="Why is there no registry cleaner?"/></Expander.Header>
                     <StackPanel>
-                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>A few stale entries in the registry take no space and cost no speed; Microsoft itself says cleaning the registry has no benefit, while a wrong deletion can break apps or Windows and is hard to fix. So ClearC doesn't do it, for the same reason it doesn't clean Prefetch or "boost memory".</Run></TextBlock>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Leftover registry entries take no space and don't slow anything down, while a wrong deletion can stop apps from starting.</Run></TextBlock>
                     </StackPanel>
                   </Expander>
                   <Expander Style="{StaticResource HelpQ}">
                     <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="How do I know about new versions?"/></Expander.Header>
                     <StackPanel>
-                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Click "Check for updates" under "Feedback and updates" in the list on the left. If there is a new version, the download page opens; replace the old exe with the new one and your settings, logs and reminders are kept. ClearC does not go online otherwise; it contacts GitHub only when you click that button.</Run></TextBlock>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Click "Check for updates" under "Feedback and updates" in Help. Replace the old exe with the new one; your settings and records are kept.</Run></TextBlock>
                     </StackPanel>
                   </Expander>
                 </StackPanel>
               </StackPanel>
             </Border>
-            <Border x:Name="FeedbackCard" Style="{StaticResource Card}" Padding="24,20,24,24" Visibility="Collapsed">
+            <Border x:Name="FeedbackCard" Style="{StaticResource Card}" Padding="36,30,36,36" Visibility="Collapsed">
               <StackPanel>
-                <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE8BD;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/><TextBlock Text="Feedback" Style="{StaticResource HelpHead}"/></StackPanel>
-                <TextBlock Style="{StaticResource HelpBody}" Margin="0,8,0,0" Text="If you run into a problem, find a bug or have a suggestion, please open an issue on GitHub."/>
-                <Border Background="#F5F5F7" CornerRadius="10" Padding="18,14" Margin="0,14,0,0">
+                <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE8BD;" FontFamily="{StaticResource Icons}" FontSize="19" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,1,12,0"/><TextBlock Text="Feedback and updates" Style="{StaticResource HelpHead}"/></StackPanel>
+                <TextBlock Style="{StaticResource HelpBody}" Margin="0,12,0,0" Text="If you run into a problem or have a suggestion, please open an issue on GitHub."/>
+                <Border Background="#F5F5F7" CornerRadius="12" Padding="20,16" Margin="0,18,0,0">
                   <DockPanel>
                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                       <Button x:Name="BtnIssue" Content="Report an issue" Style="{StaticResource Primary}" Padding="14,7" Margin="0,0,8,0"/>
@@ -10355,34 +10152,34 @@ $script:helpEnXaml = @'
                         <TextBlock Text="&#xE943;" FontFamily="{StaticResource Icons}" FontSize="18" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                       </Border>
                       <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="GitHub project page: downloads, source code, issues" Style="{StaticResource Caption}"/>
+                        <TextBlock Text="GitHub project page" Style="{StaticResource Caption}"/>
                         <TextBlock x:Name="GitHubUrl" Text="github.com/Xuanqiyun/ClearC" FontSize="16" FontWeight="SemiBold" Margin="0,1,0,0" TextOptions.TextFormattingMode="Ideal"/>
                       </StackPanel>
                     </StackPanel>
                   </DockPanel>
                 </Border>
-                <StackPanel x:Name="FbCopyDiag" Margin="0,18,0,0">
+                <StackPanel x:Name="FbCopyDiag" Margin="0,24,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Include diagnostic info"/>
-                  <TextBlock Style="{StaticResource HelpBody}" Text="A screenshot of the problem and the diagnostic info help find the cause faster. Diagnostic info includes the app version, Windows version, space on C: and the recent run log (which contains folder paths), so you may want to review it before sending."/>
-                  <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                  <TextBlock Style="{StaticResource HelpBody}" Text="A screenshot and the diagnostic info help find the cause faster. The diagnostic info contains folder paths, so take a look before posting it."/>
+                  <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
                     <Button x:Name="BtnCopyDiag" Content="Copy diagnostic info" Margin="0,0,8,0"/>
                     <Button x:Name="BtnOpenLog" Content="Open run log file"/>
                     <TextBlock x:Name="CopyHint" Style="{StaticResource Caption}" Foreground="#248A3D" Margin="14,0,0,0"/>
                   </StackPanel>
                 </StackPanel>
-                <StackPanel x:Name="FbSelfTest" Margin="0,18,0,0">
-                  <Border Height="1" Background="#EDEDF0" Margin="0,0,0,18"/>
+                <StackPanel x:Name="FbSelfTest" Margin="0,24,0,0">
+                  <Border Height="1" Background="#EDEDF0" Margin="0,0,0,24"/>
                   <TextBlock Style="{StaticResource HelpLead}" Text="Check scanning"/>
-                  <TextBlock Style="{StaticResource HelpBody}" Text="Verifies the fast scan on this PC: it compares reading the file table with a folder-by-folder scan, then creates a few files in ClearC's own folder, changes and deletes them to check updates from the change journal. It only reads drive C:, leaves your files alone and takes a minute or two; the result is copied so you can paste it into a GitHub issue."/>
-                  <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                  <TextBlock Style="{StaticResource HelpBody}" Text="Verifies on this PC that the fast scan is accurate. It takes a minute or two and only reads. The result is copied so you can paste it into an issue."/>
+                  <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
                     <Button x:Name="BtnSelfTest" Content="Check scanning"/>
                   </StackPanel>
                 </StackPanel>
-                <StackPanel x:Name="FbCheckUpdate" Margin="0,18,0,0">
-                  <Border Height="1" Background="#EDEDF0" Margin="0,0,0,18"/>
+                <StackPanel x:Name="FbCheckUpdate" Margin="0,24,0,0">
+                  <Border Height="1" Background="#EDEDF0" Margin="0,0,0,24"/>
                   <TextBlock Style="{StaticResource HelpLead}" Text="Check for updates"/>
-                  <TextBlock Style="{StaticResource HelpBody}" Text="If there is a new version, the download page opens; replace the old exe with the new one. ClearC contacts GitHub only when you click this button."/>
-                  <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                  <TextBlock Style="{StaticResource HelpBody}" Text="ClearC contacts GitHub only when you click this button."/>
+                  <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
                     <Button x:Name="BtnCheckUpdate" Content="Check for updates"/>
                   </StackPanel>
                 </StackPanel>
@@ -10616,44 +10413,44 @@ if ($script:mode -match '(?i)/autoclean') {
     </Style>
     <Style x:Key="Note" TargetType="TextBlock" BasedOn="{StaticResource Caption}"/>
     <Style x:Key="HelpHead" TargetType="TextBlock">
-      <Setter Property="FontSize" Value="15"/>
+      <Setter Property="FontSize" Value="20"/>
       <Setter Property="FontWeight" Value="SemiBold"/>
       <Setter Property="Foreground" Value="#1D1D1F"/>
       <Setter Property="VerticalAlignment" Value="Center"/>
     </Style>
     <Style x:Key="HelpPara" TargetType="TextBlock">
-      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="FontSize" Value="14"/>
       <Setter Property="Foreground" Value="#3A3A3C"/>
       <Setter Property="TextWrapping" Value="Wrap"/>
-      <Setter Property="LineHeight" Value="22"/>
+      <Setter Property="LineHeight" Value="24"/>
     </Style>
-    <!-- 帮助页：每一节是一张能折叠的卡片；条目是一行粗体标题，下面一两行说明 -->
+    <!-- 帮助页：条目是一行粗体标题，下面一两行说明（字号、行距、段距照苹果的帮助页：正文 14 / 行高 24，条目之间空 26） -->
     <Style x:Key="HelpLead" TargetType="TextBlock">
-      <Setter Property="FontSize" Value="13.5"/>
+      <Setter Property="FontSize" Value="15"/>
       <Setter Property="FontWeight" Value="SemiBold"/>
       <Setter Property="Foreground" Value="#1D1D1F"/>
       <Setter Property="TextWrapping" Value="Wrap"/>
     </Style>
     <Style x:Key="HelpBody" TargetType="TextBlock">
-      <Setter Property="FontSize" Value="13"/>
-      <Setter Property="Foreground" Value="#515154"/>
+      <Setter Property="FontSize" Value="14"/>
+      <Setter Property="Foreground" Value="#424245"/>
       <Setter Property="TextWrapping" Value="Wrap"/>
-      <Setter Property="LineHeight" Value="21"/>
-      <Setter Property="Margin" Value="0,3,0,0"/>
-      <Setter Property="MaxWidth" Value="720"/>
+      <Setter Property="LineHeight" Value="24"/>
+      <Setter Property="Margin" Value="0,6,0,0"/>
+      <Setter Property="MaxWidth" Value="660"/>
       <Setter Property="HorizontalAlignment" Value="Left"/>
     </Style>
     <Style x:Key="HelpGroup" TargetType="TextBlock">
-      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="FontSize" Value="13"/>
       <Setter Property="FontWeight" Value="SemiBold"/>
-      <Setter Property="Foreground" Value="#0066CC"/>
+      <Setter Property="Foreground" Value="#86868B"/>
       <Setter Property="VerticalAlignment" Value="Center"/>
     </Style>
     <Style x:Key="HelpSum" TargetType="TextBlock">
-      <Setter Property="FontSize" Value="12.5"/>
+      <Setter Property="FontSize" Value="14"/>
       <Setter Property="Foreground" Value="#6E6E73"/>
       <Setter Property="TextWrapping" Value="Wrap"/>
-      <Setter Property="Margin" Value="0,2,0,0"/>
+      <Setter Property="Margin" Value="0,5,0,0"/>
     </Style>
     <Style x:Key="HelpListHead" TargetType="TextBlock">
       <Setter Property="FontSize" Value="13"/>
@@ -10662,25 +10459,25 @@ if ($script:mode -match '(?i)/autoclean') {
       <Setter Property="VerticalAlignment" Value="Bottom"/>
     </Style>
     <Style x:Key="HelpIcon" TargetType="Border">
-      <Setter Property="Width" Value="36"/>
-      <Setter Property="Height" Value="36"/>
-      <Setter Property="CornerRadius" Value="10"/>
+      <Setter Property="Width" Value="44"/>
+      <Setter Property="Height" Value="44"/>
+      <Setter Property="CornerRadius" Value="12"/>
       <Setter Property="Background" Value="#EAF2FD"/>
       <Setter Property="VerticalAlignment" Value="Center"/>
-      <Setter Property="Margin" Value="0,0,14,0"/>
+      <Setter Property="Margin" Value="0,0,16,0"/>
     </Style>
     <Style x:Key="HelpPill" TargetType="Border">
       <Setter Property="Background" Value="#F0F0F3"/>
-      <Setter Property="CornerRadius" Value="6"/>
-      <Setter Property="Padding" Value="8,1,8,2"/>
+      <Setter Property="CornerRadius" Value="7"/>
+      <Setter Property="Padding" Value="10,3,10,4"/>
       <Setter Property="HorizontalAlignment" Value="Left"/>
       <Setter Property="VerticalAlignment" Value="Top"/>
-      <Setter Property="Margin" Value="0,1,12,0"/>
+      <Setter Property="Margin" Value="0,0,14,0"/>
     </Style>
     <Style x:Key="HelpTile" TargetType="Border">
       <Setter Property="Background" Value="#F5F5F7"/>
-      <Setter Property="CornerRadius" Value="10"/>
-      <Setter Property="Padding" Value="14,11,14,13"/>
+      <Setter Property="CornerRadius" Value="12"/>
+      <Setter Property="Padding" Value="18,16,18,18"/>
     </Style>
     <Style x:Key="HelpSection" TargetType="Expander">
       <Setter Property="Margin" Value="0,0,0,10"/>
@@ -10741,7 +10538,7 @@ if ($script:mode -match '(?i)/autoclean') {
                               IsChecked="{Binding IsExpanded, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
                   <ToggleButton.Template>
                     <ControlTemplate TargetType="ToggleButton">
-                      <Border Background="Transparent" Padding="0,13,2,13">
+                      <Border Background="Transparent" Padding="0,17,2,17">
                         <DockPanel>
                           <TextBlock x:Name="Chev" DockPanel.Dock="Right" Text="&#xE70D;" FontFamily="{StaticResource Icons}" FontSize="11"
                                      Foreground="#86868B" VerticalAlignment="Center" Margin="16,0,0,0" RenderTransformOrigin="0.5,0.5">
@@ -10759,7 +10556,7 @@ if ($script:mode -match '(?i)/autoclean') {
                     </ControlTemplate>
                   </ToggleButton.Template>
                 </ToggleButton>
-                <ContentPresenter x:Name="Body" Visibility="Collapsed" Margin="0,0,30,15"/>
+                <ContentPresenter x:Name="Body" Visibility="Collapsed" Margin="0,0,36,20"/>
               </DockPanel>
             </Border>
             <ControlTemplate.Triggers>
@@ -11860,7 +11657,7 @@ if ($script:mode -match '(?i)/autoclean') {
         <StackPanel>
           <TextBlock Text="清理 C 盘" Style="{StaticResource PageTitle}"/>
           <TextBlock x:Name="Hint" Style="{StaticResource PageSub}"
-                     Text="「一键清理」会自动扫描并处理默认选中的项目。也可以先扫描，再逐项选择删除、搬到其他盘或跳过。"/>
+                     Text="一键清理缓存和临时文件，或者先扫描，再逐项选择。"/>
         </StackPanel>
       </DockPanel>
 
@@ -12018,7 +11815,7 @@ if ($script:mode -match '(?i)/autoclean') {
         </StackPanel>
         <StackPanel>
           <TextBlock Text="重复文件" Style="{StaticResource PageTitle}"/>
-          <TextBlock Style="{StaticResource PageSub}" Text="找出内容完全相同的文件，每组只留一份，其余删除。"/>
+          <TextBlock Style="{StaticResource PageSub}" Text="找出内容完全相同的文件，每组留一份。"/>
         </StackPanel>
       </DockPanel>
 
@@ -12255,7 +12052,7 @@ if ($script:mode -match '(?i)/autoclean') {
         </StackPanel>
         <StackPanel>
           <TextBlock Text="空间地图" Style="{StaticResource PageTitle}"/>
-          <TextBlock Style="{StaticResource PageSub}" Text="扫描整块盘，看清每个文件夹占了多少。双击文件夹往里点，一层层找到真正的大户。"/>
+          <TextBlock Style="{StaticResource PageSub}" Text="看清每个文件夹和文件占了多少空间。"/>
         </StackPanel>
       </DockPanel>
       <!-- 每块盘一张卡片：用量条、温度、磨损、健康状态。颜色按档位：绿正常、橙要留意、红有问题 -->
@@ -12550,7 +12347,7 @@ if ($script:mode -match '(?i)/autoclean') {
         <Button x:Name="BtnSaveRefresh" DockPanel.Dock="Right" Content="刷新" VerticalAlignment="Top" Margin="16,4,0,0"/>
         <StackPanel>
           <TextBlock Text="省空间" Style="{StaticResource PageTitle}"/>
-          <TextBlock Style="{StaticResource PageSub}" Text="不删任何文件也能腾出空间：系统压缩、把大系统文件挪到其他盘、压缩不常用的文件夹和虚拟磁盘。左边选一项，右边是它的说明和按钮。"/>
+          <TextBlock Style="{StaticResource PageSub}" Text="不删文件也能腾出空间：压缩，或者换个位置放。"/>
         </StackPanel>
       </DockPanel>
       <Grid Grid.Row="1">
@@ -13091,7 +12888,7 @@ if ($script:mode -match '(?i)/autoclean') {
         </StackPanel>
         <StackPanel>
           <TextBlock Text="软件管理" Style="{StaticResource PageTitle}"/>
-          <TextBlock Style="{StaticResource PageSub}" TextWrapping="Wrap" Text="装过的软件按占用空间从大到小排。装在 C 盘的可以「搬到其他盘」，软件照常使用、不用重装；不用的可以直接卸载，卸载后再检查有没有残留文件夹。开机启动的程序、第三方的计划任务和右键菜单也在这里管。"/>
+          <TextBlock Style="{StaticResource PageSub}" TextWrapping="Wrap" Text="看软件占了多少，卸载、清残留，或者搬到其他盘。"/>
         </StackPanel>
       </DockPanel>
       <DockPanel Grid.Row="1" Margin="0,0,0,10">
@@ -13273,7 +13070,7 @@ if ($script:mode -match '(?i)/autoclean') {
         <Button x:Name="BtnMovesRefresh" DockPanel.Dock="Right" Content="刷新" VerticalAlignment="Top" Margin="16,4,0,0" ToolTip="重新看看 C 盘上还有什么能搬，并刷新已经搬走的状态"/>
         <StackPanel>
           <TextBlock Text="搬家管理" Style="{StaticResource PageTitle}"/>
-          <TextBlock Style="{StaticResource PageSub}" Text="把 C 盘上的聊天记录、软件和其他大文件夹搬到其他盘，原位置留一个链接，软件照常使用。搬走的也在这里：看链接是否正常、搬回 C 盘、修复断掉的链接。"/>
+          <TextBlock Style="{StaticResource PageSub}" Text="把聊天记录、软件和大文件夹搬到其他盘，软件照常使用。"/>
         </StackPanel>
       </DockPanel>
       <TextBlock Grid.Row="1" x:Name="MovesInfo" FontWeight="SemiBold" Margin="2,0,0,12" TextWrapping="Wrap"/>
@@ -13426,7 +13223,7 @@ if ($script:mode -match '(?i)/autoclean') {
       </WrapPanel>
       <Grid Grid.Row="1">
         <Grid.ColumnDefinitions><ColumnDefinition Width="*" MaxWidth="900"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
-        <TextBlock Style="{StaticResource PageSub}" TextWrapping="Wrap" Text="C 盘快满或者垃圾攒多了时提醒你，定期自动清一次缓存，并记下空间的变化。两项都默认关闭，打开开关才生效。开启后由 Windows 自己定时运行，不需要一直开着本工具，也不需要开机启动。"/>
+        <TextBlock Style="{StaticResource PageSub}" TextWrapping="Wrap" Text="C 盘快满时提醒你，定期自动清理缓存。默认都关着。"/>
       </Grid>
       <Grid Grid.Row="2" Margin="0,18,0,0">
         <Grid.ColumnDefinitions><ColumnDefinition Width="*" MaxWidth="900"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
@@ -13523,7 +13320,7 @@ if ($script:mode -match '(?i)/autoclean') {
         </StackPanel>
         <StackPanel>
           <TextBlock Text="操作日志" Style="{StaticResource PageTitle}"/>
-          <TextBlock Style="{StaticResource PageSub}" Text="删除、搬运、合并、压缩、卸载和系统设置的每一次改动都记在这里，可以按类别、时间和关键字查找。"/>
+          <TextBlock Style="{StaticResource PageSub}" Text="每一次删除、搬家和设置改动都记在这里。"/>
         </StackPanel>
       </DockPanel>
       <Border Grid.Row="1" Style="{StaticResource Card}" Padding="20,14" Margin="0,0,0,12">
@@ -13609,7 +13406,7 @@ if ($script:mode -match '(?i)/autoclean') {
                 ToolTip="页面、按钮、列和说明全部恢复成默认显示。外观、语言和扫描设置不变"/>
         <StackPanel>
           <TextBlock Text="设置" Style="{StaticResource PageTitle}"/>
-          <TextBlock Style="{StaticResource PageSub}" Text="外观、语言，以及界面上显示哪些内容。用不上的页面、按钮和说明可以关掉，界面更清爽；随时可以回来打开，不会丢任何设置和记录。"/>
+          <TextBlock Style="{StaticResource PageSub}" Text="外观、语言，以及界面上显示什么。"/>
         </StackPanel>
       </DockPanel>
       </Grid>
@@ -13635,7 +13432,7 @@ if ($script:mode -match '(?i)/autoclean') {
             <Border x:Name="SetCardMode" Style="{StaticResource Card}" Padding="24,20" Margin="0" Visibility="Collapsed">
               <StackPanel>
                 <TextBlock Text="使用模式" Style="{StaticResource CardHead}"/>
-                <TextBlock Style="{StaticResource SetNote}" Text="按你的需要决定界面上有多少东西。换模式不会丢任何设置和记录，随时可以换回来。"/>
+                <TextBlock Style="{StaticResource SetNote}" Text="决定界面上有多少功能。换模式不会丢任何设置和记录。"/>
                 <Border Style="{StaticResource SegBox}" HorizontalAlignment="Left" Margin="0,12,0,0">
                   <StackPanel Orientation="Horizontal">
                     <RadioButton x:Name="SetModeBasic" GroupName="mode" Content="普通用户" Style="{StaticResource Seg}"/>
@@ -13660,7 +13457,7 @@ if ($script:mode -match '(?i)/autoclean') {
                   </Border>
                   <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="外观" Style="{StaticResource SetName}"/>
-                    <TextBlock Style="{StaticResource SetNote}" Text="跟随系统会照 Windows 设置里「选择应用模式」来。换了以后本工具会关闭，再自动打开。"/>
+                    <TextBlock Style="{StaticResource SetNote}" Text="跟随系统时照 Windows 的「选择应用模式」。更改后本工具会重新打开。"/>
                   </StackPanel>
                 </DockPanel>
                 <DockPanel Margin="0,16,0,0">
@@ -13672,7 +13469,7 @@ if ($script:mode -match '(?i)/autoclean') {
                   </Border>
                   <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="界面语言" Style="{StaticResource SetName}"/>
-                    <TextBlock Style="{StaticResource SetNote}" Text="换了以后本工具会关闭，再用新的语言打开。"/>
+                    <TextBlock Style="{StaticResource SetNote}" Text="更改后本工具会重新打开。"/>
                   </StackPanel>
                 </DockPanel>
               </StackPanel>
@@ -13682,7 +13479,7 @@ if ($script:mode -match '(?i)/autoclean') {
               <StackPanel>
                 <TextBlock Text="界面上显示什么" Style="{StaticResource CardHead}"/>
                 <TextBlock Text="左侧显示的页面" Style="{StaticResource SetName}" Margin="0,14,0,0"/>
-                <TextBlock Style="{StaticResource SetNote}" Text="「清理 C 盘」「空间地图」「帮助」和「设置」一直显示。关掉的页面只是不在左侧列出，里面的设置、搬家记录和自动提醒都照旧。"/>
+                <TextBlock Style="{StaticResource SetNote}" Text="「清理 C 盘」「空间地图」「帮助」和「设置」一直显示。关掉的页面只是不在左边列出，设置和记录都照旧。"/>
                 <WrapPanel Margin="0,2,0,0">
                   <CheckBox x:Name="SetPageDup" Content="重复文件" Width="170" Margin="0,10,0,0"/>
                   <CheckBox x:Name="SetPageSave" Content="省空间" Width="170" Margin="0,10,0,0"/>
@@ -13693,7 +13490,7 @@ if ($script:mode -match '(?i)/autoclean') {
                   <CheckBox x:Name="SetPageLog" Content="操作日志" Width="170" Margin="0,10,0,0"/>
                 </WrapPanel>
                 <TextBlock Text="左下角的按钮" Style="{StaticResource SetName}" Margin="0,18,0,0"/>
-                <TextBlock Style="{StaticResource SetNote}" Text="外观和语言也可以在这一页上面改；「使用反馈」和「运行记录」也在「帮助」页里。"/>
+                <TextBlock Style="{StaticResource SetNote}" Text="外观和语言在这一页上面也能改；「使用反馈」和「运行记录」在帮助里也有。"/>
                 <WrapPanel Margin="0,2,0,0">
                   <CheckBox x:Name="SetLinkTheme" Content="外观" Width="170" Margin="0,10,0,0"/>
                   <CheckBox x:Name="SetLinkLang" Content="切换语言" Width="170" Margin="0,10,0,0"/>
@@ -13704,7 +13501,7 @@ if ($script:mode -match '(?i)/autoclean') {
                   <CheckBox x:Name="SetPageSub" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
                   <StackPanel>
                     <TextBlock Text="页面标题下的说明" Style="{StaticResource SetName}"/>
-                    <TextBlock Style="{StaticResource SetNote}" Text="每一页标题下面那行灰色的说明文字。用熟了可以关掉，列表能多显示几行。"/>
+                    <TextBlock Style="{StaticResource SetNote}" Text="每一页标题下面那行灰色的说明。关掉后列表能多显示几行。"/>
                   </StackPanel>
                 </DockPanel>
               </StackPanel>
@@ -13717,14 +13514,14 @@ if ($script:mode -match '(?i)/autoclean') {
                   <CheckBox x:Name="SetMapCheck" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
                   <StackPanel>
                     <TextBlock Text="项目复选框" Style="{StaticResource SetName}"/>
-                    <TextBlock Style="{StaticResource SetNote}" Text="每一行前面显示一个复选框（和资源管理器「查看」里的「项目复选框」一样）：只有点方框才选中或取消，单击行的其他地方不会选中，按 Esc 全部取消。关掉就照 Windows 列表原来的做法：单击选中一行，按住 Ctrl、Shift 多选。开不开都可以按住鼠标（左键或右键）上下拖，一次选中连着的几行。"/>
+                    <TextBlock Style="{StaticResource SetNote}" Text="每一行前面显示一个复选框，点方框才选中，按 Esc 全部取消。关掉就照 Windows 原来的做法：单击选中，按住 Ctrl 或 Shift 多选。都可以按住鼠标上下拖，一次选中连着的几行。"/>
                   </StackPanel>
                 </DockPanel>
                 <DockPanel Margin="0,16,0,0">
                   <CheckBox x:Name="SetMapBar" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
                   <StackPanel>
                     <TextBlock Text="占比条" Style="{StaticResource SetName}"/>
-                    <TextBlock Style="{StaticResource SetNote}" Text="名字右边的蓝色横条，一眼看出谁大。"/>
+                    <TextBlock Style="{StaticResource SetNote}" Text="名字右边的蓝色横条，表示占了多少。"/>
                   </StackPanel>
                 </DockPanel>
                 <DockPanel Margin="0,16,0,0">
@@ -13745,21 +13542,21 @@ if ($script:mode -match '(?i)/autoclean') {
                   <CheckBox x:Name="SetMapDisk" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
                   <StackPanel>
                     <TextBlock Text="实际占用和硬链接" Style="{StaticResource SetName}"/>
-                    <TextBlock Style="{StaticResource SetNote}" Text="快速扫描时在名字下面注明：压缩、稀疏和只在云端（OneDrive 等）的文件实际占的盘比文件大小小；WinSxS 这类文件夹里很多文件和系统其他位置是同一份（硬链接），删了也不腾空间。"/>
+                    <TextBlock Style="{StaticResource SetNote}" Text="快速扫描时注明压缩、稀疏和只在云端的文件实际占多少，以及硬链接（删了也不腾空间）。"/>
                   </StackPanel>
                 </DockPanel>
                 <DockPanel Margin="0,16,0,0">
                   <CheckBox x:Name="SetMapHealth" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
                   <StackPanel>
                     <TextBlock Text="磁盘健康卡片" Style="{StaticResource SetName}"/>
-                    <TextBlock Style="{StaticResource SetNote}" Text="页面上方每块盘一张卡片：用了多少、健康状态，固态硬盘还有温度、磨损和通电时间。只读，不改任何东西。"/>
+                    <TextBlock Style="{StaticResource SetNote}" Text="页面上方每块盘一张卡片：用量、健康状态，固态硬盘还有温度和磨损。"/>
                   </StackPanel>
                 </DockPanel>
                 <DockPanel Margin="0,16,0,0">
                   <CheckBox x:Name="SetMapFastBtn" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
                   <StackPanel>
                     <TextBlock Text="右上角的「快速扫描」开关" Style="{StaticResource SetName}"/>
-                    <TextBlock Style="{StaticResource SetNote}" Text="关掉只是不在空间地图上显示这个开关；快速扫描本身在下面「扫描和查重」里开关。"/>
+                    <TextBlock Style="{StaticResource SetNote}" Text="只是不在空间地图上显示这个开关；快速扫描本身在「扫描和查重」里开关。"/>
                   </StackPanel>
                 </DockPanel>
               </StackPanel>
@@ -13772,14 +13569,14 @@ if ($script:mode -match '(?i)/autoclean') {
                   <CheckBox x:Name="SetFast" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
                   <StackPanel>
                     <TextBlock Text="快速扫描" Style="{StaticResource SetName}"/>
-                    <TextBlock Style="{StaticResource SetNote}" Text="直接读取 NTFS 的文件表（MFT），比逐个文件夹查看快得多，还能看出实际占用和硬链接。少数安全软件对直接读盘会提示，可以关掉，改为逐个文件夹扫描。清理、搬家、软件管理统计大小时也按这个设置。"/>
+                    <TextBlock Style="{StaticResource SetNote}" Text="直接读 NTFS 的文件表，比逐个文件夹查看快得多。少数安全软件会提示，可以关掉。"/>
                   </StackPanel>
                 </DockPanel>
                 <DockPanel Margin="0,16,0,0">
                   <CheckBox x:Name="SetLowIo" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
                   <StackPanel>
                     <TextBlock Text="查重复文件时让着其他程序" Style="{StaticResource SetName}"/>
-                    <TextBlock Style="{StaticResource SetNote}" Text="读文件时用 Windows 的后台模式，磁盘和内存都排在其他程序后面：不拖慢正在用的程序，也不把它们缓存在内存里的数据挤掉。电脑空闲时速度基本不受影响，同时在做别的事时查得慢一些。"/>
+                    <TextBlock Style="{StaticResource SetNote}" Text="读文件时用 Windows 的后台模式，不拖慢正在用的程序。同时做别的事时会查得慢一些。"/>
                   </StackPanel>
                 </DockPanel>
               </StackPanel>
@@ -13792,11 +13589,11 @@ if ($script:mode -match '(?i)/autoclean') {
                   <CheckBox x:Name="SetRecycle" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
                   <StackPanel>
                     <TextBlock Text="删除时先放进回收站" Style="{StaticResource SetName}"/>
-                    <TextBlock Style="{StaticResource SetNote}" Text="手动清理删掉的文件先放进回收站，删错了可以从回收站恢复。慢一些，回收站会变大（清空回收站才真正腾出空间）；放不进回收站的（网络位置、U 盘、比回收站还大）不删。定期自动清理不受这个影响，照样直接删。"/>
+                    <TextBlock Style="{StaticResource SetNote}" Text="手动清理删掉的文件先放进回收站，删错了能恢复。放不进回收站的不删。定期自动清理不受影响。"/>
                   </StackPanel>
                 </DockPanel>
                 <TextBlock x:Name="SetCustomHead" Text="自己加的文件夹" Style="{StaticResource SetName}" Margin="0,14,0,0"/>
-                <TextBlock x:Name="SetCustomNote" Style="{StaticResource SetNote}" Text="清理时删掉这些文件夹里的东西，文件夹本身保留。在「清理 C 盘」页单独列成一组，默认选「删除」，每次执行前照样要确认；定期自动清理不碰它们。个人文件夹、系统文件夹和软件的安装文件夹加不进来。"/>
+                <TextBlock x:Name="SetCustomNote" Style="{StaticResource SetNote}" Text="清理时删掉这些文件夹里的东西，文件夹本身保留。个人文件夹、系统文件夹和软件的安装文件夹加不进来。"/>
                 <ItemsControl x:Name="SetCustomList" Margin="0,6,0,0">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate>
@@ -13810,7 +13607,7 @@ if ($script:mode -match '(?i)/autoclean') {
                 <TextBlock x:Name="SetCustomEmpty" Style="{StaticResource SetNote}" Text="还没有加。" Margin="0,6,0,0"/>
                 <Button x:Name="BtnSetCustomAdd" Content="添加文件夹…" Style="{StaticResource Small}" HorizontalAlignment="Left" Margin="0,8,0,0"/>
                 <TextBlock x:Name="SetExcludeHead" Text="排除的文件夹" Style="{StaticResource SetName}" Margin="0,20,0,0"/>
-                <TextBlock x:Name="SetExcludeNote" Style="{StaticResource SetNote}" Text="清理时一律不碰这些文件夹和里面的东西，估算大小时也不算。比如临时文件夹里某个你要留着的子文件夹。"/>
+                <TextBlock x:Name="SetExcludeNote" Style="{StaticResource SetNote}" Text="清理时一律不碰这些文件夹，估算大小时也不算。"/>
                 <ItemsControl x:Name="SetExcludeList" Margin="0,6,0,0">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate>
@@ -13835,7 +13632,7 @@ if ($script:mode -match '(?i)/autoclean') {
       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
       <StackPanel Grid.Row="0" Margin="0,0,0,16">
         <TextBlock Text="帮助" Style="{StaticResource PageTitle}"/>
-        <TextBlock Style="{StaticResource PageSub}" Text="使用说明、安全风险提示，以及怎么反馈问题。"/>
+        <TextBlock Style="{StaticResource PageSub}" Text="怎么用，哪些东西不会动，以及怎么反馈问题。"/>
       </StackPanel>
       <Grid Grid.Row="1">
         <Grid.ColumnDefinitions><ColumnDefinition Width="214"/><ColumnDefinition Width="*" MaxWidth="900"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
@@ -13866,69 +13663,69 @@ if ($script:mode -match '(?i)/autoclean') {
         <ScrollViewer x:Name="HelpScroll" Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
           <StackPanel Margin="0,0,6,14">
             <StackPanel x:Name="HelpPaneStart">
-              <Border x:Name="RiskCard" Background="#FFF6F6" BorderBrush="#F3C4C8" BorderThickness="1" CornerRadius="12" Padding="24,20,24,20" Margin="0">
+              <Border x:Name="RiskCard" Background="#FFF6F6" BorderBrush="#F3C4C8" BorderThickness="1" CornerRadius="14" Padding="32,28,32,30" Margin="0">
                 <DockPanel>
-                  <TextBlock DockPanel.Dock="Left" Text="&#xE7BA;" FontFamily="{StaticResource Icons}" FontSize="20" Foreground="#D70015" VerticalAlignment="Top" Margin="0,1,14,0"/>
+                  <TextBlock DockPanel.Dock="Left" Text="&#xE7BA;" FontFamily="{StaticResource Icons}" FontSize="20" Foreground="#D70015" VerticalAlignment="Top" Margin="0,3,16,0"/>
                   <StackPanel>
                     <TextBlock Text="安全风险提示" Style="{StaticResource HelpHead}" Foreground="#A1000F"/>
-                    <DockPanel Margin="0,8,0,0">
-                      <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                    <DockPanel Margin="0,10,0,0">
+                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
                       <TextBlock Style="{StaticResource HelpPara}"><Run>删除操作会把文件从电脑上移除。没有放进回收站的文件，删除后通常无法恢复，可能造成资料丢失。</Run></TextBlock>
                     </DockPanel>
-                    <DockPanel Margin="0,8,0,0">
-                      <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                    <DockPanel Margin="0,10,0,0">
+                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
                       <TextBlock Style="{StaticResource HelpPara}"><Run>每次删除前，请确认这些资料确实不再需要、删除不会给你带来损失。重要资料请先备份。</Run></TextBlock>
                     </DockPanel>
-                    <DockPanel Margin="0,8,0,0">
-                      <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                    <DockPanel Margin="0,10,0,0">
+                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
                       <TextBlock Style="{StaticResource HelpPara}"><Run>本工具只按你的选择执行操作。因使用本工具删除、搬移文件造成的资料丢失或其他损失，</Run><Run FontWeight="SemiBold" Foreground="#A1000F">责任由使用者自行承担，开发者不承担责任</Run><Run>。</Run></TextBlock>
                     </DockPanel>
-                    <DockPanel Margin="0,8,0,0">
-                      <TextBlock DockPanel.Dock="Left" Text="•" Width="16" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                    <DockPanel Margin="0,10,0,0">
+                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
                       <TextBlock Style="{StaticResource HelpPara}"><Run>继续使用本工具，即表示你已了解并接受上述风险。</Run></TextBlock>
                     </DockPanel>
                   </StackPanel>
                 </DockPanel>
               </Border>
-              <Border Style="{StaticResource Card}" Padding="22,18,22,22" Margin="0,16,0,0">
+              <Border Style="{StaticResource Card}" Padding="36,30,36,36" Margin="0,20,0,0">
                 <StackPanel>
-                  <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE768;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/><TextBlock Text="快速上手" Style="{StaticResource HelpHead}"/></StackPanel>
-                  <Grid Margin="0,14,0,0">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="10"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                  <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE768;" FontFamily="{StaticResource Icons}" FontSize="19" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,1,12,0"/><TextBlock Text="快速上手" Style="{StaticResource HelpHead}"/></StackPanel>
+                  <Grid Margin="0,20,0,0">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                     <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource HelpTile}">
                       <DockPanel>
-                        <Border DockPanel.Dock="Left" Width="22" Height="22" CornerRadius="11" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,11,0"><TextBlock Text="1" Foreground="White" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                        <Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0"><TextBlock Text="1" Foreground="White" FontSize="12.5" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                         <StackPanel>
-                          <TextBlock Style="{StaticResource HelpLead}" Text="一键清理" Margin="0,2,0,0"/>
-                          <TextBlock Style="{StaticResource HelpBody}"><Run>在「清理 C 盘」页点「一键清理」。先扫描，再处理默认选中的项目：删除缓存、临时文件和日志，把微信、QQ 等聊天记录搬到空间最大的其他盘。开始前会列出全部项目让你确认。</Run></TextBlock>
+                          <TextBlock Style="{StaticResource HelpLead}" Text="一键清理" Margin="0,1,0,0"/>
+                          <TextBlock Style="{StaticResource HelpBody}"><Run>在「清理 C 盘」点「一键清理」：删除缓存和临时文件，把聊天记录搬到空间最大的其他盘。开始前会列出全部项目，确认后才做。</Run></TextBlock>
                         </StackPanel>
                       </DockPanel>
                     </Border>
                     <Border Grid.Row="0" Grid.Column="2" Style="{StaticResource HelpTile}">
                       <DockPanel>
-                        <Border DockPanel.Dock="Left" Width="22" Height="22" CornerRadius="11" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,11,0"><TextBlock Text="2" Foreground="White" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                        <Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0"><TextBlock Text="2" Foreground="White" FontSize="12.5" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                         <StackPanel>
-                          <TextBlock Style="{StaticResource HelpLead}" Text="自己挑选" Margin="0,2,0,0"/>
-                          <TextBlock Style="{StaticResource HelpBody}"><Run>先点「扫描」，在每一行选「删除」「搬到其他盘」或「跳过」，再点右下角「执行所选操作」。</Run></TextBlock>
+                          <TextBlock Style="{StaticResource HelpLead}" Text="自己挑选" Margin="0,1,0,0"/>
+                          <TextBlock Style="{StaticResource HelpBody}"><Run>点「扫描」，在每一行选「删除」「搬到其他盘」或「跳过」，再点「执行所选操作」。</Run></TextBlock>
                         </StackPanel>
                       </DockPanel>
                     </Border>
                     <Border Grid.Row="2" Grid.Column="0" Style="{StaticResource HelpTile}">
                       <DockPanel>
-                        <Border DockPanel.Dock="Left" Width="22" Height="22" CornerRadius="11" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,11,0"><TextBlock Text="3" Foreground="White" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                        <Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0"><TextBlock Text="3" Foreground="White" FontSize="12.5" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                         <StackPanel>
-                          <TextBlock Style="{StaticResource HelpLead}" Text="找重复文件" Margin="0,2,0,0"/>
-                          <TextBlock Style="{StaticResource HelpBody}"><Run>在左边切到「重复文件」，选好位置和条件，点「开始查找」。核对勾选后，点「删除勾选的文件」。</Run></TextBlock>
+                          <TextBlock Style="{StaticResource HelpLead}" Text="找重复文件" Margin="0,1,0,0"/>
+                          <TextBlock Style="{StaticResource HelpBody}"><Run>在「重复文件」选好位置，点「开始查找」，核对后删除勾选的文件。</Run></TextBlock>
                         </StackPanel>
                       </DockPanel>
                     </Border>
                     <Border Grid.Row="2" Grid.Column="2" Style="{StaticResource HelpTile}">
                       <DockPanel>
-                        <Border DockPanel.Dock="Left" Width="22" Height="22" CornerRadius="11" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,11,0"><TextBlock Text="4" Foreground="White" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                        <Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0"><TextBlock Text="4" Foreground="White" FontSize="12.5" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                         <StackPanel>
-                          <TextBlock Style="{StaticResource HelpLead}" Text="看谁占地方" Margin="0,2,0,0"/>
-                          <TextBlock Style="{StaticResource HelpBody}"><Run>在左边切到「空间地图」，选 C 盘点「扫描」，双击文件夹一层层往里看。</Run></TextBlock>
+                          <TextBlock Style="{StaticResource HelpLead}" Text="看谁占地方" Margin="0,1,0,0"/>
+                          <TextBlock Style="{StaticResource HelpBody}"><Run>在「空间地图」选一块盘扫描，双击文件夹一层层往里看。</Run></TextBlock>
                         </StackPanel>
                       </DockPanel>
                     </Border>
@@ -13937,856 +13734,628 @@ if ($script:mode -match '(?i)/autoclean') {
               </Border>
             </StackPanel>
             <StackPanel x:Name="HelpSections">
-              <Border x:Name="HelpSec0" Style="{StaticResource Card}" Padding="24,20,24,24" Visibility="Collapsed">
+              <Border x:Name="HelpSec0" Style="{StaticResource Card}" Padding="36,30,36,36" Visibility="Collapsed">
                 <StackPanel>
                   <DockPanel>
-                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xEDA2;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xEDA2;" FontFamily="{StaticResource Icons}" FontSize="20" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                     <StackPanel VerticalAlignment="Center">
                       <TextBlock Text="清理 C 盘" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
-                      <TextBlock Text="删除缓存和临时文件；聊天记录整体搬到其他盘" Style="{StaticResource HelpSum}"/>
+                      <TextBlock Text="删除缓存和临时文件，把聊天记录搬到其他盘" Style="{StaticResource HelpSum}"/>
                     </StackPanel>
                   </DockPanel>
-                  <Border Height="1" Background="#EDEDF0" Margin="0,16,0,2"/>
-                  <DockPanel Margin="0,16,0,0"><TextBlock DockPanel.Dock="Left" Text="列表里有什么" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
-                  <Grid Margin="0,10,0,0">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                  <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
+                  <TextBlock Text="扫描结果" Style="{StaticResource HelpGroup}" Margin="0,22,0,0"/>
+                  <Grid Margin="0,14,0,0">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="104"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                    <Border Grid.Row="0" Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="安全清理" FontSize="12.5" Foreground="#1D7A35" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>缓存、临时文件和日志，删了软件会自动重建。</Run></TextBlock>
-                    <Border Grid.Row="1" Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="谨慎清理" FontSize="12.5" Foreground="#995700" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>浏览器缓存、缩略图、着色器缓存、下载缓存：删了要重新下载或重新生成，第一次打开慢一点。默认也清，但单独成组，执行前会单独列出来。</Run></TextBlock>
-                    <Border Grid.Row="2" Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="需确认" FontSize="12.5" Foreground="#995700" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>有代价的项目，默认跳过，看清说明再选。比如删掉 Windows.old 后不能退回旧系统，清空回收站后找不回以前删的文件。</Run></TextBlock>
-                    <Border Grid.Row="3" Style="{StaticResource HelpPill}" Background="#E8F1FC"><TextBlock Text="只能搬走" FontSize="12.5" Foreground="#0B5CAD" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="3" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>「聊天软件的聊天记录」和「其他可搬的文件夹」：数据不能删，只能整体搬到其他盘。</Run></TextBlock>
-                    <Border Grid.Row="4" Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="受保护" FontSize="12.5" Foreground="#1D7A35" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="4" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>个人文件夹、系统文件夹、软件安装文件夹、正在使用的数据：任何清理都不碰，误选也自动跳过。</Run></TextBlock>
+                    <Border Grid.Row="0" Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="安全清理" FontSize="13" Foreground="#1D7A35" TextWrapping="Wrap"/></Border>
+                    <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,16"><Run>缓存、临时文件和日志。删了软件会自动重建。</Run></TextBlock>
+                    <Border Grid.Row="1" Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="谨慎清理" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border>
+                    <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,16"><Run>浏览器缓存、缩略图、着色器和下载缓存。删了要重新生成，第一次打开会慢一点。</Run></TextBlock>
+                    <Border Grid.Row="2" Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="需确认" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border>
+                    <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,16"><Run>有代价的项目，默认跳过。比如删掉 Windows.old 后，不能再退回旧系统。</Run></TextBlock>
+                    <Border Grid.Row="3" Style="{StaticResource HelpPill}" Background="#E8F1FC"><TextBlock Text="只能搬走" FontSize="13" Foreground="#0B5CAD" TextWrapping="Wrap"/></Border>
+                    <TextBlock Grid.Row="3" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,16"><Run>聊天记录和其他大文件夹。不能删，只能整体搬到其他盘。</Run></TextBlock>
+                    <Border Grid.Row="4" Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="受保护" FontSize="13" Foreground="#1D7A35" TextWrapping="Wrap"/></Border>
+                    <TextBlock Grid.Row="4" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>个人文件夹、系统文件夹和软件的安装文件夹，任何清理都不碰。</Run></TextBlock>
                   </Grid>
-                  <StackPanel Margin="0,16,0,0">
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="删除前看清单"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>确认对话框里点「看文件清单」：按现在的选择会删掉哪些文件和文件夹，最大的 60 项列在对话框里，完整清单存成文本文件，可以打开核对。</Run></TextBlock>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>确认时点「看文件清单」，可以看到会删掉哪些文件，完整清单能存成文本文件。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="可恢复删除"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>设置「清理列表」里打开「删除时先放进回收站」：手动清理删掉的文件先进回收站，删错了能恢复。慢一些、回收站会变大。放不进回收站的（网络位置、U 盘、回收站被关掉、比这块盘的回收站还大）不删，日志里写明原因，绝不会悄悄变成永久删除。回收站满了时，新放进去的会挤掉回收站里更早的东西（Windows 本来就这样）。定期自动清理不受影响。</Run></TextBlock>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="先放进回收站"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>在设置的「清理列表」里打开后，手动清理删掉的文件先进回收站，删错了能恢复。放不进回收站的不会删，日志里写明原因。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="清理审计"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>每一项都记在操作日志里：删了什么、删前删后 C 盘剩余多少、有没有放进回收站、哪些没删掉和原因。</Run></TextBlock>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="打开所在位置"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>双击一行，打开它所在的文件夹；右键可以复制路径。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="打开所在文件夹"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>扫描后双击任意一行，直接在资源管理器里打开它所在的文件夹，方便把日志、转储这类文件拷出来分析；右键可以「打开全部位置」（一项有好几个位置时）或「复制路径」。回收站、传递优化缓存、搜索索引、Installer、驱动存储、事件日志、WinSxS 这些由系统命令处理的项目，打开的是 Windows 存放它们的地方。只是打开查看，不改动任何东西。</Run></TextBlock>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="清理哪些缓存"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Windows 的临时文件、更新缓存和日志，常见浏览器、游戏平台和软件的缓存，以及开发工具的下载缓存。只删缓存，不碰 Cookie、历史记录、密码和设置。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="扫完一目了然"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>列表上方写明一共扫到几项、分成几类。下面一排选项卡（安全清理、谨慎清理、需确认、其他可搬的文件夹……）一次只显示一类，选项卡上写着这一类几项；往下滚到选项卡碰到顶边，它就停在那里，下面的列表照常滚，换一类不用再滚回去。「执行所选操作」会处理所有类别，不只是正在看的这一类。</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>表头点「名称」按名字排，点「大小」从大到小排，再点一下反过来，点第三下回到本来的顺序（按安全程度排）。</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>表头右边的下拉框可以只看某一种操作，比如只看要删除的、只看跳过的；排过的顺序不变。</Run></TextBlock></DockPanel>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="需确认的项目"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Windows.old、回收站、Windows Installer 孤儿安装包、旧版驱动包、失效的快捷方式和事件日志等。默认跳过，看清说明再选。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="扫描为什么快"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>文件夹大小直接从 C 盘的文件表（MFT）里查，不用一个个文件夹去数；打开本工具几秒后、空闲时就在后台把文件表读好，之后每次扫描只补读改过的部分。要问 Windows 的几项（孤儿安装包、旧版驱动包、传递优化缓存、失效的快捷方式）另外同时问。只统计你这个使用模式下会列出的项目。一般几秒钟就扫完。</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>文件表只用来显示大小；真正删除时，每一项都会重新检查、重新统计。</Run></TextBlock></DockPanel>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="自己加文件夹"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>在设置的「清理列表」里添加要清理或要排除的文件夹。添加的文件夹只清里面的东西，文件夹本身保留。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="分析占用"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>打开「空间地图」并扫描 C 盘，看清哪些文件夹和文件最占地方。</Run></TextBlock>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="扫描很快"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>文件夹大小直接从 C 盘的文件表里读，一般几秒钟就扫完。真正删除时，每一项都会重新检查。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="清的是哪些缓存"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>几十种：Windows 自己的临时文件、更新缓存、崩溃转储和日志；Chrome、Edge、Firefox、Brave、360、QQ 等浏览器的网页缓存；显卡的着色器缓存；Steam、Epic 的缓存；Adobe 的媒体缓存；Teams、Discord、Slack、VS Code、Spotify、网易云音乐等软件的缓存；pip、npm、NuGet、Go、Rust 等开发工具的下载缓存。电脑上有哪个，扫描后就列出哪个。</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>只删缓存，不碰 Cookie、历史记录、密码、设置和保存的数据。</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>删了要重新下载、重新生成而且比较慢的（NuGet 全局包、Gradle、Maven、JetBrains 索引、虚幻引擎缓存等）放在「需确认」里，默认跳过。</Run></TextBlock></DockPanel>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="驱动残留、失效快捷方式、事件日志"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>都在「需确认」里，默认跳过：显卡和品牌机驱动解压到 C 盘根目录的安装文件；开始菜单里指向已不存在程序的快捷方式（不碰桌面）；Windows 事件日志（排查问题的工程师会看，不确定就跳过）。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Windows Installer 孤儿安装包"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>在「需确认」里。C:\Windows\Installer 里没有任何已装软件和补丁再引用的安装包，常有好几 GB，判断方法和 PatchCleaner 一样。默认跳过，看清说明再选。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="自己加文件夹、排除文件夹"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>在「设置」的「清理列表」里（页面右上角「自定义清理项」直达）。加的文件夹单独列成一组，每次删里面的东西、文件夹本身保留；排除的文件夹清理时一律不碰，估算时也不算。</Run></TextBlock>
-                  </StackPanel>
-                  <Border Background="#EFF8F1" BorderBrush="#CFE9D6" BorderThickness="1" CornerRadius="10" Padding="14,11,16,12" Margin="0,16,0,0">
+                  <Border Background="#EFF8F1" BorderBrush="#CFE9D6" BorderThickness="1" CornerRadius="12" Padding="18,16,22,17" Margin="0,26,0,0">
                     <DockPanel>
-                      <TextBlock DockPanel.Dock="Left" Text="&#xEA18;" FontFamily="{StaticResource Icons}" FontSize="15" Foreground="#248A3D" VerticalAlignment="Top" Margin="0,2,12,0"/>
+                      <TextBlock DockPanel.Dock="Left" Text="&#xEA18;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#248A3D" VerticalAlignment="Top" Margin="0,3,14,0"/>
                       <StackPanel>
-                        <TextBlock Style="{StaticResource HelpLead}" Text="个人文件夹里的东西一律不删"/>
-                        <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>桌面、文档、下载、图片、视频、音乐、收藏夹、OneDrive 等 C 盘个人文件夹，清理时不删除里面的任何文件，误选也会自动跳过。桌面和下载只能「搬到其他盘」（文件原样保留），而且默认跳过。</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpLead}" Text="个人文件夹里的东西不会删"/>
+                        <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>桌面、文档、下载、图片、视频、音乐和 OneDrive 等文件夹，清理时一律跳过。</Run></TextBlock>
                       </StackPanel>
                     </DockPanel>
                   </Border>
-                  <DockPanel Margin="0,26,0,0"><TextBlock DockPanel.Dock="Left" Text="搬聊天记录" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
-                  <StackPanel Margin="0,10,0,0">
+                  <TextBlock Text="搬聊天记录" Style="{StaticResource HelpGroup}" Margin="0,40,0,0"/>
+                  <StackPanel Margin="0,14,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="支持的软件"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>微信（新版和旧版）、QQ、企业微信、腾讯会议、飞书、钉钉，以及 Telegram、Discord、Slack、Signal、LINE、Viber、KakaoTalk、Zoom。电脑上装了哪个，扫描后就列出哪个。</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>从应用商店装的（比如 WhatsApp、Microsoft Teams）由 Windows 管理，请在 Windows 设置 → 应用里用「移动」换盘。</Run></TextBlock></DockPanel>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>微信、QQ、企业微信、腾讯会议、飞书、钉钉、Telegram、Discord、Slack、Signal、LINE、Viber、KakaoTalk 和 Zoom。应用商店版请在 Windows 设置的「应用」里用「移动」。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="搬到哪里"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>默认选空闲最多的本机硬盘，也可以从下拉框换盘，或点「选择文件夹…」。只能选本机硬盘，网络盘、网盘和 U 盘不行。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="怎么搬"/>
-                    <WrapPanel Margin="0,8,0,0">
-                      <Border Style="{StaticResource HelpPill}" Background="#E8F1FC" Margin="0,0,0,6"><StackPanel Orientation="Horizontal"><TextBlock Text="1" FontSize="12.5" FontWeight="SemiBold" Foreground="#0B5CAD"/><TextBlock Text="关闭占用的软件" FontSize="12.5" Foreground="#0B5CAD" Margin="6,0,0,0"/></StackPanel></Border>
-                      <TextBlock Text="&#xE76C;" FontFamily="{StaticResource Icons}" FontSize="10" Foreground="#86868B" VerticalAlignment="Center" Margin="8,0,8,6"/>
-                      <Border Style="{StaticResource HelpPill}" Background="#E8F1FC" Margin="0,0,0,6"><StackPanel Orientation="Horizontal"><TextBlock Text="2" FontSize="12.5" FontWeight="SemiBold" Foreground="#0B5CAD"/><TextBlock Text="复制到目标盘" FontSize="12.5" Foreground="#0B5CAD" Margin="6,0,0,0"/></StackPanel></Border>
-                      <TextBlock Text="&#xE76C;" FontFamily="{StaticResource Icons}" FontSize="10" Foreground="#86868B" VerticalAlignment="Center" Margin="8,0,8,6"/>
-                      <Border Style="{StaticResource HelpPill}" Background="#E8F1FC" Margin="0,0,0,6"><StackPanel Orientation="Horizontal"><TextBlock Text="3" FontSize="12.5" FontWeight="SemiBold" Foreground="#0B5CAD"/><TextBlock Text="核对两边大小" FontSize="12.5" Foreground="#0B5CAD" Margin="6,0,0,0"/></StackPanel></Border>
-                      <TextBlock Text="&#xE76C;" FontFamily="{StaticResource Icons}" FontSize="10" Foreground="#86868B" VerticalAlignment="Center" Margin="8,0,8,6"/>
-                      <Border Style="{StaticResource HelpPill}" Background="#E8F1FC" Margin="0,0,0,6"><StackPanel Orientation="Horizontal"><TextBlock Text="4" FontSize="12.5" FontWeight="SemiBold" Foreground="#0B5CAD"/><TextBlock Text="原位置换成链接" FontSize="12.5" Foreground="#0B5CAD" Margin="6,0,0,0"/></StackPanel></Border>
-                      <TextBlock Text="&#xE76C;" FontFamily="{StaticResource Icons}" FontSize="10" Foreground="#86868B" VerticalAlignment="Center" Margin="8,0,8,6"/>
-                      <Border Style="{StaticResource HelpPill}" Background="#E8F1FC" Margin="0,0,0,6"><StackPanel Orientation="Horizontal"><TextBlock Text="5" FontSize="12.5" FontWeight="SemiBold" Foreground="#0B5CAD"/><TextBlock Text="删除 C 盘上的原文件夹" FontSize="12.5" Foreground="#0B5CAD" Margin="6,0,0,0"/></StackPanel></Border>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="搬的过程"/>
+                    <WrapPanel Margin="0,12,0,0">
+                      <Border Style="{StaticResource HelpPill}" Background="#E8F1FC" Margin="0,0,0,8"><StackPanel Orientation="Horizontal"><TextBlock Text="1" FontSize="13" FontWeight="SemiBold" Foreground="#0B5CAD"/><TextBlock Text="关闭软件" FontSize="13" Foreground="#0B5CAD" Margin="7,0,0,0"/></StackPanel></Border>
+                      <TextBlock Text="&#xE76C;" FontFamily="{StaticResource Icons}" FontSize="10" Foreground="#8E8E93" VerticalAlignment="Center" Margin="8,0,8,8"/>
+                      <Border Style="{StaticResource HelpPill}" Background="#E8F1FC" Margin="0,0,0,8"><StackPanel Orientation="Horizontal"><TextBlock Text="2" FontSize="13" FontWeight="SemiBold" Foreground="#0B5CAD"/><TextBlock Text="复制到目标盘" FontSize="13" Foreground="#0B5CAD" Margin="7,0,0,0"/></StackPanel></Border>
+                      <TextBlock Text="&#xE76C;" FontFamily="{StaticResource Icons}" FontSize="10" Foreground="#8E8E93" VerticalAlignment="Center" Margin="8,0,8,8"/>
+                      <Border Style="{StaticResource HelpPill}" Background="#E8F1FC" Margin="0,0,0,8"><StackPanel Orientation="Horizontal"><TextBlock Text="3" FontSize="13" FontWeight="SemiBold" Foreground="#0B5CAD"/><TextBlock Text="核对" FontSize="13" Foreground="#0B5CAD" Margin="7,0,0,0"/></StackPanel></Border>
+                      <TextBlock Text="&#xE76C;" FontFamily="{StaticResource Icons}" FontSize="10" Foreground="#8E8E93" VerticalAlignment="Center" Margin="8,0,8,8"/>
+                      <Border Style="{StaticResource HelpPill}" Background="#E8F1FC" Margin="0,0,0,8"><StackPanel Orientation="Horizontal"><TextBlock Text="4" FontSize="13" FontWeight="SemiBold" Foreground="#0B5CAD"/><TextBlock Text="原位置换成链接" FontSize="13" Foreground="#0B5CAD" Margin="7,0,0,0"/></StackPanel></Border>
+                      <TextBlock Text="&#xE76C;" FontFamily="{StaticResource Icons}" FontSize="10" Foreground="#8E8E93" VerticalAlignment="Center" Margin="8,0,8,8"/>
+                      <Border Style="{StaticResource HelpPill}" Background="#E8F1FC" Margin="0,0,0,8"><StackPanel Orientation="Horizontal"><TextBlock Text="5" FontSize="13" FontWeight="SemiBold" Foreground="#0B5CAD"/><TextBlock Text="删除 C 盘上的原文件夹" FontSize="13" Foreground="#0B5CAD" Margin="7,0,0,0"/></StackPanel></Border>
                     </WrapPanel>
-                    <TextBlock Style="{StaticResource HelpBody}" Margin="0,1,0,0"><Run>之后 C 盘原位置只剩一个链接，几乎不占空间。软件打开原来的路径时，Windows 自动转到目标盘上读写，软件察觉不到变化，不用改任何设置。</Run></TextBlock>
+                    <TextBlock Style="{StaticResource HelpBody}" Margin="0,4,0,0"><Run>软件照常从原来的位置读写，不用改设置。核对不一致时，不会删除原文件夹。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="一个文件都不少才删"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>软件还开着会先提示你退出。复制完重新核对两边的文件个数和大小，一个文件都不少，才删除 C 盘上的原文件夹。</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>原文件夹万一仍被别的程序占用，已复制好的副本会保留；退出相关软件后再执行一次，只补复制有变化的文件，很快就好。</Run></TextBlock></DockPanel>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="目标盘"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>默认选空闲最多的本机硬盘，也可以换一块盘或选一个文件夹。网络盘、网盘和 U 盘不行。</Run></TextBlock>
                   </StackPanel>
-                  <Border Background="#FFF8EC" BorderBrush="#F5E1BC" BorderThickness="1" CornerRadius="10" Padding="14,11,16,12" Margin="0,16,0,0">
+                  <Border Background="#FFF8EC" BorderBrush="#F5E1BC" BorderThickness="1" CornerRadius="12" Padding="18,16,22,17" Margin="0,26,0,0">
                     <DockPanel>
-                      <TextBlock DockPanel.Dock="Left" Text="&#xE7BA;" FontFamily="{StaticResource Icons}" FontSize="15" Foreground="#B25E00" VerticalAlignment="Top" Margin="0,2,12,0"/>
+                      <TextBlock DockPanel.Dock="Left" Text="&#xE7BA;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#B25E00" VerticalAlignment="Top" Margin="0,3,14,0"/>
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="不要动目标盘上的 CDriveMoved 文件夹"/>
-                        <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>删除、改名或移动它，微信、QQ 等就会找不到聊天记录和文件。</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>删除、改名或移动它，软件就找不到聊天记录。</Run></TextBlock>
                       </StackPanel>
                     </DockPanel>
                   </Border>
                 </StackPanel>
               </Border>
-              <Border x:Name="HelpSec1" Style="{StaticResource Card}" Padding="24,20,24,24" Visibility="Collapsed">
+              <Border x:Name="HelpSec1" Style="{StaticResource Card}" Padding="36,30,36,36" Visibility="Collapsed">
                 <StackPanel>
                   <DockPanel>
-                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE8C8;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE8C8;" FontFamily="{StaticResource Icons}" FontSize="20" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                     <StackPanel VerticalAlignment="Center">
                       <TextBlock Text="重复文件" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
-                      <TextBlock Text="找出内容完全相同的文件，留一份、删其余" Style="{StaticResource HelpSum}"/>
+                      <TextBlock Text="找出内容完全相同的文件，留一份，删其余" Style="{StaticResource HelpSum}"/>
                     </StackPanel>
                   </DockPanel>
-                  <Border Height="1" Background="#EDEDF0" Margin="0,16,0,2"/>
-                  <DockPanel Margin="0,16,0,0"><TextBlock DockPanel.Dock="Left" Text="查找条件" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
-                  <StackPanel Margin="0,10,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="选项卡"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>查找位置、文件类型、文件大小、怎样算重复各一个选项卡，选项卡上直接写着现在选的是什么。点「开始查找」后条件自动收起来，只留这一排选项卡，找到的结果占满下面；点任意一个选项卡再打开，点打开着的那个或右边的「收起」收起来。</Run></TextBlock>
+                  <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
+                  <TextBlock Text="查找" Style="{StaticResource HelpGroup}" Margin="0,22,0,0"/>
+                  <StackPanel Margin="0,14,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="位置和条件"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>选好查找位置、文件类型和大小。系统、软件和开发环境的文件夹会自动跳过。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="查找位置"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>点胶囊勾选或取消；「添加文件夹…」可以加自己的位置，带小叉的可以移除。系统目录、程序目录和开发环境会自动跳过。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="文件类型和大小"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>只找选中的类型和大小范围，范围越小找得越快。选「自定义」可以手填大小。</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>NTFS 盘上找 1 MB 以上的文件时，直接从这块盘的文件表里列出文件（规则和一个个文件夹去看一样），大盘上快很多。</Run></TextBlock></DockPanel>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="怎样算重复"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>默认要求文件名和内容都相同；选「只看内容」时，名字不同但内容相同也算。无论哪种，内容都要逐字节完全相同。</Run></TextBlock>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>默认名字和内容都要相同；选「只看内容」时，名字不同也算。内容都要逐字节相同。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="比对方式"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>「快速」对大文件只抽样读取；「完整比对」读完每个文件，更慢但更彻底。</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>快速模式下，删除前也会逐字节完整核对，有任何不同就不删。</Run></TextBlock></DockPanel>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="快速和完整比对"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>「快速」对大文件只抽样比对，删除前再逐字节核对；「完整比对」每个文件都读完。</Run></TextBlock>
                   </StackPanel>
-                  <DockPanel Margin="0,26,0,0"><TextBlock DockPanel.Dock="Left" Text="结果和删除" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
-                  <StackPanel Margin="0,10,0,0">
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="相似照片"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>「怎样算重复」里选「相似照片」：把每张图缩成 9×8 的灰度小图算 64 位指纹，相差几位以内算一组。不同分辨率、重新压缩过、轻微裁剪过的照片也认得出。相似程度有三档：几乎一样（4 位）、相似（8 位）、大致相似（12 位，连拍也会归到一起）。</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>相似不等于相同：每组按分辨率排序，每一张都写着尺寸和相差位数，看过再勾。不自动勾选，只能放进回收站或归档，不能永久删除，也不能合并。</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>只看 jpg、png、bmp、gif、tif、webp、heic。</Run></TextBlock></DockPanel>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>找看起来一样的照片，比如不同分辨率或重新压缩过的。相似不等于相同，不会自动勾选，只能放进回收站或归档。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <TextBlock Text="处理" Style="{StaticResource HelpGroup}" Margin="0,40,0,0"/>
+                  <StackPanel Margin="0,14,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="留哪一份"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>每组列出所有副本。默认每组留最新的一份、勾选其余的；也可以改成留最早的、优先留 C 盘以外的，或者自己勾选。「打开位置」可以在资源管理器里看到这个文件。</Run></TextBlock>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>默认每组留最新的一份。也可以留最早的、留 C 盘以外的、留某个文件夹里的，或者自己勾选。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="留某个文件夹里的、留路径最短的"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>「留某个文件夹里的…」选一个文件夹，每组优先保留在它（含子文件夹）里的那份；「留路径最短的」保留层级最浅的那份。</Run></TextBlock>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="删除、归档或合并"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>默认放进回收站，能恢复。也可以把多余的归档到一个文件夹，或者「合并为一份」：每个位置的文件都还在，只占一份空间。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="归档勾选的"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>不删：把勾选的文件搬到你选的一个文件夹，里面按「盘符\原来的路径」放，不会重名覆盖；每组照样至少留一份不动。想清楚了再从归档里删。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="放入回收站"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>默认放入回收站，误删可以从回收站恢复；取消勾选「放入回收站」就是永久删除，不能恢复。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="带「注意」的"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>是程序目录或微信数据里的副本，删除前请看清楚。</Run></TextBlock>
-                  </StackPanel>
-                  <Border Background="#EFF8F1" BorderBrush="#CFE9D6" BorderThickness="1" CornerRadius="10" Padding="14,11,16,12" Margin="0,16,0,0">
+                  <Border Background="#EFF8F1" BorderBrush="#CFE9D6" BorderThickness="1" CornerRadius="12" Padding="18,16,22,17" Margin="0,26,0,0">
                     <DockPanel>
-                      <TextBlock DockPanel.Dock="Left" Text="&#xEA18;" FontFamily="{StaticResource Icons}" FontSize="15" Foreground="#248A3D" VerticalAlignment="Top" Margin="0,2,12,0"/>
+                      <TextBlock DockPanel.Dock="Left" Text="&#xEA18;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#248A3D" VerticalAlignment="Top" Margin="0,3,14,0"/>
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="C 盘个人文件夹受保护"/>
-                        <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>默认勾选「不删 C 盘个人文件夹里的文件」：桌面、文档、下载、图片、视频、音乐等位置的副本显示一把小锁，不会被勾选或删除，只删其他位置的副本。确实要删这些位置的副本，取消勾选并再次确认才行。</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>桌面、文档、下载等位置的副本默认不能勾选。每组至少留一份。</Run></TextBlock>
                       </StackPanel>
                     </DockPanel>
                   </Border>
                 </StackPanel>
               </Border>
-              <Border x:Name="HelpSec2" Style="{StaticResource Card}" Padding="24,20,24,24" Visibility="Collapsed">
+              <Border x:Name="HelpSec2" Style="{StaticResource Card}" Padding="36,30,36,36" Visibility="Collapsed">
                 <StackPanel>
                   <DockPanel>
-                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE7B8;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE7B8;" FontFamily="{StaticResource Icons}" FontSize="20" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                     <StackPanel VerticalAlignment="Center">
                       <TextBlock Text="省空间（不删文件）" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
-                      <TextBlock Text="压缩，或者换个位置放，文件都还在" Style="{StaticResource HelpSum}"/>
+                      <TextBlock Text="压缩，或换个位置放，文件都还在" Style="{StaticResource HelpSum}"/>
                     </StackPanel>
                   </DockPanel>
-                  <Border Height="1" Background="#EDEDF0" Margin="0,16,0,2"/>
-                  <StackPanel Margin="0,14,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="左边目录"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>左边按「系统文件」「还原点和临时文件」「文件和文件夹」「虚拟磁盘」分好类，点哪一项右边只显示那一项的说明和按钮，不用一路往下滚。下次打开停在上次看的那一项。</Run></TextBlock>
-                  </StackPanel>
-                  <Grid Margin="0,16,0,0">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="10"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                  <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
+                  <Grid Margin="0,18,0,0">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                     <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource HelpTile}">
                       <StackPanel>
-                        <TextBlock Style="{StaticResource HelpLead}" Text="系统压缩（CompactOS）"/>
-                        <TextBlock Style="{StaticResource HelpBody}"><Run>Windows 自带，把系统文件压缩存放，通常省 2 到 4 GB，不影响使用。</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpLead}" Text="系统压缩"/>
+                        <TextBlock Style="{StaticResource HelpBody}"><Run>压缩 Windows 系统文件，通常省 2 到 4 GB，不影响使用。</Run></TextBlock>
                       </StackPanel>
                     </Border>
                     <Border Grid.Row="0" Grid.Column="2" Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="页面文件"/>
-                        <TextBlock Style="{StaticResource HelpBody}"><Run>把 pagefile.sys 改到其他硬盘，C 盘多出几个 GB。重启后生效，随时可以恢复系统默认。</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpBody}"><Run>把 pagefile.sys 移到其他盘，重启后生效。</Run></TextBlock>
                       </StackPanel>
                     </Border>
                     <Border Grid.Row="2" Grid.Column="0" Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="休眠文件"/>
-                        <TextBlock Style="{StaticResource HelpBody}"><Run>「只留快速启动」能把 hiberfil.sys 缩小一半左右；「关闭休眠」整个删掉它。</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpBody}"><Run>只留快速启动能缩小一半；关闭休眠会删掉它。</Run></TextBlock>
                       </StackPanel>
                     </Border>
                     <Border Grid.Row="2" Grid.Column="2" Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="系统还原点"/>
-                        <TextBlock Style="{StaticResource HelpBody}"><Run>显示还原点有几个、占了多少、最多能用到多少。要调小上限或删掉还原点，点「打开系统保护设置」在 Windows 自己的设置里改；本工具不直接删还原点。</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpBody}"><Run>看还原点占了多少，到 Windows 的系统保护里调整。本工具不删还原点。</Run></TextBlock>
                       </StackPanel>
                     </Border>
                     <Border Grid.Row="4" Grid.Column="0" Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="压缩文件夹"/>
-                        <TextBlock Style="{StaticResource HelpBody}"><Run>NTFS 压缩：文件照常打开和修改，只是占的空间变小。适合文档、代码、旧项目。</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpBody}"><Run>NTFS 压缩。文件照常使用，只是占得少，适合文档和旧项目。</Run></TextBlock>
                       </StackPanel>
                     </Border>
                     <Border Grid.Row="4" Grid.Column="2" Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="虚拟磁盘"/>
-                        <TextBlock Style="{StaticResource HelpBody}"><Run>WSL、Docker 的虚拟磁盘在里面删了文件也不会自动变小，压缩一下就能把空间还给 Windows；安卓模拟器和虚拟机的文件夹可以整个搬到其他盘。</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpBody}"><Run>压缩 WSL、Docker 的虚拟磁盘；模拟器和虚拟机可以整个搬走。</Run></TextBlock>
                       </StackPanel>
                     </Border>
                     <Border Grid.Row="6" Grid.Column="0" Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="合并重复文件"/>
-                        <TextBlock Style="{StaticResource HelpBody}"><Run>在「重复文件」页点「合并为一份」，同一块盘上的重复文件只占一份空间，每个位置的文件都还在。合并后改动其中一个位置，其他位置会跟着变，所以适合不会再改的照片、视频、安装包。</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpBody}"><Run>同一块盘上的重复文件只占一份空间，适合不再修改的照片和视频。</Run></TextBlock>
                       </StackPanel>
                     </Border>
                     <Border Grid.Row="6" Grid.Column="2" Style="{StaticResource HelpTile}">
                       <StackPanel>
-                        <TextBlock Style="{StaticResource HelpLead}" Text="OneDrive 改成仅在线"/>
-                        <TextBlock Style="{StaticResource HelpBody}"><Run>同步过的文件本地都留着副本。改成「仅在线」后文件还在云端，资源管理器里照常显示，打开时才下载。什么都不删；设了「始终保留在此设备」的不动。</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpLead}" Text="OneDrive 仅在线"/>
+                        <TextBlock Style="{StaticResource HelpBody}"><Run>本地副本改成只在云端，打开时再下载。</Run></TextBlock>
                       </StackPanel>
                     </Border>
                     <Border Grid.Row="8" Grid.Column="0" Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="保留的存储"/>
-                        <TextBlock Style="{StaticResource HelpBody}"><Run>Windows 给更新预留的 7 GB 左右。关掉就还给你，更新时 Windows 临时借用空闲空间；随时能开回来。</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpBody}"><Run>把 Windows 为更新预留的约 7 GB 还给你，随时能恢复。</Run></TextBlock>
                       </StackPanel>
                     </Border>
                     <Border Grid.Row="8" Grid.Column="2" Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="组件存储分析"/>
-                        <TextBlock Style="{StaticResource HelpBody}"><Run>让 Windows 算一下 WinSxS 实际多大、能回收多少、建不建议清理，再决定要不要做 DISM 清理。</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpBody}"><Run>让 Windows 算一下 WinSxS 能回收多少，再决定要不要清理。</Run></TextBlock>
                       </StackPanel>
                     </Border>
                     <Border Grid.Row="10" Grid.Column="0" Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="蓝屏小转储"/>
-                        <TextBlock Style="{StaticResource HelpBody}"><Run>蓝屏时只存 256 KB 的小转储，不再生成几个 GB 的 MEMORY.DMP。够看出是哪个驱动出的问题，随时可以恢复自动。</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpBody}"><Run>蓝屏时只存 256 KB 的小转储，不再生成几 GB 的文件。</Run></TextBlock>
                       </StackPanel>
                     </Border>
                     <Border Grid.Row="10" Grid.Column="2" Style="{StaticResource HelpTile}">
                       <StackPanel>
-                        <TextBlock Style="{StaticResource HelpLead}" Text="临时文件夹改到其他盘"/>
-                        <TextBlock Style="{StaticResource HelpBody}"><Run>当前用户的 TEMP 指向其他盘，以后的临时文件不占 C 盘。注销再登录后生效；个别安装程序不兼容就恢复默认。</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpLead}" Text="临时文件夹"/>
+                        <TextBlock Style="{StaticResource HelpBody}"><Run>把 TEMP 改到其他盘，注销再登录后生效。</Run></TextBlock>
                       </StackPanel>
                     </Border>
                     <Border Grid.Row="12" Grid.Column="0" Grid.ColumnSpan="3" Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="WSL 搬到其他盘"/>
-                        <TextBlock Style="{StaticResource HelpBody}"><Run>用 WSL 自己的 wsl --manage --move 把整个发行版搬走，搬完照常使用。需要 WSL 2.5 以后。</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpBody}"><Run>用 wsl --manage --move 搬走整个发行版，需要 WSL 2.5 以上。</Run></TextBlock>
                       </StackPanel>
                     </Border>
                   </Grid>
                 </StackPanel>
               </Border>
-              <Border x:Name="HelpSec3" Style="{StaticResource Card}" Padding="24,20,24,24" Visibility="Collapsed">
+              <Border x:Name="HelpSec3" Style="{StaticResource Card}" Padding="36,30,36,36" Visibility="Collapsed">
                 <StackPanel>
                   <DockPanel>
-                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE9D9;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE9D9;" FontFamily="{StaticResource Icons}" FontSize="20" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                     <StackPanel VerticalAlignment="Center">
                       <TextBlock Text="空间地图" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
                       <TextBlock Text="看清哪些文件夹和文件最占地方" Style="{StaticResource HelpSum}"/>
                     </StackPanel>
                   </DockPanel>
-                  <Border Height="1" Background="#EDEDF0" Margin="0,16,0,2"/>
-                  <DockPanel Margin="0,16,0,0"><TextBlock DockPanel.Dock="Left" Text="扫描" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
-                  <StackPanel Margin="0,10,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="开始扫描"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>选一块盘点「扫描」，把每个文件夹的大小都数一遍。只是查看，不改动任何东西。</Run></TextBlock>
+                  <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
+                  <TextBlock Text="扫描" Style="{StaticResource HelpGroup}" Margin="0,22,0,0"/>
+                  <StackPanel Margin="0,14,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="扫描一块盘"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>选一块盘点「扫描」，或者点上方的盘卡片。只是查看，不改动任何东西。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="为什么快"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>NTFS 格式的盘（C 盘基本都是）直接读盘上的文件表（MFT），几十万个文件一般几秒到十几秒就读完，不用一个个文件夹去看。</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>读完会和直接列目录的结果核对。对不上或读不了（不是 NTFS、权限不够等），就自动改回逐个文件夹扫描，多个线程一起数（固态硬盘多一些，机械硬盘少一些）。</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>同一次打开工具里再扫描，按系统的变更日志只更新改过的部分，更快。</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>读文件表能看到逐个扫描进不去的文件夹（比如 System Volume Information），所以两种方式的总数可能略有出入。</Run></TextBlock></DockPanel>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="快速扫描"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>NTFS 盘直接读文件表，几十万个文件几秒钟就扫完；读不了时自动改为逐个文件夹扫描。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="不想直接读盘"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>少数安全软件对直接读盘会提示。取消右上角的「快速扫描」，以后都逐个文件夹扫描；清理、搬家、软件管理统计大小时也一样。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="各页共用一次读取"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>「清理 C 盘」「搬家管理」「软件管理」统计大小时也先读一次 C 盘的文件表。这些数字只用来显示和估算；真正删除、搬家时，每一项都会重新统计、重新检查，不会拿这份结果做判断。</Run></TextBlock>
-                  </StackPanel>
-                  <DockPanel Margin="0,26,0,0"><TextBlock DockPanel.Dock="Left" Text="浏览" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
-                  <StackPanel Margin="0,10,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="后退、前进和路径"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>左上角的后退、前进按钮（也可以用鼠标侧键、Alt+← 和 Alt+→）在看过的文件夹之间来回；Backspace 回到上一级。路径上的每一层都能点，点哪一层回到哪一层。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="往里点"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>双击文件夹进入下一层，点「上一级」返回。每一行的蓝色条表示它在这一层里有多大。</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>一层里东西很多时（比如 WinSxS 有上万个），只列最大的 500 项，其余合成最后一行；点「打开位置」可以在资源管理器里看全部。</Run></TextBlock></DockPanel>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="点盘卡片"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>页面上方每块盘一张卡片（用量、温度、磨损、健康）。点哪一张就选中哪块盘并开始扫描，下面换成这块盘的详细情况；选中的卡片有蓝色描边。下面已经是这块盘的结果时不重复扫描，要重扫点「扫描」。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="盘的概览"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>扫完整块盘后，列表上方一行概览：已用 / 总量、百分比，以及系统与软件、个人文件、可清理的缓存、其他、剩余空间各占多少的分段条。缓存按清理页「安全清理」里的目录估算。</Run></TextBlock>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>扫完整块盘后，上方显示已用空间里系统与软件、个人文件、可清理的缓存和其他各占多少。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="方块图"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>把这一层的文件夹和文件画成方块，方块越大占的空间越多，一眼看出谁最大。单击选中，双击文件夹往里点。颜色按文件夹装的是哪一类东西（系统、软件数据、文档、照片视频音乐、代码、同步盘、游戏），缓存和临时文件带斜线，表示删了能腾出来；下面有图例。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="值得一看"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>扫完整块盘后，概览下面列出名字一看就是缓存、依赖包（node_modules 等）、构建产物、Python 虚拟环境、临时文件的大文件夹（300 MB 以上），点一下跳过去，看清楚再决定。只是按名字认的。</Run></TextBlock>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>列出缓存、依赖包、构建产物和临时文件这类大文件夹，点一下就过去。只按名字判断，删之前先看看。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="待删清单"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>在不同文件夹里挑要删的，先「加入待删清单」（右键菜单里也有），不马上删；下面一直写着清单里一共多大、这块盘现在空闲多少、删完大约剩多少。放进一个文件夹时，清单里它里面的项目合进它。看过清单再「删除清单里的…」，和平时删除一样先确认、能选放进回收站；删完写明这块盘实际多出了多少。</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>要删的文件夹是 git 仓库时，确认对话框里会提醒：没提交、没推送的改动删了就找不回来。</Run></TextBlock></DockPanel>
+                  <TextBlock Text="浏览" Style="{StaticResource HelpGroup}" Margin="0,40,0,0"/>
+                  <StackPanel Margin="0,14,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="往里看"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>双击文件夹进入下一层。后退、前进可以用鼠标侧键或 Alt+←、Alt+→，路径上的每一层都能点。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="方块图"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>方块越大，占得越多。颜色表示文件夹里是哪一类东西，带斜线的是删了能腾出空间的缓存。</Run></TextBlock>
+                  </StackPanel>
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="找文件"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>在扫描时记下的 1 MB 以上的文件里找，从大到小排。</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>可以按大小、多久没改过（比如半年以上）、类型（视频、压缩包和安装包、光盘映像和虚拟磁盘……）和名称筛选；名称里可以用 * 和 ?，比如 *.mp4。</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>勾选「只找当前文件夹里的」，就只找刚才点进去的那个文件夹。</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>勾选「只找聊天软件里的」，就只在微信、QQ、企业微信、飞书、钉钉、Telegram 等的聊天记录里找，看清是哪些视频和文件占了地方。</Run></TextBlock></DockPanel>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>在 1 MB 以上的文件里，按大小、修改时间、类型和名称找。也可以只看聊天软件里的大文件。</Run></TextBlock>
                   </StackPanel>
-                  <Border Background="#EEF5FD" BorderBrush="#D2E3FA" BorderThickness="1" CornerRadius="10" Padding="14,11,16,12" Margin="0,16,0,0">
-                    <DockPanel>
-                      <TextBlock DockPanel.Dock="Left" Text="&#xE946;" FontFamily="{StaticResource Icons}" FontSize="15" Foreground="#0071E3" VerticalAlignment="Top" Margin="0,2,12,0"/>
-                      <StackPanel>
-                        <TextBlock Style="{StaticResource HelpLead}" Text="聊天记录里的文件只能查看"/>
-                        <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>在这里只能查看、打开位置，不能删。要腾地方，到「搬家管理」把整个聊天记录搬到其他盘。</Run></TextBlock>
-                      </StackPanel>
-                    </DockPanel>
-                  </Border>
-                  <StackPanel Margin="0,16,0,0">
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="按类型"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>扫描时顺手把这块盘上所有文件按扩展名分成十类（视频、图片、音乐、文档、压缩包和安装包、镜像和虚拟磁盘、程序、日志和临时文件、代码和开发文件、其他），列出每类多少个、多大。双击一类，到「找文件」里看这一类最大的文件。</Run></TextBlock>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>把全盘文件按视频、图片、文档、压缩包等分成十类，看每类占多少。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="所有者和排序"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>「找文件」最多列 1000 个，可以按大小或修改时间排序，按文件的所有者（Windows 账户）筛选；NTFS 压缩过的文件写明压缩后的大小。</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>列表上方的表头可以点「名称」「修改时间」「大小」排序，再点一下反过来，点第三下回到原来的顺序；换个文件夹也按这个顺序排。「和上次比」的表格点列名排序。</Run></TextBlock></DockPanel>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="最近改动、和上次比"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>「最近改动」列出这几天新建、改写文件最多的文件夹；「和上次比」找出变大的文件夹，说明多出的空间主要在哪。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="最近改动"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>读文件系统的变更日志（USN），列出最近 24 小时 / 3 天 / 7 天 / 30 天里新建、改写的文件最集中的文件夹：多出来的空间多半在那里。大小按文件现在的大小算（日志里没有写了多少字节），删掉的只计个数。要先用快速扫描读过文件表。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="和上次比"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>列出比上一次扫描变大或变小超过 100 MB 的文件夹，找出空间是被谁慢慢吃掉的；双击一行跳到那个文件夹。文件夹列表里也会标出「比上次 +2.1 GB」这样的变化。每次扫描的快照都带日期保留（每块盘最多 40 份），「和哪次比」可以选 1 天前、3 天前、7 天前、30 天前或最早的一次。列表上方一句话说清：这段时间已用空间多了（或少了）多少，主要在哪（Docker 数据、WSL 发行版、浏览器缓存、Windows 更新、某个文件夹……），其余多少。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="导出"/>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">导出 CSV</Run><Run>：把现在看到的列表（文件夹、找到的文件或和上次比的结果）存成 CSV 文件，可以用 Excel 打开、排序、发给别人。</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">导出报告</Run><Run>：把整块盘的情况存成一个网页，有方块图、最大的文件夹和文件、各类文件占多少、和上次比的变化；在浏览器里按 Ctrl+P 可以存成 PDF。</Run></TextBlock></DockPanel>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>把列表导出成 CSV，或把整块盘的情况存成网页报告。</Run></TextBlock>
                   </StackPanel>
-                  <DockPanel Margin="0,26,0,0"><TextBlock DockPanel.Dock="Left" Text="选中和操作" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
-                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,10,0,0"><Run>选中后可以「打开位置」「压缩（不删文件）」或「删除」。每一行前面有方框，和资源管理器的「项目复选框」一样：</Run></TextBlock>
-                  <Grid Margin="0,10,0,0">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="150"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                    <Border Grid.Row="0" Style="{StaticResource HelpPill}"><TextBlock Text="点方框" FontSize="12.5" Foreground="#1D1D1F" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>选中或取消这一行，可以勾一项或多项</Run></TextBlock>
-                    <Border Grid.Row="1" Style="{StaticResource HelpPill}"><TextBlock Text="点行的其他地方" FontSize="12.5" Foreground="#1D1D1F" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>不会选中</Run></TextBlock>
-                    <Border Grid.Row="2" Style="{StaticResource HelpPill}"><TextBlock Text="双击文件夹" FontSize="12.5" Foreground="#1D1D1F" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>进入下一层</Run></TextBlock>
-                    <Border Grid.Row="3" Style="{StaticResource HelpPill}"><TextBlock Text="Shift + 点方框" FontSize="12.5" Foreground="#1D1D1F" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="3" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>把上次勾的那一行到这一行都勾上</Run></TextBlock>
-                    <Border Grid.Row="4" Style="{StaticResource HelpPill}"><TextBlock Text="按住左键或右键拖" FontSize="12.5" Foreground="#1D1D1F" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="4" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>上下拖，一次勾上连着的几行；用右键拖的话，松开后弹出右键菜单</Run></TextBlock>
-                    <Border Grid.Row="5" Style="{StaticResource HelpPill}"><TextBlock Text="右键点一行" FontSize="12.5" Foreground="#1D1D1F" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="5" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>菜单只对这一行起作用；点在勾着的行上，就对全部勾着的行起作用</Run></TextBlock>
-                    <Border Grid.Row="6" Style="{StaticResource HelpPill}"><TextBlock Text="Esc" FontSize="12.5" Foreground="#1D1D1F" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="6" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>全部取消</Run></TextBlock>
-                  </Grid>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="不想要复选框"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>在「设置」里关掉，就照 Windows 列表原来的做法：单击选中一行，按住 Ctrl 或 Shift 多选。</Run></TextBlock>
+                  <TextBlock Text="选中和删除" Style="{StaticResource HelpGroup}" Margin="0,40,0,0"/>
+                  <StackPanel Margin="0,14,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="勾选"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>点行前面的方框勾选；按住鼠标左键或右键上下拖，一次勾上连着的几行。方框可以在设置里关掉。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="待删清单"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>在不同文件夹里挑好要删的，先放进待删清单，下面会一直显示删完以后大约还剩多少空间。看过再一起删。</Run></TextBlock>
+                  </StackPanel>
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="删除"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>可以选「移到回收站」（能恢复）或「永久删除」（立刻腾出空间），都要先勾选确认。</Run></TextBlock>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>可以移到回收站，也可以永久删除，都要先确认。要删的是 git 仓库时会提醒你。</Run></TextBlock>
                   </StackPanel>
-                  <Border Background="#F5F5F7" BorderBrush="#E5E5EA" BorderThickness="1" CornerRadius="10" Padding="14,11,16,12" Margin="0,16,0,0">
+                  <Border Background="#F5F5F7" BorderBrush="#E5E5EA" BorderThickness="1" CornerRadius="12" Padding="18,16,22,17" Margin="0,26,0,0">
                     <DockPanel>
-                      <TextBlock DockPanel.Dock="Left" Text="&#xE72E;" FontFamily="{StaticResource Icons}" FontSize="15" Foreground="#6E6E73" VerticalAlignment="Top" Margin="0,2,12,0"/>
+                      <TextBlock DockPanel.Dock="Left" Text="&#xE72E;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#6E6E73" VerticalAlignment="Top" Margin="0,3,14,0"/>
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="带小锁的不能在这里删"/>
-                        <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>系统文件夹、软件的安装文件夹（请到「软件管理」卸载）、C 盘个人文件夹，以及搬家后的数据（CDriveMoved 文件夹）。</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>系统文件夹、软件的安装文件夹、C 盘个人文件夹、聊天记录，以及搬家后的数据。</Run></TextBlock>
                       </StackPanel>
                     </DockPanel>
                   </Border>
-                  <DockPanel Margin="0,26,0,0"><TextBlock DockPanel.Dock="Left" Text="实际占用" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
-                  <StackPanel Margin="0,10,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="实际占用和硬链接"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>快速扫描时，名字下面会注明压缩、稀疏和只在云端（OneDrive 等）的文件实际只占多少，以及 WinSxS 这类文件夹里有多少是硬链接。</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>硬链接是同一份文件在别处也有名字，删了这个名字不腾空间。</Run></TextBlock></DockPanel>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="磁盘健康卡片"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>页面上方每块盘一张卡片：用量条、健康状态，固态硬盘还有温度、磨损和通电时间，按档位标色（绿正常、橙要留意、红有问题）。点卡片就选中这块盘。数据从 Windows 的存储可靠性计数器读，只读不改；在「设置」里可以关掉。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="空间明细"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>点「空间明细」，看已用空间分成哪几块：文件实际占用、文件表（MFT）和其他，以及为什么和按文件大小相加对不上。删除时也会写明实际能腾出多少。</Run></TextBlock>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="实际占用"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>快速扫描时会注明压缩和只在云端的文件实际占多少，以及硬链接。「空间明细」说明已用空间为什么和文件大小相加对不上。</Run></TextBlock>
                   </StackPanel>
                 </StackPanel>
               </Border>
-              <Border x:Name="HelpSec4" Style="{StaticResource Card}" Padding="24,20,24,24" Visibility="Collapsed">
+              <Border x:Name="HelpSec4" Style="{StaticResource Card}" Padding="36,30,36,36" Visibility="Collapsed">
                 <StackPanel>
                   <DockPanel>
-                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE71D;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE71D;" FontFamily="{StaticResource Icons}" FontSize="20" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                     <StackPanel VerticalAlignment="Center">
                       <TextBlock Text="软件管理" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
-                      <TextBlock Text="看软件占多少；卸载、清残留、搬到其他盘" Style="{StaticResource HelpSum}"/>
+                      <TextBlock Text="看软件占多少，卸载、清残留、搬到其他盘" Style="{StaticResource HelpSum}"/>
                     </StackPanel>
                   </DockPanel>
-                  <Border Height="1" Background="#EDEDF0" Margin="0,16,0,2"/>
-                  <StackPanel Margin="0,14,0,0">
+                  <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
+                  <StackPanel Margin="0,18,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="软件列表"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>列出装过的所有软件（包括应用商店里的），按占用空间从大到小排。可以只看装在 C 盘的，或者按名字搜索。表头可以点「名称」「发行商」「安装日期」「大小」排序，再点一下反过来；开机启动、计划任务、右键菜单可以按名称、状态排。</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">一次处理几个</Run><Run>：勾选行前面的方框，或按住鼠标左键在行上上下拖，拖过的都勾上；Shift 点方框勾上一段，表头的方框全选。勾了以后下面出现按钮：软件「卸载选中的」依次打开各自的卸载程序，一个走完、窗口关掉后再打开下一个，可以随时停下；应用商店的直接卸载。开机启动、计划任务、右键菜单「禁用选中的」「启用选中的」；残留文件夹「移到回收站」。都先列出来确认一次。</Run></TextBlock></DockPanel>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>按占用空间从大到小列出所有软件，可以搜索，也可以只看装在 C 盘的。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="卸载"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>打开软件自带的卸载程序，按提示操作即可。</Run></TextBlock>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="一次处理几个"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>勾选几个，或按住鼠标左键拖选。卸载时会依次打开每个软件自己的卸载程序。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="检查残留"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>卸载完回到这里点「检查残留」，找出以软件名命名、卸载后剩下的文件夹，确认后移到回收站。</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>发行商的总文件夹（比如 Tencent、Microsoft）不会被当成残留，系统自带的程序也不会。</Run></TextBlock></DockPanel>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="卸载和残留"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>卸载后点「检查残留」，找出留下的文件夹，确认后移到回收站。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="搬到其他盘"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>装在 C 盘的软件可以把整个安装文件夹搬到其他硬盘，C 盘原位置留一个链接。快捷方式、开始菜单、卸载和自动更新都照常可用，不用重装。</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>核对两边文件完全一致，才删掉 C 盘上的那份；正在运行的会先问你再关掉。</Run></TextBlock></DockPanel>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>把装在 C 盘的软件整个搬到其他盘，快捷方式、卸载和更新照常可用。带服务或驱动的、微软自己的软件等不适合搬，会写明原因。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="不适合搬的"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>会直接告诉你原因，不会硬搬：</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>带系统服务或驱动的（杀毒、VPN、驱动、远程控制等）</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>给资源管理器装了右键菜单的，以及输入法</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>微软自己的软件（Office、Visual Studio 等）和 Windows 自带组件</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>文件夹里有链接或用 Windows 压缩功能压过的文件（复制时可能漏掉）</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>没写明装在哪个文件夹的</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>应用商店的软件：请在 Windows 设置 → 应用里用「移动」</Run></TextBlock></DockPanel>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="搬走以后"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>在「搬家管理」里能看到，随时可以「搬回 C 盘」。以后软件大版本升级时，个别安装程序会把它重新装回 C 盘，到时再搬一次即可。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="残留文件夹"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>找已卸载软件可能留下的文件夹：名字对不上任何已装软件、没有程序在用、一个月没动过、至少 1 MB。只是猜测，先点「打开位置」看一眼再决定；移到回收站，能恢复。可以勾选几个一起移到回收站。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="检查新版本"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>用 Windows 自带的 winget 查一下装过的软件有没有新版本，只在你点的时候联网。查到的在列表里标出「可升级到」，旁边多一个「升级」按钮：在终端窗口里用 winget 升级，过程和提示都看得见。也可以一次全部升级。</Run></TextBlock>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>用 Windows 自带的 winget 查新版本，在终端里升级。只在你点的时候联网。</Run></TextBlock>
                   </StackPanel>
-                  <DockPanel Margin="0,26,0,0"><TextBlock DockPanel.Dock="Left" Text="开机启动、计划任务、右键菜单" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
-                  <StackPanel Margin="0,10,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="开机启动"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>和任务管理器「启动应用」一样的来源：注册表里的 Run 项和两个「启动」文件夹。点「禁用」以后开机不再自动启动，程序本身不删，随时可以重新启用。</Run></TextBlock>
+                  <TextBlock Text="启动项和扩展" Style="{StaticResource HelpGroup}" Margin="0,40,0,0"/>
+                  <StackPanel Margin="0,14,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="开机启动、计划任务、右键菜单"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>列出第三方的启动项、计划任务和右键菜单扩展。禁用不删除任何东西，随时可以重新启用。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="计划任务"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>只列第三方的计划任务（Windows 自己的在 Microsoft 文件夹里，不列）。禁用后到时间不再运行，随时可以重新启用。本工具自己的任务请在「自动提醒」页开关。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="右键菜单"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>只列第三方装进资源管理器右键菜单的扩展，系统自带的不列。禁用是写进 Windows 的「Shell Extensions\Blocked」，对新打开的窗口生效，软件本身照常用。</Run></TextBlock>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="残留文件夹"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>找已卸载软件可能留下的文件夹。只是猜测，先打开看看，再移到回收站。</Run></TextBlock>
                   </StackPanel>
                 </StackPanel>
               </Border>
-              <Border x:Name="HelpSec5" Style="{StaticResource Card}" Padding="24,20,24,24" Visibility="Collapsed">
+              <Border x:Name="HelpSec5" Style="{StaticResource Card}" Padding="36,30,36,36" Visibility="Collapsed">
                 <StackPanel>
                   <DockPanel>
-                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE95E;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE95E;" FontFamily="{StaticResource Icons}" FontSize="20" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                     <StackPanel VerticalAlignment="Center">
                       <TextBlock Text="系统健康" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
-                      <TextBlock Text="硬件状态、开机用时、蓝屏诊断、常见问题修复、谁在吃资源" Style="{StaticResource HelpSum}"/>
+                      <TextBlock Text="硬件状态、开机用时、蓝屏诊断和常见问题修复" Style="{StaticResource HelpSum}"/>
                     </StackPanel>
                   </DockPanel>
-                  <Border Height="1" Background="#EDEDF0" Margin="0,16,0,2"/>
-                  <StackPanel Margin="0,14,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="选项卡"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>标题旁一排选项卡：硬件、开机用时、蓝屏和崩溃、常见问题修复、活动监控、Windows 事件。点哪一项只显示哪一项，各自上下滚动，不用把整页拉到底。下次打开停在上次看的那一项。</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>「蓝屏和崩溃」里再分三个小选项卡：诊断结论、每次蓝屏、相关事件和驱动，小选项卡上写着有几条。</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>「常见问题修复」左边是问题列表，右边只显示选中的那个问题的修法；活动监控的表格占满这一页，表格自己滚动。</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>打开本工具几秒后，没有别的操作在做时，就在后台把这些先读好，点进来不用等；读过十分钟再打开会在后台刷新一遍。中途插上或拔掉硬盘，硬件卡片、空间地图的盘和搬家目标会自动跟着变。</Run></TextBlock></DockPanel>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
+                  <StackPanel Margin="0,18,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="硬件"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>每一项一张卡片，按档位标色（绿正常、橙留意、红有问题、灰读不到）：CPU 的负载、当前和最高频率、性能计数器（持续低于标称频率说明在降频）、ACPI 温度；内存的已用、提交、硬错误、WHEA 记录过的内存错误；每块盘的 SMART 健康状态、温度、磨损、读错误、通电时间；电池的设计容量、现在充满能到多少、循环次数；显卡的占用、显存、驱动版本；Windows 开机多久、等待重启、最近更新、有问题的设备。</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>读不到的直接写「读不到」，不用估算冒充：CPU 内核温度和显卡温度 Windows 不提供，要厂商工具；台式机没有电池；USB 硬盘盒和部分虚拟机不报 SMART。</Run></TextBlock></DockPanel>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>CPU、内存、硬盘、电池、显卡和 Windows 的状态，按绿、橙、红标出，读不到的写明读不到。打开本工具后会在后台先读好。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="开机用时"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Windows 自己记在「诊断-性能」日志里：最近一次开机用了多久（到桌面多久、桌面出来后开机程序又忙了多久），最近几次平均多少，以及 Windows 点名拖慢开机的程序和拖慢了几秒。拖慢的程序可以到「软件管理 → 开机启动」里关掉。</Run></TextBlock>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>最近几次开机用了多久，以及拖慢开机的程序。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="蓝屏和崩溃"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>本工具自己解析 C:\Windows\Minidump 里的转储文件：错误码和名字、四个参数、读盘失败时的状态码（比如 0xC000000E 是硬盘掉线）、出事时的进程、出事时加载的驱动、异常地址落在哪个驱动里、调用栈上出现的驱动。每次蓝屏下面用一句话说明是什么错、常见原因是什么；栈上只有 Windows 自带驱动的，不会冤枉某个驱动。再列最近 30 天的意外关机、蓝屏记录、WHEA 硬件错误、磁盘和文件系统错误事件，以及最近 30 天装的驱动。</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>这是提示不是定论，准确度不如 WinDbg。</Run></TextBlock></DockPanel>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>解析蓝屏转储，结合事件日志和硬盘健康给出诊断结论。每条结论下面有「按建议处理」和「需要你自己做的」。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="诊断结论"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>几次蓝屏、事件日志、硬盘健康、系统时钟和 Windows 版本放在一起看，给出几条结论：比如「读盘失败 + 系统进程反复退出 + 磁盘错误」就是硬盘或硬盘连接不稳定，同一个第三方驱动在两次以上蓝屏里被点名就是它嫌疑最大，还有内存、显卡、硬件错误、睡眠唤醒、时钟不准、系统版本太旧。每条结论下面分两块：「按建议处理」把本工具能直接做的几步一次做完（先列出来确认，都能撤销，比如关闭硬盘省电、关闭快速启动、打开日期和时间）；「需要你自己做的」按顺序列出本工具做不了的事（备份、更新 BIOS 和驱动、厂商硬件检测、重新插硬盘），写明这台电脑的 BIOS、存储驱动有多旧。蓝屏次数按系统的蓝屏记录算（小转储只留最近几个）；U 盘、移动硬盘的读写错误不算到系统盘头上；系统时间比本工具的发布日期还早、或者时间服务一直同步不了，也会报出来。</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>「厂商驱动下载页」按厂商和型号打开 BIOS、驱动、固件的下载页（Dell 按服务编号直达），链接同时复制下来，上不了外网的电脑可以拿到别的电脑上下载。「改用 Windows 自带的硬盘驱动」针对接在 Intel RST（RAID On）上又老掉线的硬盘：先替你查是不是单块盘、BitLocker 开没开，再列出进 BIOS 改成 AHCI 的步骤和改回去的办法，本工具不替你改。</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>「复制报告」把结论、处理办法和每次蓝屏的说明复制成文字；「导出诊断包」把转储、最近 30 天的系统和应用日志、systeminfo、驱动列表、硬盘信息和这份报告打成一个 zip（存到你选的位置，不覆盖已有文件），方便发给懂的人看。诊断包可能包含电脑名、用户名、装过的软件和内存片段，只发给你信任的人。</Run></TextBlock></DockPanel>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="诊断包"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>把转储、日志和系统信息打成一个 zip，发给能帮你的人。里面有电脑名和装过的软件，只发给信任的人。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="常见问题修复"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>按问题列出论坛里最常用、确实有效的修法，从轻到重：蓝屏和死机、硬盘掉线和卡顿、系统文件损坏、Windows 更新失败、上不了网、时间不准、关机变重启和唤醒失败、没有声音、图标和应用商店、开机慢、把信息发给别人。每一步标明「只看」「会改动」「要重启」，鼠标放上去看具体做什么。</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>用的都是 Windows 自带的命令（sfc、DISM、chkdsk、netsh、ipconfig、w32tm、powercfg 等），在看得见的终端窗口里运行，每次都记进操作日志。</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>会改动的先弹出说明再确认：修复系统文件（DISM /RestoreHealth 再 sfc /scannow）、下次开机检查 C 盘（可用「取消开机检查」撤销）、重置 Windows 更新组件（更新缓存改名留底，不删除）、重置网络（要重启，固定 IP 要重填）。</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>「关闭硬盘省电」把电源计划里的 PCIe 链路电源管理、AHCI 链路电源管理和「关闭硬盘」改成不省电，治掉盘最常用；改之前记下原值，「恢复硬盘省电」原样改回。「关闭快速启动」随时能再打开。</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>不删除任何文件、不结束任何程序、不装驱动、不改和这些修复无关的设置。系统还原、内存诊断、设备管理器是 Windows 自己的工具，每一步由你确认。</Run></TextBlock></DockPanel>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>按问题列出常用的修法，都是 Windows 自带的命令，在看得见的窗口里运行。会改动系统的先说明，再由你确认。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="谁在让电脑变慢"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>点「开始监控」，每 3 秒采一次样：各程序这段时间用了多少 CPU、占多少内存、往磁盘写得多快、本次监控一共写了多少、从进程启动起一共写了多少；同名进程合在一起算。点列名（程序、CPU、内存、写入速度、本次监控写入、启动以来写入）按那一列从高到低排，再点一下从低到高；表格只列前 25 个，换了排序就重新按这一列取前 25 个。不装常驻服务，关掉本工具就停。</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>写入量不等于磁盘净占用增长（临时文件写了又删）。哪个进程写了哪个文件，只有监控开着的时间段能对上：把「空间地图 → 最近改动」里变大的文件夹和这里写入多的程序放在一起看。</Run></TextBlock></DockPanel>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="活动监控"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>每 3 秒看一次各程序的 CPU、内存和磁盘写入，找出是谁在拖慢电脑。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Windows 事件"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>最近 7 天系统日志里的严重和错误事件按来源归并。很多错误是无害的，同一个来源反复出现、时间又和故障对得上的才值得查。</Run></TextBlock>
-                  </StackPanel>
-                  <Border Background="#EFF8F1" BorderBrush="#CFE9D6" BorderThickness="1" CornerRadius="10" Padding="14,11,16,12" Margin="0,16,0,0">
+                  <Border Background="#EFF8F1" BorderBrush="#CFE9D6" BorderThickness="1" CornerRadius="12" Padding="18,16,22,17" Margin="0,26,0,0">
                     <DockPanel>
-                      <TextBlock DockPanel.Dock="Left" Text="&#xEA18;" FontFamily="{StaticResource Icons}" FontSize="15" Foreground="#248A3D" VerticalAlignment="Top" Margin="0,2,12,0"/>
+                      <TextBlock DockPanel.Dock="Left" Text="&#xEA18;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#248A3D" VerticalAlignment="Top" Margin="0,3,14,0"/>
                       <StackPanel>
-                        <TextBlock Style="{StaticResource HelpLead}" Text="读取什么都不改，修复先确认"/>
-                        <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>硬件、开机、蓝屏、事件、活动监控全部是读取。会改系统的只在修复按钮里，点了先说明要改什么、能不能撤销，再由你确认。</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpLead}" Text="查看什么都不改"/>
+                        <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>只有修复按钮会改系统，而且先说明改什么、能不能撤销。</Run></TextBlock>
                       </StackPanel>
                     </DockPanel>
                   </Border>
                 </StackPanel>
               </Border>
-              <Border x:Name="HelpSec6" Style="{StaticResource Card}" Padding="24,20,24,24" Visibility="Collapsed">
+              <Border x:Name="HelpSec6" Style="{StaticResource Card}" Padding="36,30,36,36" Visibility="Collapsed">
                 <StackPanel>
                   <DockPanel>
-                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE8AB;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE8AB;" FontFamily="{StaticResource Icons}" FontSize="20" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                     <StackPanel VerticalAlignment="Center">
                       <TextBlock Text="搬家管理" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
-                      <TextBlock Text="一次搬好几项；看搬走的文件夹是否正常" Style="{StaticResource HelpSum}"/>
+                      <TextBlock Text="一次搬好几项，看搬走的是否正常" Style="{StaticResource HelpSum}"/>
                     </StackPanel>
                   </DockPanel>
-                  <Border Height="1" Background="#EDEDF0" Margin="0,16,0,2"/>
-                  <DockPanel Margin="0,16,0,0"><TextBlock DockPanel.Dock="Left" Text="可以搬的" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
-                  <StackPanel Margin="0,10,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="批量搬走"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>自动列出 C 盘上还能搬走的东西，分成聊天记录、装在 C 盘的软件和其他文件夹三组，每项都标着大小。左边目录可以一次只看一组（还有「不适合搬的软件」和「已经搬走的」）。勾选后在右下角选好目标盘，点「搬到其他盘」。</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>开始前会列出全部项目，要先关掉的软件也会告诉你。</Run></TextBlock></DockPanel>
+                  <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
+                  <StackPanel Margin="0,18,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="可以搬的"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>列出 C 盘上还能搬走的聊天记录、软件和大文件夹。勾选后选好目标盘，点「搬到其他盘」。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="不适合搬的软件"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>带系统服务或驱动的、给资源管理器装了右键菜单的、微软自己的软件等，单独列在「不适合搬的软件」里，写明原因，不能勾选。</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>从应用商店装的聊天软件（比如 WhatsApp、Microsoft Teams）由 Windows 管理，页面下方会提示在 Windows 设置里用「移动」换盘。</Run></TextBlock></DockPanel>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>单独列出，并写明原因。</Run></TextBlock>
                   </StackPanel>
-                  <DockPanel Margin="0,26,0,0"><TextBlock DockPanel.Dock="Left" Text="已经搬走的" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
-                  <TextBlock Style="{StaticResource HelpBody}" Margin="0,10,0,0"><Run>所有搬到其他盘的文件夹都列在这里，每一项都显示现在的状态：</Run></TextBlock>
-                  <Grid Margin="0,10,0,0">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="96"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                  <TextBlock Text="已经搬走的" Style="{StaticResource HelpGroup}" Margin="0,40,0,0"/>
+                  <Grid Margin="0,14,0,0">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="88"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                    <Border Grid.Row="0" Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="正常" FontSize="12.5" Foreground="#1D7A35" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>数据在目标盘上，C 盘原位置只留一个指向它的链接，不占 C 盘空间，软件照常使用。需要时可以「搬回 C 盘」：复制回来、核对一致后才拆掉链接，最后删除目标盘上的那份。</Run></TextBlock>
-                    <Border Grid.Row="1" Style="{StaticResource HelpPill}" Background="#FDEBEC"><TextBlock Text="链接断了" FontSize="12.5" Foreground="#C0101C" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,9"><Run>目标盘拔了或者盘符变了。把硬盘插回去（或改回原来的盘符）就好；如果在其他盘找到了同名的副本，可以「修复链接」改指向它。</Run></TextBlock>
-                    <Border Grid.Row="2" Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="没搬完" FontSize="12.5" Foreground="#995700" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>C 盘原文件夹还在，目标盘上有一份副本。可以在「可以搬的」里再搬一次（只补差异），或者删掉这份多余的副本。</Run></TextBlock>
+                    <Border Grid.Row="0" Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="正常" FontSize="13" Foreground="#1D7A35" TextWrapping="Wrap"/></Border>
+                    <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,16"><Run>数据在目标盘上，C 盘只留一个链接。需要时可以搬回 C 盘。</Run></TextBlock>
+                    <Border Grid.Row="1" Style="{StaticResource HelpPill}" Background="#FDEBEC"><TextBlock Text="链接断了" FontSize="13" Foreground="#C0101C" TextWrapping="Wrap"/></Border>
+                    <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,16"><Run>目标盘没插着，或者盘符变了。插回去就好，也可以修复链接。</Run></TextBlock>
+                    <Border Grid.Row="2" Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="没搬完" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border>
+                    <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>原文件夹还在，目标盘上有一份副本。可以再搬一次，或删掉多余的副本。</Run></TextBlock>
                   </Grid>
                 </StackPanel>
               </Border>
-              <Border x:Name="HelpSec7" Style="{StaticResource Card}" Padding="24,20,24,24" Visibility="Collapsed">
+              <Border x:Name="HelpSec7" Style="{StaticResource Card}" Padding="36,30,36,36" Visibility="Collapsed">
                 <StackPanel>
                   <DockPanel>
-                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE823;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE823;" FontFamily="{StaticResource Icons}" FontSize="20" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                     <StackPanel VerticalAlignment="Center">
                       <TextBlock Text="自动提醒" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
-                      <TextBlock Text="空间不够时提醒，每周自动清理；默认都关着" Style="{StaticResource HelpSum}"/>
+                      <TextBlock Text="空间不够时提醒，定期自动清理" Style="{StaticResource HelpSum}"/>
                     </StackPanel>
                   </DockPanel>
-                  <Border Height="1" Background="#EDEDF0" Margin="0,16,0,2"/>
-                  <StackPanel Margin="0,14,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="选项卡"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>标题旁一排选项卡：空间提醒、定期自动清理、空间变化，点哪一项只显示哪一项；选项卡上写着开着还是关着、记了几天。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
+                  <StackPanel Margin="0,18,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="空间不足提醒"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>打开后，每次登录电脑 2 分钟后、以及每天中午各检查一次 C 盘，低于你设定的值（默认 20 GB）就在屏幕右下角提醒，每天最多一次；空间够就什么都不显示。</Run></TextBlock>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>C 盘低于你设定的值时，在屏幕右下角提醒，每天最多一次。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="垃圾攒多了也提醒"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>可以再设一个界限（比如 2 GB）：检查时顺便统计「安全清理」里的临时文件、缓存和日志，超过就提醒，每天最多一次。只统计，不删任何东西。</Run></TextBlock>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="垃圾提醒"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>临时文件和缓存超过你设定的大小时提醒。只统计，不删除。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="定期自动清理"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>打开后，在你选的时间（每周某一天或每天，中午 12:30）自动清理一次临时文件、缓存和日志。不搬家、不清空回收站、不碰个人文件夹和你自己加的文件夹，被占用的文件直接跳过。</Run></TextBlock>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>每周或每天自动清一次临时文件、缓存和日志。不碰个人文件夹，也不搬家。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="存储感知"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>页面上会写明 Windows 自带的「存储感知」开没开。开着的话它也会定期清临时文件和回收站，和这里的自动清理不冲突，只是各做一遍。</Run></TextBlock>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="空间变化"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>记下每天 C 盘的剩余空间，画成最近 30 天的柱状图。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="C 盘空间变化"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>每次打开本工具、每次定时检查都记一笔，画成最近 30 天的柱状图。</Run></TextBlock>
-                  </StackPanel>
-                  <Border Background="#EEF5FD" BorderBrush="#D2E3FA" BorderThickness="1" CornerRadius="10" Padding="14,11,16,12" Margin="0,16,0,0">
+                  <Border Background="#EEF5FD" BorderBrush="#D2E3FA" BorderThickness="1" CornerRadius="12" Padding="18,16,22,17" Margin="0,26,0,0">
                     <DockPanel>
-                      <TextBlock DockPanel.Dock="Left" Text="&#xE946;" FontFamily="{StaticResource Icons}" FontSize="15" Foreground="#0071E3" VerticalAlignment="Top" Margin="0,2,12,0"/>
+                      <TextBlock DockPanel.Dock="Left" Text="&#xE946;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Top" Margin="0,3,14,0"/>
                       <StackPanel>
-                        <TextBlock Style="{StaticResource HelpLead}" Text="不用一直开着本工具"/>
-                        <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>这两项都由 Windows「任务计划程序」按时运行本工具，也不需要设置开机启动。任务名字以 CleanC 开头，默认关闭，关掉开关就删除任务。</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpLead}" Text="默认都关着"/>
+                        <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>打开后由 Windows 的任务计划程序按时运行本工具，请把本工具放在固定的位置。</Run></TextBlock>
                       </StackPanel>
                     </DockPanel>
                   </Border>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="放在固定的位置"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>请把本工具放在一个固定的位置（比如 D:\工具），不要删掉。挪了位置后打开一次，任务会自动改用新位置。</Run></TextBlock>
-                  </StackPanel>
                 </StackPanel>
               </Border>
-              <Border x:Name="HelpSec8" Style="{StaticResource Card}" Padding="24,20,24,24" Visibility="Collapsed">
+              <Border x:Name="HelpSec8" Style="{StaticResource Card}" Padding="36,30,36,36" Visibility="Collapsed">
                 <StackPanel>
                   <DockPanel>
-                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE81C;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE81C;" FontFamily="{StaticResource Icons}" FontSize="20" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                     <StackPanel VerticalAlignment="Center">
                       <TextBlock Text="操作日志" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
-                      <TextBlock Text="每一次改动都记下来，可以查" Style="{StaticResource HelpSum}"/>
+                      <TextBlock Text="每一次改动都记下来" Style="{StaticResource HelpSum}"/>
                     </StackPanel>
                   </DockPanel>
-                  <Border Height="1" Background="#EDEDF0" Margin="0,16,0,2"/>
-                  <StackPanel Margin="0,14,0,0">
+                  <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
+                  <StackPanel Margin="0,18,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="记什么"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>删除、搬运、合并、压缩、卸载和系统设置的每一次改动：什么时间、做了什么、对哪个文件或文件夹、结果怎样。只记操作，不保存文件内容。</Run></TextBlock>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>每次删除、搬家、合并、压缩、卸载和系统设置的改动：时间、做了什么、对哪个文件夹、结果如何。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="怎么查"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>按类别（删除、搬运、合并……）、时间（7 天、30 天、全部）和关键字查找。日志是普通的 txt 文件，每月一个，点「打开日志文件夹」可以用记事本直接看。</Run></TextBlock>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="查找"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>按类别、时间和关键字查找。日志是普通的文本文件，每月一个。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="保存多久"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>默认半年，可以改成 1 个月到 2 年，或者永久保存。</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>每次打开本工具时，超过保存时间的记录会自动删除，删掉后找不回来。</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>把保存时间改短时，会先提示哪天之前的记录会被删掉。</Run></TextBlock></DockPanel>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>默认半年，可以改。超过保存时间的记录会自动删除。</Run></TextBlock>
                   </StackPanel>
                 </StackPanel>
               </Border>
-              <Border x:Name="HelpSec9" Style="{StaticResource Card}" Padding="24,20,24,24" Visibility="Collapsed">
+              <Border x:Name="HelpSec9" Style="{StaticResource Card}" Padding="36,30,36,36" Visibility="Collapsed">
                 <StackPanel>
                   <DockPanel>
-                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE713;" FontFamily="{StaticResource Icons}" FontSize="17" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                    <Border DockPanel.Dock="Left" Style="{StaticResource HelpIcon}"><TextBlock Text="&#xE713;" FontFamily="{StaticResource Icons}" FontSize="20" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                     <StackPanel VerticalAlignment="Center">
                       <TextBlock Text="设置" Style="{StaticResource HelpHead}" HorizontalAlignment="Left"/>
-                      <TextBlock Text="外观、语言，以及界面上显示什么" Style="{StaticResource HelpSum}"/>
+                      <TextBlock Text="外观、语言和界面上显示什么" Style="{StaticResource HelpSum}"/>
                     </StackPanel>
                   </DockPanel>
-                  <Border Height="1" Background="#EDEDF0" Margin="0,16,0,2"/>
-                  <StackPanel Margin="0,14,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="目录"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>左边按「常用」「界面」「清理和扫描」分好类，点哪一项右边只显示那一项。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
+                  <StackPanel Margin="0,18,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="使用模式"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>三种，按你的需要决定界面上有多少东西。第一次打开时会问一句，之后在「设置」最上面随时换，换了不丢任何设置和记录。左下角版本号下面写着当前模式，点一下就到设置。</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">普通用户</Run><Run>：清理 C 盘、省空间、空间地图、软件管理、系统健康（硬件、蓝屏和崩溃、常见问题修复）、帮助。清理列表里只有常见的缓存和临时文件，删了软件会自动重建；有代价的项目仍然默认跳过。</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">工程师</Run><Run>：再加上重复文件、搬家管理、自动提醒、操作日志；空间地图的找文件、和上次比、最近改动、导出、压缩；省空间的页面文件、还原点、压缩文件夹、虚拟磁盘、合并重复文件；软件管理的开机启动、残留文件夹、检查新版本、搬到其他盘；系统健康的开机用时、活动监控，以及常见问题修复里重置网络、重置更新组件、开机检查 C 盘、关闭硬盘省电、关闭快速启动这几步；清理列表里多出开发工具的缓存和驱动残留。</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">开发者和 IT</Run><Run>：全部功能。再加上计划任务、右键菜单、保留的存储、组件存储分析、蓝屏转储、临时文件夹位置、自定义清理列表和排除、快速扫描开关、空间明细、检查扫描功能、运行记录、Windows 事件汇总，以及 Installer 孤儿安装包、事件日志、旧版驱动包、NuGet / Gradle / Maven / JetBrains 缓存这类项目。</Run></TextBlock></DockPanel>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>决定界面上有多少功能。随时可以换，不会丢任何设置和记录。</Run></TextBlock>
+                    <DockPanel Margin="0,10,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="20" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#8E8E93"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">普通用户</Run><Run>：清理 C 盘、省空间、空间地图、软件管理、系统健康和帮助。</Run></TextBlock></DockPanel>
+                    <DockPanel Margin="0,7,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="20" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#8E8E93"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">工程师</Run><Run>：再加上重复文件、搬家管理、自动提醒、操作日志，以及各页的进阶功能。</Run></TextBlock></DockPanel>
+                    <DockPanel Margin="0,7,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="20" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#8E8E93"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">开发者和 IT</Run><Run>：全部功能。</Run></TextBlock></DockPanel>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="外观和语言"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>浅色、深色或跟随系统（照 Windows 设置里「选择应用模式」来），中文或 English。换了以后本工具会关闭，再自动打开。左下角的「外观」和「切换语言」也能改。</Run></TextBlock>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>浅色、深色或跟随系统；中文或 English。更改后本工具会重新打开。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="界面上显示什么"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>用不上的页面、左下角的按钮、页面标题下的说明，以及空间地图的复选框、占比条、百分比、详细信息和「快速扫描」开关都可以关掉。</Run></TextBlock>
-                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>关掉的随时可以回来打开，里面的设置和记录都不受影响；「恢复默认显示」一下全部恢复。</Run></TextBlock></DockPanel>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>用不上的页面、按钮和说明都可以关掉，随时能恢复。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="快速扫描"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>直接读 NTFS 的文件表（MFT），比逐个文件夹查看快得多，还能看出实际占用和硬链接。关掉就改为逐个文件夹扫描。</Run></TextBlock>
+                  <StackPanel Margin="0,26,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="扫描和查重"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>快速扫描直接读文件表；查重复文件时可以让着其他程序，不拖慢正在用的软件。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="查重复文件时让着其他程序"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>读文件时用 Windows 的后台模式，磁盘和内存都排在其他程序后面，不拖慢正在用的程序；同时在做别的事时，查得会慢一些。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="删除时先放进回收站"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>在「清理列表」卡片里。打开后手动清理删掉的文件先进回收站；自动清理不受影响。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,16,0,0">
+                  <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="清理列表"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>自己加要清理的文件夹（删里面的东西，文件夹本身保留），或排除清理时不想碰的文件夹。个人文件夹、系统文件夹和软件的安装文件夹加不进来。</Run></TextBlock>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>删除时先放进回收站，以及添加要清理或要排除的文件夹。</Run></TextBlock>
                   </StackPanel>
                 </StackPanel>
               </Border>
             </StackPanel>
-            <Border x:Name="HelpPaneFaq" Style="{StaticResource Card}" Padding="24,20,24,10" Visibility="Collapsed">
+            <Border x:Name="HelpPaneFaq" Style="{StaticResource Card}" Padding="36,30,36,20" Visibility="Collapsed">
               <StackPanel>
-                <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE897;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/><TextBlock Text="常见问题" Style="{StaticResource HelpHead}"/></StackPanel>
-                <StackPanel x:Name="HelpFaq" Margin="0,6,0,0">
+                <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE897;" FontFamily="{StaticResource Icons}" FontSize="19" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,1,12,0"/><TextBlock Text="常见问题" Style="{StaticResource HelpHead}"/></StackPanel>
+                <StackPanel x:Name="HelpFaq" Margin="0,14,0,0">
                   <Expander Style="{StaticResource HelpQ}" BorderThickness="0">
                     <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="为什么有些功能找不到？"/></Expander.Header>
                     <StackPanel>
-                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>多半是使用模式的关系：普通用户模式只显示基础功能，工程师模式多一些，开发者和 IT 模式才是全部。到「设置」最上面换一下模式就有了；另外「界面上显示什么」里手动隐藏过的也要在那里打开。清理列表是扫描时按模式决定列什么的，换了模式再扫描一次。</Run></TextBlock>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>可能是使用模式的缘故。到「设置」里换成工程师或开发者和 IT 模式；在「界面上显示什么」里关掉的，也在那里打开。</Run></TextBlock>
                     </StackPanel>
                   </Expander>
                   <Expander Style="{StaticResource HelpQ}">
-                    <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="C 盘这几天少了几十 GB，去哪了？"/></Expander.Header>
+                    <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="C 盘这几天少了很多空间，去哪了？"/></Expander.Header>
                     <StackPanel>
-                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>「空间地图」扫一遍，看上方概览和「和上次比」：它会说清这段时间已用空间多了多少、主要在哪（Docker、WSL、浏览器缓存、Windows 更新或某个文件夹）。再看「最近改动」，按变更日志列出这几天新建、改写的文件最集中的文件夹。想知道是哪个程序在写，到「系统健康」开一会儿活动监控。</Run></TextBlock>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>用「空间地图」扫描 C 盘，看「和上次比」和「最近改动」，就知道多出的空间主要在哪。想知道是哪个程序在写，开一会儿「系统健康」的活动监控。</Run></TextBlock>
                     </StackPanel>
                   </Expander>
                   <Expander Style="{StaticResource HelpQ}">
-                    <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="蓝屏了怎么查？"/></Expander.Header>
+                    <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="蓝屏了怎么办？"/></Expander.Header>
                     <StackPanel>
-                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>「系统健康 → 蓝屏和崩溃」：最上面的「诊断结论」把几次蓝屏、事件日志和硬盘健康放在一起看，告诉你最可能是哪一类问题；点「按建议处理」把本工具能做的一次做完，再照「需要你自己做的」一条条做；每次蓝屏下面还有一句话的解释。常见的处理顺序：硬盘掉线的先备份、关硬盘省电、更新存储驱动；驱动被反复点名的先更新或回退它；再跑「检查系统文件」，内存类的跑内存诊断。要找人帮忙，点「导出诊断包」。</Run></TextBlock>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>打开「系统健康」的「蓝屏和崩溃」，先看诊断结论，点「按建议处理」，再照「需要你自己做的」逐条做。要找人帮忙，就导出诊断包。</Run></TextBlock>
                     </StackPanel>
                   </Expander>
                   <Expander Style="{StaticResource HelpQ}">
                     <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="为什么要管理员权限？"/></Expander.Header>
                     <StackPanel>
-                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>清理系统临时文件、Windows 更新缓存等位置，需要管理员权限。</Run></TextBlock>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>清理系统临时文件、Windows 更新缓存这些位置需要管理员权限。</Run></TextBlock>
                     </StackPanel>
                   </Expander>
                   <Expander Style="{StaticResource HelpQ}">
                     <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="做到一半能取消吗？"/></Expander.Header>
                     <StackPanel>
-                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>可以。进度卡片和窗口底部都有「取消」按钮，会停在安全的地方，已经做完的不会撤销：</Run></TextBlock>
-                      <DockPanel Margin="0,6,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">清理</Run><Run>：停下来。</Run></TextBlock></DockPanel>
-                      <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">搬家</Run><Run>：如果还在复制，C 盘上的原文件夹不动，已复制的部分留在目标盘，下次再搬会接着复制。</Run></TextBlock></DockPanel>
-                      <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">搬回 C 盘</Run><Run>：复制回来的那一半会删掉，什么都不改。</Run></TextBlock></DockPanel>
-                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,8,0,0"><Run>正在换成链接、删除备份或运行系统命令（比如清理 Windows 更新）时按钮是灰的，等这一步做完就能取消。</Run></TextBlock>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>可以，会停在安全的地方，已经做完的不会撤销。搬家时如果还在复制，C 盘上的原文件夹不动，下次接着复制。</Run></TextBlock>
                     </StackPanel>
                   </Expander>
                   <Expander Style="{StaticResource HelpQ}">
                     <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="执行时能关窗口吗？"/></Expander.Header>
                     <StackPanel>
-                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>做完前请不要关闭窗口，想停下请点「取消」。可以点「在后台继续」收起进度卡片，窗口底部和任务栏图标上都能看到进度。</Run></TextBlock>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>做完前请不要关窗口。想停下就点「取消」；点「在后台继续」可以收起进度。</Run></TextBlock>
                     </StackPanel>
                   </Expander>
                   <Expander Style="{StaticResource HelpQ}">
                     <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="在哪看详细过程？"/></Expander.Header>
                     <StackPanel>
-                      <DockPanel Margin="0,0,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>做过哪些删除和搬运：看左侧的「操作日志」。</Run></TextBlock></DockPanel>
-                      <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>程序运行的技术细节：看左下角「运行记录」，完整文件在 %TEMP%\CleanC-run.log。</Run></TextBlock></DockPanel>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>删除和搬家的记录在「操作日志」里，技术细节在左下角的「运行记录」里。</Run></TextBlock>
                     </StackPanel>
                   </Expander>
                   <Expander Style="{StaticResource HelpQ}">
                     <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="释放的空间比预计少？"/></Expander.Header>
                     <StackPanel>
-                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>放进回收站的文件，要清空回收站后才真正释放空间；正被其他程序占用的文件会被跳过；打开了「删除时先放进回收站」时，放不进回收站的不删（日志里有原因）。</Run></TextBlock>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>放进回收站的文件，要清空回收站后才释放空间；被其他程序占用的文件会跳过。</Run></TextBlock>
                     </StackPanel>
                   </Expander>
                   <Expander Style="{StaticResource HelpQ}">
-                    <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="能用深色界面吗？"/></Expander.Header>
+                    <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="扫描的合计为什么和已用空间对不上？"/></Expander.Header>
                     <StackPanel>
-                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>可以。在左边的「设置」里（或点左下角的「外观」）选浅色、深色或跟随系统。换了以后本工具会关闭，再自动打开。</Run></TextBlock>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>硬链接会被重复计算，压缩和只在云端的文件实际占得少，文件表这类系统数据也占空间。快速扫描后，在空间地图点「空间明细」可以看到每一部分。</Run></TextBlock>
                     </StackPanel>
                   </Expander>
                   <Expander Style="{StaticResource HelpQ}">
-                    <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="能把用不上的页面和按钮藏起来吗？"/></Expander.Header>
+                    <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="WinSxS 很大，能删吗？"/></Expander.Header>
                     <StackPanel>
-                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>可以，在左边的「设置」里关掉就行。藏起来的随时可以在那里打开，里面的设置和记录都不受影响。</Run></TextBlock>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>不能手动删。里面很多文件是硬链接，实际占的比看上去小。要回收空间，用清理页的「WinSxS 组件清理」。</Run></TextBlock>
                     </StackPanel>
                   </Expander>
                   <Expander Style="{StaticResource HelpQ}">
-                    <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="为什么扫描出来的合计和「已用空间」对不上？"/></Expander.Header>
+                    <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="为什么不清 Prefetch，也没有内存加速？"/></Expander.Header>
                     <StackPanel>
-                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>按文件大小相加，和盘上实际用掉的空间不是一回事：</Run></TextBlock>
-                      <DockPanel Margin="0,6,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>硬链接（同一份文件有好几个名字，WinSxS 和 System32 里很多）会重复算。</Run></TextBlock></DockPanel>
-                      <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>压缩、稀疏和只在云端的文件，实际占得比文件大小少。</Run></TextBlock></DockPanel>
-                      <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>文件表（MFT）、NTFS 的日志、Windows 给更新预留的空间（保留的存储）也占地方，但不是普通文件。</Run></TextBlock></DockPanel>
-                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,8,0,0"><Run>快速扫描后，在空间地图点「空间明细」可以看到每一块各多少。</Run></TextBlock>
-                    </StackPanel>
-                  </Expander>
-                  <Expander Style="{StaticResource HelpQ}">
-                    <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="WinSxS 看起来很大，能删吗？"/></Expander.Header>
-                    <StackPanel>
-                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>不能手动删，删了系统可能坏掉。</Run></TextBlock>
-                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,8,0,0"><Run>里面很多文件和 System32 等位置是同一份（硬链接），资源管理器按名字相加会重复算，实际占的比看上去小；快速扫描时，空间地图会注明其中多少是硬链接。</Run></TextBlock>
-                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,8,0,0"><Run>真正能清掉的是更新替换下来的旧组件：用「清理 C 盘」里的「WinSxS 组件清理 (DISM)」。</Run></TextBlock>
-                    </StackPanel>
-                  </Expander>
-                  <Expander Style="{StaticResource HelpQ}">
-                    <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="为什么不清理 Prefetch 文件夹，也没有「内存加速」？"/></Expander.Header>
-                    <StackPanel>
-                      <DockPanel Margin="0,0,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Prefetch</Run><Run> 里记的是程序启动时要读哪些文件，Windows 靠它让常用软件打开得更快。一共只有几十 MB，删了下次启动反而变慢，过几天又会长回来。</Run></TextBlock></DockPanel>
-                      <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">内存</Run><Run>也一样：Windows 会把空闲的内存拿来缓存常用的文件（任务管理器里的「已缓存」），别的程序要用时马上让出来，强行清空只会让电脑变慢。</Run></TextBlock></DockPanel>
-                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,8,0,0"><Run>所以这两样本工具都不做。</Run></TextBlock>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Prefetch 让常用软件启动得更快，一共只有几十 MB，删了反而变慢。空闲内存被 Windows 用来缓存文件，强行清空只会更慢。</Run></TextBlock>
                     </StackPanel>
                   </Expander>
                   <Expander Style="{StaticResource HelpQ}">
                     <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="为什么没有注册表清理？"/></Expander.Header>
                     <StackPanel>
-                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>注册表里多几条没用的记录，既不占空间也不影响速度，微软自己的说法是清理注册表没有收益；清错了反而可能让软件打不开、系统出问题，而且很难修。所以本工具不做，和不清 Prefetch、不做「内存加速」是一个道理。</Run></TextBlock>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>多余的注册表项不占空间，也不影响速度；清错了反而可能让软件打不开。</Run></TextBlock>
                     </StackPanel>
                   </Expander>
                   <Expander Style="{StaticResource HelpQ}">
                     <Expander.Header><TextBlock Style="{StaticResource HelpLead}" Text="怎么知道有没有新版本？"/></Expander.Header>
                     <StackPanel>
-                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>在左边目录的「反馈和新版本」里点「检查新版本」，有新版本会打开下载页面；下载新的 exe 换掉旧的就行，设置、日志和自动提醒都会保留。本工具平时不联网，只在你点这个按钮时连一次 GitHub。</Run></TextBlock>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>在帮助的「反馈和新版本」里点「检查新版本」。下载新的 exe 换掉旧的即可，设置和记录都会保留。</Run></TextBlock>
                     </StackPanel>
                   </Expander>
                 </StackPanel>
               </StackPanel>
             </Border>
-            <Border x:Name="FeedbackCard" Style="{StaticResource Card}" Padding="24,20,24,24" Visibility="Collapsed">
+            <Border x:Name="FeedbackCard" Style="{StaticResource Card}" Padding="36,30,36,36" Visibility="Collapsed">
               <StackPanel>
-                <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE8BD;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,0,10,0"/><TextBlock Text="使用反馈" Style="{StaticResource HelpHead}"/></StackPanel>
-                <TextBlock Style="{StaticResource HelpBody}" Margin="0,8,0,0" Text="遇到问题、发现错误或有改进建议，欢迎在 GitHub 上提交问题（Issues）。"/>
-                <Border Background="#F5F5F7" CornerRadius="10" Padding="18,14" Margin="0,14,0,0">
+                <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE8BD;" FontFamily="{StaticResource Icons}" FontSize="19" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,1,12,0"/><TextBlock Text="反馈和新版本" Style="{StaticResource HelpHead}"/></StackPanel>
+                <TextBlock Style="{StaticResource HelpBody}" Margin="0,12,0,0" Text="遇到问题或有建议，欢迎在 GitHub 上提交。"/>
+                <Border Background="#F5F5F7" CornerRadius="12" Padding="20,16" Margin="0,18,0,0">
                   <DockPanel>
                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                       <Button x:Name="BtnIssue" Content="提交问题" Style="{StaticResource Primary}" Padding="14,7" Margin="0,0,8,0"/>
@@ -14797,34 +14366,34 @@ if ($script:mode -match '(?i)/autoclean') {
                         <TextBlock Text="&#xE943;" FontFamily="{StaticResource Icons}" FontSize="18" Foreground="#0071E3" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                       </Border>
                       <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="GitHub 项目主页：下载新版本、看源代码、提交问题" Style="{StaticResource Caption}"/>
+                        <TextBlock Text="GitHub 项目主页" Style="{StaticResource Caption}"/>
                         <TextBlock x:Name="GitHubUrl" Text="github.com/Xuanqiyun/ClearC" FontSize="16" FontWeight="SemiBold" Margin="0,1,0,0" TextOptions.TextFormattingMode="Ideal"/>
                       </StackPanel>
                     </StackPanel>
                   </DockPanel>
                 </Border>
-                <StackPanel x:Name="FbCopyDiag" Margin="0,18,0,0">
+                <StackPanel x:Name="FbCopyDiag" Margin="0,24,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="附上诊断信息"/>
-                  <TextBlock Style="{StaticResource HelpBody}" Text="提交问题时附上截图和诊断信息，能更快找到原因。诊断信息包括软件版本、Windows 版本、C 盘空间和最近的运行记录（里面有文件夹路径），贴出去之前可以先看一下。"/>
-                  <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                  <TextBlock Style="{StaticResource HelpBody}" Text="提交问题时附上截图和诊断信息，能更快找到原因。诊断信息里有文件夹路径，贴出去之前可以先看一下。"/>
+                  <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
                     <Button x:Name="BtnCopyDiag" Content="复制诊断信息" Margin="0,0,8,0"/>
                     <Button x:Name="BtnOpenLog" Content="打开运行记录文件"/>
                     <TextBlock x:Name="CopyHint" Style="{StaticResource Caption}" Foreground="#248A3D" Margin="14,0,0,0"/>
                   </StackPanel>
                 </StackPanel>
-                <StackPanel x:Name="FbSelfTest" Margin="0,18,0,0">
-                  <Border Height="1" Background="#EDEDF0" Margin="0,0,0,18"/>
+                <StackPanel x:Name="FbSelfTest" Margin="0,24,0,0">
+                  <Border Height="1" Background="#EDEDF0" Margin="0,0,0,24"/>
                   <TextBlock Style="{StaticResource HelpLead}" Text="检查扫描功能"/>
-                  <TextBlock Style="{StaticResource HelpBody}" Text="在这台电脑上核对快速扫描：比较直接读文件表和逐个文件夹扫描的结果，再在本工具自己的文件夹里建几个文件、改一改、删掉，看按变更日志更新对不对。只读 C 盘，不动你的文件，大约要一两分钟；结果会复制下来，可以贴到 GitHub 的问题里。"/>
-                  <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                  <TextBlock Style="{StaticResource HelpBody}" Text="在这台电脑上核对快速扫描是否准确，大约要一两分钟，只读不改。结果会复制下来，可以贴到问题里。"/>
+                  <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
                     <Button x:Name="BtnSelfTest" Content="检查扫描功能"/>
                   </StackPanel>
                 </StackPanel>
-                <StackPanel x:Name="FbCheckUpdate" Margin="0,18,0,0">
-                  <Border Height="1" Background="#EDEDF0" Margin="0,0,0,18"/>
+                <StackPanel x:Name="FbCheckUpdate" Margin="0,24,0,0">
+                  <Border Height="1" Background="#EDEDF0" Margin="0,0,0,24"/>
                   <TextBlock Style="{StaticResource HelpLead}" Text="检查新版本"/>
-                  <TextBlock Style="{StaticResource HelpBody}" Text="有新版本会打开下载页面，下载新的 exe 换掉旧的就行。只在你点这个按钮时连一次 GitHub。"/>
-                  <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                  <TextBlock Style="{StaticResource HelpBody}" Text="只在你点的时候连一次 GitHub。"/>
+                  <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
                     <Button x:Name="BtnCheckUpdate" Content="检查新版本"/>
                   </StackPanel>
                 </StackPanel>
@@ -22362,6 +21931,8 @@ function Invoke-UiTest {
                 # 帮助：快速上手，再看「空间地图」那一项
                 Show-Page 'help'; $hp0 = $script:helpPane; Select-HelpPane 'start' -NoRemember; & $shot 'help'
                 Select-HelpPane 's3' -NoRemember; & $shot 'help-map'
+                # 每一项完整的样子（不只是窗口里看得到的那一截）
+                foreach ($pk in @('start', 's9', 's0', 's3', 'faq')) { Select-HelpPane $pk -NoRemember; $win.UpdateLayout(); [void](& $waitUi { $false } 200); & $snap $script:helpPanes[$pk].Pane ('pane-' + $pk) 1 }
                 Select-HelpPane $hp0 -NoRemember; Show-Page 'clean'
             }
         }

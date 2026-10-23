@@ -156,6 +156,31 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+决定界面上有多少功能。换模式不会丢任何设置和记录。	Decides how many features the window shows. Switching keeps all settings and records.
+跟随系统时照 Windows 的「选择应用模式」。更改后本工具会重新打开。	Follow Windows uses its "Choose your app mode" setting. ClearC reopens after a change.
+更改后本工具会重新打开。	ClearC reopens after a change.
+「清理 C 盘」「空间地图」「帮助」和「设置」一直显示。关掉的页面只是不在左边列出，设置和记录都照旧。	"Clean up C:", "Space map", "Help" and "Settings" always show. Hidden pages only leave the sidebar; their settings and records stay.
+外观和语言在这一页上面也能改；「使用反馈」和「运行记录」在帮助里也有。	Appearance and language can also be changed at the top of this page; Feedback and the Run log are also in Help.
+每一页标题下面那行灰色的说明。关掉后列表能多显示几行。	The grey line under each page title. Turn it off to see a few more rows.
+每一行前面显示一个复选框，点方框才选中，按 Esc 全部取消。关掉就照 Windows 原来的做法：单击选中，按住 Ctrl 或 Shift 多选。都可以按住鼠标上下拖，一次选中连着的几行。	Shows a check box in front of each row: only clicking the box selects it, and Esc clears all. Turned off, rows work the Windows way: click to select, hold Ctrl or Shift for more. Either way, drag with the mouse to select a run of rows.
+名字右边的蓝色横条，表示占了多少。	The blue bar next to the name, showing how much it takes.
+快速扫描时注明压缩、稀疏和只在云端的文件实际占多少，以及硬链接（删了也不腾空间）。	With the fast scan, shows what compressed, sparse and cloud-only files really take, and hard links (deleting them frees nothing).
+页面上方每块盘一张卡片：用量、健康状态，固态硬盘还有温度和磨损。	A card for each drive at the top: usage and health, plus temperature and wear for SSDs.
+只是不在空间地图上显示这个开关；快速扫描本身在「扫描和查重」里开关。	Only hides the switch on the space map; the fast scan itself is under "Scanning and duplicates".
+直接读 NTFS 的文件表，比逐个文件夹查看快得多。少数安全软件会提示，可以关掉。	Reads the NTFS file table directly, much faster than going folder by folder. A few security programs warn about it; you can turn it off.
+读文件时用 Windows 的后台模式，不拖慢正在用的程序。同时做别的事时会查得慢一些。	Reads files in Windows' background mode so it doesn't slow down what you are using. It is slower while you do other things.
+手动清理删掉的文件先放进回收站，删错了能恢复。放不进回收站的不删。定期自动清理不受影响。	Files deleted by a manual cleanup go to the Recycle Bin first, so mistakes can be undone. Anything that can't go there is not deleted. Scheduled cleanup is not affected.
+清理时删掉这些文件夹里的东西，文件夹本身保留。个人文件夹、系统文件夹和软件的安装文件夹加不进来。	Cleanup deletes the contents of these folders and keeps the folders. Personal, system and app installation folders can't be added.
+清理时一律不碰这些文件夹，估算大小时也不算。	Cleanup never touches these folders, and they are left out of size estimates.
+一键清理缓存和临时文件，或者先扫描，再逐项选择。	Clean caches and temporary files in one go, or scan first and choose item by item.
+找出内容完全相同的文件，每组留一份。	Find files with identical content and keep one copy of each.
+看清每个文件夹和文件占了多少空间。	See how much space every folder and file takes.
+不删文件也能腾出空间：压缩，或者换个位置放。	Free up space without deleting anything: compress, or keep things elsewhere.
+看软件占了多少，卸载、清残留，或者搬到其他盘。	See what your apps take; uninstall them, clean up leftovers or move them to another drive.
+把聊天记录、软件和大文件夹搬到其他盘，软件照常使用。	Move chat history, apps and large folders to another drive; the apps keep working.
+C 盘快满时提醒你，定期自动清理缓存。默认都关着。	A warning when C: is nearly full, and scheduled cache cleanup. Both are off by default.
+每一次删除、搬家和设置改动都记在这里。	Every delete, move and settings change is recorded here.
+外观、语言，以及界面上显示什么。	Appearance, language and what the window shows.
   {0}：等了一分半钟系统还没回答，这次先不列（下次扫描再问）	  {0}: Windows had not answered after a minute and a half; left out this time (asked again on the next scan)
 读取 {0} 盘的文件表	Reading the file table of {0}
 {0} 个查找位置从文件表里列出文件（不用逐个文件夹去看）	{0} search locations were listed from the file table (no need to go through every folder)

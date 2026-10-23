@@ -1,0 +1,4 @@
+pane-start-zh
+pane-s9-zh
+pane-s0-zh
+pane-s3-zh

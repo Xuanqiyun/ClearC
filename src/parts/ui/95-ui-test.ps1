@@ -945,6 +945,8 @@ function Invoke-UiTest {
                 # 帮助：快速上手，再看「空间地图」那一项
                 Show-Page 'help'; $hp0 = $script:helpPane; Select-HelpPane 'start' -NoRemember; & $shot 'help'
                 Select-HelpPane 's3' -NoRemember; & $shot 'help-map'
+                # 每一项完整的样子（不只是窗口里看得到的那一截）
+                foreach ($pk in @('start', 's9', 's0', 's3', 'faq')) { Select-HelpPane $pk -NoRemember; $win.UpdateLayout(); [void](& $waitUi { $false } 200); & $snap $script:helpPanes[$pk].Pane ('pane-' + $pk) 1 }
                 Select-HelpPane $hp0 -NoRemember; Show-Page 'clean'
             }
         }
