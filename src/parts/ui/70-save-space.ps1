@@ -163,6 +163,10 @@ function Show-Health($r) {
     foreach ($x in @($cr.Drivers | Select-Object -First 12)) { $n = New-Object NoteRow; $n.Head = ("{0} {1} {2}" -f $x.Provider, $x.Name, $x.Version).Trim(); $n.Path = $x.Device; $n.Body = '{0:MM-dd HH:mm}' -f $x.When; $drs.Add($n) }
     if ($drs.Count -eq 0) { $n = New-Object NoteRow; $n.Head = (T '最近 30 天没有装过驱动'); $drs.Add($n) }
     $ctl.HealthDrivers.ItemsSource = $drs
+    # 小选项卡上写明有几条，不点进去也知道
+    $ctl.CTabDumps.Content = (T '每次蓝屏') + $(if ($dumps.Count -gt 0) { '  ' + $dumps.Count } else { '' })
+    $nEv = @($cr.Events).Count + @($cr.Drivers).Count
+    $ctl.CTabEvents.Content = (T '相关事件和驱动') + $(if ($nEv -gt 0) { '  ' + $nEv } else { '' })
     # Windows 事件
     $errs = New-Object 'System.Collections.ObjectModel.ObservableCollection[NoteRow]'
     foreach ($x in @($w.Errors)) { $n = New-Object NoteRow; $n.Head = ("{0}：{1}" -f $x.Source, $x.Sample); $n.Path = $x.Sample; $n.Body = (T "{0} 次，最近 {1:MM-dd HH:mm}") -f $x.Count, $x.Last; $errs.Add($n) }
@@ -170,6 +174,15 @@ function Show-Health($r) {
     $ctl.HealthWinText.Text = if ($w.ErrorCount -gt 0) { (T "最近 7 天系统日志里有 {0} 条严重或错误事件，来源最多的几个：") -f $w.ErrorCount } else { (T '最近 7 天系统日志里没有严重或错误事件。') }
 }
 $ctl.HealthDumps.AddHandler([System.Windows.Controls.Button]::ClickEvent, [System.Windows.RoutedEventHandler]{ param($s, $e) $b = $e.OriginalSource; if ($b -is [System.Windows.Controls.Button] -and $b.Tag -is [DumpRow]) { Open-Location $b.Tag.File } })
+# 「蓝屏和崩溃」里的三个小选项卡
+$script:crashTabs = [ordered]@{ verdict = @('CTabVerdict', 'CrashViewVerdict'); dumps = @('CTabDumps', 'CrashViewDumps'); events = @('CTabEvents', 'CrashViewEvents') }
+function Select-CrashTab([string]$k) {
+    if (-not $script:crashTabs.Contains($k)) { $k = 'verdict' }
+    foreach ($t in $script:crashTabs.Keys) { $ctl[$script:crashTabs[$t][1]].Visibility = $(if ($t -eq $k) { 'Visible' } else { 'Collapsed' }) }
+    $rb = $ctl[$script:crashTabs[$k][0]]; if (-not $rb.IsChecked) { $rb.IsChecked = $true }
+    $script:crashTab = $k
+}
+foreach ($t in $script:crashTabs.Keys) { $rb = $ctl[$script:crashTabs[$t][0]]; $rb.Tag = $t; $rb.Add_Checked({ Select-CrashTab ([string]$this.Tag) }) }
 # ---------- 选项卡：点哪一项只显示哪一项 ----------
 $script:healthTabs = [ordered]@{ hw = @('HTabHw', 'HealthViewHw'); boot = @('HTabBoot', 'HealthViewBoot'); crash = @('HTabCrash', 'HealthViewCrash'); fix = @('HTabFix', 'HealthViewFix'); mon = @('HTabMon', 'HealthViewMon'); events = @('HTabEvents', 'HealthViewEvents') }
 $script:healthTab = Get-Setting 'HealthTab' 'hw'; $script:htabQuiet = $false
@@ -230,8 +243,14 @@ function Show-Fixes($st) {
         }
         if ($g.Steps.Count -gt 0) { $col.Add($g) }
     }
+    # 左边的问题列表换了内容，原来选的那个问题还选着（第一次打开选记住的那个，没有就选第一个）
+    $keep = if ($ctl.FixGroups.SelectedItem) { [string]$ctl.FixGroups.SelectedItem.Id } else { Get-Setting 'FixGroup' '' }
     $ctl.FixGroups.ItemsSource = $col
+    $sel = @($col | Where-Object { $_.Id -eq $keep })[0]
+    if (-not $sel -and $col.Count -gt 0) { $sel = $col[0] }
+    $ctl.FixGroups.SelectedItem = $sel
 }
+$ctl.FixGroups.Add_SelectionChanged({ if ($ctl.FixGroups.SelectedItem) { Set-Setting 'FixGroup' ([string]$ctl.FixGroups.SelectedItem.Id); $ctl.FixDetailScroll.ScrollToTop() } })
 function Show-Verdicts($r) {
     $col = New-Object 'System.Collections.ObjectModel.ObservableCollection[VerdictRow]'
     $rec = New-Object 'System.Collections.ObjectModel.ObservableCollection[FixBtn]'; $seen = @{}
@@ -395,7 +414,7 @@ function Invoke-FixStep([string]$id, [switch]$Quiet) {
         UI-Log ((T "已打开：{0}") -f $name)
     } catch { Show-Sheet -Kind warn -Title ((T '没能打开：{0}') -f $name) -Text $_.Exception.Message | Out-Null }
 }
-foreach ($ic in @($ctl.HealthVerdicts, $ctl.FixRec, $ctl.FixGroups)) {
+foreach ($ic in @($ctl.HealthVerdicts, $ctl.FixRec, $ctl.FixDetail)) {
     $ic.AddHandler([System.Windows.Controls.Button]::ClickEvent, [System.Windows.RoutedEventHandler]{ param($s, $e) $b = $e.OriginalSource; if ($b -is [System.Windows.Controls.Button] -and $b.Tag -is [string] -and $b.Tag) { $t = [string]$b.Tag; if ($t.StartsWith('plan:')) { Invoke-RepairPlan $t.Substring(5) } else { Invoke-FixStep $t } } })
 }
 # 原来的两个按钮：和「常见问题修复」里的是同一步
@@ -485,14 +504,19 @@ function Show-Monitor($rows) {
         $a = $by[$k]; $a.N++; $a.Cpu += $x.Cpu; $a.Ws += $x.Ws; $a.Rate += $x.WriteRate; $a.Since += $x.WriteSince; $a.Total += $x.WriteTotal
         if (-not $a.Path -and $x.Path) { $a.Path = $x.Path }
     }
-    $sort = if ($ctl.MonSortCpu.IsChecked) { 'cpu' } elseif ($ctl.MonSortMem.IsChecked) { 'mem' } else { 'write' }
-    $list = @($by.Values | Sort-Object { switch ($sort) { 'cpu' { $_.Cpu } 'mem' { $_.Ws } default { $_.Since * 1000000 + $_.Rate } } } -Descending | Select-Object -First 25)
+    # 只列 25 个：按表头选的那一列取前 25（点「CPU」就是 CPU 最高的 25 个），表格再按这一列排
+    $cfg = $script:sortCfg['MonList']
+    $sort = if ($cfg -and $cfg.Prop) { [string]$cfg.Prop } else { 'Since' }
+    $desc = -not ($cfg -and $cfg.Prop -and -not $cfg.Desc)
+    $key = switch ($sort) { 'Cpu' { { $_.Cpu } } 'Ws' { { $_.Ws } } 'Rate' { { $_.Rate } } 'Total' { { $_.Total } } 'Name' { { $_.Name } } default { { $_.Since * 1000000 + $_.Rate } } }
+    $list = @($by.Values | Sort-Object $key -Descending:$desc | Select-Object -First 25)
     $max = [double]0; foreach ($a in $list) { if ($a.Since -gt $max) { $max = $a.Since } }
     $col = New-Object 'System.Collections.ObjectModel.ObservableCollection[ProcRow]'
     foreach ($a in $list) {
         $p = New-Object ProcRow
         $p.Name = $a.Name; $p.Meta = $(if ($a.N -gt 1) { (T "{0} 个进程 · ") -f $a.N } else { '' }) + $(if ($a.Path) { Shorten $a.Path } else { '' })
         $p.CpuText = '{0:N0}%' -f $a.Cpu; $p.WsText = Fmt $a.Ws; $p.RateText = (T "{0}/秒") -f (Fmt $a.Rate); $p.SinceText = Fmt $a.Since; $p.TotalText = Fmt $a.Total
+        $p.Cpu = [double]$a.Cpu; $p.Ws = [double]$a.Ws; $p.Rate = [double]$a.Rate; $p.Since = [double]$a.Since; $p.Total = [double]$a.Total
         $p.Bar = if ($max -gt 0) { [math]::Max(0, 100.0 * $a.Since / $max) } else { 0 }
         $col.Add($p)
     }
@@ -500,9 +524,35 @@ function Show-Monitor($rows) {
 }
 $ctl.BtnMonStart.Add_Click({ Start-Monitor })
 $ctl.BtnMonStop.Add_Click({ Stop-Monitor })
-foreach ($rb in @($ctl.MonSortWrite, $ctl.MonSortCpu, $ctl.MonSortMem)) { $rb.Add_Checked({ if ($script:monShared -and $script:monShared.Rows) { Show-Monitor @($script:monShared.Rows) } }) }
 $win.Add_Closed({ try { if ($script:monShared) { $script:monShared.Stop = $true } } catch {} })
 
+# ---------- 省空间：左边目录，点哪项右边只显示那一项（记住上次看的） ----------
+$script:saveGroups = [ordered]@{ Sys = @('Cos', 'Pf', 'Hib', 'Rs', 'Cs', 'Dump'); Safe = @('Rp', 'Tmp'); Files = @('Fc', 'Od', 'Merge'); Vd = @('Vd') }
+$script:saveLvl = @{ Pf = 1; Rp = 1; Fc = 1; Vd = 1; Merge = 1; Rs = 2; Cs = 2; Dump = 2; Tmp = 2 }   # 没写的谁都能用
+$script:saveSec = Get-Setting 'SaveSection' 'Cos'
+function Update-SaveNav {
+    $m = Get-Mode; $first = ''
+    foreach ($g in $script:saveGroups.Keys) {
+        $any = $false
+        foreach ($k in $script:saveGroups[$g]) {
+            $ok = $m -ge [int]$script:saveLvl[$k]
+            $ctl['SaveNav' + $k].Visibility = $(if ($ok) { 'Visible' } else { 'Collapsed' })
+            if ($ok) { $any = $true; if (-not $first) { $first = $k } }
+        }
+        $ctl['SaveHead' + $g].Visibility = $(if ($any) { 'Visible' } else { 'Collapsed' })
+    }
+    $k = $script:saveSec
+    if (-not $ctl['SaveNav' + $k] -or $ctl['SaveNav' + $k].Visibility -ne 'Visible') { $k = $first }
+    Select-SaveSection $k
+}
+function Select-SaveSection([string]$k) {
+    if (-not $ctl['SaveCard' + $k]) { return }
+    $script:saveSec = $k
+    foreach ($g in $script:saveGroups.Keys) { foreach ($x in $script:saveGroups[$g]) { $ctl['SaveCard' + $x].Visibility = $(if ($x -eq $k) { 'Visible' } else { 'Collapsed' }) } }
+    $rb = $ctl['SaveNav' + $k]; if (-not $rb.IsChecked) { $script:saveNavQuiet = $true; try { $rb.IsChecked = $true } finally { $script:saveNavQuiet = $false } }
+    $ctl.SaveScroll.ScrollToTop()
+}
+foreach ($g in $script:saveGroups.Keys) { foreach ($k in $script:saveGroups[$g]) { $ctl['SaveNav' + $k].Add_Checked({ if ($script:saveNavQuiet) { return }; Select-SaveSection ([string]$this.Tag); Set-Setting 'SaveSection' $script:saveSec }) } }
 function Load-Save {
     $on = Get-CompactOSOn
     $ctl.SaveCosState.Text = if ($on) { (T '当前：已开启，系统文件已压缩存放') } else { (T '当前：未开启') }

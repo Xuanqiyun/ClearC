@@ -110,8 +110,21 @@ function Load-Auto {
     $ctl.AutoCleanNote.Text = if ($hasExe) { ((T "任务名：{0}。") -f $script:taskClean) + $(if ($last) { "`n$last" } else { '' }) } else { (T '只有 exe 版本支持每周自动清理。') }
     $ctl.AutoCleanNote.Text += "`n" + $(if (Get-StorageSenseOn) { (T 'Windows 自带的「存储感知」现在是开着的：它也会定期清临时文件和回收站，和这里的自动清理不冲突，只是会各做一遍。') } else { (T 'Windows 自带的「存储感知」现在是关着的（在 Windows 设置 → 系统 → 存储里）。') })
     $script:autoSync = $false
+    # 选项卡上写明开着还是关着，不点进去也知道
+    $ctl.ATabRemindState.Text = $(if ($r1) { (T '已开启') } else { (T '已关闭') })
+    $ctl.ATabCleanState.Text = $(if ($r2) { (T '已开启') } else { (T '已关闭') })
     Draw-History
 }
+# 自动提醒的三个选项卡
+$script:autoTabs = [ordered]@{ remind = @('ATabRemind', 'AutoViewRemind'); clean = @('ATabClean', 'AutoViewClean'); hist = @('ATabHist', 'AutoViewHist') }
+function Select-AutoTab([string]$k) {
+    if (-not $script:autoTabs.Contains($k)) { $k = 'remind' }
+    foreach ($t in $script:autoTabs.Keys) { $ctl[$script:autoTabs[$t][1]].Visibility = $(if ($t -eq $k) { 'Visible' } else { 'Collapsed' }) }
+    $rb = $ctl[$script:autoTabs[$k][0]]; if (-not $rb.IsChecked) { $script:atabQuiet = $true; try { $rb.IsChecked = $true } finally { $script:atabQuiet = $false } }
+    $script:autoTab = $k
+}
+foreach ($t in $script:autoTabs.Keys) { $rb = $ctl[$script:autoTabs[$t][0]]; $rb.Tag = $t; $rb.Add_Checked({ if ($script:atabQuiet) { return }; Select-AutoTab ([string]$this.Tag); Set-Setting 'AutoTab' $script:autoTab }) }
+Select-AutoTab (Get-Setting 'AutoTab' 'remind')
 function Draw-History {
     $h = Get-History
     $days = [ordered]@{}
@@ -122,7 +135,7 @@ function Draw-History {
         $x = $days[$k]
         $used = [math]::Max([double]0, $x.Total - $x.Free); $ratio = if ($x.Total -gt 0) { $used / $x.Total } else { 0 }
         $b = New-Object HistBar
-        $b.H = [math]::Max([double]3, 140.0 * $ratio)
+        $b.H = [math]::Max([double]3, 205.0 * $ratio)   # 图高 220
         $b.Fill = if ($ratio -ge 0.95) { '#FF3B30' } elseif ($ratio -ge 0.85) { '#FF9F0A' } else { '#0071E3' }
         $b.Tip = (T "{0}：已用 {1}，剩余 {2}") -f $k, (Fmt $used), (Fmt $x.Free)
         $b.Label = $k
@@ -135,6 +148,7 @@ function Draw-History {
         $d = $l.Free - $f.Free
         $ctl.HistInfo.Text = (T "最近 {0} 天有记录：C 盘剩余从 {1} 变成 {2}（{3}{4}）。蓝色正常，橙色表示用掉了八成五以上，红色表示快满了。") -f $keys.Count, (Fmt $f.Free), (Fmt $l.Free), $(if ($d -ge 0) { (T '多了 ') } else { (T '少了 ') }), (Fmt ([math]::Abs($d)))
     } else { $ctl.HistInfo.Text = (T '还没有记录。每次打开本工具都会记一笔。'); $ctl.HistFirst.Text = ''; $ctl.HistLast.Text = '' }
+    $ctl.ATabHistState.Text = $(if ($keys.Count -gt 0) { (T "{0} 天") -f $keys.Count } else { '' })
 }
 $ctl.AutoRemindGB.Add_SelectionChanged({
     if ($script:autoSync) { return }

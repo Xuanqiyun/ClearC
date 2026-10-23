@@ -474,6 +474,23 @@ $ctl.AppVer.Text = ((T "版本 {0}") -f $script:AppVersion)
 Write-LogFile ((T "==== 腾挪 ClearC {0} 启动；Windows {1}；屏幕可用区域 {2:N0} x {3:N0}") -f $script:AppVersion, [Environment]::OSVersion.Version, $wa.Width, $wa.Height)
 if ($script:themeFail) { Write-LogFile ((T "深色界面没能打开，这次用浅色：{0}") -f $script:themeFail) }
 
+# ---------- 各个列表的表头排序（点列名排序，再点一下反过来；记住每个列表上次怎么排的） ----------
+# 表格（GridView）：键是第几列；自己画表头的列表：键是表头按钮的 Tag
+Register-ListSort 'MonList' @{ '0' = @{ Prop = 'Name' }; '1' = @{ Prop = 'Cpu'; Num = $true }; '2' = @{ Prop = 'Ws'; Num = $true }; '3' = @{ Prop = 'Rate'; Num = $true }; '4' = @{ Prop = 'Since'; Num = $true }; '5' = @{ Prop = 'Total'; Num = $true } } -defProp 'Since'
+$script:sortCfg['MonList'].After = { if ($script:monShared -and $script:monShared.Rows) { Show-Monitor @($script:monShared.Rows) } }
+Register-ListSort 'LogList' @{ '0' = @{ Prop = 'When'; Num = $true }; '1' = @{ Prop = 'CatText' }; '2' = @{ Prop = 'What' }; '3' = @{ Prop = 'Target' }; '4' = @{ Prop = 'Detail' } } -defProp 'When'
+Register-ListSort 'MapGrow' @{ '0' = @{ Prop = 'Path' }; '1' = @{ Prop = 'BeforeBytes'; Num = $true }; '2' = @{ Prop = 'NowBytes'; Num = $true }; '3' = @{ Prop = 'Delta'; Num = $true } } -Tri
+Register-ListSort 'DupList' @{ '0' = @{ Prop = 'ToDelete'; Num = $true }; '1' = @{ Prop = 'Path' }; '2' = @{ Prop = 'ModifiedTicks'; Num = $true }; '3' = @{ Prop = 'Risk' } } -pre @('GroupId') -Tri
+Register-ListSort 'MapList' @{ name = @{ Prop = 'Name' }; when = @{ Prop = 'When'; Num = $true }; size = @{ Prop = 'Size'; Num = $true } } -pre @('IsSummary') -bar $ctl.MapHead -Tri
+Register-ListSort 'AppsList' @{ name = @{ Prop = 'Name' }; pub = @{ Prop = 'Publisher' }; date = @{ Prop = 'Date'; Num = $true }; size = @{ Prop = 'Size'; Num = $true } } -bar $ctl.AppsHead -defProp 'Size'
+Register-ListSort 'StartList' @{ name = @{ Prop = 'Name' }; status = @{ Prop = 'StatusText' } } -bar $ctl.StartHead -Tri
+Register-ListSort 'CandList' @{ name = @{ Prop = 'Name' }; size = @{ Prop = 'Size'; Num = $true } } -pre @('GroupOrder') -bar $ctl.CandHead -Tri
+Register-ListSort 'MovesList' @{ name = @{ Prop = 'Name' }; state = @{ Prop = 'State' }; size = @{ Prop = 'Size'; Num = $true } } -bar $ctl.MovesHead -Tri
+Register-ListSort 'List' @{ name = @{ Prop = 'Name' }; size = @{ Prop = 'Bytes'; Num = $true } } -bar $ctl.CleanHead -Tri
+foreach ($p in @(@('AppsList', 'AppsHead'), @('StartList', 'StartHead'), @('MovesList', 'MovesHead'), @('MapList', 'MapHead'), @('CandList', 'CandHead'))) { Register-HeadPad $ctl[$p[0]] $ctl[$p[1]] }
+$script:headOf = [ordered]@{ AppsList = $ctl.AppsHead; StartList = $ctl.StartHead; CandList = $ctl.CandHead; MovesList = $ctl.MovesHeadBox; MapList = $ctl.MapHeadBox }
+Update-HeadVis
+
 $script:statusColor = @{ wait = '#86868B'; run = '#0071E3'; ok = '#248A3D'; warn = '#B25000'; fail = '#D70015'; skip = '#86868B' }
 $script:pendingDialog = $null
 $win.TaskbarItemInfo = New-Object System.Windows.Shell.TaskbarItemInfo
@@ -537,7 +554,7 @@ function Request-Lang {
     return $true
 }
 $ctl.BtnLang.Add_Click({ [void](Request-Lang) })
-$ctl.CleanScroll.Add_ScrollChanged({ Update-CleanMore })
+$ctl.CleanScroll.Add_ScrollChanged({ Update-CleanBar; Update-CleanMore })
 $ctl.CleanMore.Add_Click({ $ctl.CleanScroll.PageDown() })
 # 第一次打开时先给出安全风险提示，勾选同意后才能使用；同意过就不再弹
 $script:riskFile = Join-Path $env:LOCALAPPDATA 'CleanC\risk-accepted.txt'

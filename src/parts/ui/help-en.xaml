@@ -122,7 +122,9 @@
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Easy to see after a scan"/>
-                  <TextBlock Style="{StaticResource HelpBody}"><Run>The top of the list shows how many items were found and how many groups they fall into; each group heading also shows its item count. When there are many items, scroll down the page; a hint at the bottom tells you how many more are below.</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>The top of the list shows how many items were found and how many groups they fall into. A row of tabs below (Safe to clean, Careful cleanup, Needs confirmation, Other movable folders and so on) shows one group at a time, with its item count on the tab. Scroll down and the tabs stop at the top edge while the list keeps scrolling, so switching groups needs no scrolling back. "Run selected" handles every group, not only the one you are looking at.</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Click "Name" in the header to sort by name or "Size" to sort largest first; click again to reverse, and a third time to go back to the original order (by how safe each item is).</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>The drop-down on the right of the header shows only items with one action, for example only the ones to delete or only the skipped ones; the sort order stays as it is.</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Analyze usage"/>
@@ -209,6 +211,10 @@
               <StackPanel>
                 <DockPanel Margin="0,16,0,0"><TextBlock DockPanel.Dock="Left" Text="Search criteria" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
                 <StackPanel Margin="0,10,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Tabs"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Search locations, file types, file size and what counts as a duplicate each have a tab that shows the current choice. When you click "Start search" the options fold away and only the row of tabs stays, so the results fill the page; click any tab to open it again, and click the open tab or "Hide" on the right to fold it.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Search locations"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>Click a chip to select or deselect it. Use "Add folder…" to add your own locations; those with a small × can be removed. System folders, program folders and development environments are skipped automatically.</Run></TextBlock>
                 </StackPanel>
@@ -274,7 +280,11 @@
                 </DockPanel>
               </Expander.Header>
               <StackPanel>
-                <Grid Margin="0,14,0,0">
+                <StackPanel Margin="0,14,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="List on the left"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>The list on the left is grouped into System files, Restore points and temp files, Files and folders, and Virtual disks. Click an item to show only its explanation and buttons on the right, with no scrolling through the page. The page reopens on the item you looked at last.</Run></TextBlock>
+                </StackPanel>
+                <Grid Margin="0,16,0,0">
                   <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="10"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                   <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource HelpTile}">
@@ -430,6 +440,7 @@
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Owner and sorting"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>"Find files" lists up to 1,000 files, sorted by size or date, filtered by file owner (Windows account); NTFS-compressed files show their compressed size.</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Click "Name", "Modified" or "Size" in the header above the list to sort, again to reverse, and a third time to go back to the original order; other folders open in the same order. In "Since last scan", click a column name to sort.</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Recent changes"/>
@@ -510,7 +521,7 @@
               <StackPanel>
                 <StackPanel Margin="0,14,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="App list"/>
-                  <TextBlock Style="{StaticResource HelpBody}"><Run>Lists all installed apps (including Microsoft Store apps), sorted by size from largest to smallest. You can show only apps installed on C:, or search by name.</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Lists all installed apps (including Microsoft Store apps), sorted by size from largest to smallest. You can show only apps installed on C:, or search by name. Click "Name", "Publisher", "Installed" or "Size" in the header to sort, and again to reverse; startup items, scheduled tasks and context menu entries sort by name or status.</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Uninstall"/>
@@ -577,6 +588,8 @@
                 <StackPanel Margin="0,14,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Tabs"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>A row of tabs next to the title: Hardware, Boot time, Blue screens and crashes, Common fixes, Activity monitor, Windows events. Click one to show only that section, each with its own scroll bar, so you never scroll through the whole page. The page reopens on the tab you looked at last.</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>"Blue screens and crashes" has three smaller tabs: Diagnosis, Each crash, and Events and drivers, each showing how many entries it has.</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>"Common fixes" lists the problems on the left and shows the fixes for the selected one on the right; the activity monitor table fills the page and scrolls on its own.</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Hardware"/>
@@ -608,7 +621,7 @@
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="What is slowing the PC down"/>
-                  <TextBlock Style="{StaticResource HelpBody}"><Run>Click "Start monitoring" to sample every 3 seconds: how much CPU each program used, how much memory it holds, how fast it writes to disk, how much it wrote while monitoring and since it started; processes with the same name are combined, sortable by writes, CPU or memory. No resident service; it stops when ClearC closes.</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Click "Start monitoring" to sample every 3 seconds: how much CPU each program used, how much memory it holds, how fast it writes to disk, how much it wrote while monitoring and since it started; processes with the same name are combined. Click a column name (Program, CPU, Memory, Write rate, Written while monitoring, Written since start) to sort high to low, and again for low to high; the table lists the top 25 and picks the top 25 again by the new column. No resident service; it stops when ClearC closes.</Run></TextBlock>
                   <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Bytes written are not the same as space used (temporary files get written and deleted). Which process wrote which file can only be matched while monitoring is on: compare the folders that grew under "Space map → Recent changes" with the programs that wrote the most here.</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
@@ -674,6 +687,10 @@
               </Expander.Header>
               <StackPanel>
                 <StackPanel Margin="0,14,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Tabs"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>A row of tabs next to the title: Low space alert, Scheduled cleanup and Space history. Click one to show only that part; the tabs show whether each one is on and how many days are recorded.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Low-space reminder"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>When turned on, ClearC checks drive C: 2 minutes after each sign-in and again at noon every day. If free space falls below the value you set (20 GB by default), a reminder appears at the bottom right of the screen, at most once a day; if there is enough space, nothing is shown.</Run></TextBlock>
                 </StackPanel>

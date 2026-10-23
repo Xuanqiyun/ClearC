@@ -4,11 +4,12 @@
 # 列表上方的总览：「扫描到 23 项，分 4 类：安全清理 9 项、……」
 function Update-CleanOverview {
     $col = $script:rows
+    Update-CleanTabs
     if (-not $col -or $col.Count -eq 0) { $ctl.CleanOverview.Visibility = 'Collapsed'; Update-CleanMore; return }
     $order = New-Object System.Collections.Generic.List[string]; $cnt = @{}
     foreach ($r in $col) { if (-not $cnt.ContainsKey($r.GroupTitle)) { $order.Add($r.GroupTitle); $cnt[$r.GroupTitle] = 0 }; $cnt[$r.GroupTitle]++ }
     $parts = @($order | ForEach-Object { (T "{0} {1} 项") -f $_, $cnt[$_] })
-    $ctl.CleanOverviewText.Text = (T "扫描到 {0} 项，分成 {1} 类：{2}。每一项都可以单独选「删除」「搬走」或「跳过」，往下滚动查看全部。双击一行打开它所在的文件夹，右键可以复制路径。") -f $col.Count, $order.Count, ($parts -join (T '、'))
+    $ctl.CleanOverviewText.Text = (T "扫描到 {0} 项，分成 {1} 类：{2}。点下面的选项卡切换类别，点「名称」「大小」排序，右边的下拉框可以只看某一种操作。每一项都可以单独选「删除」「搬走」或「跳过」；「执行所选操作」会处理所有类别。双击一行打开它所在的文件夹，右键可以复制路径。") -f $col.Count, $order.Count, ($parts -join (T '、'))
     $ctl.CleanOverview.Visibility = 'Visible'
     $script:cleanItems = $null
     $ctl.CleanScroll.ScrollToTop()
@@ -98,7 +99,7 @@ function Update-CleanMore {
     $left = [double]$sv.ScrollableHeight - [double]$sv.VerticalOffset
     if (-not $script:rows -or $script:rows.Count -eq 0 -or $left -lt 30) { $ctl.CleanMore.Visibility = 'Collapsed'; return }
     # 数一数还有几行在可视区下面（列表的行在第一次需要时从界面树里找出来，之后直接用）
-    if (-not $script:cleanItems -or $script:cleanItems.Count -ne $script:rows.Count) {
+    if (-not $script:cleanItems -or $script:cleanItems.Count -ne $ctl.List.Items.Count) {
         $found = New-Object System.Collections.Generic.List[object]
         $stack = New-Object System.Collections.Generic.Stack[object]; $stack.Push($ctl.List)
         while ($stack.Count -gt 0) {
@@ -117,6 +118,100 @@ function Update-CleanMore {
     $ctl.CleanMoreText.Text = if ($below -gt 0) { (T "下面还有 {0} 项") -f $below } else { (T '下面还有内容') }
     $ctl.CleanMore.Visibility = 'Visible'
 }
+# ---------- 清理页：一类一个选项卡；表头点「名称」「大小」排序，下拉框只看某一种操作；选项卡和表头滚到顶上就停住 ----------
+$script:cleanTab = ''; $script:cleanOp = ''; $script:cleanPinned = $false; $script:cleanGroups = $null
+function Update-CleanTabs {
+    $ctl.CleanTabs.Children.Clear()
+    $col = $script:rows
+    $has = [bool]($col -and $col.Count -gt 0)
+    foreach ($n in 'CleanBar', 'CleanBarSlot', 'CleanListCard') { $ctl[$n].Visibility = $(if ($has) { 'Visible' } else { 'Collapsed' }) }
+    $script:cleanItems = $null
+    if (-not $has) { return }
+    $order = New-Object System.Collections.Generic.List[string]; $cnt = @{}; $bytes = @{}; $note = @{}
+    foreach ($r in $col) {
+        $g = [string]$r.GroupTitle
+        if (-not $cnt.ContainsKey($g)) { $order.Add($g); $cnt[$g] = 0; $bytes[$g] = [double]0; $note[$g] = [string]$r.GroupNote }
+        $cnt[$g]++; if ($r.Bytes -gt 0) { $bytes[$g] += $r.Bytes }
+    }
+    $script:cleanGroups = @{ Order = $order; Cnt = $cnt; Bytes = $bytes; Note = $note }
+    if (-not $order.Contains($script:cleanTab)) { $script:cleanTab = $order[0] }
+    $seg = $win.FindResource('Seg')
+    foreach ($g in $order) {
+        $rb = New-Object System.Windows.Controls.RadioButton
+        $rb.GroupName = 'cleantab'; $rb.Style = $seg; $rb.Tag = $g
+        $sp = New-Object System.Windows.Controls.StackPanel; $sp.Orientation = 'Horizontal'
+        $t1 = New-Object System.Windows.Controls.TextBlock; $t1.Text = $g
+        $t2 = New-Object System.Windows.Controls.TextBlock; $t2.Text = [string]$cnt[$g]; $t2.Margin = New-Object System.Windows.Thickness 6, 0, 0, 0; $t2.Foreground = New-Brush '#86868B'
+        [void]$sp.Children.Add($t1); [void]$sp.Children.Add($t2); $rb.Content = $sp
+        if ($note[$g]) { $rb.ToolTip = $note[$g] }
+        $rb.IsChecked = ($g -eq $script:cleanTab)
+        $rb.Add_Checked({ Select-CleanTab ([string]$this.Tag) })
+        [void]$ctl.CleanTabs.Children.Add($rb)
+    }
+    # 操作下拉框：这次扫描里出现过的操作
+    $ops = New-Object System.Collections.Generic.List[string]
+    foreach ($r in $col) { foreach ($a in @($r.Actions)) { if ($a -and -not $ops.Contains([string]$a)) { $ops.Add([string]$a) } } }
+    if ($script:cleanOp -and -not $ops.Contains($script:cleanOp)) { $script:cleanOp = '' }
+    $script:cleanOpLoading = $true
+    try {
+        $ctl.CleanOpFilter.Items.Clear()
+        $it = New-Object System.Windows.Controls.ComboBoxItem; $it.Content = (T '全部操作'); $it.Tag = ''; [void]$ctl.CleanOpFilter.Items.Add($it)
+        foreach ($a in $ops) { $it = New-Object System.Windows.Controls.ComboBoxItem; $it.Content = (T "只看「{0}」") -f $a; $it.Tag = $a; [void]$ctl.CleanOpFilter.Items.Add($it) }
+        foreach ($it in $ctl.CleanOpFilter.Items) { if ([string]$it.Tag -eq $script:cleanOp) { $ctl.CleanOpFilter.SelectedItem = $it } }
+    } finally { $script:cleanOpLoading = $false }
+    Apply-CleanFilter
+}
+# 只显示选中的那一类、选中的那种操作；排序（表头）不变
+function Apply-CleanFilter {
+    $cfg = $script:sortCfg['List']
+    if ($cfg) { $cfg.Filter = [Predicate[object]]{ param($o) ([string]$o.GroupTitle -eq $script:cleanTab) -and (-not $script:cleanOp -or [string]$o.Action -eq $script:cleanOp) } }
+    Apply-ListSort 'List'
+    $script:cleanItems = $null
+    $n = $ctl.List.Items.Count
+    $ctl.CleanFilterEmpty.Visibility = $(if ($script:rows -and $script:rows.Count -gt 0 -and $n -eq 0) { 'Visible' } else { 'Collapsed' })
+    $gi = $script:cleanGroups
+    if ($gi -and $gi.Cnt.ContainsKey($script:cleanTab)) {
+        $ctl.CleanTabNote.Text = [string]$gi.Note[$script:cleanTab]
+        $ctl.CleanTabNote.Visibility = $(if ($ctl.CleanTabNote.Text) { 'Visible' } else { 'Collapsed' })
+        $ctl.CleanTabInfo.Text = $(if ($script:cleanOp) { (T "显示 {0} / {1} 项") -f $n, $gi.Cnt[$script:cleanTab] } else { (T "{0} 项，约 {1}") -f $gi.Cnt[$script:cleanTab], (Fmt $gi.Bytes[$script:cleanTab]) })
+    }
+}
+function Get-CleanSlotPos { try { return $ctl.CleanBarSlot.TransformToAncestor($ctl.CleanHost).Transform((New-Object System.Windows.Point 0, 0)) } catch { return $null } }
+function Select-CleanTab([string]$g) {
+    if ($g -eq $script:cleanTab) { return }
+    $p = Get-CleanSlotPos; $pinned = $p -and $p.Y -lt 0
+    $script:cleanTab = $g
+    foreach ($rb in $ctl.CleanTabs.Children) { if ([string]$rb.Tag -eq $g -and -not $rb.IsChecked) { $rb.IsChecked = $true } }
+    Apply-CleanFilter
+    # 选项卡停在顶上时换类：列表从头显示（紧贴在选项卡下面），不用再往上找
+    if ($pinned) { $ctl.CleanScroll.UpdateLayout(); $p = Get-CleanSlotPos; if ($p) { $ctl.CleanScroll.ScrollToVerticalOffset([math]::Max([double]0, $ctl.CleanScroll.VerticalOffset + $p.Y)) } }
+}
+# 浮着的那一排跟着占位的位置走；占位滚出顶边以后就停在顶上
+function Update-CleanBar {
+    if ($ctl.CleanBar.Visibility -ne 'Visible') { return }
+    $p = Get-CleanSlotPos; if (-not $p) { return }
+    $w = [double]$ctl.CleanBarSlot.ActualWidth
+    if ($w -gt 0 -and -not ($ctl.CleanBar.Width -eq $w)) { $ctl.CleanBar.Width = $w }
+    $top = [math]::Max([double]0, [double]$p.Y)
+    $m = $ctl.CleanBar.Margin
+    if ($m.Left -ne $p.X -or $m.Top -ne $top) { $ctl.CleanBar.Margin = New-Object System.Windows.Thickness $p.X, $top, 0, 0 }
+    $h = [double]$ctl.CleanBar.ActualHeight
+    if ($h -gt 0 -and -not ($ctl.CleanBarSlot.Height -eq $h)) { $ctl.CleanBarSlot.Height = $h }
+    $pin = [double]$p.Y -lt 0
+    if ($pin -ne $script:cleanPinned) {
+        $script:cleanPinned = $pin
+        $ctl.CleanBar.Effect = if ($pin) { $fx = New-Object System.Windows.Media.Effects.DropShadowEffect; $fx.BlurRadius = 10; $fx.ShadowDepth = 2; $fx.Direction = 270; $fx.Opacity = 0.14; $fx } else { $null }
+    }
+}
+$ctl.CleanBar.Add_SizeChanged({ Update-CleanBar })
+# 鼠标在选项卡和表头上滚轮：照样滚下面的列表
+$ctl.CleanBar.Add_PreviewMouseWheel({ param($s, $e) if ($ctl.CleanOpFilter.IsDropDownOpen) { return }; $ctl.CleanScroll.ScrollToVerticalOffset($ctl.CleanScroll.VerticalOffset - $e.Delta * 0.4); $e.Handled = $true })
+$ctl.CleanOpFilter.Add_SelectionChanged({
+    if ($script:cleanOpLoading) { return }
+    $it = $ctl.CleanOpFilter.SelectedItem
+    $script:cleanOp = if ($it) { [string]$it.Tag } else { '' }
+    Apply-CleanFilter
+})
 function Build-Rows($sizes) {
     $col = New-Object 'System.Collections.ObjectModel.ObservableCollection[RowItem]'
     $script:rowSig = @{}
@@ -137,14 +232,12 @@ function Build-Rows($sizes) {
         $r.GroupNote = if ($gp.Count -gt 1) { $gp[1].TrimEnd([char]0xFF09).TrimEnd(')') } else { '' }
         $r.First = -not $seen.ContainsKey($it.G); $seen[$it.G] = $true
         $r.SizeText = if ($b -lt 0) { (T '运行后知道') } else { Fmt $b }
+        $r.Bytes = [double]$b
         if ($b -gt 0 -and $it.Def -ne (T '跳过')) { $total += $b }
         $col.Add($r)
     }
     $script:rows = $col
-    $ctl.List.ItemsSource = $col
-    $view = [System.Windows.Data.CollectionViewSource]::GetDefaultView($col)
-    $view.GroupDescriptions.Clear()
-    $view.GroupDescriptions.Add((New-Object System.Windows.Data.PropertyGroupDescription 'Group'))
+    $ctl.List.ItemsSource = $col   # 不再分组显示：上面的选项卡一次只显示一类（Update-CleanTabs）
     $ctl.EmptyClean.Visibility = if ($col.Count -gt 0) { 'Collapsed' } else { 'Visible' }
     if ($col.Count -eq 0) { $ctl.EmptyCleanText.Text = (T 'C 盘上没找到可以清理的东西') }
     Update-CleanOverview

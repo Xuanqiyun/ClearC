@@ -227,8 +227,36 @@ function Update-FilterSummary {
     $mode += if ($ctl.SpeedExact.IsChecked) { (T '，完整比对') } else { (T '，快速比对') }
     $n = @($script:roots | Where-Object { $_.Enabled }).Count
     $ctl.FilterSummary.Text = (T "{0}，{1}，{2}，{3} 个位置") -f $types, $size, $mode, $n
+    # 选项卡上直接写着现在的条件：收起来也看得到
+    $ctl.DTabRootsVal.Text = (T "{0} 个") -f $n
+    $ctl.DTabTypeVal.Text = $types
+    $ctl.DTabSizeVal.Text = $size
+    $ctl.DTabModeVal.Text = $(if ($ctl.ModeSimilar.IsChecked) { (T '相似照片') } elseif ($ctl.ModeName.IsChecked) { (T '名字和内容') } else { (T '只看内容') }) + (T ' · ') + $(if ($ctl.ModeSimilar.IsChecked) { $(if ($ctl.SimStrict.IsChecked) { (T '几乎一样') } elseif ($ctl.SimLoose.IsChecked) { (T '大致相似') } else { (T '相似') }) } elseif ($ctl.SpeedExact.IsChecked) { (T '完整比对') } else { (T '快速') })
 }
-foreach ($c in @($ctl.ModeName, $ctl.ModeContent, $ctl.SpeedFast, $ctl.SpeedExact)) { $c.Add_Click({ Update-FilterSummary }) }
+# ---------- 查找条件的选项卡：点一个打开那一类；再点一下（或点「收起」）收起来；开始查找时自动收起 ----------
+$script:dupPanes = [ordered]@{ roots = @('DTabRoots', 'DPaneRoots'); type = @('DTabType', 'DPaneType'); size = @('DTabSize', 'DPaneSize'); mode = @('DTabMode', 'DPaneMode') }
+$script:dupPane = 'roots'; $script:dupTabQuiet = $false; $script:dupTabWas = $false
+function Set-DupFilterOpen([bool]$open, [string]$pane = '') {
+    if ($pane -and $script:dupPanes.Contains($pane)) { $script:dupPane = $pane }
+    $ctl.DupFilterBody.Visibility = $(if ($open) { 'Visible' } else { 'Collapsed' })
+    $script:dupTabQuiet = $true
+    try {
+        foreach ($k in $script:dupPanes.Keys) {
+            $ctl[$script:dupPanes[$k][1]].Visibility = $(if ($k -eq $script:dupPane) { 'Visible' } else { 'Collapsed' })
+            $ctl[$script:dupPanes[$k][0]].IsChecked = ($open -and $k -eq $script:dupPane)   # 收起时一个都不选中，看得出是收着的
+        }
+    } finally { $script:dupTabQuiet = $false }
+    $ctl.DupFilterToggle.Content = $(if ($open) { (T '收起') } else { (T '展开条件') })
+}
+foreach ($k in $script:dupPanes.Keys) {
+    $rb = $ctl[$script:dupPanes[$k][0]]; $rb.Tag = $k
+    $rb.Add_Checked({ if ($script:dupTabQuiet) { return }; Set-DupFilterOpen $true ([string]$this.Tag) })
+    # 点已经打开的那个选项卡：收起来
+    $rb.Add_PreviewMouseLeftButtonDown({ $script:dupTabWas = [bool]$this.IsChecked -and $ctl.DupFilterBody.Visibility -eq 'Visible' })
+    $rb.Add_Click({ if ($script:dupTabWas) { Set-DupFilterOpen $false }; $script:dupTabWas = $false })
+}
+$ctl.DupFilterToggle.Add_Click({ Set-DupFilterOpen ($ctl.DupFilterBody.Visibility -ne 'Visible') })
+foreach ($c in @($ctl.ModeName, $ctl.ModeContent, $ctl.SpeedFast, $ctl.SpeedExact, $ctl.SimStrict, $ctl.SimNormal, $ctl.SimLoose)) { $c.Add_Click({ Update-FilterSummary }) }
 # 点胶囊 = 勾选/取消；点自己加的文件夹上的小叉 = 移除
 $ctl.Roots.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent, [System.Windows.RoutedEventHandler]{
     param($s, $e)
@@ -399,7 +427,7 @@ function Start-SimilarScan([string[]]$paths, $range) {
     $dist = if ($ctl.SimStrict.IsChecked) { 4 } elseif ($ctl.SimLoose.IsChecked) { 12 } else { 8 }
     $script:dupRows = $null; $script:dupByGroup = @{}; $ctl.DupList.ItemsSource = $null
     $ctl.EmptyDup.Visibility = 'Visible'; $ctl.EmptyDupText.Text = (T '正在找照片…')
-    $ctl.FilterExpander.IsExpanded = $false
+    Set-DupFilterOpen $false
     $sync.Mode = 'similar'; $sync.DupResult = $null; $sync.SimNote = ''
     Start-Op (T '查找相似照片')
     $ctl.DupProgressText.Text = (T '正在找照片…')
@@ -446,9 +474,9 @@ $sync.SimNote = (T "看了 {0:N0} 张照片，{1:N0} 张读不了，{2} 组相�
 }
 $ctl.BtnDupScan.Add_Click({
     $paths = @($script:roots | Where-Object { $_.Enabled } | ForEach-Object { $_.Path })
-    if (-not $paths) { Show-Sheet -Title (T '还没选查找位置') -Text (T '请在「查找位置」里至少勾选一个文件夹或磁盘。') | Out-Null; $ctl.FilterExpander.IsExpanded = $true; return }
+    if (-not $paths) { Show-Sheet -Title (T '还没选查找位置') -Text (T '请在「查找位置」里至少勾选一个文件夹或磁盘。') | Out-Null; Set-DupFilterOpen $true 'roots'; return }
     $range = Get-SizeRange
-    if (-not $range.Ok) { Show-Sheet -Kind warn -Title (T '文件大小填写有误') -Text $range.Err | Out-Null; $ctl.FilterExpander.IsExpanded = $true; return }
+    if (-not $range.Ok) { Show-Sheet -Kind warn -Title (T '文件大小填写有误') -Text $range.Err | Out-Null; Set-DupFilterOpen $true 'size'; return }
     if ($ctl.ModeSimilar.IsChecked) { Start-SimilarScan $paths $range; return }
     $ext = Get-SelectedExt
     $script:dupRows = $null; $script:dupByGroup = @{}; $ctl.DupList.ItemsSource = $null
@@ -462,7 +490,7 @@ $ctl.BtnDupScan.Add_Click({
         Exact     = [bool]$ctl.SpeedExact.IsChecked
     }
     $sync.DriveNote = ''
-    $ctl.FilterExpander.IsExpanded = $false
+    Set-DupFilterOpen $false
     $sync.Mode = 'dup'; $sync.DupResult = $null
     Start-Op (T '查找重复文件')
     $ctl.DupProgressText.Text = (T '正在查找…')

@@ -267,6 +267,7 @@ function Show-AppsView {
     $isApps = ($v -eq 'apps')
     $ctl.AppsList.Visibility = if ($isApps) { 'Visible' } else { 'Collapsed' }
     $ctl.StartList.Visibility = if ($isApps) { 'Collapsed' } else { 'Visible' }
+    Update-HeadVis
     $ctl.AppsFilterBox.Visibility = if ($isApps) { 'Visible' } else { 'Collapsed' }
     $ctl.BtnAppsUpdates.Visibility = if ($isApps -and $script:appsUpdatesAllowed) { 'Visible' } else { 'Collapsed' }
     if ($isApps) { Filter-Apps; return }

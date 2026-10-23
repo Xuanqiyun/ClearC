@@ -48,6 +48,7 @@ function Set-MovesTab([string]$t) {
     $ctl.CandList.Visibility = if ($c) { 'Visible' } else { 'Collapsed' }
     $ctl.EmptyCand.Visibility = if ($c -and -not ($script:candRows -and $script:candRows.Count -gt 0)) { 'Visible' } else { 'Collapsed' }
     $ctl.MovesCard.Visibility = if ($c) { 'Collapsed' } else { 'Visible' }
+    Update-HeadVis
     $ctl.CandBar.Visibility = if ($c) { 'Visible' } else { 'Collapsed' }
     $ctl.CandStore.Visibility = if ($c -and @($script:storeChat).Count -gt 0) { 'Visible' } else { 'Collapsed' }
     $ctl.MovesInfo.Text = if ($c) { $script:candInfo } else { $script:doneInfo }
@@ -167,7 +168,7 @@ function Build-CandRows($list) {
         if ($x.Partial -and $r.CanMove) { $r.Status = (T '上次已经复制过一部分，这次只补有变化的文件'); $r.StatusBrush = '#0A6ED1' }
         $gt = if ($g -eq 'chat' -or $g -eq 'other') { T ([string]$x.G) } else { $gText[$g] }
         $gp = $gt.Split([char]0xFF08, 2); if ($gp.Count -lt 2) { $gp = $gt.Split([char]'(', 2) }
-        $r.Group = $g; $r.GroupTitle = $gp[0].Trim()
+        $r.Group = $g; $r.GroupOrder = [int]$order[$g]; $r.GroupTitle = $gp[0].Trim()
         $r.GroupNote = if ($gp.Count -gt 1) { $gp[1].TrimEnd([char]0xFF09).TrimEnd(')') } else { '' }
         $r.First = -not $seen.ContainsKey($g); $seen[$g] = $true
         $col.Add($r)

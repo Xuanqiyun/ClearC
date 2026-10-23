@@ -590,7 +590,7 @@ function Refresh-MapFiles { if ($script:mapView -eq 'files' -and $script:mapRoot
 $ctl.MapMinSize.Add_SelectionChanged({ Refresh-MapFiles })
 $ctl.MapAge.Add_SelectionChanged({ Refresh-MapFiles })
 $ctl.MapType.Add_SelectionChanged({ Refresh-MapFiles })
-$ctl.MapSort.Add_SelectionChanged({ Refresh-MapFiles })
+$ctl.MapSort.Add_SelectionChanged({ if ($script:sortCfg['MapList'] -and $script:sortCfg['MapList'].Prop) { Reset-ListSort 'MapList' '' $true }; Refresh-MapFiles })
 $ctl.MapOwner.Add_SelectionChanged({ if (-not $script:ownerFill) { Refresh-MapFiles } })
 $ctl.MapUnder.Add_Checked({ $ctl.MapChat.IsChecked = $false; Refresh-MapFiles })
 $ctl.MapUnder.Add_Unchecked({ Refresh-MapFiles })
@@ -624,6 +624,7 @@ function Set-MapView([string]$v) {
     $ctl.MapGrid.RowDefinitions[1].Height = if ($tree) { New-Object System.Windows.GridLength 3, ([System.Windows.GridUnitType]::Star) } else { New-Object System.Windows.GridLength 0 }
     $ctl.MapGrid.RowDefinitions[2].Height = if ($tree) { New-Object System.Windows.GridLength 2, ([System.Windows.GridUnitType]::Star) } else { New-Object System.Windows.GridLength 1, ([System.Windows.GridUnitType]::Star) }
     $ctl.MapList.Visibility = if ($grow) { 'Collapsed' } else { 'Visible' }
+    Update-HeadVis
     if (-not $script:mapRoot) { $ctl.MapOverview.Visibility = 'Collapsed'; return }
     if ($v -eq 'dirs' -or $tree) { Show-MapLevel $(if ($script:mapCur) { $script:mapCur } else { $script:mapRoot }) }
     elseif ($v -eq 'files') { Show-MapOverview; Show-MapFiles }

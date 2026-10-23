@@ -6,7 +6,7 @@
 param()
 
 $ErrorActionPreference = 'SilentlyContinue'
-$script:AppVersion = '3.2'
+$script:AppVersion = '3.3'
 $script:AppBuildStamp = ''   # 构建 exe 时由 build 脚本填上构建时间（UTC）：写进诊断信息和运行记录，反馈问题时好对上是哪一次构建的
 $script:startClock = [Diagnostics.Stopwatch]::StartNew()   # 记下启动各阶段用了多久，写进运行记录
 
@@ -42,6 +42,7 @@ public class RowItem : INotifyPropertyChanged {
     public bool First { get; set; }
     public string Name { get; set; }
     public string SizeText { get; set; }
+    public double Bytes { get; set; }      // 表头按大小排序用（-1 = 运行后才知道）
     public string Note { get; set; }
     public string[] Actions { get; set; }
     private string _action;
@@ -2955,6 +2956,12 @@ public class ProcRow {
     public string TotalText { get; set; }
     public double Bar { get; set; }
     public double Sort { get; set; }
+    // 表头排序用的数字（文字列显示用，排序按这些）
+    public double Cpu { get; set; }
+    public double Ws { get; set; }
+    public double Rate { get; set; }
+    public double Since { get; set; }
+    public double Total { get; set; }
 }
 public class DumpRow {
     public string When { get; set; }
@@ -3091,6 +3098,7 @@ public class CandRow : INotifyPropertyChanged {
     public string Key { get; set; }
     public string Type { get; set; }     // cat = 清理目录里的项目；app = 装在 C 盘的软件
     public string Group { get; set; }
+    public int GroupOrder { get; set; }  // 组的先后：聊天记录、软件、其他文件夹、不适合搬的（表头排序只在组里面排）
     public string GroupTitle { get; set; }
     public string GroupNote { get; set; }
     public bool First { get; set; }
@@ -3171,6 +3179,7 @@ public class GrowRow {
     string _change; public string ChangeBrush { get { return Theme.F(_change); } set { _change = value; } }
     public double BeforeBytes { get; set; }
     public double NowBytes { get; set; }
+    public double Delta { get { return NowBytes - BeforeBytes; } }
 }
 '@
 if (-not ('DupFinder' -as [type])) { Add-Type -TypeDefinition $dupCode }
@@ -6696,6 +6705,44 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+扫描到 {0} 项，分成 {1} 类：{2}。点下面的选项卡切换类别，点「名称」「大小」排序，右边的下拉框可以只看某一种操作。每一项都可以单独选「删除」「搬走」或「跳过」；「执行所选操作」会处理所有类别。双击一行打开它所在的文件夹，右键可以复制路径。	Found {0} items in {1} groups: {2}. Use the tabs below to switch groups, click "Name" or "Size" to sort, and use the drop-down on the right to show only one action. Each item can be set to "Delete", "Move" or "Skip" on its own; "Run selected" handles every group. Double-click a row to open its folder; right-click to copy the path.
+全部操作	All actions
+只看「{0}」	Only "{0}"
+显示 {0} / {1} 项	Showing {0} of {1}
+{0} 项，约 {1}	{0} items, about {1}
+{0} 个	{0}
+名字和内容	Name and content
+只看内容	Content only
+ · 	 · 
+展开条件	Show options
+相关事件和驱动	Events and drivers
+已开启	On
+已关闭	Off
+{0} 天	{0} days
+每次蓝屏	Each crash
+蓝屏转储大小	Crash dump size
+发行商	Publisher
+安装日期	Installed
+状态	Status
+只看某一种操作的项目，比如只看要删除的、只看跳过的。排序不变	Show only items with one action, for example only the ones to delete or only the skipped ones. The sort order stays the same
+OneDrive 仅在线	OneDrive online-only
+休眠文件	Hibernation file
+保留的存储	Reserved storage
+系统压缩	System compression
+系统还原点	Restore points
+虚拟磁盘和虚拟机	Virtual disks and VMs
+页面文件	Page file
+点一下按这一列排序，再点一下反过来	Click to sort by this column; click again to reverse
+不删任何文件也能腾出空间：系统压缩、把大系统文件挪到其他盘、压缩不常用的文件夹和虚拟磁盘。左边选一项，右边是它的说明和按钮。	Free up space without deleting any files: system compression, moving large system files to another drive, and compressing rarely used folders and virtual disks. Pick an item on the left to see what it does and its buttons on the right.
+左边选遇到的问题，右边是对应的修法，从上往下、从轻到重地试。「只看」不改任何东西；「会改动」点了会先说明要改什么，能撤销的写明怎么撤销；「要重启」重启后才生效。用的都是 Windows 自带的命令，在看得见的窗口里运行。	Pick your problem on the left; the fixes for it are on the right. Try them from top to bottom, lightest first. "Read-only" changes nothing; "Changes system" explains what it changes before doing it, and how to undo it where possible; "Needs restart" takes effect after a restart. All of them are built-in Windows commands that run in a visible window.
+意外关机、硬件错误（WHEA）、磁盘和文件系统错误按来源归并；蓝屏时间和最近装的驱动对得上的，优先怀疑那个驱动。	Unexpected shutdowns, hardware errors (WHEA) and disk and file system errors are grouped by source. If a crash lines up with a recently installed driver, suspect that driver first.
+点「开始监控」，每 3 秒采一次样：各个程序这段时间用了多少 CPU、占多少内存、往磁盘写了多少。点列名按那一列从高到低排，再点一下从低到高。不装常驻服务，关掉本工具就停。	Click "Start monitoring" to sample every 3 seconds: how much CPU each program used, how much memory it holds and how much it wrote to disk. Click a column name to sort high to low, and again for low to high. No resident service; it stops when ClearC closes.
+空间变化	Space history
+空间提醒	Low space alert
+系统文件	System files
+虚拟磁盘	Virtual disks
+还原点和临时文件	Restore points and temp files
+这一类里没有这种操作的项目，换一个操作看看	Nothing in this group has that action; try another one
 按建议处理…	Fix as suggested…
 会做：	Will do: 
 本工具能做的都已经做过了。剩下的要你自己做，见结论下面「需要你自己做的」。	Everything ClearC can do has been done. The rest is up to you: see "Things to do yourself" under the diagnosis.
@@ -9046,7 +9093,9 @@ $script:helpEnXaml = @'
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Easy to see after a scan"/>
-                  <TextBlock Style="{StaticResource HelpBody}"><Run>The top of the list shows how many items were found and how many groups they fall into; each group heading also shows its item count. When there are many items, scroll down the page; a hint at the bottom tells you how many more are below.</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>The top of the list shows how many items were found and how many groups they fall into. A row of tabs below (Safe to clean, Careful cleanup, Needs confirmation, Other movable folders and so on) shows one group at a time, with its item count on the tab. Scroll down and the tabs stop at the top edge while the list keeps scrolling, so switching groups needs no scrolling back. "Run selected" handles every group, not only the one you are looking at.</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Click "Name" in the header to sort by name or "Size" to sort largest first; click again to reverse, and a third time to go back to the original order (by how safe each item is).</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>The drop-down on the right of the header shows only items with one action, for example only the ones to delete or only the skipped ones; the sort order stays as it is.</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Analyze usage"/>
@@ -9133,6 +9182,10 @@ $script:helpEnXaml = @'
               <StackPanel>
                 <DockPanel Margin="0,16,0,0"><TextBlock DockPanel.Dock="Left" Text="Search criteria" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
                 <StackPanel Margin="0,10,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Tabs"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Search locations, file types, file size and what counts as a duplicate each have a tab that shows the current choice. When you click "Start search" the options fold away and only the row of tabs stays, so the results fill the page; click any tab to open it again, and click the open tab or "Hide" on the right to fold it.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Search locations"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>Click a chip to select or deselect it. Use "Add folder…" to add your own locations; those with a small × can be removed. System folders, program folders and development environments are skipped automatically.</Run></TextBlock>
                 </StackPanel>
@@ -9198,7 +9251,11 @@ $script:helpEnXaml = @'
                 </DockPanel>
               </Expander.Header>
               <StackPanel>
-                <Grid Margin="0,14,0,0">
+                <StackPanel Margin="0,14,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="List on the left"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>The list on the left is grouped into System files, Restore points and temp files, Files and folders, and Virtual disks. Click an item to show only its explanation and buttons on the right, with no scrolling through the page. The page reopens on the item you looked at last.</Run></TextBlock>
+                </StackPanel>
+                <Grid Margin="0,16,0,0">
                   <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="10"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                   <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource HelpTile}">
@@ -9354,6 +9411,7 @@ $script:helpEnXaml = @'
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Owner and sorting"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>"Find files" lists up to 1,000 files, sorted by size or date, filtered by file owner (Windows account); NTFS-compressed files show their compressed size.</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Click "Name", "Modified" or "Size" in the header above the list to sort, again to reverse, and a third time to go back to the original order; other folders open in the same order. In "Since last scan", click a column name to sort.</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Recent changes"/>
@@ -9434,7 +9492,7 @@ $script:helpEnXaml = @'
               <StackPanel>
                 <StackPanel Margin="0,14,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="App list"/>
-                  <TextBlock Style="{StaticResource HelpBody}"><Run>Lists all installed apps (including Microsoft Store apps), sorted by size from largest to smallest. You can show only apps installed on C:, or search by name.</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Lists all installed apps (including Microsoft Store apps), sorted by size from largest to smallest. You can show only apps installed on C:, or search by name. Click "Name", "Publisher", "Installed" or "Size" in the header to sort, and again to reverse; startup items, scheduled tasks and context menu entries sort by name or status.</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Uninstall"/>
@@ -9501,6 +9559,8 @@ $script:helpEnXaml = @'
                 <StackPanel Margin="0,14,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Tabs"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>A row of tabs next to the title: Hardware, Boot time, Blue screens and crashes, Common fixes, Activity monitor, Windows events. Click one to show only that section, each with its own scroll bar, so you never scroll through the whole page. The page reopens on the tab you looked at last.</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>"Blue screens and crashes" has three smaller tabs: Diagnosis, Each crash, and Events and drivers, each showing how many entries it has.</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>"Common fixes" lists the problems on the left and shows the fixes for the selected one on the right; the activity monitor table fills the page and scrolls on its own.</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Hardware"/>
@@ -9532,7 +9592,7 @@ $script:helpEnXaml = @'
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="What is slowing the PC down"/>
-                  <TextBlock Style="{StaticResource HelpBody}"><Run>Click "Start monitoring" to sample every 3 seconds: how much CPU each program used, how much memory it holds, how fast it writes to disk, how much it wrote while monitoring and since it started; processes with the same name are combined, sortable by writes, CPU or memory. No resident service; it stops when ClearC closes.</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Click "Start monitoring" to sample every 3 seconds: how much CPU each program used, how much memory it holds, how fast it writes to disk, how much it wrote while monitoring and since it started; processes with the same name are combined. Click a column name (Program, CPU, Memory, Write rate, Written while monitoring, Written since start) to sort high to low, and again for low to high; the table lists the top 25 and picks the top 25 again by the new column. No resident service; it stops when ClearC closes.</Run></TextBlock>
                   <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Bytes written are not the same as space used (temporary files get written and deleted). Which process wrote which file can only be matched while monitoring is on: compare the folders that grew under "Space map → Recent changes" with the programs that wrote the most here.</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
@@ -9598,6 +9658,10 @@ $script:helpEnXaml = @'
               </Expander.Header>
               <StackPanel>
                 <StackPanel Margin="0,14,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Tabs"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>A row of tabs next to the title: Low space alert, Scheduled cleanup and Space history. Click one to show only that part; the tabs show whether each one is on and how many days are recorded.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Low-space reminder"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>When turned on, ClearC checks drive C: 2 minutes after each sign-in and again at noon every day. If free space falls below the value you set (20 GB by default), a reminder appears at the bottom right of the screen, at most once a day; if there is enough space, nothing is shown.</Run></TextBlock>
                 </StackPanel>
@@ -10322,6 +10386,115 @@ if ($script:mode -match '(?i)/autoclean') {
       </Setter>
     </Style>
 
+    <!-- ===== 列表表头：点列名按这一列排序，再点一下反过来 ===== -->
+    <Style x:Key="ColHead" TargetType="Button">
+      <Setter Property="Foreground" Value="#86868B"/>
+      <Setter Property="FontSize" Value="11.5"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Padding" Value="0,3"/>
+      <Setter Property="HorizontalContentAlignment" Value="Left"/>
+      <Setter Property="ToolTip" Value="点一下按这一列排序，再点一下反过来"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border Background="Transparent" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center" RecognizesAccessKey="False"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter Property="Foreground" Value="#1D1D1F"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <!-- 表头那一行：白底，下面一条细线 -->
+    <Style x:Key="HeadBar" TargetType="Border">
+      <Setter Property="BorderBrush" Value="#E5E5EA"/>
+      <Setter Property="BorderThickness" Value="0,0,0,1"/>
+      <Setter Property="Padding" Value="0,4,0,4"/>
+    </Style>
+    <!-- ===== 页面里的二级选项卡：文字下面一条蓝线 ===== -->
+    <Style x:Key="SubTab" TargetType="RadioButton">
+      <Setter Property="Foreground" Value="#6E6E73"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Margin" Value="0,0,22,0"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="RadioButton">
+            <Border x:Name="Bd" Background="Transparent" BorderBrush="Transparent" BorderThickness="0,0,0,2" Padding="2,6,2,7">
+              <ContentPresenter VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter Property="Foreground" Value="#1D1D1F"/></Trigger>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="Bd" Property="BorderBrush" Value="#0071E3"/>
+                <Setter Property="Foreground" Value="#1D1D1F"/>
+                <Setter Property="FontWeight" Value="SemiBold"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <!-- ===== 页面左侧的目录（省空间、常见问题修复）：一级标题下面一项一项，点哪项右边显示哪项 ===== -->
+    <Style x:Key="TreeHead" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="11.5"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Foreground" Value="#86868B"/>
+      <Setter Property="Margin" Value="10,16,0,5"/>
+    </Style>
+    <Style x:Key="TreeItem" TargetType="RadioButton">
+      <Setter Property="Foreground" Value="#1D1D1F"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Margin" Value="0,0,0,2"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="RadioButton">
+            <Border x:Name="Bd" CornerRadius="7" Padding="10,7" Background="Transparent">
+              <ContentPresenter VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="#E8E8ED"/></Trigger>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="#E3EEFF"/>
+                <Setter Property="Foreground" Value="#0A5BC4"/>
+                <Setter Property="FontWeight" Value="SemiBold"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="NavItem" TargetType="ListBoxItem">
+      <Setter Property="Foreground" Value="#1D1D1F"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+      <Setter Property="Margin" Value="0,0,0,2"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ListBoxItem">
+            <Border x:Name="Bd" CornerRadius="7" Padding="10,7" Background="Transparent">
+              <ContentPresenter VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="#E8E8ED"/></Trigger>
+              <Trigger Property="IsSelected" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="#E3EEFF"/>
+                <Setter Property="Foreground" Value="#0A5BC4"/>
+                <Setter Property="FontWeight" Value="SemiBold"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
     <!-- ===== 侧边栏导航 ===== -->
     <Style x:Key="Nav" TargetType="RadioButton">
       <Setter Property="Foreground" Value="#1D1D1F"/>
@@ -10800,7 +10973,8 @@ if ($script:mode -match '(?i)/autoclean') {
               <ContentPresenter/>
             </Grid>
             <ControlTemplate.Triggers>
-              <DataTrigger Binding="{Binding First}" Value="True"><Setter TargetName="Sep" Property="Visibility" Value="Collapsed"/></DataTrigger>
+              <!-- 显示出来的第一行不画分隔线：列表要设 AlternationCount（很大），排序、筛选以后按显示的顺序算 -->
+              <Trigger Property="ItemsControl.AlternationIndex" Value="0"><Setter TargetName="Sep" Property="Visibility" Value="Collapsed"/></Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>
         </Setter.Value>
@@ -10810,8 +10984,8 @@ if ($script:mode -match '(?i)/autoclean') {
       <Grid Margin="18,12,14,12">
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="*"/>
-          <ColumnDefinition Width="Auto"/>
-          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="Auto" SharedSizeGroup="CleanSize"/>
+          <ColumnDefinition Width="Auto" SharedSizeGroup="CleanAct"/>
         </Grid.ColumnDefinitions>
         <StackPanel Grid.Column="0" Margin="0,0,18,0" VerticalAlignment="Center">
           <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold" Foreground="#1D1D1F"/>
@@ -10835,6 +11009,7 @@ if ($script:mode -match '(?i)/autoclean') {
     <!-- ===== 重复文件结果表 ===== -->
     <Style TargetType="GridViewColumnHeader">
       <Setter Property="HorizontalContentAlignment" Value="Left"/>
+      <Setter Property="Cursor" Value="Hand"/>
       <Setter Property="Foreground" Value="#86868B"/>
       <Setter Property="FontSize" Value="11.5"/>
       <Setter Property="Template">
@@ -10994,7 +11169,7 @@ if ($script:mode -match '(?i)/autoclean') {
           <ColumnDefinition Width="30"/>
           <ColumnDefinition Width="*"/>
           <ColumnDefinition Width="100"/>
-          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="Auto" SharedSizeGroup="CandAct"/>
         </Grid.ColumnDefinitions>
         <CheckBox x:Name="Ck" Grid.Column="0" IsChecked="{Binding Checked, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanMove}" VerticalAlignment="Top" Margin="0,2,0,0"/>
         <StackPanel Grid.Column="1" Margin="0,0,14,0">
@@ -11015,12 +11190,12 @@ if ($script:mode -match '(?i)/autoclean') {
     <DataTemplate x:Key="MapRowTpl">
       <Grid Margin="12,7,14,7">
         <Grid.ColumnDefinitions>
-          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="Auto" SharedSizeGroup="MapCk"/>
           <ColumnDefinition Width="30"/>
           <ColumnDefinition Width="*"/>
-          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="Auto" SharedSizeGroup="MapBar"/>
           <ColumnDefinition Width="92"/>
-          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="Auto" SharedSizeGroup="MapPct"/>
         </Grid.ColumnDefinitions>
         <!-- 项目复选框：和这一行是否选中绑在一起，点它只增减这一行，不影响其他已选的行 -->
         <CheckBox Grid.Column="0" Visibility="{DynamicResource MapCkVis}" Focusable="False" VerticalAlignment="Center" Margin="0,0,12,0" Cursor="Hand"
@@ -11145,8 +11320,8 @@ if ($script:mode -match '(?i)/autoclean') {
         </StackPanel>
       </DockPanel>
 
-      <!-- 容量卡片、搬家目标和清理列表放在同一个滚动区里，整页一起滚，列表不再挤在一小块里 -->
-      <Grid Grid.Row="1">
+      <!-- 容量卡片、搬家目标和清理列表放在同一个滚动区里，整页一起滚；分类选项卡和表头滚到顶上就停住 -->
+      <Grid x:Name="CleanHost" Grid.Row="1" Grid.IsSharedSizeScope="True" ClipToBounds="True">
       <ScrollViewer x:Name="CleanScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False" Padding="0,0,6,0">
       <StackPanel>
       <!-- 存储空间：已用 / 可释放 / 可用 -->
@@ -11207,8 +11382,12 @@ if ($script:mode -match '(?i)/autoclean') {
           <TextBlock x:Name="CleanOverviewText" TextWrapping="Wrap" Foreground="#1D1D1F" LineHeight="20"/>
         </DockPanel>
       </Border>
-      <!-- 列表自己不滚动（没有内部滚动条），所有项目都排开，跟着整页滚 -->
-      <ListView x:Name="List" Background="Transparent" BorderThickness="0" Padding="0"
+      <!-- 分类选项卡和表头占的位置：真正的那一排浮在列表上面（CleanBar），滚过头以后停在顶上 -->
+      <Border x:Name="CleanBarSlot" Visibility="Collapsed"/>
+      <!-- 列表自己不滚动（没有内部滚动条），只显示选中的那一类，跟着整页滚 -->
+      <Border x:Name="CleanListCard" Background="White" CornerRadius="0,0,12,12" BorderBrush="#E5E5EA" BorderThickness="1,0,1,1" Padding="0,0,0,2" Margin="0,0,0,8" Visibility="Collapsed">
+      <StackPanel>
+      <ListView x:Name="List" Background="Transparent" BorderThickness="0" Padding="0" AlternationCount="1000000"
                 ItemTemplate="{StaticResource CleanRow}" ItemContainerStyle="{StaticResource PlainRow}">
         <ListView.ContextMenu>
           <ContextMenu x:Name="CleanMenu" Style="{StaticResource Menu}">
@@ -11220,16 +11399,42 @@ if ($script:mode -match '(?i)/autoclean') {
         <ListView.Template>
           <ControlTemplate TargetType="ListView"><ItemsPresenter/></ControlTemplate>
         </ListView.Template>
-        <ListView.GroupStyle>
-          <GroupStyle ContainerStyle="{StaticResource CardGroup}"/>
-        </ListView.GroupStyle>
       </ListView>
+      <TextBlock x:Name="CleanFilterEmpty" Text="这一类里没有这种操作的项目，换一个操作看看" Foreground="#86868B" Margin="18,16,18,16" Visibility="Collapsed"/>
+      </StackPanel>
+      </Border>
       <StackPanel x:Name="EmptyClean" HorizontalAlignment="Center" Margin="0,40,0,40" IsHitTestVisible="False">
         <TextBlock Text="&#xE721;" FontFamily="{StaticResource Icons}" FontSize="34" Foreground="#C7C7CC" HorizontalAlignment="Center"/>
         <TextBlock x:Name="EmptyCleanText" Text="点「扫描」看看 C 盘里有什么可以清理" Foreground="#86868B" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center"/>
       </StackPanel>
       </StackPanel>
       </ScrollViewer>
+      <!-- 分类选项卡和表头：平时就在列表上面；往下滚到它碰到顶边以后就停在那里，下面的列表照常滚 -->
+      <Border x:Name="CleanBar" VerticalAlignment="Top" HorizontalAlignment="Left" Background="#F5F5F7" Visibility="Collapsed">
+        <StackPanel>
+          <DockPanel Margin="0,0,0,8">
+            <TextBlock x:Name="CleanTabInfo" DockPanel.Dock="Right" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="14,0,4,0"/>
+            <Border Style="{StaticResource SegBox}" VerticalAlignment="Center">
+              <WrapPanel x:Name="CleanTabs"/>
+            </Border>
+          </DockPanel>
+          <TextBlock x:Name="CleanTabNote" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="4,0,4,8"/>
+          <Border Background="White" CornerRadius="12,12,0,0" BorderBrush="#E5E5EA" BorderThickness="1,1,1,0">
+            <Border Style="{StaticResource HeadBar}">
+              <Grid x:Name="CleanHead" Margin="18,0,14,0">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*"/>
+                  <ColumnDefinition Width="Auto" SharedSizeGroup="CleanSize"/>
+                  <ColumnDefinition Width="Auto" SharedSizeGroup="CleanAct"/>
+                </Grid.ColumnDefinitions>
+                <Button Grid.Column="0" Tag="name" Content="名称" Style="{StaticResource ColHead}" HorizontalAlignment="Left"/>
+                <Button Grid.Column="1" Tag="size" Content="大小" Style="{StaticResource ColHead}" HorizontalAlignment="Right" Margin="0,0,18,0"/>
+                <ComboBox Grid.Column="2" x:Name="CleanOpFilter" MinWidth="150" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0,2,0,2" ToolTip="只看某一种操作的项目，比如只看要删除的、只看跳过的。排序不变"/>
+              </Grid>
+            </Border>
+          </Border>
+        </StackPanel>
+      </Border>
       <!-- 下面还有内容时浮在底部的提示，点一下往下翻一屏 -->
       <Button x:Name="CleanMore" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,10" Visibility="Collapsed" Cursor="Hand" ToolTip="往下翻一屏">
         <Button.Template>
@@ -11273,121 +11478,116 @@ if ($script:mode -match '(?i)/autoclean') {
         </StackPanel>
       </DockPanel>
 
-      <Expander Grid.Row="1" x:Name="FilterExpander" IsExpanded="True" Margin="0,0,0,12">
-        <Expander.Header>
-          <StackPanel Orientation="Horizontal">
-            <TextBlock Text="查找条件" Style="{StaticResource SectionTitle}" FontSize="13.5"/>
-            <TextBlock x:Name="FilterSummary" Margin="12,0,0,0" Foreground="#86868B" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
-          </StackPanel>
-        </Expander.Header>
-        <!-- 位置和条件放在同一张卡片里，一行一类；选项都用胶囊和分段控件 -->
-        <Border Style="{StaticResource Card}" Padding="20,4,20,4" Margin="0,8,0,0">
-          <StackPanel>
-            <Grid Margin="0,12,0,10">
-              <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-              <TextBlock Grid.Column="0" Text="查找位置" Style="{StaticResource RowLabel}"/>
-              <StackPanel Grid.Column="1">
-                <ListBox x:Name="Roots" BorderThickness="0" Background="Transparent" Padding="0" ItemContainerStyle="{StaticResource RootRow}"
-                         ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Disabled">
-                  <ListBox.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ListBox.ItemsPanel>
-                  <ListBox.ItemTemplate>
-                    <DataTemplate>
-                      <CheckBox IsChecked="{Binding Enabled, Mode=TwoWay}" Style="{StaticResource PillCheck}" ToolTip="{Binding Detail}">
-                        <StackPanel Orientation="Horizontal">
-                          <TextBlock Text="{Binding Label}" VerticalAlignment="Center"/>
-                          <Button x:Name="X" Tag="{Binding}" Style="{StaticResource PillX}" Visibility="Collapsed" Margin="6,0,-5,0" ToolTip="不在这里找了，移除"/>
-                        </StackPanel>
-                      </CheckBox>
-                      <DataTemplate.Triggers>
-                        <DataTrigger Binding="{Binding Removable}" Value="True"><Setter TargetName="X" Property="Visibility" Value="Visible"/></DataTrigger>
-                      </DataTemplate.Triggers>
-                    </DataTemplate>
-                  </ListBox.ItemTemplate>
-                </ListBox>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,0">
-                  <Button x:Name="BtnAddRoot" Style="{StaticResource LinkButton}" Content="添加文件夹…" Margin="0,0,14,0"/>
-                  <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap"
-                             Text="系统目录、Program Files、AppData 和开发环境（.git、node_modules、conda）会自动跳过。"/>
-                </StackPanel>
+      <!-- 查找条件：一类一个选项卡（选项卡上写着现在选的是什么）；点「开始查找」后收起来，只留这一排，结果占满下面 -->
+      <Border Grid.Row="1" x:Name="DupFilterCard" Style="{StaticResource Card}" Padding="0" Margin="0,0,0,12">
+        <StackPanel>
+          <DockPanel Margin="16,4,14,0">
+            <Button x:Name="DupFilterToggle" DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="收起" VerticalAlignment="Center" Margin="12,0,0,0"/>
+            <TextBlock x:Name="FilterSummary" DockPanel.Dock="Right" Visibility="Collapsed"/>
+            <WrapPanel>
+              <RadioButton x:Name="DTabRoots" GroupName="dtab" Style="{StaticResource SubTab}" IsChecked="True">
+                <StackPanel Orientation="Horizontal"><TextBlock Text="查找位置"/><TextBlock x:Name="DTabRootsVal" Margin="8,0,0,0" Foreground="#86868B" FontWeight="Normal" MaxWidth="230" TextTrimming="CharacterEllipsis"/></StackPanel>
+              </RadioButton>
+              <RadioButton x:Name="DTabType" GroupName="dtab" Style="{StaticResource SubTab}">
+                <StackPanel Orientation="Horizontal"><TextBlock Text="文件类型"/><TextBlock x:Name="DTabTypeVal" Margin="8,0,0,0" Foreground="#86868B" FontWeight="Normal" MaxWidth="230" TextTrimming="CharacterEllipsis"/></StackPanel>
+              </RadioButton>
+              <RadioButton x:Name="DTabSize" GroupName="dtab" Style="{StaticResource SubTab}">
+                <StackPanel Orientation="Horizontal"><TextBlock Text="文件大小"/><TextBlock x:Name="DTabSizeVal" Margin="8,0,0,0" Foreground="#86868B" FontWeight="Normal" MaxWidth="230" TextTrimming="CharacterEllipsis"/></StackPanel>
+              </RadioButton>
+              <RadioButton x:Name="DTabMode" GroupName="dtab" Style="{StaticResource SubTab}">
+                <StackPanel Orientation="Horizontal"><TextBlock Text="怎样算重复"/><TextBlock x:Name="DTabModeVal" Margin="8,0,0,0" Foreground="#86868B" FontWeight="Normal" MaxWidth="230" TextTrimming="CharacterEllipsis"/></StackPanel>
+              </RadioButton>
+            </WrapPanel>
+          </DockPanel>
+          <Border x:Name="DupFilterBody" BorderBrush="#E5E5EA" BorderThickness="0,1,0,0" Padding="20,12,20,12">
+            <Grid>
+              <StackPanel x:Name="DPaneRoots">
+              <ListBox x:Name="Roots" BorderThickness="0" Background="Transparent" Padding="0" ItemContainerStyle="{StaticResource RootRow}"
+                       ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                <ListBox.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ListBox.ItemsPanel>
+                <ListBox.ItemTemplate>
+                  <DataTemplate>
+                    <CheckBox IsChecked="{Binding Enabled, Mode=TwoWay}" Style="{StaticResource PillCheck}" ToolTip="{Binding Detail}">
+                      <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{Binding Label}" VerticalAlignment="Center"/>
+                        <Button x:Name="X" Tag="{Binding}" Style="{StaticResource PillX}" Visibility="Collapsed" Margin="6,0,-5,0" ToolTip="不在这里找了，移除"/>
+                      </StackPanel>
+                    </CheckBox>
+                    <DataTemplate.Triggers>
+                      <DataTrigger Binding="{Binding Removable}" Value="True"><Setter TargetName="X" Property="Visibility" Value="Visible"/></DataTrigger>
+                    </DataTemplate.Triggers>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+              <StackPanel Orientation="Horizontal" Margin="0,0,0,0">
+                <Button x:Name="BtnAddRoot" Style="{StaticResource LinkButton}" Content="添加文件夹…" Margin="0,0,14,0"/>
+                <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap"
+                           Text="系统目录、Program Files、AppData 和开发环境（.git、node_modules、conda）会自动跳过。"/>
               </StackPanel>
-            </Grid>
-            <Rectangle Height="1" Fill="#E5E5EA"/>
-            <Grid Margin="0,12,0,10">
-              <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-              <TextBlock Grid.Column="0" Text="文件类型" Style="{StaticResource RowLabel}"/>
-              <StackPanel Grid.Column="1">
-                <WrapPanel x:Name="TypeChips"/>
-                <DockPanel Margin="0,2,0,0" MaxWidth="560" HorizontalAlignment="Left">
-                  <TextBlock DockPanel.Dock="Left" Text="其他扩展名" Style="{StaticResource Caption}" Margin="0,0,10,0"/>
-                  <Button x:Name="TypeReset" DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="全部重置" Margin="12,0,0,0"/>
-                  <TextBox x:Name="ExtraExt" MinWidth="240" ToolTip="上面没有的类型，用空格隔开，例如 .dwg .step .sldprt"/>
-                </DockPanel>
               </StackPanel>
-            </Grid>
-            <Rectangle Height="1" Fill="#E5E5EA"/>
-            <Grid Margin="0,10,0,10">
-              <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-              <TextBlock Grid.Column="0" Text="文件大小" Style="{StaticResource RowLabel}"/>
-              <StackPanel Grid.Column="1">
-                <Border Style="{StaticResource SegBox}"><StackPanel x:Name="SizeChips" Orientation="Horizontal"/></Border>
-                <StackPanel x:Name="SizeCustomRow" Orientation="Horizontal" Margin="0,9,0,0" Visibility="Collapsed">
-                  <TextBlock Text="从" Style="{StaticResource Caption}" Margin="0,0,8,0"/>
-                  <TextBox x:Name="SizeMin" Width="76"/>
-                  <ComboBox x:Name="SizeMinUnit" Width="66" Margin="6,0,0,0" SelectedIndex="1">
-                    <ComboBoxItem Content="KB"/><ComboBoxItem Content="MB"/><ComboBoxItem Content="GB"/>
-                  </ComboBox>
-                  <TextBlock Text="到" Style="{StaticResource Caption}" Margin="16,0,8,0"/>
-                  <TextBox x:Name="SizeMax" Width="76"/>
-                  <ComboBox x:Name="SizeMaxUnit" Width="66" Margin="6,0,0,0" SelectedIndex="1">
-                    <ComboBoxItem Content="KB"/><ComboBoxItem Content="MB"/><ComboBoxItem Content="GB"/>
-                  </ComboBox>
-                  <TextBlock x:Name="SizeHint" Text="留空表示不限" Style="{StaticResource Caption}" Margin="14,0,0,0"/>
-                </StackPanel>
+              <StackPanel x:Name="DPaneType" Visibility="Collapsed">
+              <WrapPanel x:Name="TypeChips"/>
+              <DockPanel Margin="0,2,0,0" MaxWidth="560" HorizontalAlignment="Left">
+                <TextBlock DockPanel.Dock="Left" Text="其他扩展名" Style="{StaticResource Caption}" Margin="0,0,10,0"/>
+                <Button x:Name="TypeReset" DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="全部重置" Margin="12,0,0,0"/>
+                <TextBox x:Name="ExtraExt" MinWidth="240" ToolTip="上面没有的类型，用空格隔开，例如 .dwg .step .sldprt"/>
+              </DockPanel>
               </StackPanel>
-            </Grid>
-            <Rectangle Height="1" Fill="#E5E5EA"/>
-            <Grid Margin="0,10,0,12">
-              <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-              <TextBlock Grid.Column="0" Text="怎样算重复" Style="{StaticResource RowLabel}"/>
-              <StackPanel Grid.Column="1">
-                <WrapPanel>
-                  <Border Style="{StaticResource SegBox}" Margin="0,0,28,0">
+              <StackPanel x:Name="DPaneSize" Visibility="Collapsed">
+              <Border Style="{StaticResource SegBox}"><StackPanel x:Name="SizeChips" Orientation="Horizontal"/></Border>
+              <StackPanel x:Name="SizeCustomRow" Orientation="Horizontal" Margin="0,9,0,0" Visibility="Collapsed">
+                <TextBlock Text="从" Style="{StaticResource Caption}" Margin="0,0,8,0"/>
+                <TextBox x:Name="SizeMin" Width="76"/>
+                <ComboBox x:Name="SizeMinUnit" Width="66" Margin="6,0,0,0" SelectedIndex="1">
+                  <ComboBoxItem Content="KB"/><ComboBoxItem Content="MB"/><ComboBoxItem Content="GB"/>
+                </ComboBox>
+                <TextBlock Text="到" Style="{StaticResource Caption}" Margin="16,0,8,0"/>
+                <TextBox x:Name="SizeMax" Width="76"/>
+                <ComboBox x:Name="SizeMaxUnit" Width="66" Margin="6,0,0,0" SelectedIndex="1">
+                  <ComboBoxItem Content="KB"/><ComboBoxItem Content="MB"/><ComboBoxItem Content="GB"/>
+                </ComboBox>
+                <TextBlock x:Name="SizeHint" Text="留空表示不限" Style="{StaticResource Caption}" Margin="14,0,0,0"/>
+              </StackPanel>
+              </StackPanel>
+              <StackPanel x:Name="DPaneMode" Visibility="Collapsed">
+              <WrapPanel>
+                <Border Style="{StaticResource SegBox}" Margin="0,0,28,0">
+                  <StackPanel Orientation="Horizontal">
+                    <RadioButton x:Name="ModeName" GroupName="dupmode" Content="名字和内容都相同" IsChecked="True" Style="{StaticResource Seg}"/>
+                    <RadioButton x:Name="ModeContent" GroupName="dupmode" Content="只看内容，名字不同也算" Style="{StaticResource Seg}"/>
+                    <RadioButton x:Name="ModeSimilar" GroupName="dupmode" Content="相似照片" Style="{StaticResource Seg}"
+                                 ToolTip="找看起来一样的照片：不同分辨率、重新压缩过、轻微裁剪过的也算。只看 jpg、png、bmp、gif、tif、webp、heic。不是同一个文件，删之前自己看一眼"/>
+                  </StackPanel>
+                </Border>
+                <StackPanel x:Name="SimilarRow" Orientation="Horizontal" Margin="0,0,28,0" Visibility="Collapsed">
+                  <TextBlock Text="相似程度" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                  <Border Style="{StaticResource SegBox}">
                     <StackPanel Orientation="Horizontal">
-                      <RadioButton x:Name="ModeName" GroupName="dupmode" Content="名字和内容都相同" IsChecked="True" Style="{StaticResource Seg}"/>
-                      <RadioButton x:Name="ModeContent" GroupName="dupmode" Content="只看内容，名字不同也算" Style="{StaticResource Seg}"/>
-                      <RadioButton x:Name="ModeSimilar" GroupName="dupmode" Content="相似照片" Style="{StaticResource Seg}"
-                                   ToolTip="找看起来一样的照片：不同分辨率、重新压缩过、轻微裁剪过的也算。只看 jpg、png、bmp、gif、tif、webp、heic。不是同一个文件，删之前自己看一眼"/>
+                      <RadioButton x:Name="SimStrict" GroupName="simlvl" Content="几乎一样" Style="{StaticResource Seg}" ToolTip="64 位指纹相差 4 位以内：同一张照片的不同尺寸、不同压缩"/>
+                      <RadioButton x:Name="SimNormal" GroupName="simlvl" Content="相似" IsChecked="True" Style="{StaticResource Seg}" ToolTip="相差 8 位以内：加上轻微裁剪、调色"/>
+                      <RadioButton x:Name="SimLoose" GroupName="simlvl" Content="大致相似" Style="{StaticResource Seg}" ToolTip="相差 12 位以内：连拍、构图相近的也会归到一起，误判会多"/>
                     </StackPanel>
                   </Border>
-                  <StackPanel x:Name="SimilarRow" Orientation="Horizontal" Margin="0,0,28,0" Visibility="Collapsed">
-                    <TextBlock Text="相似程度" VerticalAlignment="Center" Margin="0,0,12,0"/>
-                    <Border Style="{StaticResource SegBox}">
-                      <StackPanel Orientation="Horizontal">
-                        <RadioButton x:Name="SimStrict" GroupName="simlvl" Content="几乎一样" Style="{StaticResource Seg}" ToolTip="64 位指纹相差 4 位以内：同一张照片的不同尺寸、不同压缩"/>
-                        <RadioButton x:Name="SimNormal" GroupName="simlvl" Content="相似" IsChecked="True" Style="{StaticResource Seg}" ToolTip="相差 8 位以内：加上轻微裁剪、调色"/>
-                        <RadioButton x:Name="SimLoose" GroupName="simlvl" Content="大致相似" Style="{StaticResource Seg}" ToolTip="相差 12 位以内：连拍、构图相近的也会归到一起，误判会多"/>
-                      </StackPanel>
-                    </Border>
-                  </StackPanel>
-                  <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="比对方式" VerticalAlignment="Center" Margin="0,0,12,0"/>
-                    <Border Style="{StaticResource SegBox}">
-                      <StackPanel Orientation="Horizontal">
-                        <RadioButton x:Name="SpeedFast" GroupName="dupspeed" Content="快速" IsChecked="True" Style="{StaticResource Seg}"
-                                     ToolTip="16 MB 以内的文件读全文；更大的读头尾和 16 处抽样（每个约 1 MB）。删除前再逐字节完整比对。"/>
-                        <RadioButton x:Name="SpeedExact" GroupName="dupspeed" Content="完整比对" Style="{StaticResource Seg}"
-                                     ToolTip="每个可疑文件都读完全部内容。大视频多的时候会慢很多。"/>
-                      </StackPanel>
-                    </Border>
-                  </StackPanel>
-                </WrapPanel>
-                <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="2,8,0,0"
-                           Text="快速模式下大文件只抽样读约 1 MB；删除前都会逐字节完整核对，有任何不同就不删。"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock Text="比对方式" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                  <Border Style="{StaticResource SegBox}">
+                    <StackPanel Orientation="Horizontal">
+                      <RadioButton x:Name="SpeedFast" GroupName="dupspeed" Content="快速" IsChecked="True" Style="{StaticResource Seg}"
+                                   ToolTip="16 MB 以内的文件读全文；更大的读头尾和 16 处抽样（每个约 1 MB）。删除前再逐字节完整比对。"/>
+                      <RadioButton x:Name="SpeedExact" GroupName="dupspeed" Content="完整比对" Style="{StaticResource Seg}"
+                                   ToolTip="每个可疑文件都读完全部内容。大视频多的时候会慢很多。"/>
+                    </StackPanel>
+                  </Border>
+                </StackPanel>
+              </WrapPanel>
+              <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="2,8,0,0"
+                         Text="快速模式下大文件只抽样读约 1 MB；删除前都会逐字节完整核对，有任何不同就不删。"/>
               </StackPanel>
             </Grid>
-          </StackPanel>
-        </Border>
-      </Expander>
+          </Border>
+        </StackPanel>
+      </Border>
 
       <!-- 结果 -->
       <Border Grid.Row="2" Style="{StaticResource Card}" Padding="0,0,0,6">
@@ -11658,7 +11858,7 @@ if ($script:mode -match '(?i)/autoclean') {
         <Button x:Name="BtnMapRecent" Content="查看" Style="{StaticResource Small}" VerticalAlignment="Center" Margin="0,2,0,2"/>
       </WrapPanel>
       <Border Grid.Row="4" Style="{StaticResource Card}" Padding="0,6,0,6">
-        <Grid x:Name="MapGrid">
+        <Grid x:Name="MapGrid" Grid.IsSharedSizeScope="True">
           <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="0"/>
@@ -11691,7 +11891,27 @@ if ($script:mode -match '(?i)/autoclean') {
             </StackPanel>
           </Border>
           <Canvas x:Name="MapTree" Grid.Row="1" Margin="10,4,10,8" ClipToBounds="True" Background="White" Visibility="Collapsed"/>
-          <ListView x:Name="MapList" Grid.Row="2" Background="Transparent" BorderThickness="0" ItemTemplate="{StaticResource MapRowTpl}" ItemContainerStyle="{StaticResource SelRow}" SelectionMode="Extended"
+          <DockPanel Grid.Row="2">
+          <!-- 表头：点「名称」「修改时间」「大小」排序，点第三下回到按大小排 -->
+          <Border x:Name="MapHeadBox" DockPanel.Dock="Top" Style="{StaticResource HeadBar}" Margin="6,0,6,2" Visibility="Collapsed">
+            <Grid x:Name="MapHead" Margin="12,0,14,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" SharedSizeGroup="MapCk"/>
+                <ColumnDefinition Width="30"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto" SharedSizeGroup="MapBar"/>
+                <ColumnDefinition Width="92"/>
+                <ColumnDefinition Width="Auto" SharedSizeGroup="MapPct"/>
+              </Grid.ColumnDefinitions>
+              <StackPanel Grid.Column="2" Orientation="Horizontal">
+                <Button Tag="name" Content="名称" Style="{StaticResource ColHead}"/>
+                <TextBlock Text="·" Foreground="#C7C7CC" Margin="7,0" VerticalAlignment="Center"/>
+                <Button Tag="when" Content="修改时间" Style="{StaticResource ColHead}"/>
+              </StackPanel>
+              <Button Grid.Column="4" Tag="size" Content="大小" Style="{StaticResource ColHead}" HorizontalAlignment="Right"/>
+            </Grid>
+          </Border>
+          <ListView x:Name="MapList" Background="Transparent" BorderThickness="0" ItemTemplate="{StaticResource MapRowTpl}" ItemContainerStyle="{StaticResource SelRow}" SelectionMode="Extended"
                     ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
             <ListView.ContextMenu>
               <ContextMenu x:Name="MapMenu" Style="{StaticResource Menu}">
@@ -11704,6 +11924,7 @@ if ($script:mode -match '(?i)/autoclean') {
               </ContextMenu>
             </ListView.ContextMenu>
           </ListView>
+          </DockPanel>
           <ListView x:Name="MapGrow" Grid.Row="2" Background="White" BorderThickness="0" ItemContainerStyle="{StaticResource GridRow}" Visibility="Collapsed">
             <ListView.View>
               <GridView>
@@ -11742,201 +11963,227 @@ if ($script:mode -match '(?i)/autoclean') {
     </Grid>
 
     <!-- ==================== 省空间（不删文件） ==================== -->
-    <Grid x:Name="PageSave" Grid.Column="1" Grid.Row="0" Visibility="Collapsed">
-      <ScrollViewer x:Name="SaveScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
-        <StackPanel Margin="30,24,30,28" MaxWidth="900" HorizontalAlignment="Left">
-          <DockPanel>
-            <Button x:Name="BtnSaveRefresh" DockPanel.Dock="Right" Content="刷新" VerticalAlignment="Top" Margin="16,4,0,0"/>
-            <StackPanel>
-              <TextBlock Text="省空间" Style="{StaticResource PageTitle}"/>
-              <TextBlock Style="{StaticResource PageSub}" Text="不删任何文件也能腾出空间：系统压缩、把大系统文件挪到其他盘、压缩不常用的文件夹和虚拟磁盘。"/>
-            </StackPanel>
-          </DockPanel>
-
-          <Border x:Name="SaveCardCos" Style="{StaticResource Card}" Padding="24,20" Margin="0,20,0,0">
-            <DockPanel>
-              <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="20,0,0,0">
-                <Button x:Name="BtnCosOff" Content="关闭" Margin="0,0,8,0"/>
-                <Button x:Name="BtnCosOn" Content="开启" Style="{StaticResource Primary}"/>
-              </StackPanel>
-              <StackPanel>
-                <TextBlock Text="系统压缩（CompactOS）" Style="{StaticResource CardHead}"/>
-                <TextBlock x:Name="SaveCosState" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
-                <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
-                           Text="Windows 自带的功能：把系统文件压缩存放，通常能省 2 到 4 GB，不影响使用。压缩要 10 到 30 分钟，期间可以照常用电脑。固态硬盘几乎感觉不到变慢；很老的机械硬盘电脑不建议开。"/>
-              </StackPanel>
-            </DockPanel>
-          </Border>
-
-          <Border x:Name="SaveCardPf" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
-            <StackPanel>
-              <TextBlock Text="页面文件（pagefile.sys）" Style="{StaticResource CardHead}"/>
-              <TextBlock x:Name="SavePfState" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
-              <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
-                         Text="内存不够用时，Windows 把暂时用不到的数据放进这个文件，通常有几个 GB 到十几 GB。可以把它放到其他硬盘，C 盘就不再占这块空间。要重启电脑才生效。改了以后蓝屏时可能无法保存完整的内存转储，对普通用户没有影响；如果有问题，随时点「恢复系统默认」。"/>
-              <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
-                <ComboBox x:Name="SavePfDrive" Width="220" Margin="0,0,8,0"/>
-                <Button x:Name="BtnPfMove" Content="改到这块盘" Style="{StaticResource Primary}" Margin="0,0,8,0"/>
-                <Button x:Name="BtnPfAuto" Content="恢复系统默认"/>
-              </StackPanel>
-            </StackPanel>
-          </Border>
-
-          <Border x:Name="SaveCardHib" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
-            <StackPanel>
-              <TextBlock Text="休眠文件（hiberfil.sys）" Style="{StaticResource CardHead}"/>
-              <TextBlock x:Name="SaveHibState" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
-              <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
-                         Text="休眠和「快速启动」用的文件，大小约等于内存的四成到七成。「只留快速启动」能缩小到原来的一半左右，开机速度不变，只是不能手动休眠；「关闭休眠」整个删掉它，睡眠不受影响，只是没有休眠和快速启动。"/>
-              <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
-                <Button x:Name="BtnHibReduced" Content="只留快速启动（缩小）" Style="{StaticResource Primary}" Margin="0,0,8,0"/>
-                <Button x:Name="BtnHibOff" Content="关闭休眠" Margin="0,0,8,0"/>
-                <Button x:Name="BtnHibFull" Content="恢复完整休眠"/>
-              </StackPanel>
-            </StackPanel>
-          </Border>
-
-          <Border x:Name="SaveCardRp" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
-            <DockPanel>
-              <Button x:Name="BtnRestoreOpen" DockPanel.Dock="Right" Content="打开系统保护设置" VerticalAlignment="Center" Margin="20,0,0,0"/>
-              <StackPanel>
-                <TextBlock Text="系统还原点（卷影副本）" Style="{StaticResource CardHead}"/>
-                <TextBlock x:Name="SaveRpState" Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"/>
-                <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
-                           Text="装更新、装驱动之前 Windows 会自动建还原点，系统出问题时可以退回去。还原点放在 C 盘的 System Volume Information 里（空间地图里带小锁的那个文件夹），只记改动过的部分，占的空间有上限，到了上限会自动删掉最旧的。觉得占得多，可以在 Windows 的「系统保护」里点「配置」，调小「最大使用量」，或者删掉这块盘的全部还原点（删了就不能再退回去）。本工具不直接删还原点。"/>
-              </StackPanel>
-            </DockPanel>
-          </Border>
-
-          <Border x:Name="SaveCardFc" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
-            <DockPanel>
-              <Button x:Name="BtnFolderCompress" DockPanel.Dock="Right" Content="选择文件夹…" Style="{StaticResource Primary}" VerticalAlignment="Center" Margin="20,0,0,0"/>
-              <StackPanel>
-                <TextBlock Text="压缩文件夹（NTFS 压缩）" Style="{StaticResource CardHead}"/>
-                <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
-                           Text="文件照常打开、照常修改，只是占的空间变小。文档、代码、日志、旧项目通常能省一半；照片、视频、压缩包本身已经压缩过，几乎省不了。也可以在「空间地图」里选中文件夹直接压缩。"/>
-                <TextBlock x:Name="SaveFcState" Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"/>
-              </StackPanel>
-            </DockPanel>
-          </Border>
-
-          <Border x:Name="SaveCardOd" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
-            <DockPanel>
-              <Button x:Name="BtnOdFree" DockPanel.Dock="Right" Content="改成仅在线" Style="{StaticResource Primary}" VerticalAlignment="Center" Margin="20,0,0,0" IsEnabled="False"/>
-              <StackPanel>
-                <TextBlock Text="OneDrive 文件改成「仅在线」" Style="{StaticResource CardHead}"/>
-                <TextBlock x:Name="SaveOdState" Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"/>
-                <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
-                           Text="同步过的文件本地都留着一份副本。改成「仅在线」后文件还在云端，资源管理器里照常显示，打开时才下载，本地不再占空间。什么都不删。你设了「始终保留在此设备」的文件不动；OneDrive 要开着才会真正释放。"/>
-              </StackPanel>
-            </DockPanel>
-          </Border>
-
-          <Border x:Name="SaveCardRs" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
-            <DockPanel>
-              <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="20,0,0,0">
-                <Button x:Name="BtnRsOn" Content="重新开启" Margin="0,0,8,0" IsEnabled="False"/>
-                <Button x:Name="BtnRsOff" Content="关闭" IsEnabled="False"/>
-              </StackPanel>
-              <StackPanel>
-                <TextBlock Text="Windows 保留的存储" Style="{StaticResource CardHead}"/>
-                <TextBlock x:Name="SaveRsState" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
-                <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
-                           Text="Windows 给系统更新预留的空间，通常 7 GB 左右，空间明细里的「其他」有一部分就是它。关掉以后这块空间还给你，更新时 Windows 改为临时借用空闲空间；C 盘很满时更新可能提示空间不够，再开回来就好。有更新正在安装时改不了。"/>
-              </StackPanel>
-            </DockPanel>
-          </Border>
-
-          <Border x:Name="SaveCardCs" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
-            <DockPanel>
-              <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="20,0,0,0">
-                <Button x:Name="BtnCsAnalyze" Content="分析" Style="{StaticResource Primary}" Margin="0,0,8,0"/>
-                <Button x:Name="BtnCsClean" Content="去清理"/>
-              </StackPanel>
-              <StackPanel>
-                <TextBlock Text="组件存储（WinSxS）" Style="{StaticResource CardHead}"/>
-                <TextBlock x:Name="SaveCsState" Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap" Text="点「分析」让 Windows 算一下实际多大、能清多少（要一两分钟）。"/>
-                <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
-                           Text="C:\Windows\WinSxS 看着很大，其中很多文件和 System32 是同一份（硬链接），真正能清的是更新替换下来的旧组件。Windows 自己能算出可回收多少、建不建议清理；清理在「清理 C 盘」里的「WinSxS 组件清理 (DISM)」。"/>
-              </StackPanel>
-            </DockPanel>
-          </Border>
-
-          <Border x:Name="SaveCardDump" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
-            <DockPanel>
-              <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="20,0,0,0">
-                <Button x:Name="BtnDumpSmall" Content="改成小转储" Style="{StaticResource Primary}" Margin="0,0,8,0"/>
-                <Button x:Name="BtnDumpAuto" Content="恢复自动"/>
-              </StackPanel>
-              <StackPanel>
-                <TextBlock Text="蓝屏时保存多大的转储" Style="{StaticResource CardHead}"/>
-                <TextBlock x:Name="SaveDumpState" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
-                <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
-                           Text="蓝屏时 Windows 会把内存里的内容存成 C:\Windows\MEMORY.DMP，「自动」模式下可能和内存一样大，清掉了下次蓝屏又会生成。改成「小内存转储」只存 256 KB 的摘要，够看出是哪个驱动出的问题。随时可以恢复。"/>
-              </StackPanel>
-            </DockPanel>
-          </Border>
-
-          <Border x:Name="SaveCardTmp" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
-            <StackPanel>
-              <TextBlock Text="临时文件夹的位置" Style="{StaticResource CardHead}"/>
-              <TextBlock x:Name="SaveTmpState" Style="{StaticResource Caption}" Margin="0,4,0,0" TextTrimming="CharacterEllipsis"/>
-              <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
-                         Text="各软件的临时文件默认放在 C 盘的用户目录里。可以改到其他盘，以后的临时文件就不占 C 盘了。改完要注销再登录（或重启）才对所有软件生效；个别安装程序对 C 盘以外的临时文件夹不兼容，遇到就点「恢复默认」。"/>
-              <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
-                <ComboBox x:Name="SaveTmpDrive" Width="220" Margin="0,0,8,0"/>
-                <Button x:Name="BtnTmpMove" Content="改到这块盘" Style="{StaticResource Primary}" Margin="0,0,8,0"/>
-                <Button x:Name="BtnTmpAuto" Content="恢复默认"/>
-              </StackPanel>
-            </StackPanel>
-          </Border>
-
-          <Border x:Name="SaveCardVd" Style="{StaticResource Card}" Padding="24,20,24,14" Margin="0,14,0,0">
-            <StackPanel>
-              <TextBlock Text="虚拟磁盘、模拟器和虚拟机" Style="{StaticResource CardHead}"/>
-              <TextBlock Style="{StaticResource Body}" Margin="0,8,0,4"
-                         Text="WSL、Docker、安卓模拟器、虚拟机的磁盘文件动辄几十 GB，而且在里面删了东西也不会自动变小。压缩能把空出来的部分还给 Windows；WSL 发行版和文件夹形式的可以整个搬到其他盘。"/>
-              <ItemsControl x:Name="VdList">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate>
-                    <Border BorderBrush="#E5E5EA" BorderThickness="0,1,0,0" Padding="0,12,0,10">
-                      <DockPanel>
-                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
-                          <Button x:Name="VdOpen" Content="打开位置" Tag="{Binding}" Style="{StaticResource Small}" Margin="0,0,6,0"/>
-                          <Button x:Name="VdMove" Content="搬到其他盘" Tag="{Binding}" Style="{StaticResource Small}" Margin="0,0,6,0" Visibility="Collapsed"/>
-                          <Button x:Name="VdCompact" Content="压缩" Tag="{Binding}" Style="{StaticResource Small}" Visibility="Collapsed"/>
-                        </StackPanel>
-                        <TextBlock DockPanel.Dock="Right" Text="{Binding SizeText}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="12,0,0,0"/>
-                        <StackPanel>
-                          <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
-                          <TextBlock Text="{Binding Path}" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
-                          <TextBlock Text="{Binding Note}" FontSize="12" Foreground="#6E6E73" TextWrapping="Wrap" Margin="0,4,0,0"/>
-                        </StackPanel>
-                      </DockPanel>
-                    </Border>
-                    <DataTemplate.Triggers>
-                      <DataTrigger Binding="{Binding CanCompact}" Value="True"><Setter TargetName="VdCompact" Property="Visibility" Value="Visible"/></DataTrigger>
-                      <DataTrigger Binding="{Binding CanMove}" Value="True"><Setter TargetName="VdMove" Property="Visibility" Value="Visible"/></DataTrigger>
-                    </DataTemplate.Triggers>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-              <TextBlock x:Name="VdEmpty" Style="{StaticResource Caption}" Margin="0,8,0,0" Text="这台电脑上没找到 WSL、Docker、安卓模拟器或虚拟机的磁盘。"/>
-            </StackPanel>
-          </Border>
-
-          <Border x:Name="SaveCardMerge" Style="{StaticResource Card}" Padding="24,18" Margin="0,14,0,0">
-            <DockPanel>
-              <Button x:Name="BtnGoDup" DockPanel.Dock="Right" Content="去找重复文件" VerticalAlignment="Center" Margin="20,0,0,0"/>
-              <StackPanel>
-                <TextBlock Text="合并重复文件" Style="{StaticResource CardHead}"/>
-                <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
-                           Text="同一块盘上内容完全相同的文件，可以合并成一份：每个位置的文件都还在，只占一份空间。在「重复文件」页找完后，点「合并为一份」。"/>
-              </StackPanel>
-            </DockPanel>
-          </Border>
+    <!-- 省空间：左边是目录（一级标题下面一项一项），点哪项右边只显示那一项，不用一路往下滚 -->
+    <Grid x:Name="PageSave" Grid.Column="1" Grid.Row="0" Visibility="Collapsed" Margin="30,24,30,14">
+      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+      <DockPanel Grid.Row="0" Margin="0,0,0,16">
+        <Button x:Name="BtnSaveRefresh" DockPanel.Dock="Right" Content="刷新" VerticalAlignment="Top" Margin="16,4,0,0"/>
+        <StackPanel>
+          <TextBlock Text="省空间" Style="{StaticResource PageTitle}"/>
+          <TextBlock Style="{StaticResource PageSub}" Text="不删任何文件也能腾出空间：系统压缩、把大系统文件挪到其他盘、压缩不常用的文件夹和虚拟磁盘。左边选一项，右边是它的说明和按钮。"/>
         </StackPanel>
-      </ScrollViewer>
+      </DockPanel>
+      <Grid Grid.Row="1">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="214"/><ColumnDefinition Width="*" MaxWidth="900"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
+        <Border Grid.Column="0" Style="{StaticResource Card}" Padding="8,0,8,10" Margin="0,0,16,0" VerticalAlignment="Top">
+          <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+            <StackPanel x:Name="SaveNav">
+                <TextBlock x:Name="SaveHeadSys" Text="系统文件" Style="{StaticResource TreeHead}"/>
+                <RadioButton x:Name="SaveNavCos" GroupName="savenav" Tag="Cos" Content="系统压缩" Style="{StaticResource TreeItem}"/>
+                <RadioButton x:Name="SaveNavPf" GroupName="savenav" Tag="Pf" Content="页面文件" Style="{StaticResource TreeItem}"/>
+                <RadioButton x:Name="SaveNavHib" GroupName="savenav" Tag="Hib" Content="休眠文件" Style="{StaticResource TreeItem}"/>
+                <RadioButton x:Name="SaveNavRs" GroupName="savenav" Tag="Rs" Content="保留的存储" Style="{StaticResource TreeItem}"/>
+                <RadioButton x:Name="SaveNavCs" GroupName="savenav" Tag="Cs" Content="组件存储（WinSxS）" Style="{StaticResource TreeItem}"/>
+                <RadioButton x:Name="SaveNavDump" GroupName="savenav" Tag="Dump" Content="蓝屏转储大小" Style="{StaticResource TreeItem}"/>
+                <TextBlock x:Name="SaveHeadSafe" Text="还原点和临时文件" Style="{StaticResource TreeHead}"/>
+                <RadioButton x:Name="SaveNavRp" GroupName="savenav" Tag="Rp" Content="系统还原点" Style="{StaticResource TreeItem}"/>
+                <RadioButton x:Name="SaveNavTmp" GroupName="savenav" Tag="Tmp" Content="临时文件夹的位置" Style="{StaticResource TreeItem}"/>
+                <TextBlock x:Name="SaveHeadFiles" Text="文件和文件夹" Style="{StaticResource TreeHead}"/>
+                <RadioButton x:Name="SaveNavFc" GroupName="savenav" Tag="Fc" Content="压缩文件夹" Style="{StaticResource TreeItem}"/>
+                <RadioButton x:Name="SaveNavOd" GroupName="savenav" Tag="Od" Content="OneDrive 仅在线" Style="{StaticResource TreeItem}"/>
+                <RadioButton x:Name="SaveNavMerge" GroupName="savenav" Tag="Merge" Content="合并重复文件" Style="{StaticResource TreeItem}"/>
+                <TextBlock x:Name="SaveHeadVd" Text="虚拟磁盘" Style="{StaticResource TreeHead}"/>
+                <RadioButton x:Name="SaveNavVd" GroupName="savenav" Tag="Vd" Content="虚拟磁盘和虚拟机" Style="{StaticResource TreeItem}"/>
+            </StackPanel>
+          </ScrollViewer>
+        </Border>
+        <ScrollViewer x:Name="SaveScroll" Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+          <StackPanel Margin="0,0,6,14">
+            <Border x:Name="SaveCardCos" Style="{StaticResource Card}" Padding="24,20" Margin="0" Visibility="Collapsed">
+              <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="20,0,0,0">
+                  <Button x:Name="BtnCosOff" Content="关闭" Margin="0,0,8,0"/>
+                  <Button x:Name="BtnCosOn" Content="开启" Style="{StaticResource Primary}"/>
+                </StackPanel>
+                <StackPanel>
+                  <TextBlock Text="系统压缩（CompactOS）" Style="{StaticResource CardHead}"/>
+                  <TextBlock x:Name="SaveCosState" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
+                  <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
+                             Text="Windows 自带的功能：把系统文件压缩存放，通常能省 2 到 4 GB，不影响使用。压缩要 10 到 30 分钟，期间可以照常用电脑。固态硬盘几乎感觉不到变慢；很老的机械硬盘电脑不建议开。"/>
+                </StackPanel>
+              </DockPanel>
+            </Border>
+
+            <Border x:Name="SaveCardPf" Style="{StaticResource Card}" Padding="24,20" Margin="0" Visibility="Collapsed">
+              <StackPanel>
+                <TextBlock Text="页面文件（pagefile.sys）" Style="{StaticResource CardHead}"/>
+                <TextBlock x:Name="SavePfState" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
+                <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
+                           Text="内存不够用时，Windows 把暂时用不到的数据放进这个文件，通常有几个 GB 到十几 GB。可以把它放到其他硬盘，C 盘就不再占这块空间。要重启电脑才生效。改了以后蓝屏时可能无法保存完整的内存转储，对普通用户没有影响；如果有问题，随时点「恢复系统默认」。"/>
+                <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                  <ComboBox x:Name="SavePfDrive" Width="220" Margin="0,0,8,0"/>
+                  <Button x:Name="BtnPfMove" Content="改到这块盘" Style="{StaticResource Primary}" Margin="0,0,8,0"/>
+                  <Button x:Name="BtnPfAuto" Content="恢复系统默认"/>
+                </StackPanel>
+              </StackPanel>
+            </Border>
+
+            <Border x:Name="SaveCardHib" Style="{StaticResource Card}" Padding="24,20" Margin="0" Visibility="Collapsed">
+              <StackPanel>
+                <TextBlock Text="休眠文件（hiberfil.sys）" Style="{StaticResource CardHead}"/>
+                <TextBlock x:Name="SaveHibState" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
+                <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
+                           Text="休眠和「快速启动」用的文件，大小约等于内存的四成到七成。「只留快速启动」能缩小到原来的一半左右，开机速度不变，只是不能手动休眠；「关闭休眠」整个删掉它，睡眠不受影响，只是没有休眠和快速启动。"/>
+                <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                  <Button x:Name="BtnHibReduced" Content="只留快速启动（缩小）" Style="{StaticResource Primary}" Margin="0,0,8,0"/>
+                  <Button x:Name="BtnHibOff" Content="关闭休眠" Margin="0,0,8,0"/>
+                  <Button x:Name="BtnHibFull" Content="恢复完整休眠"/>
+                </StackPanel>
+              </StackPanel>
+            </Border>
+
+            <Border x:Name="SaveCardRp" Style="{StaticResource Card}" Padding="24,20" Margin="0" Visibility="Collapsed">
+              <DockPanel>
+                <Button x:Name="BtnRestoreOpen" DockPanel.Dock="Right" Content="打开系统保护设置" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                <StackPanel>
+                  <TextBlock Text="系统还原点（卷影副本）" Style="{StaticResource CardHead}"/>
+                  <TextBlock x:Name="SaveRpState" Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                  <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
+                             Text="装更新、装驱动之前 Windows 会自动建还原点，系统出问题时可以退回去。还原点放在 C 盘的 System Volume Information 里（空间地图里带小锁的那个文件夹），只记改动过的部分，占的空间有上限，到了上限会自动删掉最旧的。觉得占得多，可以在 Windows 的「系统保护」里点「配置」，调小「最大使用量」，或者删掉这块盘的全部还原点（删了就不能再退回去）。本工具不直接删还原点。"/>
+                </StackPanel>
+              </DockPanel>
+            </Border>
+
+            <Border x:Name="SaveCardFc" Style="{StaticResource Card}" Padding="24,20" Margin="0" Visibility="Collapsed">
+              <DockPanel>
+                <Button x:Name="BtnFolderCompress" DockPanel.Dock="Right" Content="选择文件夹…" Style="{StaticResource Primary}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                <StackPanel>
+                  <TextBlock Text="压缩文件夹（NTFS 压缩）" Style="{StaticResource CardHead}"/>
+                  <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
+                             Text="文件照常打开、照常修改，只是占的空间变小。文档、代码、日志、旧项目通常能省一半；照片、视频、压缩包本身已经压缩过，几乎省不了。也可以在「空间地图」里选中文件夹直接压缩。"/>
+                  <TextBlock x:Name="SaveFcState" Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                </StackPanel>
+              </DockPanel>
+            </Border>
+
+            <Border x:Name="SaveCardOd" Style="{StaticResource Card}" Padding="24,20" Margin="0" Visibility="Collapsed">
+              <DockPanel>
+                <Button x:Name="BtnOdFree" DockPanel.Dock="Right" Content="改成仅在线" Style="{StaticResource Primary}" VerticalAlignment="Center" Margin="20,0,0,0" IsEnabled="False"/>
+                <StackPanel>
+                  <TextBlock Text="OneDrive 文件改成「仅在线」" Style="{StaticResource CardHead}"/>
+                  <TextBlock x:Name="SaveOdState" Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                  <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
+                             Text="同步过的文件本地都留着一份副本。改成「仅在线」后文件还在云端，资源管理器里照常显示，打开时才下载，本地不再占空间。什么都不删。你设了「始终保留在此设备」的文件不动；OneDrive 要开着才会真正释放。"/>
+                </StackPanel>
+              </DockPanel>
+            </Border>
+
+            <Border x:Name="SaveCardRs" Style="{StaticResource Card}" Padding="24,20" Margin="0" Visibility="Collapsed">
+              <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="20,0,0,0">
+                  <Button x:Name="BtnRsOn" Content="重新开启" Margin="0,0,8,0" IsEnabled="False"/>
+                  <Button x:Name="BtnRsOff" Content="关闭" IsEnabled="False"/>
+                </StackPanel>
+                <StackPanel>
+                  <TextBlock Text="Windows 保留的存储" Style="{StaticResource CardHead}"/>
+                  <TextBlock x:Name="SaveRsState" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
+                  <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
+                             Text="Windows 给系统更新预留的空间，通常 7 GB 左右，空间明细里的「其他」有一部分就是它。关掉以后这块空间还给你，更新时 Windows 改为临时借用空闲空间；C 盘很满时更新可能提示空间不够，再开回来就好。有更新正在安装时改不了。"/>
+                </StackPanel>
+              </DockPanel>
+            </Border>
+
+            <Border x:Name="SaveCardCs" Style="{StaticResource Card}" Padding="24,20" Margin="0" Visibility="Collapsed">
+              <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="20,0,0,0">
+                  <Button x:Name="BtnCsAnalyze" Content="分析" Style="{StaticResource Primary}" Margin="0,0,8,0"/>
+                  <Button x:Name="BtnCsClean" Content="去清理"/>
+                </StackPanel>
+                <StackPanel>
+                  <TextBlock Text="组件存储（WinSxS）" Style="{StaticResource CardHead}"/>
+                  <TextBlock x:Name="SaveCsState" Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap" Text="点「分析」让 Windows 算一下实际多大、能清多少（要一两分钟）。"/>
+                  <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
+                             Text="C:\Windows\WinSxS 看着很大，其中很多文件和 System32 是同一份（硬链接），真正能清的是更新替换下来的旧组件。Windows 自己能算出可回收多少、建不建议清理；清理在「清理 C 盘」里的「WinSxS 组件清理 (DISM)」。"/>
+                </StackPanel>
+              </DockPanel>
+            </Border>
+
+            <Border x:Name="SaveCardDump" Style="{StaticResource Card}" Padding="24,20" Margin="0" Visibility="Collapsed">
+              <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="20,0,0,0">
+                  <Button x:Name="BtnDumpSmall" Content="改成小转储" Style="{StaticResource Primary}" Margin="0,0,8,0"/>
+                  <Button x:Name="BtnDumpAuto" Content="恢复自动"/>
+                </StackPanel>
+                <StackPanel>
+                  <TextBlock Text="蓝屏时保存多大的转储" Style="{StaticResource CardHead}"/>
+                  <TextBlock x:Name="SaveDumpState" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
+                  <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
+                             Text="蓝屏时 Windows 会把内存里的内容存成 C:\Windows\MEMORY.DMP，「自动」模式下可能和内存一样大，清掉了下次蓝屏又会生成。改成「小内存转储」只存 256 KB 的摘要，够看出是哪个驱动出的问题。随时可以恢复。"/>
+                </StackPanel>
+              </DockPanel>
+            </Border>
+
+            <Border x:Name="SaveCardTmp" Style="{StaticResource Card}" Padding="24,20" Margin="0" Visibility="Collapsed">
+              <StackPanel>
+                <TextBlock Text="临时文件夹的位置" Style="{StaticResource CardHead}"/>
+                <TextBlock x:Name="SaveTmpState" Style="{StaticResource Caption}" Margin="0,4,0,0" TextTrimming="CharacterEllipsis"/>
+                <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
+                           Text="各软件的临时文件默认放在 C 盘的用户目录里。可以改到其他盘，以后的临时文件就不占 C 盘了。改完要注销再登录（或重启）才对所有软件生效；个别安装程序对 C 盘以外的临时文件夹不兼容，遇到就点「恢复默认」。"/>
+                <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                  <ComboBox x:Name="SaveTmpDrive" Width="220" Margin="0,0,8,0"/>
+                  <Button x:Name="BtnTmpMove" Content="改到这块盘" Style="{StaticResource Primary}" Margin="0,0,8,0"/>
+                  <Button x:Name="BtnTmpAuto" Content="恢复默认"/>
+                </StackPanel>
+              </StackPanel>
+            </Border>
+
+            <Border x:Name="SaveCardVd" Style="{StaticResource Card}" Padding="24,20,24,14" Margin="0" Visibility="Collapsed">
+              <StackPanel>
+                <TextBlock Text="虚拟磁盘、模拟器和虚拟机" Style="{StaticResource CardHead}"/>
+                <TextBlock Style="{StaticResource Body}" Margin="0,8,0,4"
+                           Text="WSL、Docker、安卓模拟器、虚拟机的磁盘文件动辄几十 GB，而且在里面删了东西也不会自动变小。压缩能把空出来的部分还给 Windows；WSL 发行版和文件夹形式的可以整个搬到其他盘。"/>
+                <ItemsControl x:Name="VdList">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <Border BorderBrush="#E5E5EA" BorderThickness="0,1,0,0" Padding="0,12,0,10">
+                        <DockPanel>
+                          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
+                            <Button x:Name="VdOpen" Content="打开位置" Tag="{Binding}" Style="{StaticResource Small}" Margin="0,0,6,0"/>
+                            <Button x:Name="VdMove" Content="搬到其他盘" Tag="{Binding}" Style="{StaticResource Small}" Margin="0,0,6,0" Visibility="Collapsed"/>
+                            <Button x:Name="VdCompact" Content="压缩" Tag="{Binding}" Style="{StaticResource Small}" Visibility="Collapsed"/>
+                          </StackPanel>
+                          <TextBlock DockPanel.Dock="Right" Text="{Binding SizeText}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                          <StackPanel>
+                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                            <TextBlock Text="{Binding Path}" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                            <TextBlock Text="{Binding Note}" FontSize="12" Foreground="#6E6E73" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                          </StackPanel>
+                        </DockPanel>
+                      </Border>
+                      <DataTemplate.Triggers>
+                        <DataTrigger Binding="{Binding CanCompact}" Value="True"><Setter TargetName="VdCompact" Property="Visibility" Value="Visible"/></DataTrigger>
+                        <DataTrigger Binding="{Binding CanMove}" Value="True"><Setter TargetName="VdMove" Property="Visibility" Value="Visible"/></DataTrigger>
+                      </DataTemplate.Triggers>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock x:Name="VdEmpty" Style="{StaticResource Caption}" Margin="0,8,0,0" Text="这台电脑上没找到 WSL、Docker、安卓模拟器或虚拟机的磁盘。"/>
+              </StackPanel>
+            </Border>
+
+            <Border x:Name="SaveCardMerge" Style="{StaticResource Card}" Padding="24,18" Margin="0" Visibility="Collapsed">
+              <DockPanel>
+                <Button x:Name="BtnGoDup" DockPanel.Dock="Right" Content="去找重复文件" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                <StackPanel>
+                  <TextBlock Text="合并重复文件" Style="{StaticResource CardHead}"/>
+                  <TextBlock Style="{StaticResource Body}" Margin="0,8,0,0"
+                             Text="同一块盘上内容完全相同的文件，可以合并成一份：每个位置的文件都还在，只占一份空间。在「重复文件」页找完后，点「合并为一份」。"/>
+                </StackPanel>
+              </DockPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+      </Grid>
     </Grid>
 
     <!-- ==================== 软件管理 ==================== -->
@@ -12035,8 +12282,19 @@ if ($script:mode -match '(?i)/autoclean') {
 
           </StackPanel>
         </ScrollViewer>
-        <ScrollViewer x:Name="HealthViewCrash" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
-          <StackPanel MaxWidth="980" HorizontalAlignment="Left" Margin="0,0,6,14">
+        <!-- 蓝屏和崩溃：再分三个小选项卡（诊断结论 / 蓝屏记录 / 相关事件和驱动），各自滚动，不用一路滚到底 -->
+        <Grid x:Name="HealthViewCrash" Visibility="Collapsed">
+          <Grid.ColumnDefinitions><ColumnDefinition Width="*" MaxWidth="980"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
+          <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+          <Border Grid.Row="0" BorderBrush="#E5E5EA" BorderThickness="0,0,0,1" Margin="0,0,6,12">
+            <StackPanel Orientation="Horizontal">
+              <RadioButton x:Name="CTabVerdict" GroupName="ctab" Content="诊断结论" IsChecked="True" Style="{StaticResource SubTab}"/>
+              <RadioButton x:Name="CTabDumps" GroupName="ctab" Content="每次蓝屏" Style="{StaticResource SubTab}"/>
+              <RadioButton x:Name="CTabEvents" GroupName="ctab" Content="相关事件和驱动" Style="{StaticResource SubTab}"/>
+            </StackPanel>
+          </Border>
+          <ScrollViewer x:Name="CrashViewVerdict" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+          <StackPanel Margin="0,0,6,14">
           <!-- 诊断结论：几次蓝屏、事件、硬盘健康放在一起看 -->
           <Border x:Name="HealthCardVerdict" Style="{StaticResource Card}" Padding="24,20">
             <StackPanel>
@@ -12079,15 +12337,18 @@ if ($script:mode -match '(?i)/autoclean') {
               <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Text="结论是按错误码、状态码、事件日志和硬盘健康推出来的，是排查方向，不是定论。按钮和「常见问题修复」里的是同一套：只看的直接运行，会改动的先说明要改什么。"/>
             </StackPanel>
           </Border>
-          <!-- 蓝屏和崩溃 -->
-          <Border x:Name="HealthCardCrash" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
+          </StackPanel>
+          </ScrollViewer>
+          <ScrollViewer x:Name="CrashViewDumps" Grid.Row="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+          <StackPanel Margin="0,0,6,14">
+          <Border x:Name="HealthCardCrash" Style="{StaticResource Card}" Padding="24,20">
             <StackPanel>
               <DockPanel>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top" Margin="20,0,0,0">
                   <Button x:Name="BtnSfcCheck" Content="检查系统文件（只看）" Margin="0,0,8,0" ToolTip="在终端窗口里运行 sfc /verifyonly 和 DISM /ScanHealth：只检查，不改任何东西。要几分钟"/>
                   <Button x:Name="BtnSfcRepair" Content="修复系统文件…" ToolTip="在终端窗口里运行 DISM /RestoreHealth 和 sfc /scannow：会把损坏的系统文件换成正常的副本（会改系统文件，可能要联网下载）。点了会先确认"/>
                 </StackPanel>
-                <TextBlock Text="蓝屏和崩溃" Style="{StaticResource CardHead}"/>
+                <TextBlock Text="每次蓝屏" Style="{StaticResource CardHead}"/>
               </DockPanel>
               <TextBlock x:Name="HealthCrashText" Style="{StaticResource Body}" Margin="0,8,0,0" TextWrapping="Wrap" Text=""/>
               <ItemsControl x:Name="HealthDumps" Margin="0,8,0,0">
@@ -12110,7 +12371,16 @@ if ($script:mode -match '(?i)/autoclean') {
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
-              <TextBlock x:Name="HealthEventsHead" Text="最近 30 天的相关事件" Style="{StaticResource SetName}" Margin="0,14,0,0"/>
+              <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap" Text="转储文件是本工具自己解析的（错误码、参数、状态码、出事时加载的驱动、栈上出现的驱动），不如 WinDbg 准确；「可能的驱动」只是提示，不是定论。蓝屏时间和最近装的驱动对得上的，优先怀疑那个驱动。"/>
+            </StackPanel>
+          </Border>
+          </StackPanel>
+          </ScrollViewer>
+          <ScrollViewer x:Name="CrashViewEvents" Grid.Row="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+          <StackPanel Margin="0,0,6,14">
+          <Border x:Name="HealthCardCrashEv" Style="{StaticResource Card}" Padding="24,20">
+            <StackPanel>
+              <TextBlock x:Name="HealthEventsHead" Text="最近 30 天的相关事件" Style="{StaticResource CardHead}"/>
               <ItemsControl x:Name="HealthEvents">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate>
@@ -12121,7 +12391,7 @@ if ($script:mode -match '(?i)/autoclean') {
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
-              <TextBlock x:Name="HealthDriversHead" Text="最近 30 天装的驱动" Style="{StaticResource SetName}" Margin="0,14,0,0"/>
+              <TextBlock x:Name="HealthDriversHead" Text="最近 30 天装的驱动" Style="{StaticResource CardHead}" Margin="0,20,0,0"/>
               <ItemsControl x:Name="HealthDrivers">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate>
@@ -12132,84 +12402,91 @@ if ($script:mode -match '(?i)/autoclean') {
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
-              <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap" Text="转储文件是本工具自己解析的（错误码、参数、状态码、出事时加载的驱动、栈上出现的驱动），不如 WinDbg 准确；「可能的驱动」只是提示，不是定论。蓝屏时间和最近装的驱动对得上的，优先怀疑那个驱动。"/>
+              <TextBlock Style="{StaticResource Caption}" Margin="0,12,0,0" TextWrapping="Wrap" Text="意外关机、硬件错误（WHEA）、磁盘和文件系统错误按来源归并；蓝屏时间和最近装的驱动对得上的，优先怀疑那个驱动。"/>
             </StackPanel>
           </Border>
           </StackPanel>
-        </ScrollViewer>
-        <ScrollViewer x:Name="HealthViewFix" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
-          <StackPanel MaxWidth="980" HorizontalAlignment="Left" Margin="0,0,6,14">
-          <!-- 常见问题修复：按问题列出论坛里最常用的修法，每一步标明改不改东西 -->
-          <Border x:Name="HealthCardFix" Style="{StaticResource Card}" Padding="24,20">
-            <StackPanel>
-              <TextBlock Text="常见问题修复" Style="{StaticResource CardHead}"/>
-              <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,0" Text="按问题找对应的修法，从上往下、从轻到重地试。「只看」不改任何东西；「会改动」点了会先说明要改什么，能撤销的写明怎么撤销；「要重启」重启后才生效。用的都是 Windows 自带的命令，在看得见的窗口里运行。"/>
-              <Border x:Name="FixRecBox" Background="#E3EEFF" CornerRadius="10" Padding="16,12" Margin="0,12,0,0" Visibility="Collapsed">
-                <StackPanel>
-                  <TextBlock x:Name="FixRecHead" Text="根据这台电脑的蓝屏诊断，建议先做" FontWeight="SemiBold" Foreground="#0A5BC4"/>
-                  <ItemsControl x:Name="FixRec" Margin="0,8,0,0">
-                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate><DataTemplate><Button Content="{Binding Name}" Tag="{Binding Id}" ToolTip="{Binding Tip}" IsEnabled="{Binding Enabled}" Style="{StaticResource Small}" Margin="0,0,8,6"/></DataTemplate></ItemsControl.ItemTemplate>
-                  </ItemsControl>
-                </StackPanel>
-              </Border>
-              <ItemsControl x:Name="FixGroups" Margin="0,12,0,0" Grid.IsSharedSizeScope="True">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate>
-                    <Border Background="#F7F7F9" CornerRadius="10" Padding="16,12" Margin="0,0,0,10">
-                      <StackPanel>
-                        <TextBlock Text="{Binding Title}" FontSize="14.5" FontWeight="SemiBold" TextWrapping="Wrap"/>
-                        <TextBlock Text="{Binding Desc}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,3,0,4"/>
-                        <ItemsControl ItemsSource="{Binding Steps}">
-                          <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                              <Grid Margin="0,6,0,0">
-                                <Grid.ColumnDefinitions>
-                                  <ColumnDefinition Width="Auto" SharedSizeGroup="FixBtn"/>
-                                  <ColumnDefinition Width="Auto" SharedSizeGroup="FixTag"/>
-                                  <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <Button Grid.Column="0" Content="{Binding Name}" Tag="{Binding Id}" IsEnabled="{Binding Enabled}" ToolTip="{Binding Desc}" Style="{StaticResource Small}" HorizontalAlignment="Stretch" VerticalAlignment="Top"/>
-                                <Border Grid.Column="1" Background="{Binding TagBg}" CornerRadius="6" Padding="7,2" Margin="10,3,0,0" VerticalAlignment="Top"><TextBlock Text="{Binding Tag}" FontSize="11.5" FontWeight="SemiBold" Foreground="{Binding TagFg}" HorizontalAlignment="Center"/></Border>
-                                <TextBlock Grid.Column="2" Text="{Binding Desc}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="10,4,0,0"/>
-                              </Grid>
-                            </DataTemplate>
-                          </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                      </StackPanel>
-                    </Border>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-              <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,0" Text="这里的修复不删除任何文件、不结束任何程序、不装驱动；Windows 更新组件是改名留底，硬盘省电和快速启动随时能改回来。系统还原、内存诊断、设备管理器是 Windows 自己的工具，里面每一步都由你确认。每次运行都记在操作日志里。"/>
-            </StackPanel>
+          </ScrollViewer>
+        </Grid>
+        <!-- 常见问题修复：左边选问题，右边只显示这个问题的修法 -->
+        <Grid x:Name="HealthViewFix" Visibility="Collapsed" Margin="0,0,6,10">
+          <Grid.ColumnDefinitions><ColumnDefinition Width="*" MaxWidth="980"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
+          <Border x:Name="HealthCardFix" Style="{StaticResource Card}" Padding="0">
+            <DockPanel>
+              <StackPanel DockPanel.Dock="Top" Margin="24,18,24,0">
+                <TextBlock Text="常见问题修复" Style="{StaticResource CardHead}"/>
+                <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,0" Text="左边选遇到的问题，右边是对应的修法，从上往下、从轻到重地试。「只看」不改任何东西；「会改动」点了会先说明要改什么，能撤销的写明怎么撤销；「要重启」重启后才生效。用的都是 Windows 自带的命令，在看得见的窗口里运行。"/>
+                <Border x:Name="FixRecBox" Background="#E3EEFF" CornerRadius="10" Padding="16,12" Margin="0,12,0,0" Visibility="Collapsed">
+                  <StackPanel>
+                    <TextBlock x:Name="FixRecHead" Text="根据这台电脑的蓝屏诊断，建议先做" FontWeight="SemiBold" Foreground="#0A5BC4"/>
+                    <ItemsControl x:Name="FixRec" Margin="0,8,0,0">
+                      <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                      <ItemsControl.ItemTemplate><DataTemplate><Button Content="{Binding Name}" Tag="{Binding Id}" ToolTip="{Binding Tip}" IsEnabled="{Binding Enabled}" Style="{StaticResource Small}" Margin="0,0,8,6"/></DataTemplate></ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+                </Border>
+              </StackPanel>
+              <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="24,10,24,14" Text="这里的修复不删除任何文件、不结束任何程序、不装驱动；Windows 更新组件是改名留底，硬盘省电和快速启动随时能改回来。系统还原、内存诊断、设备管理器是 Windows 自己的工具，里面每一步都由你确认。每次运行都记在操作日志里。"/>
+              <Grid Margin="0,14,0,0">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="230"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <Border Grid.Column="0" BorderBrush="#E5E5EA" BorderThickness="0,1,1,1">
+                  <ListBox x:Name="FixGroups" Background="Transparent" BorderThickness="0" Padding="10,8" ItemContainerStyle="{StaticResource NavItem}"
+                           ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Title}" TextWrapping="Wrap"/></DataTemplate></ListBox.ItemTemplate>
+                  </ListBox>
+                </Border>
+                <Border Grid.Column="1" BorderBrush="#E5E5EA" BorderThickness="0,1,0,1">
+                  <ScrollViewer x:Name="FixDetailScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+                    <ContentControl x:Name="FixDetail" Content="{Binding SelectedItem, ElementName=FixGroups}" Margin="22,14,18,16" Focusable="False">
+                      <ContentControl.ContentTemplate>
+                        <DataTemplate>
+                          <StackPanel Grid.IsSharedSizeScope="True">
+                            <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                            <TextBlock Text="{Binding Desc}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,6"/>
+                            <ItemsControl ItemsSource="{Binding Steps}">
+                              <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                  <Grid Margin="0,6,0,0">
+                                    <Grid.ColumnDefinitions>
+                                      <ColumnDefinition Width="Auto" SharedSizeGroup="FixBtn"/>
+                                      <ColumnDefinition Width="Auto" SharedSizeGroup="FixTag"/>
+                                      <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Button Grid.Column="0" Content="{Binding Name}" Tag="{Binding Id}" IsEnabled="{Binding Enabled}" ToolTip="{Binding Desc}" Style="{StaticResource Small}" HorizontalAlignment="Stretch" VerticalAlignment="Top"/>
+                                    <Border Grid.Column="1" Background="{Binding TagBg}" CornerRadius="6" Padding="7,2" Margin="10,3,0,0" VerticalAlignment="Top"><TextBlock Text="{Binding Tag}" FontSize="11.5" FontWeight="SemiBold" Foreground="{Binding TagFg}" HorizontalAlignment="Center"/></Border>
+                                    <TextBlock Grid.Column="2" Text="{Binding Desc}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="10,4,0,0"/>
+                                  </Grid>
+                                </DataTemplate>
+                              </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                          </StackPanel>
+                        </DataTemplate>
+                      </ContentControl.ContentTemplate>
+                    </ContentControl>
+                  </ScrollViewer>
+                </Border>
+              </Grid>
+            </DockPanel>
           </Border>
-          </StackPanel>
-        </ScrollViewer>
+        </Grid>
 
-        <ScrollViewer x:Name="HealthViewMon" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
-          <StackPanel MaxWidth="980" HorizontalAlignment="Left" Margin="0,0,6,14">
-          <!-- 活动监控 -->
-          <Border x:Name="HealthCardMon" Style="{StaticResource Card}" Padding="24,20">
-            <StackPanel>
-              <DockPanel>
+        <!-- 活动监控：表格占满这一页，表格自己滚动；点列名（CPU、内存、写入速度……）按那一列从高到低排 -->
+        <Grid x:Name="HealthViewMon" Visibility="Collapsed" Margin="0,0,6,10">
+          <Grid.ColumnDefinitions><ColumnDefinition Width="*" MaxWidth="980"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
+          <Border x:Name="HealthCardMon" Style="{StaticResource Card}" Padding="24,18,24,14">
+            <DockPanel>
+              <DockPanel DockPanel.Dock="Top">
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top" Margin="20,0,0,0">
-                  <Border Style="{StaticResource SegBox}" VerticalAlignment="Center" Margin="0,0,10,0">
-                    <StackPanel Orientation="Horizontal">
-                      <RadioButton x:Name="MonSortWrite" GroupName="monsort" Content="写入最多" IsChecked="True" Style="{StaticResource Seg}"/>
-                      <RadioButton x:Name="MonSortCpu" GroupName="monsort" Content="CPU 最高" Style="{StaticResource Seg}"/>
-                      <RadioButton x:Name="MonSortMem" GroupName="monsort" Content="内存最多" Style="{StaticResource Seg}"/>
-                    </StackPanel>
-                  </Border>
                   <Button x:Name="BtnMonStart" Content="开始监控" Style="{StaticResource Primary}"/>
                   <Button x:Name="BtnMonStop" Content="停止" Margin="8,0,0,0" IsEnabled="False"/>
                 </StackPanel>
                 <StackPanel>
                   <TextBlock Text="谁在让电脑变慢" Style="{StaticResource CardHead}"/>
-                  <TextBlock x:Name="HealthMonText" Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap" Text="点「开始监控」，每 3 秒采一次样：各个程序这段时间用了多少 CPU、占多少内存、往磁盘写了多少。不装常驻服务，关掉本工具就停。"/>
+                  <TextBlock x:Name="HealthMonText" Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap" Text="点「开始监控」，每 3 秒采一次样：各个程序这段时间用了多少 CPU、占多少内存、往磁盘写了多少。点列名按那一列从高到低排，再点一下从低到高。不装常驻服务，关掉本工具就停。"/>
                 </StackPanel>
               </DockPanel>
-              <ListView x:Name="MonList" Margin="0,12,0,0" MaxHeight="420" Background="White" BorderThickness="0" ItemContainerStyle="{StaticResource GridRow}">
+              <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap" Text="「启动以来写入」是 Windows 从进程启动起累计的，重启过的进程从头算；写入量不等于磁盘净占用增长（临时文件写了又删）。哪个进程写了哪个文件，只有监控开着的时候能对上：把「空间地图 → 最近改动」里变大的文件夹和这里写入多的程序放在一起看。"/>
+              <ListView x:Name="MonList" Margin="0,12,0,0" Background="White" BorderThickness="0" ItemContainerStyle="{StaticResource GridRow}">
                 <ListView.View>
                   <GridView>
                     <GridViewColumn Header="程序" Width="250">
@@ -12225,12 +12502,9 @@ if ($script:mode -match '(?i)/autoclean') {
                   </GridView>
                 </ListView.View>
               </ListView>
-              <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap" Text="「启动以来写入」是 Windows 从进程启动起累计的，重启过的进程从头算；写入量不等于磁盘净占用增长（临时文件写了又删）。哪个进程写了哪个文件，只有监控开着的时候能对上：把「空间地图 → 最近改动」里变大的文件夹和这里写入多的程序放在一起看。"/>
-            </StackPanel>
+            </DockPanel>
           </Border>
-
-          </StackPanel>
-        </ScrollViewer>
+        </Grid>
         <ScrollViewer x:Name="HealthViewEvents" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
           <StackPanel MaxWidth="980" HorizontalAlignment="Left" Margin="0,0,6,14">
           <!-- Windows 事件 -->
@@ -12302,7 +12576,38 @@ if ($script:mode -match '(?i)/autoclean') {
           <TextBlock x:Name="AppsLeftText" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,12,0"/>
         </DockPanel>
       </Border>
-      <Border Grid.Row="3" Style="{StaticResource Card}" Padding="0,6,0,6">
+      <Border Grid.Row="3" Style="{StaticResource Card}" Padding="0,2,0,6">
+        <DockPanel Grid.IsSharedSizeScope="True">
+        <!-- 表头：点列名排序（软件：名称、发行商、安装日期、大小；开机启动等：名称、状态） -->
+        <Border x:Name="AppsHeadBox" DockPanel.Dock="Top" Style="{StaticResource HeadBar}" Margin="6,0,6,2">
+          <Grid>
+            <Grid x:Name="AppsHead" Margin="12,0,10,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="40"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="100"/>
+                <ColumnDefinition Width="Auto" SharedSizeGroup="AppAct"/>
+              </Grid.ColumnDefinitions>
+              <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <Button Tag="name" Content="名称" Style="{StaticResource ColHead}"/>
+                <TextBlock Text="·" Foreground="#C7C7CC" Margin="7,0" VerticalAlignment="Center"/>
+                <Button Tag="pub" Content="发行商" Style="{StaticResource ColHead}"/>
+                <TextBlock Text="·" Foreground="#C7C7CC" Margin="7,0" VerticalAlignment="Center"/>
+                <Button Tag="date" Content="安装日期" Style="{StaticResource ColHead}"/>
+              </StackPanel>
+              <Button Grid.Column="2" Tag="size" Content="大小" Style="{StaticResource ColHead}" HorizontalAlignment="Right" Margin="0,0,14,0"/>
+            </Grid>
+            <Grid x:Name="StartHead" Margin="12,0,10,0" Visibility="Collapsed">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="80"/>
+                <ColumnDefinition Width="Auto" SharedSizeGroup="StartAct"/>
+              </Grid.ColumnDefinitions>
+              <Button Grid.Column="0" Tag="name" Content="名称" Style="{StaticResource ColHead}"/>
+              <Button Grid.Column="1" Tag="status" Content="状态" Style="{StaticResource ColHead}"/>
+            </Grid>
+          </Grid>
+        </Border>
         <Grid>
           <ListView x:Name="AppsList" Background="Transparent" BorderThickness="0" ItemContainerStyle="{StaticResource SelRow}"
                     ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
@@ -12313,7 +12618,7 @@ if ($script:mode -match '(?i)/autoclean') {
                     <ColumnDefinition Width="40"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="100"/>
-                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto" SharedSizeGroup="AppAct"/>
                   </Grid.ColumnDefinitions>
                   <Border Width="30" Height="30" CornerRadius="8" Background="#EFEFF4" HorizontalAlignment="Left" VerticalAlignment="Center">
                     <TextBlock Text="{Binding Icon}" FontWeight="SemiBold" Foreground="#6E6E73" HorizontalAlignment="Center" VerticalAlignment="Center"/>
@@ -12348,7 +12653,7 @@ if ($script:mode -match '(?i)/autoclean') {
                   <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="80"/>
-                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto" SharedSizeGroup="StartAct"/>
                   </Grid.ColumnDefinitions>
                   <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
                     <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
@@ -12373,6 +12678,7 @@ if ($script:mode -match '(?i)/autoclean') {
             <TextBlock x:Name="EmptyAppsText" Text="正在读取已安装的软件…" Foreground="#86868B" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center"/>
           </StackPanel>
         </Grid>
+        </DockPanel>
       </Border>
     </Grid>
 
@@ -12401,20 +12707,48 @@ if ($script:mode -match '(?i)/autoclean') {
         </Border>
         <TextBlock x:Name="MovesInfo" FontWeight="SemiBold" Margin="2,0,0,0" TextWrapping="Wrap" VerticalAlignment="Center"/>
       </DockPanel>
-      <Grid Grid.Row="2">
-        <!-- 可以搬的：按聊天记录、软件、其他文件夹分组，勾选后一起搬 -->
+      <Grid Grid.Row="2" Grid.IsSharedSizeScope="True">
+        <!-- 可以搬的：按聊天记录、软件、其他文件夹分组，勾选后一起搬；表头排序在每一组里面排 -->
+        <DockPanel x:Name="CandBox">
+        <Grid x:Name="CandHead" DockPanel.Dock="Top" Margin="15,0,15,6">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="30"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="100"/>
+            <ColumnDefinition Width="Auto" SharedSizeGroup="CandAct"/>
+          </Grid.ColumnDefinitions>
+          <Button Grid.Column="1" Tag="name" Content="名称" Style="{StaticResource ColHead}" HorizontalAlignment="Left"/>
+          <Button Grid.Column="2" Tag="size" Content="大小" Style="{StaticResource ColHead}" HorizontalAlignment="Right" Margin="0,0,14,0"/>
+        </Grid>
         <ListView x:Name="CandList" Background="Transparent" BorderThickness="0" ItemContainerStyle="{StaticResource PlainRow}" ItemTemplate="{StaticResource CandRowTpl}"
-                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                  ScrollViewer.HorizontalScrollBarVisibility="Disabled" AlternationCount="1000000">
           <ListView.GroupStyle>
             <GroupStyle ContainerStyle="{StaticResource CardGroup}"/>
           </ListView.GroupStyle>
         </ListView>
+        </DockPanel>
         <StackPanel x:Name="EmptyCand" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
           <TextBlock Text="&#xE8AB;" FontFamily="{StaticResource Icons}" FontSize="32" Foreground="#C7C7CC" HorizontalAlignment="Center"/>
           <TextBlock x:Name="EmptyCandText" Text="正在看 C 盘上还有什么能搬…" Foreground="#86868B" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center" TextWrapping="Wrap" MaxWidth="520" TextAlignment="Center"/>
         </StackPanel>
         <!-- 已经搬走的 -->
-        <Border x:Name="MovesCard" Style="{StaticResource Card}" Padding="0,6,0,6" Visibility="Collapsed">
+        <Border x:Name="MovesCard" Style="{StaticResource Card}" Padding="0,2,0,6" Visibility="Collapsed">
+          <DockPanel>
+          <Border x:Name="MovesHeadBox" DockPanel.Dock="Top" Style="{StaticResource HeadBar}" Margin="6,0,6,2">
+            <Grid x:Name="MovesHead" Margin="14,0,10,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="100"/>
+                <ColumnDefinition Width="Auto" SharedSizeGroup="MoveAct"/>
+              </Grid.ColumnDefinitions>
+              <StackPanel Grid.Column="0" Orientation="Horizontal">
+                <Button Tag="name" Content="名称" Style="{StaticResource ColHead}"/>
+                <TextBlock Text="·" Foreground="#C7C7CC" Margin="7,0" VerticalAlignment="Center"/>
+                <Button Tag="state" Content="状态" Style="{StaticResource ColHead}"/>
+              </StackPanel>
+              <Button Grid.Column="1" Tag="size" Content="大小" Style="{StaticResource ColHead}" HorizontalAlignment="Right" Margin="0,0,14,0"/>
+            </Grid>
+          </Border>
           <Grid>
           <ListView x:Name="MovesList" Background="Transparent" BorderThickness="0" ItemContainerStyle="{StaticResource SelRow}" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
             <ListView.ItemTemplate>
@@ -12423,7 +12757,7 @@ if ($script:mode -match '(?i)/autoclean') {
                   <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="100"/>
-                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto" SharedSizeGroup="MoveAct"/>
                   </Grid.ColumnDefinitions>
                   <StackPanel Grid.Column="0" Margin="0,0,12,0">
                     <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold"/>
@@ -12453,6 +12787,7 @@ if ($script:mode -match '(?i)/autoclean') {
             <TextBlock x:Name="EmptyMovesText" Text="还没有搬过文件夹。在「可以搬的」里勾选要搬的项目，或者在「清理 C 盘」里选「搬到其他盘」，搬好的就会出现在这里。" Foreground="#86868B" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center" TextWrapping="Wrap" MaxWidth="520" TextAlignment="Center"/>
           </StackPanel>
         </Grid>
+        </DockPanel>
         </Border>
       </Grid>
       <DockPanel x:Name="CandStore" Grid.Row="3" Margin="2,10,0,0" Visibility="Collapsed">
@@ -12474,79 +12809,107 @@ if ($script:mode -match '(?i)/autoclean') {
     </Grid>
 
     <!-- ==================== 自动提醒 ==================== -->
-    <Grid x:Name="PageAuto" Grid.Column="1" Grid.Row="0" Visibility="Collapsed">
-      <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
-        <StackPanel Margin="30,24,30,28" MaxWidth="900" HorizontalAlignment="Left">
-          <TextBlock Text="自动提醒" Style="{StaticResource PageTitle}"/>
-          <TextBlock Style="{StaticResource PageSub}" TextWrapping="Wrap" Text="C 盘快满或者垃圾攒多了时提醒你，定期自动清一次缓存，并记下空间的变化。两项都默认关闭，打开开关才生效。开启后由 Windows 自己定时运行，不需要一直开着本工具，也不需要开机启动。"/>
-
-          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,20,0,0">
-            <StackPanel>
-              <DockPanel>
-                <CheckBox x:Name="AutoRemindOn" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center"/>
-                <TextBlock Text="C 盘空间不足时提醒我" Style="{StaticResource CardHead}" VerticalAlignment="Center"/>
-              </DockPanel>
-              <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
-                <TextBlock Text="剩余空间低于" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                <ComboBox x:Name="AutoRemindGB" Width="100">
-                  <ComboBoxItem Content="10 GB"/><ComboBoxItem Content="20 GB"/><ComboBoxItem Content="30 GB"/><ComboBoxItem Content="50 GB"/>
-                </ComboBox>
-                <TextBlock Text="时，在屏幕右下角弹出提醒（每天最多一次）" VerticalAlignment="Center" Margin="10,0,0,0"/>
+    <!-- 自动提醒：标题旁一排选项卡（空间提醒 / 定期自动清理 / 空间变化），点哪项只显示哪项 -->
+    <Grid x:Name="PageAuto" Grid.Column="1" Grid.Row="0" Visibility="Collapsed" Margin="30,24,30,14">
+      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+      <WrapPanel Grid.Row="0">
+        <TextBlock Text="自动提醒" Style="{StaticResource PageTitle}" VerticalAlignment="Center" Margin="0,0,22,4"/>
+        <Border Style="{StaticResource SegBox}" VerticalAlignment="Center" Margin="0,2,0,4">
+          <StackPanel Orientation="Horizontal">
+              <RadioButton x:Name="ATabRemind" GroupName="atab" Style="{StaticResource Seg}" IsChecked="True">
+                <StackPanel Orientation="Horizontal"><TextBlock Text="空间提醒"/><TextBlock x:Name="ATabRemindState" Margin="7,0,0,0" Foreground="#86868B" FontWeight="Normal"/></StackPanel>
+              </RadioButton>
+              <RadioButton x:Name="ATabClean" GroupName="atab" Style="{StaticResource Seg}">
+                <StackPanel Orientation="Horizontal"><TextBlock Text="定期自动清理"/><TextBlock x:Name="ATabCleanState" Margin="7,0,0,0" Foreground="#86868B" FontWeight="Normal"/></StackPanel>
+              </RadioButton>
+              <RadioButton x:Name="ATabHist" GroupName="atab" Style="{StaticResource Seg}">
+                <StackPanel Orientation="Horizontal"><TextBlock Text="空间变化"/><TextBlock x:Name="ATabHistState" Margin="7,0,0,0" Foreground="#86868B" FontWeight="Normal"/></StackPanel>
+              </RadioButton>
+          </StackPanel>
+        </Border>
+      </WrapPanel>
+      <Grid Grid.Row="1">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="*" MaxWidth="900"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
+        <TextBlock Style="{StaticResource PageSub}" TextWrapping="Wrap" Text="C 盘快满或者垃圾攒多了时提醒你，定期自动清一次缓存，并记下空间的变化。两项都默认关闭，打开开关才生效。开启后由 Windows 自己定时运行，不需要一直开着本工具，也不需要开机启动。"/>
+      </Grid>
+      <Grid Grid.Row="2" Margin="0,18,0,0">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="*" MaxWidth="900"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
+        <ScrollViewer x:Name="AutoViewRemind" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+          <StackPanel Margin="0,0,6,14">
+            <Border Style="{StaticResource Card}" Padding="24,20">
+              <StackPanel>
+                <DockPanel>
+                  <CheckBox x:Name="AutoRemindOn" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center"/>
+                  <TextBlock Text="C 盘空间不足时提醒我" Style="{StaticResource CardHead}" VerticalAlignment="Center"/>
+                </DockPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                  <TextBlock Text="剩余空间低于" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                  <ComboBox x:Name="AutoRemindGB" Width="100">
+                    <ComboBoxItem Content="10 GB"/><ComboBoxItem Content="20 GB"/><ComboBoxItem Content="30 GB"/><ComboBoxItem Content="50 GB"/>
+                  </ComboBox>
+                  <TextBlock Text="时，在屏幕右下角弹出提醒（每天最多一次）" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                </StackPanel>
+                <StackPanel x:Name="AutoJunkRow" Orientation="Horizontal" Margin="0,10,0,0">
+                  <TextBlock Text="可以清理的临时文件、缓存和日志超过" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                  <ComboBox x:Name="AutoJunkGB" Width="100">
+                    <ComboBoxItem Content="不提醒"/><ComboBoxItem Content="1 GB"/><ComboBoxItem Content="2 GB"/><ComboBoxItem Content="5 GB"/><ComboBoxItem Content="10 GB"/>
+                  </ComboBox>
+                  <TextBlock Text="时也提醒（检查时只统计，不删任何东西）" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                </StackPanel>
+                <TextBlock x:Name="AutoRemindNote" Style="{StaticResource Body}" Margin="0,12,0,0" Foreground="#6E6E73"/>
               </StackPanel>
-              <StackPanel x:Name="AutoJunkRow" Orientation="Horizontal" Margin="0,10,0,0">
-                <TextBlock Text="可以清理的临时文件、缓存和日志超过" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                <ComboBox x:Name="AutoJunkGB" Width="100">
-                  <ComboBoxItem Content="不提醒"/><ComboBoxItem Content="1 GB"/><ComboBoxItem Content="2 GB"/><ComboBoxItem Content="5 GB"/><ComboBoxItem Content="10 GB"/>
-                </ComboBox>
-                <TextBlock Text="时也提醒（检查时只统计，不删任何东西）" VerticalAlignment="Center" Margin="10,0,0,0"/>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+        <ScrollViewer x:Name="AutoViewClean" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False" Visibility="Collapsed">
+          <StackPanel Margin="0,0,6,14">
+            <Border Style="{StaticResource Card}" Padding="24,20">
+              <StackPanel>
+                <DockPanel>
+                  <CheckBox x:Name="AutoCleanOn" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center"/>
+                  <TextBlock Text="定期自动清理" Style="{StaticResource CardHead}" VerticalAlignment="Center"/>
+                </DockPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                  <TextBlock Text="什么时候清理" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                  <ComboBox x:Name="AutoCleanWhen" Width="110">
+                    <ComboBoxItem Content="每周日"/><ComboBoxItem Content="每周一"/><ComboBoxItem Content="每周二"/><ComboBoxItem Content="每周三"/><ComboBoxItem Content="每周四"/><ComboBoxItem Content="每周五"/><ComboBoxItem Content="每周六"/><ComboBoxItem Content="每天"/>
+                  </ComboBox>
+                  <TextBlock Text="中午 12:30（错过了就在下次开机后）" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                </StackPanel>
+                <TextBlock Style="{StaticResource Body}" Margin="0,10,0,0"
+                           Text="不用开着本工具。到时间由 Windows 任务计划在后台自动做一遍「安全清理」里的项目：临时文件、各类缓存和日志。不搬家、不清空回收站、不碰任何个人文件夹、不碰你自己加的文件夹，也不会关闭正在运行的软件（被占用的文件直接跳过）。做完在右下角告诉你释放了多少，每一项都记在「操作日志」里。"/>
+                <TextBlock x:Name="AutoCleanNote" Style="{StaticResource Body}" Margin="0,10,0,0" Foreground="#6E6E73"/>
               </StackPanel>
-              <TextBlock x:Name="AutoRemindNote" Style="{StaticResource Body}" Margin="0,12,0,0" Foreground="#6E6E73"/>
-            </StackPanel>
-          </Border>
-
-          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
-            <StackPanel>
-              <DockPanel>
-                <CheckBox x:Name="AutoCleanOn" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center"/>
-                <TextBlock Text="定期自动清理" Style="{StaticResource CardHead}" VerticalAlignment="Center"/>
-              </DockPanel>
-              <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
-                <TextBlock Text="什么时候清理" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                <ComboBox x:Name="AutoCleanWhen" Width="110">
-                  <ComboBoxItem Content="每周日"/><ComboBoxItem Content="每周一"/><ComboBoxItem Content="每周二"/><ComboBoxItem Content="每周三"/><ComboBoxItem Content="每周四"/><ComboBoxItem Content="每周五"/><ComboBoxItem Content="每周六"/><ComboBoxItem Content="每天"/>
-                </ComboBox>
-                <TextBlock Text="中午 12:30（错过了就在下次开机后）" VerticalAlignment="Center" Margin="10,0,0,0"/>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+        <ScrollViewer x:Name="AutoViewHist" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False" Visibility="Collapsed">
+          <StackPanel Margin="0,0,6,14">
+            <Border Style="{StaticResource Card}" Padding="24,20">
+              <StackPanel>
+                <TextBlock Text="C 盘空间变化" Style="{StaticResource CardHead}"/>
+                <TextBlock x:Name="HistInfo" Style="{StaticResource Caption}" Margin="0,4,0,12" TextWrapping="Wrap"/>
+                <Border Height="220" BorderBrush="#E5E5EA" BorderThickness="0,0,0,1">
+                  <ItemsControl x:Name="HistChart" VerticalAlignment="Bottom">
+                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <Border Width="16" Height="{Binding H}" Background="{Binding Fill}" CornerRadius="4,4,0,0" Margin="2,0" VerticalAlignment="Bottom" ToolTip="{Binding Tip}"/>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </Border>
+                <DockPanel Margin="0,6,0,0">
+                  <TextBlock x:Name="HistLast" DockPanel.Dock="Right" Style="{StaticResource Caption}"/>
+                  <TextBlock x:Name="HistFirst" Style="{StaticResource Caption}"/>
+                </DockPanel>
+                <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap"
+                           Text="柱子越高表示 C 盘已经用掉的越多（每天取最后一次记录）。每次打开本工具、每次定时检查都会记一笔。想知道是哪些文件夹变大了，到「空间地图」扫一遍，再选「和上次比」。"/>
               </StackPanel>
-              <TextBlock Style="{StaticResource Body}" Margin="0,10,0,0"
-                         Text="不用开着本工具。到时间由 Windows 任务计划在后台自动做一遍「安全清理」里的项目：临时文件、各类缓存和日志。不搬家、不清空回收站、不碰任何个人文件夹、不碰你自己加的文件夹，也不会关闭正在运行的软件（被占用的文件直接跳过）。做完在右下角告诉你释放了多少，每一项都记在「操作日志」里。"/>
-              <TextBlock x:Name="AutoCleanNote" Style="{StaticResource Body}" Margin="0,10,0,0" Foreground="#6E6E73"/>
-            </StackPanel>
-          </Border>
-
-          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
-            <StackPanel>
-              <TextBlock Text="C 盘空间变化" Style="{StaticResource CardHead}"/>
-              <TextBlock x:Name="HistInfo" Style="{StaticResource Caption}" Margin="0,4,0,12" TextWrapping="Wrap"/>
-              <Border Height="150" BorderBrush="#E5E5EA" BorderThickness="0,0,0,1">
-                <ItemsControl x:Name="HistChart" VerticalAlignment="Bottom">
-                  <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
-                  <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                      <Border Width="16" Height="{Binding H}" Background="{Binding Fill}" CornerRadius="4,4,0,0" Margin="2,0" VerticalAlignment="Bottom" ToolTip="{Binding Tip}"/>
-                    </DataTemplate>
-                  </ItemsControl.ItemTemplate>
-                </ItemsControl>
-              </Border>
-              <DockPanel Margin="0,6,0,0">
-                <TextBlock x:Name="HistLast" DockPanel.Dock="Right" Style="{StaticResource Caption}"/>
-                <TextBlock x:Name="HistFirst" Style="{StaticResource Caption}"/>
-              </DockPanel>
-              <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap"
-                         Text="柱子越高表示 C 盘已经用掉的越多（每天取最后一次记录）。每次打开本工具、每次定时检查都会记一笔。想知道是哪些文件夹变大了，到「空间地图」扫一遍，再选「和上次比」。"/>
-            </StackPanel>
-          </Border>
-        </StackPanel>
-      </ScrollViewer>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+      </Grid>
     </Grid>
 
     <!-- ==================== 操作日志 ==================== -->
@@ -12973,7 +13336,9 @@ if ($script:mode -match '(?i)/autoclean') {
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="扫完一目了然"/>
-                  <TextBlock Style="{StaticResource HelpBody}"><Run>列表上方写明一共扫到几项、分成几类，每组标题旁也标着几项。项目多时整页往下滚动，底部会提示「下面还有几项」。</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>列表上方写明一共扫到几项、分成几类。下面一排选项卡（安全清理、谨慎清理、需确认、其他可搬的文件夹……）一次只显示一类，选项卡上写着这一类几项；往下滚到选项卡碰到顶边，它就停在那里，下面的列表照常滚，换一类不用再滚回去。「执行所选操作」会处理所有类别，不只是正在看的这一类。</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>表头点「名称」按名字排，点「大小」从大到小排，再点一下反过来，点第三下回到本来的顺序（按安全程度排）。</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>表头右边的下拉框可以只看某一种操作，比如只看要删除的、只看跳过的；排过的顺序不变。</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="分析占用"/>
@@ -13060,6 +13425,10 @@ if ($script:mode -match '(?i)/autoclean') {
               <StackPanel>
                 <DockPanel Margin="0,16,0,0"><TextBlock DockPanel.Dock="Left" Text="查找条件" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
                 <StackPanel Margin="0,10,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="选项卡"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>查找位置、文件类型、文件大小、怎样算重复各一个选项卡，选项卡上直接写着现在选的是什么。点「开始查找」后条件自动收起来，只留这一排选项卡，找到的结果占满下面；点任意一个选项卡再打开，点打开着的那个或右边的「收起」收起来。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="查找位置"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>点胶囊勾选或取消；「添加文件夹…」可以加自己的位置，带小叉的可以移除。系统目录、程序目录和开发环境会自动跳过。</Run></TextBlock>
                 </StackPanel>
@@ -13125,7 +13494,11 @@ if ($script:mode -match '(?i)/autoclean') {
                 </DockPanel>
               </Expander.Header>
               <StackPanel>
-                <Grid Margin="0,14,0,0">
+                <StackPanel Margin="0,14,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="左边目录"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>左边按「系统文件」「还原点和临时文件」「文件和文件夹」「虚拟磁盘」分好类，点哪一项右边只显示那一项的说明和按钮，不用一路往下滚。下次打开停在上次看的那一项。</Run></TextBlock>
+                </StackPanel>
+                <Grid Margin="0,16,0,0">
                   <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="10"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                   <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource HelpTile}">
@@ -13281,6 +13654,7 @@ if ($script:mode -match '(?i)/autoclean') {
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="所有者和排序"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>「找文件」最多列 1000 个，可以按大小或修改时间排序，按文件的所有者（Windows 账户）筛选；NTFS 压缩过的文件写明压缩后的大小。</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>列表上方的表头可以点「名称」「修改时间」「大小」排序，再点一下反过来，点第三下回到原来的顺序；换个文件夹也按这个顺序排。「和上次比」的表格点列名排序。</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="最近改动"/>
@@ -13361,7 +13735,7 @@ if ($script:mode -match '(?i)/autoclean') {
               <StackPanel>
                 <StackPanel Margin="0,14,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="软件列表"/>
-                  <TextBlock Style="{StaticResource HelpBody}"><Run>列出装过的所有软件（包括应用商店里的），按占用空间从大到小排。可以只看装在 C 盘的，或者按名字搜索。</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>列出装过的所有软件（包括应用商店里的），按占用空间从大到小排。可以只看装在 C 盘的，或者按名字搜索。表头可以点「名称」「发行商」「安装日期」「大小」排序，再点一下反过来；开机启动、计划任务、右键菜单可以按名称、状态排。</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="卸载"/>
@@ -13428,6 +13802,8 @@ if ($script:mode -match '(?i)/autoclean') {
                 <StackPanel Margin="0,14,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="选项卡"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>标题旁一排选项卡：硬件、开机用时、蓝屏和崩溃、常见问题修复、活动监控、Windows 事件。点哪一项只显示哪一项，各自上下滚动，不用把整页拉到底。下次打开停在上次看的那一项。</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>「蓝屏和崩溃」里再分三个小选项卡：诊断结论、每次蓝屏、相关事件和驱动，小选项卡上写着有几条。</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>「常见问题修复」左边是问题列表，右边只显示选中的那个问题的修法；活动监控的表格占满这一页，表格自己滚动。</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="硬件"/>
@@ -13459,7 +13835,7 @@ if ($script:mode -match '(?i)/autoclean') {
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="谁在让电脑变慢"/>
-                  <TextBlock Style="{StaticResource HelpBody}"><Run>点「开始监控」，每 3 秒采一次样：各程序这段时间用了多少 CPU、占多少内存、往磁盘写得多快、本次监控一共写了多少、从进程启动起一共写了多少；同名进程合在一起算，可以按写入、CPU、内存排。不装常驻服务，关掉本工具就停。</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>点「开始监控」，每 3 秒采一次样：各程序这段时间用了多少 CPU、占多少内存、往磁盘写得多快、本次监控一共写了多少、从进程启动起一共写了多少；同名进程合在一起算。点列名（程序、CPU、内存、写入速度、本次监控写入、启动以来写入）按那一列从高到低排，再点一下从低到高；表格只列前 25 个，换了排序就重新按这一列取前 25 个。不装常驻服务，关掉本工具就停。</Run></TextBlock>
                   <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>写入量不等于磁盘净占用增长（临时文件写了又删）。哪个进程写了哪个文件，只有监控开着的时间段能对上：把「空间地图 → 最近改动」里变大的文件夹和这里写入多的程序放在一起看。</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
@@ -13525,6 +13901,10 @@ if ($script:mode -match '(?i)/autoclean') {
               </Expander.Header>
               <StackPanel>
                 <StackPanel Margin="0,14,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="选项卡"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>标题旁一排选项卡：空间提醒、定期自动清理、空间变化，点哪一项只显示哪一项；选项卡上写着开着还是关着、记了几天。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="空间不足提醒"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>打开后，每次登录电脑 2 分钟后、以及每天中午各检查一次 C 盘，低于你设定的值（默认 20 GB）就在屏幕右下角提醒，每天最多一次；空间够就什么都不显示。</Run></TextBlock>
                 </StackPanel>
@@ -13930,37 +14310,184 @@ $script:tUi = $script:startClock.Elapsed.TotalSeconds
 $ctl = @{}
 foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageMap','PageSave','PageApps','PageMoves','PageAuto','PageLog','BtnDupMerge',
                'MapDrive','BtnMapStop','BtnMapScan','MapViewDirs','MapViewFiles','MapViewGrow','BtnMapUp','MapPath','MapInfo','MapList','MapGrow','EmptyMap','EmptyMapText','BtnMapOpen','BtnMapCompress','BtnMapDelete','MapSel',
-               'SaveScroll','BtnSaveRefresh','BtnCosOff','BtnCosOn','SaveCosState','SavePfState','SavePfDrive','BtnPfMove','BtnPfAuto','SaveHibState','BtnHibReduced','BtnHibOff','BtnHibFull','BtnFolderCompress','SaveFcState','VdList','VdEmpty','BtnGoDup',
+               'SaveScroll','SaveNav','SaveNavCos','SaveNavPf','SaveNavHib','SaveNavRs','SaveNavCs','SaveNavDump','SaveNavRp','SaveNavTmp','SaveNavFc','SaveNavOd','SaveNavMerge','SaveNavVd','SaveHeadSys','SaveHeadSafe','SaveHeadFiles','SaveHeadVd','BtnSaveRefresh','BtnCosOff','BtnCosOn','SaveCosState','SavePfState','SavePfDrive','BtnPfMove','BtnPfAuto','SaveHibState','BtnHibReduced','BtnHibOff','BtnHibFull','BtnFolderCompress','SaveFcState','VdList','VdEmpty','BtnGoDup',
                'BtnAppsRefresh','AppsAll','AppsC','AppsStore','AppsInfo','AppsSearch','AppsLeftBox','BtnAppsLeftClose','BtnAppsLeft','AppsLeftText','AppsList','EmptyApps','EmptyAppsText',
                'BtnAppsUpdates','AppsViewApps','AppsViewStartup','AppsViewTasks','AppsViewMenu','AppsViewLeft','AppsViewBox','AppsFilterBox','StartList','MapHealthBox','MapHealth','MapHealthNote','SetMapHealth',
                'MapViewTypes','MapViewRecent','MapOwner','MapSort','MapGrowBar','MapGrowBase','MapRecentBar','MapRecentDays','BtnMapRecent','MapGrid','MapOverview','MapOvPct','MapOvTitle','MapOvUsed','MapOvBar','MapOvLegend',
                'NavHealth','PageHealth','HTabHw','HTabBoot','HTabCrash','HTabFix','HTabMon','HTabEvents','HealthViewHw','HealthViewBoot','HealthViewCrash','HealthViewFix','HealthViewMon','HealthViewEvents',
-               'HealthCardVerdict','BtnCopyReport','BtnDiagPack','HealthVerdicts','HealthCardFix','FixRecBox','FixRecHead','FixRec','FixGroups','BtnHealthRefresh','HealthNote','HealthCardHw','HealthCards','HealthCardBoot','HealthBootText','HealthSlow','HealthCardCrash','BtnSfcCheck','BtnSfcRepair','HealthCrashText','HealthDumps','HealthEventsHead','HealthEvents','HealthDriversHead','HealthDrivers',
-               'HealthCardMon','MonSortWrite','MonSortCpu','MonSortMem','BtnMonStart','BtnMonStop','HealthMonText','MonList','HealthCardEvents','HealthWinText','HealthErrors','SetPageHealth',
+               'HealthCardVerdict','BtnCopyReport','BtnDiagPack','HealthVerdicts','HealthCardFix','FixRecBox','FixRecHead','FixRec','FixGroups','FixDetail','FixDetailScroll','CTabVerdict','CTabDumps','CTabEvents','CrashViewVerdict','CrashViewDumps','CrashViewEvents','BtnHealthRefresh','HealthNote','HealthCardHw','HealthCards','HealthCardBoot','HealthBootText','HealthSlow','HealthCardCrash','BtnSfcCheck','BtnSfcRepair','HealthCrashText','HealthDumps','HealthEventsHead','HealthEvents','HealthDriversHead','HealthDrivers',
+               'HealthCardMon','BtnMonStart','BtnMonStop','HealthMonText','MonList','HealthCardEvents','HealthWinText','HealthErrors','SetPageHealth',
                'SaveCardCos','SaveCardPf','SaveCardHib','SaveCardRp','SaveCardFc','SaveCardOd','SaveCardRs','SaveCardCs','SaveCardDump','SaveCardTmp','SaveCardVd','SaveCardMerge','SetCardMode','SetCardDisplay','SetCardScan','SetModeBasic','SetModePro','SetModeExpert','SetModeNote','ModeTag','AutoJunkRow','FbCopyDiag','FbSelfTest','FbCheckUpdate','MapViewBox',
                'BtnOdFree','SaveOdState','BtnRsOn','BtnRsOff','SaveRsState','BtnCsAnalyze','BtnCsClean','SaveCsState','BtnDumpSmall','BtnDumpAuto','SaveDumpState','SaveTmpState','SaveTmpDrive','BtnTmpMove','BtnTmpAuto','BtnCleanCustom','AutoJunkGB','AutoCleanWhen','SetCleanCard','SetRecycle','SetRecycleRow','SetCustomHead','SetCustomNote','SetExcludeHead','SetExcludeNote','SetCustomList','SetCustomEmpty','BtnSetCustomAdd','SetExcludeList','SetExcludeEmpty','BtnSetExcludeAdd',
                'BtnMovesRefresh','MovesInfo','MovesList','EmptyMoves','EmptyMovesText',
-               'AutoRemindOn','AutoRemindGB','AutoRemindNote','AutoCleanOn','AutoCleanNote','HistInfo','HistChart','HistLast','HistFirst',
+               'AutoRemindOn','AutoRemindGB','AutoRemindNote','AutoCleanOn','AutoCleanNote','HistInfo','HistChart','HistLast','HistFirst','ATabRemind','ATabClean','ATabHist','ATabRemindState','ATabCleanState','ATabHistState','AutoViewRemind','AutoViewClean','AutoViewHist',
                'BtnLogOpenDir','BtnLogRefresh','LogKeep','LogKeepNote','LogCats','LogRange','LogSearch','LogCount','LogList','EmptyLog','EmptyLogText',
                'BtnLang','BtnLangText','BtnTheme','BtnThemeText','NavHelp','PageHelp','HelpScroll','HelpSections','HelpFaq','BtnHelpExpand','FeedbackCard','RiskCard','BtnFeedback','BtnGitHub','BtnIssue','BtnCopyDiag','BtnOpenLog','CopyHint','BtnSelfTest','BtnCheckUpdate','MapFast','MapChat',
                'NavClean','NavDup','PageClean','PageDup','AppVer','BtnLog','BtnLogText','BtnLogHide','LogPanel','Dim',
                'CapFree','CapTotal','CapBar','CapReclaim','EmptyClean','EmptyCleanText','EmptyDup','EmptyDupText','SizeCustomRow',
                'DestPick','BtnDestBrowse','DestHint','BtnOneClick','BtnScan','BtnRun','BtnHogs','Hint','List','CleanMenu','CmOpen','CmOpenAll','CmCopy','Summary','Log',
                'Roots','BtnAddRoot','BtnDupScan','BtnDupStop',
-               'FilterExpander','FilterSummary','TypeChips','TypeReset','ExtraExt','SizeChips',
+               'DupFilterCard','DupFilterToggle','DupFilterBody','DTabRoots','DTabType','DTabSize','DTabMode','DTabRootsVal','DTabTypeVal','DTabSizeVal','DTabModeVal','DPaneRoots','DPaneType','DPaneSize','DPaneMode','FilterSummary','TypeChips','TypeReset','ExtraExt','SizeChips',
                'SizeMin','SizeMinUnit','SizeMax','SizeMaxUnit','SizeHint','ModeName','ModeContent','SpeedFast','SpeedExact',
                'DupProgressText','DupList','DupRecycle','DupProtect','BtnDupDelete','ModeSimilar','SimilarRow','SimStrict','SimNormal','SimLoose','BtnKeepIn','BtnKeepShort','BtnDupMove',
                'OpPanel','OpTime','OpTitle','OpBar','OpSubTime','OpDetail','OpSubBar','Root',
                'Overlay','OvTitle','OvTime','OvBar','OvStep','OvWhat','OvChecklist','OvDetail','OvSubBar','OvPlanBox','OvPlanScroll','OvPlan','OvHide','OvClose','OvNote',
                'BtnKeepNew','BtnKeepOld','BtnPickC','BtnPickNone','DupSummary',
-               'CleanScroll','CleanMore','CleanMoreText','CleanOverview','CleanOverviewText',
+               'CleanScroll','CleanMore','CleanMoreText','CleanOverview','CleanOverviewText','CleanHost','CleanBar','CleanBarSlot','CleanListCard','CleanFilterEmpty','CleanTabs','CleanTabInfo','CleanTabNote','CleanHead','CleanOpFilter',
                'OvCancel','OpCancel','MovesTabCand','MovesTabDone','CandList','EmptyCand','EmptyCandText','MovesCard','CandStore','BtnCandStore','CandStoreText','CandBar','MovesDest','BtnCandMove','BtnCandAll','BtnCandNone','CandSel','MapViewTree','BtnMapReport','MapTree','BtnMapExport','MapFilter','MapMinSize','MapAge','MapType','MapName','MapUnder',
                'MapAll','BtnMapAcct','MapMenu','MmEnter','MmOpen','MmCopy','MmCompress','MmDelete','NavHeadManage','NavSettings','PageSettings','SetScroll','BtnSetReset',
-               'SetThemeLight','SetThemeDark','SetThemeSystem','SetLangZh','SetLangEn','SetPageDup','SetPageSave','SetPageApps','SetPageMoves','SetPageAuto','SetPageLog',
+               'AppsHeadBox','AppsHead','StartHead','CandBox','CandHead','MovesHeadBox','MovesHead','MapHeadBox','MapHead','SetThemeLight','SetThemeDark','SetThemeSystem','SetLangZh','SetLangEn','SetPageDup','SetPageSave','SetPageApps','SetPageMoves','SetPageAuto','SetPageLog',
                'SetLinkTheme','SetLinkLang','SetLinkFeedback','SetLinkLog','SetPageSub','SetMapCheck','SetMapBar','SetMapPct','SetMapMeta','SetMapDisk','SetMapFastBtn','SetFast','SetLowIo',
                'SaveRpState','BtnRestoreOpen') { $ctl[$n] = $win.FindName($n) }
 # 右键菜单不在窗口的元素树里：万一按名字找不到，就从菜单里一个个取
 if (-not $ctl.MmDelete -and $ctl.MapList.ContextMenu) { $ctl.MapMenu = $ctl.MapList.ContextMenu; foreach ($it in $ctl.MapMenu.Items) { if ($it.Name) { $ctl[$it.Name] = $it } } }
+if (-not $ctl.CmOpen -and $ctl.List.ContextMenu) { $ctl.CleanMenu = $ctl.List.ContextMenu; foreach ($it in $ctl.CleanMenu.Items) { if ($it.Name) { $ctl[$it.Name] = $it } } }
+
+# ---------- 列表排序：点表头按这一列排，再点一下反过来；切换筛选、数据刷新以后还按原来的排 ----------
+# 每个列表一份配置：Cols 是「表头的键 → 按哪个属性排、是不是数字」（数字第一次点从大到小，文字从 A 到 Z）；
+# Pre 是排在前面、不随表头变的键（比如「其余 N 项」那一行永远在最后、重复文件按组）；Filter 是筛选（清理页按组和操作）
+$script:sortCfg = @{}
+function Register-ListSort([string]$name, [hashtable]$cols, [string[]]$pre = @(), $bar = $null, [string]$defProp = '', [bool]$defDesc = $true, [switch]$Tri) {
+    $lv = $ctl[$name]; if (-not $lv) { return }
+    $cfg = @{ Name = $name; Cols = $cols; Pre = $pre; Prop = ''; Desc = $true; Heads = @{}; Bar = $bar; Filter = $null; Tri = [bool]$Tri; After = $null }
+    # 记住的排序（每个列表一个设置）；没有就用默认的
+    $saved = Get-Setting ('Sort.' + $name) ''
+    if ($saved -match '^(\w+)\|([01])$' -and @($cols.Values | Where-Object { $_.Prop -eq $Matches[1] }).Count) { $cfg.Prop = $Matches[1]; $cfg.Desc = ($Matches[2] -eq '1') }
+    elseif ($defProp) { $cfg.Prop = $defProp; $cfg.Desc = $defDesc }
+    $script:sortCfg[$name] = $cfg
+    if ($lv.View -is [System.Windows.Controls.GridView]) {
+        $i = 0; foreach ($c in $lv.View.Columns) { $cfg.Heads[[string]$i] = [string]$c.Header; $i++ }
+        $lv.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent, [System.Windows.RoutedEventHandler]{
+            param($s, $e)
+            $h = $e.OriginalSource
+            if ($h -isnot [System.Windows.Controls.GridViewColumnHeader] -or -not $h.Column) { return }
+            Invoke-HeaderSort ([string]$s.Name) ([string]$s.View.Columns.IndexOf($h.Column))
+        })
+    }
+    if ($bar) {
+        foreach ($b in @(Find-Buttons $bar)) { if ($b.Tag -is [string] -and $cols.ContainsKey([string]$b.Tag)) { $cfg.Heads[[string]$b.Tag] = [string]$b.Content; $b.Tag = $name + '|' + [string]$b.Tag } }
+        $bar.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent, [System.Windows.RoutedEventHandler]{
+            param($s, $e)
+            $b = $e.OriginalSource
+            if ($b -is [System.Windows.Controls.Button] -and [string]$b.Tag -match '^(\w+)\|(\w+)$') { Invoke-HeaderSort $Matches[1] $Matches[2] }
+        })
+    }
+    # 换了数据（ItemsSource）就按记住的方式重新排、重新筛
+    $dpd = [System.ComponentModel.DependencyPropertyDescriptor]::FromProperty([System.Windows.Controls.ItemsControl]::ItemsSourceProperty, [System.Windows.Controls.ItemsControl])
+    $dpd.AddValueChanged($lv, [EventHandler]{ param($s, $e) Apply-ListSort ([string]$s.Name); Update-HeadVis })
+    Update-SortHeads $name
+    Apply-ListSort $name
+}
+# 自己画的表头和列表对齐：列表出现竖滚动条时，表头右边让出滚动条那么宽
+$script:headPads = @{}
+function Register-HeadPad($lv, $head) {
+    if (-not $lv -or -not $head) { return }
+    $script:headPads[[string]$lv.Name] = @{ Head = $head; Base = $head.Margin; Pad = -1 }
+    $lv.AddHandler([System.Windows.Controls.ScrollViewer]::ScrollChangedEvent, [System.Windows.Controls.ScrollChangedEventHandler]{
+        param($s, $e)
+        $sv = $e.OriginalSource
+        if ($sv -isnot [System.Windows.Controls.ScrollViewer]) { return }
+        $hp = $script:headPads[[string]$s.Name]; if (-not $hp) { return }
+        $pad = if ($sv.ComputedVerticalScrollBarVisibility -eq 'Visible') { [double][System.Windows.SystemParameters]::VerticalScrollBarWidth } else { [double]0 }
+        if ($pad -eq $hp.Pad) { return }
+        $hp.Pad = $pad; $b = $hp.Base
+        $hp.Head.Margin = New-Object System.Windows.Thickness $b.Left, $b.Top, ($b.Right + $pad), $b.Bottom
+    })
+}
+# 表头只在列表显示、而且有内容时出现（空列表上面不留一排孤零零的列名）
+$script:headOf = [ordered]@{}
+function Update-HeadVis {
+    foreach ($n in @($script:headOf.Keys)) {
+        $lv = $ctl[$n]; $h = $script:headOf[$n]; if (-not $lv -or -not $h) { continue }
+        $h.Visibility = if ($lv.Visibility -eq 'Visible' -and $lv.Items.Count -gt 0) { 'Visible' } else { 'Collapsed' }
+    }
+    if ($ctl.AppsHeadBox) { $ctl.AppsHeadBox.Visibility = if ($ctl.AppsHead.Visibility -eq 'Visible' -or $ctl.StartHead.Visibility -eq 'Visible') { 'Visible' } else { 'Collapsed' } }
+}
+function Find-Buttons($root) {
+    $out = New-Object System.Collections.Generic.List[object]
+    $q = New-Object System.Collections.Queue; $q.Enqueue($root)
+    while ($q.Count -gt 0) {
+        $v = $q.Dequeue()
+        if ($v -is [System.Windows.Controls.Button]) { $out.Add($v) }
+        if ($v -is [System.Windows.DependencyObject]) { foreach ($c in [System.Windows.LogicalTreeHelper]::GetChildren($v)) { if ($c -is [System.Windows.DependencyObject]) { $q.Enqueue($c) } } }
+    }
+    return $out
+}
+function Invoke-HeaderSort([string]$name, [string]$key) {
+    $cfg = $script:sortCfg[$name]; if (-not $cfg -or -not $cfg.Cols.ContainsKey($key)) { return }
+    $col = $cfg.Cols[$key]
+    $first = [bool]$col.Num   # 数字第一次点从大到小，文字从 A 到 Z
+    if ($cfg.Prop -eq $col.Prop) {
+        # 本来的顺序有意义的列表（清理页按安全程度排、空间地图按大小排）：点第三下回到本来的顺序
+        if ($cfg.Tri -and $cfg.Desc -ne $first) { $cfg.Prop = ''; $cfg.Desc = $true } else { $cfg.Desc = -not $cfg.Desc }
+    } else { $cfg.Prop = $col.Prop; $cfg.Desc = $first }
+    Set-Setting ('Sort.' + $name) $(if ($cfg.Prop) { '{0}|{1}' -f $cfg.Prop, [int]$cfg.Desc } else { '' })
+    Apply-ListSort $name
+    Update-SortHeads $name
+    if ($cfg.After) { & $cfg.After }   # 比如活动监控：换了排序就重新取前 25 个
+}
+# 表头上的箭头：↓ 从大到小（或 Z 到 A），↑ 从小到大（或 A 到 Z）
+function Update-SortHeads([string]$name) {
+    $cfg = $script:sortCfg[$name]; if (-not $cfg) { return }
+    $lv = $ctl[$name]
+    foreach ($k in @($cfg.Cols.Keys)) {
+        $label = [string]$cfg.Heads[$k]
+        $on = $cfg.Prop -and $cfg.Cols[$k].Prop -eq $cfg.Prop
+        $text = $label + $(if ($on) { $(if ($cfg.Desc) { ' ↓' } else { ' ↑' }) } else { '' })
+        if ($lv.View -is [System.Windows.Controls.GridView] -and $k -match '^\d+$' -and [int]$k -lt $lv.View.Columns.Count) { $lv.View.Columns[[int]$k].Header = $text }
+        if ($cfg.Bar) {
+            foreach ($b in @(Find-Buttons $cfg.Bar)) {
+                if ([string]$b.Tag -ne ($name + '|' + $k)) { continue }
+                $b.Content = $text; $b.FontWeight = $(if ($on) { 'SemiBold' } else { 'Normal' })
+                if ($on) { $b.Foreground = New-Brush '#1D1D1F' } else { $b.ClearValue([System.Windows.Controls.Control]::ForegroundProperty) }
+            }
+        }
+    }
+}
+# 排序换回默认（自测用完恢复，不改用户记住的设置）
+function Reset-ListSort([string]$name, [string]$prop, [bool]$desc) {
+    $cfg = $script:sortCfg[$name]; if (-not $cfg) { return }
+    $cfg.Prop = $prop; $cfg.Desc = $desc; Set-Setting ('Sort.' + $name) $(if ($prop) { '{0}|{1}' -f $prop, [int]$desc } else { '' })
+    Apply-ListSort $name; Update-SortHeads $name
+}
+# 自测用：表格某一列的表头（GridViewColumnHeader），用来模拟点表头
+function Find-GridHead($lv, [int]$i) {
+    $col = $lv.View.Columns[$i]
+    $q = New-Object System.Collections.Queue; $q.Enqueue($lv)
+    while ($q.Count -gt 0) {
+        $v = $q.Dequeue()
+        if ($v -is [System.Windows.Controls.GridViewColumnHeader] -and [object]::ReferenceEquals($v.Column, $col)) { return $v }
+        for ($k = 0; $k -lt [System.Windows.Media.VisualTreeHelper]::GetChildrenCount($v); $k++) { $q.Enqueue([System.Windows.Media.VisualTreeHelper]::GetChild($v, $k)) }
+    }
+    return $null
+}
+# 自测用：列表是不是按某个属性排好的（数字按大小，文字按当前语言的顺序）
+function Test-SortedBy($items, [string]$prop, [bool]$desc) {
+    $a = @($items)
+    $cmp = [System.Collections.Comparer]::new([Globalization.CultureInfo]::CurrentCulture)
+    for ($i = 1; $i -lt $a.Count; $i++) {
+        $c = $cmp.Compare($a[$i - 1].$prop, $a[$i].$prop)
+        if (($desc -and $c -lt 0) -or (-not $desc -and $c -gt 0)) { return $false }
+    }
+    return $true
+}
+function Apply-ListSort([string]$name) {
+    $cfg = $script:sortCfg[$name]; $lv = $ctl[$name]
+    if (-not $cfg -or -not $lv -or $null -eq $lv.ItemsSource) { return }
+    $view = [System.Windows.Data.CollectionViewSource]::GetDefaultView($lv.ItemsSource)
+    if (-not $view) { return }
+    try {
+        $d = $view.DeferRefresh()
+        try {
+            $view.SortDescriptions.Clear()
+            if ($cfg.Prop) {
+                foreach ($p in @($cfg.Pre)) { if ($p) { $view.SortDescriptions.Add((New-Object System.ComponentModel.SortDescription $p, ([System.ComponentModel.ListSortDirection]::Ascending))) } }
+                $view.SortDescriptions.Add((New-Object System.ComponentModel.SortDescription $cfg.Prop, $(if ($cfg.Desc) { [System.ComponentModel.ListSortDirection]::Descending } else { [System.ComponentModel.ListSortDirection]::Ascending })))
+            }
+            if ($view.CanFilter) { $view.Filter = $cfg.Filter }
+        } finally { $d.Dispose() }
+    } catch { Write-LogFile ("sort {0}: {1}" -f $name, $_.Exception.Message) }
+}
 
 # ---------- 左侧导航：两页切换 ----------
 $script:pageList = [ordered]@{
@@ -14579,11 +15106,12 @@ function Start-Worker([string]$code, $arg) {
 # 列表上方的总览：「扫描到 23 项，分 4 类：安全清理 9 项、……」
 function Update-CleanOverview {
     $col = $script:rows
+    Update-CleanTabs
     if (-not $col -or $col.Count -eq 0) { $ctl.CleanOverview.Visibility = 'Collapsed'; Update-CleanMore; return }
     $order = New-Object System.Collections.Generic.List[string]; $cnt = @{}
     foreach ($r in $col) { if (-not $cnt.ContainsKey($r.GroupTitle)) { $order.Add($r.GroupTitle); $cnt[$r.GroupTitle] = 0 }; $cnt[$r.GroupTitle]++ }
     $parts = @($order | ForEach-Object { (T "{0} {1} 项") -f $_, $cnt[$_] })
-    $ctl.CleanOverviewText.Text = (T "扫描到 {0} 项，分成 {1} 类：{2}。每一项都可以单独选「删除」「搬走」或「跳过」，往下滚动查看全部。双击一行打开它所在的文件夹，右键可以复制路径。") -f $col.Count, $order.Count, ($parts -join (T '、'))
+    $ctl.CleanOverviewText.Text = (T "扫描到 {0} 项，分成 {1} 类：{2}。点下面的选项卡切换类别，点「名称」「大小」排序，右边的下拉框可以只看某一种操作。每一项都可以单独选「删除」「搬走」或「跳过」；「执行所选操作」会处理所有类别。双击一行打开它所在的文件夹，右键可以复制路径。") -f $col.Count, $order.Count, ($parts -join (T '、'))
     $ctl.CleanOverview.Visibility = 'Visible'
     $script:cleanItems = $null
     $ctl.CleanScroll.ScrollToTop()
@@ -14673,7 +15201,7 @@ function Update-CleanMore {
     $left = [double]$sv.ScrollableHeight - [double]$sv.VerticalOffset
     if (-not $script:rows -or $script:rows.Count -eq 0 -or $left -lt 30) { $ctl.CleanMore.Visibility = 'Collapsed'; return }
     # 数一数还有几行在可视区下面（列表的行在第一次需要时从界面树里找出来，之后直接用）
-    if (-not $script:cleanItems -or $script:cleanItems.Count -ne $script:rows.Count) {
+    if (-not $script:cleanItems -or $script:cleanItems.Count -ne $ctl.List.Items.Count) {
         $found = New-Object System.Collections.Generic.List[object]
         $stack = New-Object System.Collections.Generic.Stack[object]; $stack.Push($ctl.List)
         while ($stack.Count -gt 0) {
@@ -14692,6 +15220,100 @@ function Update-CleanMore {
     $ctl.CleanMoreText.Text = if ($below -gt 0) { (T "下面还有 {0} 项") -f $below } else { (T '下面还有内容') }
     $ctl.CleanMore.Visibility = 'Visible'
 }
+# ---------- 清理页：一类一个选项卡；表头点「名称」「大小」排序，下拉框只看某一种操作；选项卡和表头滚到顶上就停住 ----------
+$script:cleanTab = ''; $script:cleanOp = ''; $script:cleanPinned = $false; $script:cleanGroups = $null
+function Update-CleanTabs {
+    $ctl.CleanTabs.Children.Clear()
+    $col = $script:rows
+    $has = [bool]($col -and $col.Count -gt 0)
+    foreach ($n in 'CleanBar', 'CleanBarSlot', 'CleanListCard') { $ctl[$n].Visibility = $(if ($has) { 'Visible' } else { 'Collapsed' }) }
+    $script:cleanItems = $null
+    if (-not $has) { return }
+    $order = New-Object System.Collections.Generic.List[string]; $cnt = @{}; $bytes = @{}; $note = @{}
+    foreach ($r in $col) {
+        $g = [string]$r.GroupTitle
+        if (-not $cnt.ContainsKey($g)) { $order.Add($g); $cnt[$g] = 0; $bytes[$g] = [double]0; $note[$g] = [string]$r.GroupNote }
+        $cnt[$g]++; if ($r.Bytes -gt 0) { $bytes[$g] += $r.Bytes }
+    }
+    $script:cleanGroups = @{ Order = $order; Cnt = $cnt; Bytes = $bytes; Note = $note }
+    if (-not $order.Contains($script:cleanTab)) { $script:cleanTab = $order[0] }
+    $seg = $win.FindResource('Seg')
+    foreach ($g in $order) {
+        $rb = New-Object System.Windows.Controls.RadioButton
+        $rb.GroupName = 'cleantab'; $rb.Style = $seg; $rb.Tag = $g
+        $sp = New-Object System.Windows.Controls.StackPanel; $sp.Orientation = 'Horizontal'
+        $t1 = New-Object System.Windows.Controls.TextBlock; $t1.Text = $g
+        $t2 = New-Object System.Windows.Controls.TextBlock; $t2.Text = [string]$cnt[$g]; $t2.Margin = New-Object System.Windows.Thickness 6, 0, 0, 0; $t2.Foreground = New-Brush '#86868B'
+        [void]$sp.Children.Add($t1); [void]$sp.Children.Add($t2); $rb.Content = $sp
+        if ($note[$g]) { $rb.ToolTip = $note[$g] }
+        $rb.IsChecked = ($g -eq $script:cleanTab)
+        $rb.Add_Checked({ Select-CleanTab ([string]$this.Tag) })
+        [void]$ctl.CleanTabs.Children.Add($rb)
+    }
+    # 操作下拉框：这次扫描里出现过的操作
+    $ops = New-Object System.Collections.Generic.List[string]
+    foreach ($r in $col) { foreach ($a in @($r.Actions)) { if ($a -and -not $ops.Contains([string]$a)) { $ops.Add([string]$a) } } }
+    if ($script:cleanOp -and -not $ops.Contains($script:cleanOp)) { $script:cleanOp = '' }
+    $script:cleanOpLoading = $true
+    try {
+        $ctl.CleanOpFilter.Items.Clear()
+        $it = New-Object System.Windows.Controls.ComboBoxItem; $it.Content = (T '全部操作'); $it.Tag = ''; [void]$ctl.CleanOpFilter.Items.Add($it)
+        foreach ($a in $ops) { $it = New-Object System.Windows.Controls.ComboBoxItem; $it.Content = (T "只看「{0}」") -f $a; $it.Tag = $a; [void]$ctl.CleanOpFilter.Items.Add($it) }
+        foreach ($it in $ctl.CleanOpFilter.Items) { if ([string]$it.Tag -eq $script:cleanOp) { $ctl.CleanOpFilter.SelectedItem = $it } }
+    } finally { $script:cleanOpLoading = $false }
+    Apply-CleanFilter
+}
+# 只显示选中的那一类、选中的那种操作；排序（表头）不变
+function Apply-CleanFilter {
+    $cfg = $script:sortCfg['List']
+    if ($cfg) { $cfg.Filter = [Predicate[object]]{ param($o) ([string]$o.GroupTitle -eq $script:cleanTab) -and (-not $script:cleanOp -or [string]$o.Action -eq $script:cleanOp) } }
+    Apply-ListSort 'List'
+    $script:cleanItems = $null
+    $n = $ctl.List.Items.Count
+    $ctl.CleanFilterEmpty.Visibility = $(if ($script:rows -and $script:rows.Count -gt 0 -and $n -eq 0) { 'Visible' } else { 'Collapsed' })
+    $gi = $script:cleanGroups
+    if ($gi -and $gi.Cnt.ContainsKey($script:cleanTab)) {
+        $ctl.CleanTabNote.Text = [string]$gi.Note[$script:cleanTab]
+        $ctl.CleanTabNote.Visibility = $(if ($ctl.CleanTabNote.Text) { 'Visible' } else { 'Collapsed' })
+        $ctl.CleanTabInfo.Text = $(if ($script:cleanOp) { (T "显示 {0} / {1} 项") -f $n, $gi.Cnt[$script:cleanTab] } else { (T "{0} 项，约 {1}") -f $gi.Cnt[$script:cleanTab], (Fmt $gi.Bytes[$script:cleanTab]) })
+    }
+}
+function Get-CleanSlotPos { try { return $ctl.CleanBarSlot.TransformToAncestor($ctl.CleanHost).Transform((New-Object System.Windows.Point 0, 0)) } catch { return $null } }
+function Select-CleanTab([string]$g) {
+    if ($g -eq $script:cleanTab) { return }
+    $p = Get-CleanSlotPos; $pinned = $p -and $p.Y -lt 0
+    $script:cleanTab = $g
+    foreach ($rb in $ctl.CleanTabs.Children) { if ([string]$rb.Tag -eq $g -and -not $rb.IsChecked) { $rb.IsChecked = $true } }
+    Apply-CleanFilter
+    # 选项卡停在顶上时换类：列表从头显示（紧贴在选项卡下面），不用再往上找
+    if ($pinned) { $ctl.CleanScroll.UpdateLayout(); $p = Get-CleanSlotPos; if ($p) { $ctl.CleanScroll.ScrollToVerticalOffset([math]::Max([double]0, $ctl.CleanScroll.VerticalOffset + $p.Y)) } }
+}
+# 浮着的那一排跟着占位的位置走；占位滚出顶边以后就停在顶上
+function Update-CleanBar {
+    if ($ctl.CleanBar.Visibility -ne 'Visible') { return }
+    $p = Get-CleanSlotPos; if (-not $p) { return }
+    $w = [double]$ctl.CleanBarSlot.ActualWidth
+    if ($w -gt 0 -and -not ($ctl.CleanBar.Width -eq $w)) { $ctl.CleanBar.Width = $w }
+    $top = [math]::Max([double]0, [double]$p.Y)
+    $m = $ctl.CleanBar.Margin
+    if ($m.Left -ne $p.X -or $m.Top -ne $top) { $ctl.CleanBar.Margin = New-Object System.Windows.Thickness $p.X, $top, 0, 0 }
+    $h = [double]$ctl.CleanBar.ActualHeight
+    if ($h -gt 0 -and -not ($ctl.CleanBarSlot.Height -eq $h)) { $ctl.CleanBarSlot.Height = $h }
+    $pin = [double]$p.Y -lt 0
+    if ($pin -ne $script:cleanPinned) {
+        $script:cleanPinned = $pin
+        $ctl.CleanBar.Effect = if ($pin) { $fx = New-Object System.Windows.Media.Effects.DropShadowEffect; $fx.BlurRadius = 10; $fx.ShadowDepth = 2; $fx.Direction = 270; $fx.Opacity = 0.14; $fx } else { $null }
+    }
+}
+$ctl.CleanBar.Add_SizeChanged({ Update-CleanBar })
+# 鼠标在选项卡和表头上滚轮：照样滚下面的列表
+$ctl.CleanBar.Add_PreviewMouseWheel({ param($s, $e) if ($ctl.CleanOpFilter.IsDropDownOpen) { return }; $ctl.CleanScroll.ScrollToVerticalOffset($ctl.CleanScroll.VerticalOffset - $e.Delta * 0.4); $e.Handled = $true })
+$ctl.CleanOpFilter.Add_SelectionChanged({
+    if ($script:cleanOpLoading) { return }
+    $it = $ctl.CleanOpFilter.SelectedItem
+    $script:cleanOp = if ($it) { [string]$it.Tag } else { '' }
+    Apply-CleanFilter
+})
 function Build-Rows($sizes) {
     $col = New-Object 'System.Collections.ObjectModel.ObservableCollection[RowItem]'
     $script:rowSig = @{}
@@ -14712,14 +15334,12 @@ function Build-Rows($sizes) {
         $r.GroupNote = if ($gp.Count -gt 1) { $gp[1].TrimEnd([char]0xFF09).TrimEnd(')') } else { '' }
         $r.First = -not $seen.ContainsKey($it.G); $seen[$it.G] = $true
         $r.SizeText = if ($b -lt 0) { (T '运行后知道') } else { Fmt $b }
+        $r.Bytes = [double]$b
         if ($b -gt 0 -and $it.Def -ne (T '跳过')) { $total += $b }
         $col.Add($r)
     }
     $script:rows = $col
-    $ctl.List.ItemsSource = $col
-    $view = [System.Windows.Data.CollectionViewSource]::GetDefaultView($col)
-    $view.GroupDescriptions.Clear()
-    $view.GroupDescriptions.Add((New-Object System.Windows.Data.PropertyGroupDescription 'Group'))
+    $ctl.List.ItemsSource = $col   # 不再分组显示：上面的选项卡一次只显示一类（Update-CleanTabs）
     $ctl.EmptyClean.Visibility = if ($col.Count -gt 0) { 'Collapsed' } else { 'Visible' }
     if ($col.Count -eq 0) { $ctl.EmptyCleanText.Text = (T 'C 盘上没找到可以清理的东西') }
     Update-CleanOverview
@@ -15311,8 +15931,36 @@ function Update-FilterSummary {
     $mode += if ($ctl.SpeedExact.IsChecked) { (T '，完整比对') } else { (T '，快速比对') }
     $n = @($script:roots | Where-Object { $_.Enabled }).Count
     $ctl.FilterSummary.Text = (T "{0}，{1}，{2}，{3} 个位置") -f $types, $size, $mode, $n
+    # 选项卡上直接写着现在的条件：收起来也看得到
+    $ctl.DTabRootsVal.Text = (T "{0} 个") -f $n
+    $ctl.DTabTypeVal.Text = $types
+    $ctl.DTabSizeVal.Text = $size
+    $ctl.DTabModeVal.Text = $(if ($ctl.ModeSimilar.IsChecked) { (T '相似照片') } elseif ($ctl.ModeName.IsChecked) { (T '名字和内容') } else { (T '只看内容') }) + (T ' · ') + $(if ($ctl.ModeSimilar.IsChecked) { $(if ($ctl.SimStrict.IsChecked) { (T '几乎一样') } elseif ($ctl.SimLoose.IsChecked) { (T '大致相似') } else { (T '相似') }) } elseif ($ctl.SpeedExact.IsChecked) { (T '完整比对') } else { (T '快速') })
 }
-foreach ($c in @($ctl.ModeName, $ctl.ModeContent, $ctl.SpeedFast, $ctl.SpeedExact)) { $c.Add_Click({ Update-FilterSummary }) }
+# ---------- 查找条件的选项卡：点一个打开那一类；再点一下（或点「收起」）收起来；开始查找时自动收起 ----------
+$script:dupPanes = [ordered]@{ roots = @('DTabRoots', 'DPaneRoots'); type = @('DTabType', 'DPaneType'); size = @('DTabSize', 'DPaneSize'); mode = @('DTabMode', 'DPaneMode') }
+$script:dupPane = 'roots'; $script:dupTabQuiet = $false; $script:dupTabWas = $false
+function Set-DupFilterOpen([bool]$open, [string]$pane = '') {
+    if ($pane -and $script:dupPanes.Contains($pane)) { $script:dupPane = $pane }
+    $ctl.DupFilterBody.Visibility = $(if ($open) { 'Visible' } else { 'Collapsed' })
+    $script:dupTabQuiet = $true
+    try {
+        foreach ($k in $script:dupPanes.Keys) {
+            $ctl[$script:dupPanes[$k][1]].Visibility = $(if ($k -eq $script:dupPane) { 'Visible' } else { 'Collapsed' })
+            $ctl[$script:dupPanes[$k][0]].IsChecked = ($open -and $k -eq $script:dupPane)   # 收起时一个都不选中，看得出是收着的
+        }
+    } finally { $script:dupTabQuiet = $false }
+    $ctl.DupFilterToggle.Content = $(if ($open) { (T '收起') } else { (T '展开条件') })
+}
+foreach ($k in $script:dupPanes.Keys) {
+    $rb = $ctl[$script:dupPanes[$k][0]]; $rb.Tag = $k
+    $rb.Add_Checked({ if ($script:dupTabQuiet) { return }; Set-DupFilterOpen $true ([string]$this.Tag) })
+    # 点已经打开的那个选项卡：收起来
+    $rb.Add_PreviewMouseLeftButtonDown({ $script:dupTabWas = [bool]$this.IsChecked -and $ctl.DupFilterBody.Visibility -eq 'Visible' })
+    $rb.Add_Click({ if ($script:dupTabWas) { Set-DupFilterOpen $false }; $script:dupTabWas = $false })
+}
+$ctl.DupFilterToggle.Add_Click({ Set-DupFilterOpen ($ctl.DupFilterBody.Visibility -ne 'Visible') })
+foreach ($c in @($ctl.ModeName, $ctl.ModeContent, $ctl.SpeedFast, $ctl.SpeedExact, $ctl.SimStrict, $ctl.SimNormal, $ctl.SimLoose)) { $c.Add_Click({ Update-FilterSummary }) }
 # 点胶囊 = 勾选/取消；点自己加的文件夹上的小叉 = 移除
 $ctl.Roots.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent, [System.Windows.RoutedEventHandler]{
     param($s, $e)
@@ -15483,7 +16131,7 @@ function Start-SimilarScan([string[]]$paths, $range) {
     $dist = if ($ctl.SimStrict.IsChecked) { 4 } elseif ($ctl.SimLoose.IsChecked) { 12 } else { 8 }
     $script:dupRows = $null; $script:dupByGroup = @{}; $ctl.DupList.ItemsSource = $null
     $ctl.EmptyDup.Visibility = 'Visible'; $ctl.EmptyDupText.Text = (T '正在找照片…')
-    $ctl.FilterExpander.IsExpanded = $false
+    Set-DupFilterOpen $false
     $sync.Mode = 'similar'; $sync.DupResult = $null; $sync.SimNote = ''
     Start-Op (T '查找相似照片')
     $ctl.DupProgressText.Text = (T '正在找照片…')
@@ -15530,9 +16178,9 @@ $sync.SimNote = (T "看了 {0:N0} 张照片，{1:N0} 张读不了，{2} 组相�
 }
 $ctl.BtnDupScan.Add_Click({
     $paths = @($script:roots | Where-Object { $_.Enabled } | ForEach-Object { $_.Path })
-    if (-not $paths) { Show-Sheet -Title (T '还没选查找位置') -Text (T '请在「查找位置」里至少勾选一个文件夹或磁盘。') | Out-Null; $ctl.FilterExpander.IsExpanded = $true; return }
+    if (-not $paths) { Show-Sheet -Title (T '还没选查找位置') -Text (T '请在「查找位置」里至少勾选一个文件夹或磁盘。') | Out-Null; Set-DupFilterOpen $true 'roots'; return }
     $range = Get-SizeRange
-    if (-not $range.Ok) { Show-Sheet -Kind warn -Title (T '文件大小填写有误') -Text $range.Err | Out-Null; $ctl.FilterExpander.IsExpanded = $true; return }
+    if (-not $range.Ok) { Show-Sheet -Kind warn -Title (T '文件大小填写有误') -Text $range.Err | Out-Null; Set-DupFilterOpen $true 'size'; return }
     if ($ctl.ModeSimilar.IsChecked) { Start-SimilarScan $paths $range; return }
     $ext = Get-SelectedExt
     $script:dupRows = $null; $script:dupByGroup = @{}; $ctl.DupList.ItemsSource = $null
@@ -15546,7 +16194,7 @@ $ctl.BtnDupScan.Add_Click({
         Exact     = [bool]$ctl.SpeedExact.IsChecked
     }
     $sync.DriveNote = ''
-    $ctl.FilterExpander.IsExpanded = $false
+    Set-DupFilterOpen $false
     $sync.Mode = 'dup'; $sync.DupResult = $null
     Start-Op (T '查找重复文件')
     $ctl.DupProgressText.Text = (T '正在查找…')
@@ -16282,7 +16930,7 @@ function Refresh-MapFiles { if ($script:mapView -eq 'files' -and $script:mapRoot
 $ctl.MapMinSize.Add_SelectionChanged({ Refresh-MapFiles })
 $ctl.MapAge.Add_SelectionChanged({ Refresh-MapFiles })
 $ctl.MapType.Add_SelectionChanged({ Refresh-MapFiles })
-$ctl.MapSort.Add_SelectionChanged({ Refresh-MapFiles })
+$ctl.MapSort.Add_SelectionChanged({ if ($script:sortCfg['MapList'] -and $script:sortCfg['MapList'].Prop) { Reset-ListSort 'MapList' '' $true }; Refresh-MapFiles })
 $ctl.MapOwner.Add_SelectionChanged({ if (-not $script:ownerFill) { Refresh-MapFiles } })
 $ctl.MapUnder.Add_Checked({ $ctl.MapChat.IsChecked = $false; Refresh-MapFiles })
 $ctl.MapUnder.Add_Unchecked({ Refresh-MapFiles })
@@ -16316,6 +16964,7 @@ function Set-MapView([string]$v) {
     $ctl.MapGrid.RowDefinitions[1].Height = if ($tree) { New-Object System.Windows.GridLength 3, ([System.Windows.GridUnitType]::Star) } else { New-Object System.Windows.GridLength 0 }
     $ctl.MapGrid.RowDefinitions[2].Height = if ($tree) { New-Object System.Windows.GridLength 2, ([System.Windows.GridUnitType]::Star) } else { New-Object System.Windows.GridLength 1, ([System.Windows.GridUnitType]::Star) }
     $ctl.MapList.Visibility = if ($grow) { 'Collapsed' } else { 'Visible' }
+    Update-HeadVis
     if (-not $script:mapRoot) { $ctl.MapOverview.Visibility = 'Collapsed'; return }
     if ($v -eq 'dirs' -or $tree) { Show-MapLevel $(if ($script:mapCur) { $script:mapCur } else { $script:mapRoot }) }
     elseif ($v -eq 'files') { Show-MapOverview; Show-MapFiles }
@@ -17236,6 +17885,7 @@ function Set-MovesTab([string]$t) {
     $ctl.CandList.Visibility = if ($c) { 'Visible' } else { 'Collapsed' }
     $ctl.EmptyCand.Visibility = if ($c -and -not ($script:candRows -and $script:candRows.Count -gt 0)) { 'Visible' } else { 'Collapsed' }
     $ctl.MovesCard.Visibility = if ($c) { 'Collapsed' } else { 'Visible' }
+    Update-HeadVis
     $ctl.CandBar.Visibility = if ($c) { 'Visible' } else { 'Collapsed' }
     $ctl.CandStore.Visibility = if ($c -and @($script:storeChat).Count -gt 0) { 'Visible' } else { 'Collapsed' }
     $ctl.MovesInfo.Text = if ($c) { $script:candInfo } else { $script:doneInfo }
@@ -17355,7 +18005,7 @@ function Build-CandRows($list) {
         if ($x.Partial -and $r.CanMove) { $r.Status = (T '上次已经复制过一部分，这次只补有变化的文件'); $r.StatusBrush = '#0A6ED1' }
         $gt = if ($g -eq 'chat' -or $g -eq 'other') { T ([string]$x.G) } else { $gText[$g] }
         $gp = $gt.Split([char]0xFF08, 2); if ($gp.Count -lt 2) { $gp = $gt.Split([char]'(', 2) }
-        $r.Group = $g; $r.GroupTitle = $gp[0].Trim()
+        $r.Group = $g; $r.GroupOrder = [int]$order[$g]; $r.GroupTitle = $gp[0].Trim()
         $r.GroupNote = if ($gp.Count -gt 1) { $gp[1].TrimEnd([char]0xFF09).TrimEnd(')') } else { '' }
         $r.First = -not $seen.ContainsKey($g); $seen[$g] = $true
         $col.Add($r)
@@ -17719,6 +18369,10 @@ function Show-Health($r) {
     foreach ($x in @($cr.Drivers | Select-Object -First 12)) { $n = New-Object NoteRow; $n.Head = ("{0} {1} {2}" -f $x.Provider, $x.Name, $x.Version).Trim(); $n.Path = $x.Device; $n.Body = '{0:MM-dd HH:mm}' -f $x.When; $drs.Add($n) }
     if ($drs.Count -eq 0) { $n = New-Object NoteRow; $n.Head = (T '最近 30 天没有装过驱动'); $drs.Add($n) }
     $ctl.HealthDrivers.ItemsSource = $drs
+    # 小选项卡上写明有几条，不点进去也知道
+    $ctl.CTabDumps.Content = (T '每次蓝屏') + $(if ($dumps.Count -gt 0) { '  ' + $dumps.Count } else { '' })
+    $nEv = @($cr.Events).Count + @($cr.Drivers).Count
+    $ctl.CTabEvents.Content = (T '相关事件和驱动') + $(if ($nEv -gt 0) { '  ' + $nEv } else { '' })
     # Windows 事件
     $errs = New-Object 'System.Collections.ObjectModel.ObservableCollection[NoteRow]'
     foreach ($x in @($w.Errors)) { $n = New-Object NoteRow; $n.Head = ("{0}：{1}" -f $x.Source, $x.Sample); $n.Path = $x.Sample; $n.Body = (T "{0} 次，最近 {1:MM-dd HH:mm}") -f $x.Count, $x.Last; $errs.Add($n) }
@@ -17726,6 +18380,15 @@ function Show-Health($r) {
     $ctl.HealthWinText.Text = if ($w.ErrorCount -gt 0) { (T "最近 7 天系统日志里有 {0} 条严重或错误事件，来源最多的几个：") -f $w.ErrorCount } else { (T '最近 7 天系统日志里没有严重或错误事件。') }
 }
 $ctl.HealthDumps.AddHandler([System.Windows.Controls.Button]::ClickEvent, [System.Windows.RoutedEventHandler]{ param($s, $e) $b = $e.OriginalSource; if ($b -is [System.Windows.Controls.Button] -and $b.Tag -is [DumpRow]) { Open-Location $b.Tag.File } })
+# 「蓝屏和崩溃」里的三个小选项卡
+$script:crashTabs = [ordered]@{ verdict = @('CTabVerdict', 'CrashViewVerdict'); dumps = @('CTabDumps', 'CrashViewDumps'); events = @('CTabEvents', 'CrashViewEvents') }
+function Select-CrashTab([string]$k) {
+    if (-not $script:crashTabs.Contains($k)) { $k = 'verdict' }
+    foreach ($t in $script:crashTabs.Keys) { $ctl[$script:crashTabs[$t][1]].Visibility = $(if ($t -eq $k) { 'Visible' } else { 'Collapsed' }) }
+    $rb = $ctl[$script:crashTabs[$k][0]]; if (-not $rb.IsChecked) { $rb.IsChecked = $true }
+    $script:crashTab = $k
+}
+foreach ($t in $script:crashTabs.Keys) { $rb = $ctl[$script:crashTabs[$t][0]]; $rb.Tag = $t; $rb.Add_Checked({ Select-CrashTab ([string]$this.Tag) }) }
 # ---------- 选项卡：点哪一项只显示哪一项 ----------
 $script:healthTabs = [ordered]@{ hw = @('HTabHw', 'HealthViewHw'); boot = @('HTabBoot', 'HealthViewBoot'); crash = @('HTabCrash', 'HealthViewCrash'); fix = @('HTabFix', 'HealthViewFix'); mon = @('HTabMon', 'HealthViewMon'); events = @('HTabEvents', 'HealthViewEvents') }
 $script:healthTab = Get-Setting 'HealthTab' 'hw'; $script:htabQuiet = $false
@@ -17786,8 +18449,14 @@ function Show-Fixes($st) {
         }
         if ($g.Steps.Count -gt 0) { $col.Add($g) }
     }
+    # 左边的问题列表换了内容，原来选的那个问题还选着（第一次打开选记住的那个，没有就选第一个）
+    $keep = if ($ctl.FixGroups.SelectedItem) { [string]$ctl.FixGroups.SelectedItem.Id } else { Get-Setting 'FixGroup' '' }
     $ctl.FixGroups.ItemsSource = $col
+    $sel = @($col | Where-Object { $_.Id -eq $keep })[0]
+    if (-not $sel -and $col.Count -gt 0) { $sel = $col[0] }
+    $ctl.FixGroups.SelectedItem = $sel
 }
+$ctl.FixGroups.Add_SelectionChanged({ if ($ctl.FixGroups.SelectedItem) { Set-Setting 'FixGroup' ([string]$ctl.FixGroups.SelectedItem.Id); $ctl.FixDetailScroll.ScrollToTop() } })
 function Show-Verdicts($r) {
     $col = New-Object 'System.Collections.ObjectModel.ObservableCollection[VerdictRow]'
     $rec = New-Object 'System.Collections.ObjectModel.ObservableCollection[FixBtn]'; $seen = @{}
@@ -17951,7 +18620,7 @@ function Invoke-FixStep([string]$id, [switch]$Quiet) {
         UI-Log ((T "已打开：{0}") -f $name)
     } catch { Show-Sheet -Kind warn -Title ((T '没能打开：{0}') -f $name) -Text $_.Exception.Message | Out-Null }
 }
-foreach ($ic in @($ctl.HealthVerdicts, $ctl.FixRec, $ctl.FixGroups)) {
+foreach ($ic in @($ctl.HealthVerdicts, $ctl.FixRec, $ctl.FixDetail)) {
     $ic.AddHandler([System.Windows.Controls.Button]::ClickEvent, [System.Windows.RoutedEventHandler]{ param($s, $e) $b = $e.OriginalSource; if ($b -is [System.Windows.Controls.Button] -and $b.Tag -is [string] -and $b.Tag) { $t = [string]$b.Tag; if ($t.StartsWith('plan:')) { Invoke-RepairPlan $t.Substring(5) } else { Invoke-FixStep $t } } })
 }
 # 原来的两个按钮：和「常见问题修复」里的是同一步
@@ -18041,14 +18710,19 @@ function Show-Monitor($rows) {
         $a = $by[$k]; $a.N++; $a.Cpu += $x.Cpu; $a.Ws += $x.Ws; $a.Rate += $x.WriteRate; $a.Since += $x.WriteSince; $a.Total += $x.WriteTotal
         if (-not $a.Path -and $x.Path) { $a.Path = $x.Path }
     }
-    $sort = if ($ctl.MonSortCpu.IsChecked) { 'cpu' } elseif ($ctl.MonSortMem.IsChecked) { 'mem' } else { 'write' }
-    $list = @($by.Values | Sort-Object { switch ($sort) { 'cpu' { $_.Cpu } 'mem' { $_.Ws } default { $_.Since * 1000000 + $_.Rate } } } -Descending | Select-Object -First 25)
+    # 只列 25 个：按表头选的那一列取前 25（点「CPU」就是 CPU 最高的 25 个），表格再按这一列排
+    $cfg = $script:sortCfg['MonList']
+    $sort = if ($cfg -and $cfg.Prop) { [string]$cfg.Prop } else { 'Since' }
+    $desc = -not ($cfg -and $cfg.Prop -and -not $cfg.Desc)
+    $key = switch ($sort) { 'Cpu' { { $_.Cpu } } 'Ws' { { $_.Ws } } 'Rate' { { $_.Rate } } 'Total' { { $_.Total } } 'Name' { { $_.Name } } default { { $_.Since * 1000000 + $_.Rate } } }
+    $list = @($by.Values | Sort-Object $key -Descending:$desc | Select-Object -First 25)
     $max = [double]0; foreach ($a in $list) { if ($a.Since -gt $max) { $max = $a.Since } }
     $col = New-Object 'System.Collections.ObjectModel.ObservableCollection[ProcRow]'
     foreach ($a in $list) {
         $p = New-Object ProcRow
         $p.Name = $a.Name; $p.Meta = $(if ($a.N -gt 1) { (T "{0} 个进程 · ") -f $a.N } else { '' }) + $(if ($a.Path) { Shorten $a.Path } else { '' })
         $p.CpuText = '{0:N0}%' -f $a.Cpu; $p.WsText = Fmt $a.Ws; $p.RateText = (T "{0}/秒") -f (Fmt $a.Rate); $p.SinceText = Fmt $a.Since; $p.TotalText = Fmt $a.Total
+        $p.Cpu = [double]$a.Cpu; $p.Ws = [double]$a.Ws; $p.Rate = [double]$a.Rate; $p.Since = [double]$a.Since; $p.Total = [double]$a.Total
         $p.Bar = if ($max -gt 0) { [math]::Max(0, 100.0 * $a.Since / $max) } else { 0 }
         $col.Add($p)
     }
@@ -18056,9 +18730,35 @@ function Show-Monitor($rows) {
 }
 $ctl.BtnMonStart.Add_Click({ Start-Monitor })
 $ctl.BtnMonStop.Add_Click({ Stop-Monitor })
-foreach ($rb in @($ctl.MonSortWrite, $ctl.MonSortCpu, $ctl.MonSortMem)) { $rb.Add_Checked({ if ($script:monShared -and $script:monShared.Rows) { Show-Monitor @($script:monShared.Rows) } }) }
 $win.Add_Closed({ try { if ($script:monShared) { $script:monShared.Stop = $true } } catch {} })
 
+# ---------- 省空间：左边目录，点哪项右边只显示那一项（记住上次看的） ----------
+$script:saveGroups = [ordered]@{ Sys = @('Cos', 'Pf', 'Hib', 'Rs', 'Cs', 'Dump'); Safe = @('Rp', 'Tmp'); Files = @('Fc', 'Od', 'Merge'); Vd = @('Vd') }
+$script:saveLvl = @{ Pf = 1; Rp = 1; Fc = 1; Vd = 1; Merge = 1; Rs = 2; Cs = 2; Dump = 2; Tmp = 2 }   # 没写的谁都能用
+$script:saveSec = Get-Setting 'SaveSection' 'Cos'
+function Update-SaveNav {
+    $m = Get-Mode; $first = ''
+    foreach ($g in $script:saveGroups.Keys) {
+        $any = $false
+        foreach ($k in $script:saveGroups[$g]) {
+            $ok = $m -ge [int]$script:saveLvl[$k]
+            $ctl['SaveNav' + $k].Visibility = $(if ($ok) { 'Visible' } else { 'Collapsed' })
+            if ($ok) { $any = $true; if (-not $first) { $first = $k } }
+        }
+        $ctl['SaveHead' + $g].Visibility = $(if ($any) { 'Visible' } else { 'Collapsed' })
+    }
+    $k = $script:saveSec
+    if (-not $ctl['SaveNav' + $k] -or $ctl['SaveNav' + $k].Visibility -ne 'Visible') { $k = $first }
+    Select-SaveSection $k
+}
+function Select-SaveSection([string]$k) {
+    if (-not $ctl['SaveCard' + $k]) { return }
+    $script:saveSec = $k
+    foreach ($g in $script:saveGroups.Keys) { foreach ($x in $script:saveGroups[$g]) { $ctl['SaveCard' + $x].Visibility = $(if ($x -eq $k) { 'Visible' } else { 'Collapsed' }) } }
+    $rb = $ctl['SaveNav' + $k]; if (-not $rb.IsChecked) { $script:saveNavQuiet = $true; try { $rb.IsChecked = $true } finally { $script:saveNavQuiet = $false } }
+    $ctl.SaveScroll.ScrollToTop()
+}
+foreach ($g in $script:saveGroups.Keys) { foreach ($k in $script:saveGroups[$g]) { $ctl['SaveNav' + $k].Add_Checked({ if ($script:saveNavQuiet) { return }; Select-SaveSection ([string]$this.Tag); Set-Setting 'SaveSection' $script:saveSec }) } }
 function Load-Save {
     $on = Get-CompactOSOn
     $ctl.SaveCosState.Text = if ($on) { (T '当前：已开启，系统文件已压缩存放') } else { (T '当前：未开启') }
@@ -18633,6 +19333,7 @@ function Show-AppsView {
     $isApps = ($v -eq 'apps')
     $ctl.AppsList.Visibility = if ($isApps) { 'Visible' } else { 'Collapsed' }
     $ctl.StartList.Visibility = if ($isApps) { 'Collapsed' } else { 'Visible' }
+    Update-HeadVis
     $ctl.AppsFilterBox.Visibility = if ($isApps) { 'Visible' } else { 'Collapsed' }
     $ctl.BtnAppsUpdates.Visibility = if ($isApps -and $script:appsUpdatesAllowed) { 'Visible' } else { 'Collapsed' }
     if ($isApps) { Filter-Apps; return }
@@ -18949,8 +19650,21 @@ function Load-Auto {
     $ctl.AutoCleanNote.Text = if ($hasExe) { ((T "任务名：{0}。") -f $script:taskClean) + $(if ($last) { "`n$last" } else { '' }) } else { (T '只有 exe 版本支持每周自动清理。') }
     $ctl.AutoCleanNote.Text += "`n" + $(if (Get-StorageSenseOn) { (T 'Windows 自带的「存储感知」现在是开着的：它也会定期清临时文件和回收站，和这里的自动清理不冲突，只是会各做一遍。') } else { (T 'Windows 自带的「存储感知」现在是关着的（在 Windows 设置 → 系统 → 存储里）。') })
     $script:autoSync = $false
+    # 选项卡上写明开着还是关着，不点进去也知道
+    $ctl.ATabRemindState.Text = $(if ($r1) { (T '已开启') } else { (T '已关闭') })
+    $ctl.ATabCleanState.Text = $(if ($r2) { (T '已开启') } else { (T '已关闭') })
     Draw-History
 }
+# 自动提醒的三个选项卡
+$script:autoTabs = [ordered]@{ remind = @('ATabRemind', 'AutoViewRemind'); clean = @('ATabClean', 'AutoViewClean'); hist = @('ATabHist', 'AutoViewHist') }
+function Select-AutoTab([string]$k) {
+    if (-not $script:autoTabs.Contains($k)) { $k = 'remind' }
+    foreach ($t in $script:autoTabs.Keys) { $ctl[$script:autoTabs[$t][1]].Visibility = $(if ($t -eq $k) { 'Visible' } else { 'Collapsed' }) }
+    $rb = $ctl[$script:autoTabs[$k][0]]; if (-not $rb.IsChecked) { $script:atabQuiet = $true; try { $rb.IsChecked = $true } finally { $script:atabQuiet = $false } }
+    $script:autoTab = $k
+}
+foreach ($t in $script:autoTabs.Keys) { $rb = $ctl[$script:autoTabs[$t][0]]; $rb.Tag = $t; $rb.Add_Checked({ if ($script:atabQuiet) { return }; Select-AutoTab ([string]$this.Tag); Set-Setting 'AutoTab' $script:autoTab }) }
+Select-AutoTab (Get-Setting 'AutoTab' 'remind')
 function Draw-History {
     $h = Get-History
     $days = [ordered]@{}
@@ -18961,7 +19675,7 @@ function Draw-History {
         $x = $days[$k]
         $used = [math]::Max([double]0, $x.Total - $x.Free); $ratio = if ($x.Total -gt 0) { $used / $x.Total } else { 0 }
         $b = New-Object HistBar
-        $b.H = [math]::Max([double]3, 140.0 * $ratio)
+        $b.H = [math]::Max([double]3, 205.0 * $ratio)   # 图高 220
         $b.Fill = if ($ratio -ge 0.95) { '#FF3B30' } elseif ($ratio -ge 0.85) { '#FF9F0A' } else { '#0071E3' }
         $b.Tip = (T "{0}：已用 {1}，剩余 {2}") -f $k, (Fmt $used), (Fmt $x.Free)
         $b.Label = $k
@@ -18974,6 +19688,7 @@ function Draw-History {
         $d = $l.Free - $f.Free
         $ctl.HistInfo.Text = (T "最近 {0} 天有记录：C 盘剩余从 {1} 变成 {2}（{3}{4}）。蓝色正常，橙色表示用掉了八成五以上，红色表示快满了。") -f $keys.Count, (Fmt $f.Free), (Fmt $l.Free), $(if ($d -ge 0) { (T '多了 ') } else { (T '少了 ') }), (Fmt ([math]::Abs($d)))
     } else { $ctl.HistInfo.Text = (T '还没有记录。每次打开本工具都会记一笔。'); $ctl.HistFirst.Text = ''; $ctl.HistLast.Text = '' }
+    $ctl.ATabHistState.Text = $(if ($keys.Count -gt 0) { (T "{0} 天") -f $keys.Count } else { '' })
 }
 $ctl.AutoRemindGB.Add_SelectionChanged({
     if ($script:autoSync) { return }
@@ -19253,9 +19968,8 @@ function Apply-Mode {
     # 空间地图：找文件、和上次比、导出、压缩是工程师的；快速扫描开关、空间明细是开发者的
     foreach ($n in 'MapViewFiles', 'MapViewGrow', 'MapViewRecent', 'BtnMapExport', 'BtnMapReport', 'BtnMapCompress') { $ctl[$n].Visibility = & $v 1 }
     if ($m -lt 1 -and -not $ctl.MapViewDirs.IsChecked -and -not $ctl.MapViewTree.IsChecked -and -not $ctl.MapViewTypes.IsChecked) { $ctl.MapViewDirs.IsChecked = $true }
-    # 省空间
-    foreach ($n in 'SaveCardPf', 'SaveCardRp', 'SaveCardFc', 'SaveCardVd', 'SaveCardMerge') { $ctl[$n].Visibility = & $v 1 }
-    foreach ($n in 'SaveCardRs', 'SaveCardCs', 'SaveCardDump', 'SaveCardTmp') { $ctl[$n].Visibility = & $v 2 }
+    # 省空间：左边目录里只列这个模式能用的项
+    Update-SaveNav
     # 软件管理
     $ctl.AppsViewBox.Visibility = & $v 1
     foreach ($n in 'AppsViewStartup', 'AppsViewLeft') { $ctl[$n].Visibility = & $v 1 }
@@ -19718,16 +20432,16 @@ function Invoke-UiTest {
         & $step 'modes hide and show features' {
             Set-Mode 'basic'
             if ($ctl.NavDup.Visibility -ne 'Collapsed' -or $ctl.NavLog.Visibility -ne 'Collapsed' -or $ctl.BtnLog.Visibility -ne 'Collapsed') { throw 'basic mode still shows advanced pages' }
-            if ($ctl.SaveCardRs.Visibility -ne 'Collapsed' -or $ctl.AppsViewBox.Visibility -ne 'Collapsed' -or $ctl.MapViewFiles.Visibility -ne 'Collapsed' -or $ctl.BtnSetCustomAdd.Visibility -ne 'Collapsed') { throw 'basic mode still shows advanced cards' }
-            if ($ctl.NavClean.Visibility -ne 'Visible' -or $ctl.SaveCardCos.Visibility -ne 'Visible' -or $ctl.SaveCardOd.Visibility -ne 'Visible' -or $ctl.NavHealth.Visibility -ne 'Visible' -or $ctl.HTabHw.Visibility -ne 'Visible' -or $ctl.HTabCrash.Visibility -ne 'Visible' -or $ctl.HTabFix.Visibility -ne 'Visible') { throw 'basic mode hides basic things' }
+            if ($ctl.SaveNavRs.Visibility -ne 'Collapsed' -or $ctl.AppsViewBox.Visibility -ne 'Collapsed' -or $ctl.MapViewFiles.Visibility -ne 'Collapsed' -or $ctl.BtnSetCustomAdd.Visibility -ne 'Collapsed') { throw 'basic mode still shows advanced cards' }
+            if ($ctl.NavClean.Visibility -ne 'Visible' -or $ctl.SaveNavCos.Visibility -ne 'Visible' -or $ctl.SaveNavOd.Visibility -ne 'Visible' -or $ctl.NavHealth.Visibility -ne 'Visible' -or $ctl.HTabHw.Visibility -ne 'Visible' -or $ctl.HTabCrash.Visibility -ne 'Visible' -or $ctl.HTabFix.Visibility -ne 'Visible') { throw 'basic mode hides basic things' }
             if ($ctl.HTabBoot.Visibility -ne 'Collapsed' -or $ctl.HTabMon.Visibility -ne 'Collapsed' -or $ctl.HTabEvents.Visibility -ne 'Collapsed') { throw 'basic mode shows advanced health tabs' }
             $basicSteps = @(@($ctl.FixGroups.Items) | ForEach-Object { @($_.Steps) } | ForEach-Object { $_.Id })
             if ($basicSteps -contains 'netreset' -or $basicSteps -contains 'wureset' -or $basicSteps -notcontains 'sfcrepair') { throw ('basic mode repair steps: ' + ($basicSteps -join ',')) }
             if ($ctl.ModeTag.Text -ne ((T '普通用户') + (T '模式'))) { throw ('mode tag: ' + $ctl.ModeTag.Text) }
             Set-Mode 'pro'
-            if ($ctl.NavDup.Visibility -ne 'Visible' -or $ctl.AppsViewStartup.Visibility -ne 'Visible' -or $ctl.AppsViewTasks.Visibility -ne 'Collapsed' -or $ctl.SaveCardPf.Visibility -ne 'Visible' -or $ctl.SaveCardRs.Visibility -ne 'Collapsed') { throw 'pro mode wrong' }
+            if ($ctl.NavDup.Visibility -ne 'Visible' -or $ctl.AppsViewStartup.Visibility -ne 'Visible' -or $ctl.AppsViewTasks.Visibility -ne 'Collapsed' -or $ctl.SaveNavPf.Visibility -ne 'Visible' -or $ctl.SaveNavRs.Visibility -ne 'Collapsed') { throw 'pro mode wrong' }
             Set-Mode 'expert'
-            if ($ctl.AppsViewTasks.Visibility -ne 'Visible' -or $ctl.SaveCardRs.Visibility -ne 'Visible' -or $ctl.BtnLog.Visibility -ne 'Visible' -or $ctl.BtnSetCustomAdd.Visibility -ne 'Visible' -or $ctl.BtnSfcRepair.Visibility -ne 'Visible' -or $ctl.HTabEvents.Visibility -ne 'Visible') { throw 'expert mode wrong' }
+            if ($ctl.AppsViewTasks.Visibility -ne 'Visible' -or $ctl.SaveNavRs.Visibility -ne 'Visible' -or $ctl.BtnLog.Visibility -ne 'Visible' -or $ctl.BtnSetCustomAdd.Visibility -ne 'Visible' -or $ctl.BtnSfcRepair.Visibility -ne 'Visible' -or $ctl.HTabEvents.Visibility -ne 'Visible') { throw 'expert mode wrong' }
             if (@($catalog | Where-Object { [int]$_.Lvl -eq 2 }).Count -lt 5 -or @($catalog | Where-Object { [int]$_.Lvl -eq 1 }).Count -lt 5) { throw 'catalog levels missing' }
         }
         & $step 'cleanup tiers: careful group, delete preview, recycle switch' {
@@ -19765,7 +20479,22 @@ function Invoke-UiTest {
             Refresh-Monitor
             if ($ctl.MonList.Items.Count -lt 1) { throw 'monitor list empty' }
             $L.Add(('  monitor: ' + $ctl.MonList.Items.Count + ' rows, top ' + $ctl.MonList.Items[0].Name + ' ' + $ctl.MonList.Items[0].SinceText))
-            $ctl.MonSortCpu.IsChecked = $true; if ($ctl.MonList.Items.Count -lt 1) { throw 'monitor list empty after sort' }
+            # 点表头排序：点「内存」从高到低，再点一下从低到高；点「CPU」重新取 CPU 最高的 25 个，按 CPU 从高到低
+            Select-HealthTab 'mon'; $win.UpdateLayout()
+            $hd = Find-GridHead $ctl.MonList 2
+            if (-not $hd) { throw 'memory column header not found' }
+            & $click $hd
+            if ($script:sortCfg.MonList.Prop -ne 'Ws' -or -not $script:sortCfg.MonList.Desc) { throw 'clicking the memory header did not sort high to low' }
+            if (-not (Test-SortedBy @($ctl.MonList.Items) 'Ws' $true)) { throw 'monitor rows not sorted by memory' }
+            if ([string]$ctl.MonList.View.Columns[2].Header -notlike '*↓') { throw ('no arrow on the memory header: ' + $ctl.MonList.View.Columns[2].Header) }
+            Invoke-HeaderSort 'MonList' '2'
+            if (-not (Test-SortedBy @($ctl.MonList.Items) 'Ws' $false) -or [string]$ctl.MonList.View.Columns[2].Header -notlike '*↑') { throw 'second click did not reverse the order' }
+            Invoke-HeaderSort 'MonList' '1'
+            if ($ctl.MonList.Items.Count -lt 1) { throw 'monitor list empty after sort' }
+            if (-not (Test-SortedBy @($ctl.MonList.Items) 'Cpu' $true)) { throw 'monitor rows not sorted by CPU' }
+            if ([string]$ctl.MonList.View.Columns[2].Header -like '*↓' -or [string]$ctl.MonList.View.Columns[2].Header -like '*↑') { throw 'old arrow left on the memory header' }
+            $L.Add(('  monitor by CPU: ' + (@($ctl.MonList.Items | Select-Object -First 3 | ForEach-Object { $_.Name + ' ' + $_.CpuText }) -join ', ')))
+            Reset-ListSort 'MonList' 'Since' $true
             Stop-Monitor
             if ($ctl.BtnMonStop.IsEnabled -or -not $script:monShared.Stop) { throw 'monitor not stopped' }
             if (-not (& $waitUi { -not $script:bg['monitor'] } 15000)) { throw 'monitor thread did not end' }
@@ -19806,6 +20535,14 @@ function Invoke-UiTest {
                 if ($script:healthTab -ne $k) { throw "current tab is $($script:healthTab), not $k" }
                 & $snap $ctl.PageHealth ('health-' + $k)
             }
+            # 蓝屏和崩溃里的三个小选项卡：点哪个只显示哪个
+            Select-HealthTab 'crash'
+            foreach ($k in @($script:crashTabs.Keys)) {
+                $ctl[$script:crashTabs[$k][0]].IsChecked = $true; $win.UpdateLayout()
+                foreach ($j in @($script:crashTabs.Keys)) { $want = if ($j -eq $k) { 'Visible' } else { 'Collapsed' }; if ($ctl[$script:crashTabs[$j][1]].Visibility -ne $want) { throw "crash tab ${k}: $j is not $want" } }
+                if ($k -ne 'verdict') { & $snap $ctl.PageHealth ('health-crash-' + $k) }
+            }
+            Select-CrashTab 'verdict'
             if ($ctl.HealthVerdicts.Items.Count -lt 1) { throw 'no verdict shown' }
             $L.Add(('  verdicts: ' + (@($ctl.HealthVerdicts.Items | ForEach-Object { $_.Title }) -join ' | ')))
             # 后台线程里算出来的文字也要跟着界面语言走
@@ -19819,8 +20556,13 @@ function Invoke-UiTest {
             if ($script:uiSheets.Count -lt $n0 + 5) { throw ('changing steps did not all ask first ({0} sheets)' -f ($script:uiSheets.Count - $n0)) }
             if ((Get-Setting 'PowerFixUndo' '') -ne $undo0 -or (Get-FastStartup) -ne $fs0) { throw 'power settings changed without confirmation' }
             # 列表里的按钮点下去走同一套
-            Select-HealthTab 'fix'; $win.UpdateLayout(); $script:uiFixRuns.Clear()
-            $q = New-Object System.Collections.Queue; $q.Enqueue($ctl.FixGroups); $hit = $null
+            Select-HealthTab 'fix'; $script:uiFixRuns.Clear()
+            # 左边选「时间不准」那个问题，右边只显示它的修法
+            $tg = @(@($ctl.FixGroups.Items) | Where-Object { @($_.Steps | Where-Object { $_.Id -eq 'timecheck' }).Count -gt 0 })[0]
+            if (-not $tg) { throw 'no problem group has the clock check' }
+            $ctl.FixGroups.SelectedItem = $tg; $win.UpdateLayout()
+            if (-not [object]::ReferenceEquals($ctl.FixDetail.Content, $tg)) { throw 'the detail pane does not show the selected problem' }
+            $q = New-Object System.Collections.Queue; $q.Enqueue($ctl.FixDetail); $hit = $null
             while ($q.Count -gt 0 -and -not $hit) { $v = $q.Dequeue(); if ($v -is [System.Windows.Controls.Button] -and [string]$v.Tag -eq 'timecheck') { $hit = $v; break }; for ($i = 0; $i -lt [System.Windows.Media.VisualTreeHelper]::GetChildrenCount($v); $i++) { $q.Enqueue([System.Windows.Media.VisualTreeHelper]::GetChild($v, $i)) } }
             if (-not $hit) { throw 'repair button not found in the list' }
             & $click $hit
@@ -19838,6 +20580,99 @@ function Invoke-UiTest {
             $rep = Get-HealthReportText $script:healthData
             if ($rep.Length -lt 200 -or $rep -notmatch [regex]::Escape((T '诊断结论'))) { throw 'report text too short' }
             Select-HealthTab 'hw'
+        }
+        & $step 'list headers sort; cleanup tabs, action filter and sticky bar; filter, save and reminder tabs' {
+            # 清理页：用假的大小排一个列表（不扫描），至少两类
+            $sizes = @{}; $i = 0
+            foreach ($it in @($catalog | Where-Object { -not $_.Lvl -or [int]$_.Lvl -le (Get-Mode) })) { $i++; $sizes[$it.Idx] = [double](($i * 7919) % 997 + 1) * 1MB }
+            Show-Page 'clean'; Build-Rows $sizes; $win.UpdateLayout()
+            $groups = @($script:cleanGroups.Order)
+            if ($groups.Count -lt 2) { throw ('only {0} groups' -f $groups.Count) }
+            if ($ctl.CleanTabs.Children.Count -ne $groups.Count) { throw ('{0} tabs for {1} groups' -f $ctl.CleanTabs.Children.Count, $groups.Count) }
+            $bad = @(@($ctl.List.Items) | Where-Object { $_.GroupTitle -ne $groups[0] }).Count
+            if ($ctl.List.Items.Count -lt 1 -or $bad -gt 0) { throw 'first tab does not show only the first group' }
+            $ctl.CleanTabs.Children[1].IsChecked = $true; $win.UpdateLayout()
+            if (@(@($ctl.List.Items) | Where-Object { $_.GroupTitle -ne $groups[1] }).Count -gt 0 -or $ctl.List.Items.Count -ne $script:cleanGroups.Cnt[$groups[1]]) { throw 'second tab does not show the second group' }
+            # 表头「大小」：从大到小；只看「跳过」以后还是按大小排
+            $bs = @(Find-Buttons $ctl.CleanHead | Where-Object { [string]$_.Tag -eq 'List|size' })[0]
+            if (-not $bs) { throw 'size header button not found' }
+            & $click $bs; $win.UpdateLayout()
+            if (-not (Test-SortedBy @($ctl.List.Items) 'Bytes' $true)) { throw 'cleanup rows not sorted by size' }
+            if ([string]$bs.Content -notlike '*↓') { throw 'no arrow on the size header' }
+            # 下拉框只看某一种操作：用这一类第一行的操作
+            $ctl.CleanTabs.Children[0].IsChecked = $true; $win.UpdateLayout()
+            $op = [string]$ctl.List.Items[0].Action
+            $opItem = @($ctl.CleanOpFilter.Items | Where-Object { [string]$_.Tag -eq $op })[0]
+            if (-not $opItem) { throw ('no filter entry for "{0}"' -f $op) }
+            $ctl.CleanOpFilter.SelectedItem = $opItem; $win.UpdateLayout()
+            $n = $ctl.List.Items.Count
+            $want = @($script:rows | Where-Object { $_.GroupTitle -eq $groups[0] -and $_.Action -eq $op }).Count
+            if ($n -ne $want -or @(@($ctl.List.Items) | Where-Object { $_.Action -ne $op -or $_.GroupTitle -ne $groups[0] }).Count -gt 0) { throw ('action filter shows {0} rows, expected {1}' -f $n, $want) }
+            if (-not (Test-SortedBy @($ctl.List.Items) 'Bytes' $true)) { throw 'action filter lost the sort order' }
+            $L.Add(('  cleanup: {0} groups; "{1}" filtered to "{2}" shows {3} rows, still largest first' -f $groups.Count, $groups[0], $op, $n))
+            $ctl.CleanOpFilter.SelectedIndex = 0; $win.UpdateLayout()
+            if ($ctl.List.Items.Count -ne $script:cleanGroups.Cnt[$groups[0]]) { throw 'all actions does not show the whole group again' }
+            # 「名称」：A 到 Z；再点两下回到本来的顺序
+            $bn = @(Find-Buttons $ctl.CleanHead | Where-Object { [string]$_.Tag -eq 'List|name' })[0]
+            & $click $bn; if (-not (Test-SortedBy @($ctl.List.Items) 'Name' $false)) { throw 'cleanup rows not sorted by name' }
+            & $click $bn; & $click $bn
+            if ($script:sortCfg.List.Prop) { throw 'third click did not go back to the original order' }
+            # 选项卡和表头：往下滚以后停在顶上（列表要够长才滚得动）
+            $ctl.CleanScroll.ScrollToTop(); $win.UpdateLayout(); [void](& $waitUi { $false } 150)
+            $y0 = (Get-CleanSlotPos).Y; $t0 = $ctl.CleanBar.Margin.Top
+            if ([math]::Abs($y0 - $t0) -gt 1) { throw ('bar is not over its slot at the top: slot {0}, bar {1}' -f $y0, $t0) }
+            & $snap $ctl.PageClean 'clean-tabs'
+            if ($ctl.CleanScroll.ScrollableHeight -gt $y0 + 20) {
+                $ctl.CleanScroll.ScrollToVerticalOffset($y0 + 200); $win.UpdateLayout(); [void](& $waitUi { $false } 150)
+                $p = Get-CleanSlotPos
+                if ($p.Y -ge 0 -or [math]::Abs($ctl.CleanBar.Margin.Top) -gt 0.5) { throw ('bar did not stick: slot {0}, bar {1}' -f $p.Y, $ctl.CleanBar.Margin.Top) }
+                $L.Add(('  sticky bar: slot at {0:N0}, scrolled to {1:N0}, bar stays at {2:N0}, {3:N0} px tall' -f $y0, $ctl.CleanScroll.VerticalOffset, $ctl.CleanBar.Margin.Top, $ctl.CleanBar.ActualHeight))
+                & $snap $ctl.PageClean 'clean-sticky'
+                # 停在顶上时换类：列表从头显示
+                $ctl.CleanTabs.Children[1].IsChecked = $true; $win.UpdateLayout()
+                $p = Get-CleanSlotPos
+                if ([math]::Abs($p.Y) -gt 1.5 -and $ctl.CleanScroll.VerticalOffset -lt $ctl.CleanScroll.ScrollableHeight - 1) { throw ('switching tabs while stuck did not show the list from the top: slot at {0}' -f $p.Y) }
+            } else { $L.Add(('  sticky bar: page not tall enough to scroll ({0:N0})' -f $ctl.CleanScroll.ScrollableHeight)) }
+            $script:rows = $null; $script:cleanOp = ''; $ctl.List.ItemsSource = $null; Update-CleanOverview
+            if ($ctl.CleanBar.Visibility -ne 'Collapsed') { throw 'tabs still shown without rows' }
+            # 重复文件：查找条件的选项卡，开始查找时收起
+            Show-Page 'dup'
+            Set-DupFilterOpen $true 'type'; $win.UpdateLayout()
+            if ($ctl.DPaneType.Visibility -ne 'Visible' -or $ctl.DPaneRoots.Visibility -ne 'Collapsed' -or -not $ctl.DTabType.IsChecked) { throw 'file type tab not shown' }
+            Set-DupFilterOpen $false
+            if ($ctl.DupFilterBody.Visibility -ne 'Collapsed' -or $ctl.DTabType.IsChecked) { throw 'filter options did not fold' }
+            $ctl.DTabSize.IsChecked = $true
+            if ($ctl.DupFilterBody.Visibility -ne 'Visible' -or $ctl.DPaneSize.Visibility -ne 'Visible') { throw 'clicking a folded tab did not open it' }
+            if (-not $ctl.DTabRootsVal.Text -or -not $ctl.DTabTypeVal.Text -or -not $ctl.DTabSizeVal.Text -or -not $ctl.DTabModeVal.Text) { throw 'tab values empty' }
+            $L.Add(('  duplicate options: {0} | {1} | {2} | {3}' -f $ctl.DTabRootsVal.Text, $ctl.DTabTypeVal.Text, $ctl.DTabSizeVal.Text, $ctl.DTabModeVal.Text))
+            & $snap $ctl.PageDup 'dup-tabs'
+            Set-DupFilterOpen $true 'roots'
+            # 省空间：左边目录点哪项，右边只显示那一项
+            Show-Page 'save'
+            foreach ($g in $script:saveGroups.Keys) { foreach ($k in $script:saveGroups[$g]) {
+                if ($ctl['SaveNav' + $k].Visibility -ne 'Visible') { continue }
+                $ctl['SaveNav' + $k].IsChecked = $true
+                $shown = @(foreach ($g2 in $script:saveGroups.Keys) { foreach ($x in $script:saveGroups[$g2]) { if ($ctl['SaveCard' + $x].Visibility -eq 'Visible') { $x } } })
+                if ($shown.Count -ne 1 -or $shown[0] -ne $k) { throw ("save nav ${k}: shows " + ($shown -join ',')) }
+            } }
+            $ctl.SaveNavPf.IsChecked = $true; & $snap $ctl.PageSave 'save-nav'
+            # 自动提醒：三个选项卡
+            Show-Page 'auto'
+            foreach ($k in @($script:autoTabs.Keys)) {
+                $ctl[$script:autoTabs[$k][0]].IsChecked = $true
+                foreach ($j in @($script:autoTabs.Keys)) { $want = if ($j -eq $k) { 'Visible' } else { 'Collapsed' }; if ($ctl[$script:autoTabs[$j][1]].Visibility -ne $want) { throw "auto tab ${k}: $j is not $want" } }
+            }
+            Select-AutoTab 'remind'
+            # 操作日志：点「时间」从早到晚，再点一下从晚到早
+            Show-Page 'log'; $win.UpdateLayout()
+            if ($ctl.LogList.Items.Count -gt 1) {
+                $hd = Find-GridHead $ctl.LogList 0; if (-not $hd) { throw 'log time header not found' }
+                $was = $script:sortCfg.LogList.Desc
+                & $click $hd
+                if ($script:sortCfg.LogList.Desc -eq $was -or -not (Test-SortedBy @($ctl.LogList.Items) 'When' $script:sortCfg.LogList.Desc)) { throw 'log not re-sorted by time' }
+                Reset-ListSort 'LogList' 'When' $true
+                if (-not (Test-SortedBy @($ctl.LogList.Items) 'When' $true)) { throw 'log not back to newest first' }
+            }
         }
         & $step 'similar photos and keep rules' {
             if (-not ('PhotoHash' -as [type])) { throw 'PhotoHash did not compile' }
@@ -20637,6 +21472,23 @@ $ctl.AppVer.Text = ((T "版本 {0}") -f $script:AppVersion)
 Write-LogFile ((T "==== 腾挪 ClearC {0} 启动；Windows {1}；屏幕可用区域 {2:N0} x {3:N0}") -f $script:AppVersion, [Environment]::OSVersion.Version, $wa.Width, $wa.Height)
 if ($script:themeFail) { Write-LogFile ((T "深色界面没能打开，这次用浅色：{0}") -f $script:themeFail) }
 
+# ---------- 各个列表的表头排序（点列名排序，再点一下反过来；记住每个列表上次怎么排的） ----------
+# 表格（GridView）：键是第几列；自己画表头的列表：键是表头按钮的 Tag
+Register-ListSort 'MonList' @{ '0' = @{ Prop = 'Name' }; '1' = @{ Prop = 'Cpu'; Num = $true }; '2' = @{ Prop = 'Ws'; Num = $true }; '3' = @{ Prop = 'Rate'; Num = $true }; '4' = @{ Prop = 'Since'; Num = $true }; '5' = @{ Prop = 'Total'; Num = $true } } -defProp 'Since'
+$script:sortCfg['MonList'].After = { if ($script:monShared -and $script:monShared.Rows) { Show-Monitor @($script:monShared.Rows) } }
+Register-ListSort 'LogList' @{ '0' = @{ Prop = 'When'; Num = $true }; '1' = @{ Prop = 'CatText' }; '2' = @{ Prop = 'What' }; '3' = @{ Prop = 'Target' }; '4' = @{ Prop = 'Detail' } } -defProp 'When'
+Register-ListSort 'MapGrow' @{ '0' = @{ Prop = 'Path' }; '1' = @{ Prop = 'BeforeBytes'; Num = $true }; '2' = @{ Prop = 'NowBytes'; Num = $true }; '3' = @{ Prop = 'Delta'; Num = $true } } -Tri
+Register-ListSort 'DupList' @{ '0' = @{ Prop = 'ToDelete'; Num = $true }; '1' = @{ Prop = 'Path' }; '2' = @{ Prop = 'ModifiedTicks'; Num = $true }; '3' = @{ Prop = 'Risk' } } -pre @('GroupId') -Tri
+Register-ListSort 'MapList' @{ name = @{ Prop = 'Name' }; when = @{ Prop = 'When'; Num = $true }; size = @{ Prop = 'Size'; Num = $true } } -pre @('IsSummary') -bar $ctl.MapHead -Tri
+Register-ListSort 'AppsList' @{ name = @{ Prop = 'Name' }; pub = @{ Prop = 'Publisher' }; date = @{ Prop = 'Date'; Num = $true }; size = @{ Prop = 'Size'; Num = $true } } -bar $ctl.AppsHead -defProp 'Size'
+Register-ListSort 'StartList' @{ name = @{ Prop = 'Name' }; status = @{ Prop = 'StatusText' } } -bar $ctl.StartHead -Tri
+Register-ListSort 'CandList' @{ name = @{ Prop = 'Name' }; size = @{ Prop = 'Size'; Num = $true } } -pre @('GroupOrder') -bar $ctl.CandHead -Tri
+Register-ListSort 'MovesList' @{ name = @{ Prop = 'Name' }; state = @{ Prop = 'State' }; size = @{ Prop = 'Size'; Num = $true } } -bar $ctl.MovesHead -Tri
+Register-ListSort 'List' @{ name = @{ Prop = 'Name' }; size = @{ Prop = 'Bytes'; Num = $true } } -bar $ctl.CleanHead -Tri
+foreach ($p in @(@('AppsList', 'AppsHead'), @('StartList', 'StartHead'), @('MovesList', 'MovesHead'), @('MapList', 'MapHead'), @('CandList', 'CandHead'))) { Register-HeadPad $ctl[$p[0]] $ctl[$p[1]] }
+$script:headOf = [ordered]@{ AppsList = $ctl.AppsHead; StartList = $ctl.StartHead; CandList = $ctl.CandHead; MovesList = $ctl.MovesHeadBox; MapList = $ctl.MapHeadBox }
+Update-HeadVis
+
 $script:statusColor = @{ wait = '#86868B'; run = '#0071E3'; ok = '#248A3D'; warn = '#B25000'; fail = '#D70015'; skip = '#86868B' }
 $script:pendingDialog = $null
 $win.TaskbarItemInfo = New-Object System.Windows.Shell.TaskbarItemInfo
@@ -20700,7 +21552,7 @@ function Request-Lang {
     return $true
 }
 $ctl.BtnLang.Add_Click({ [void](Request-Lang) })
-$ctl.CleanScroll.Add_ScrollChanged({ Update-CleanMore })
+$ctl.CleanScroll.Add_ScrollChanged({ Update-CleanBar; Update-CleanMore })
 $ctl.CleanMore.Add_Click({ $ctl.CleanScroll.PageDown() })
 # 第一次打开时先给出安全风险提示，勾选同意后才能使用；同意过就不再弹
 $script:riskFile = Join-Path $env:LOCALAPPDATA 'CleanC\risk-accepted.txt'

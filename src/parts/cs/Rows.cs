@@ -91,6 +91,7 @@ public class CandRow : INotifyPropertyChanged {
     public string Key { get; set; }
     public string Type { get; set; }     // cat = 清理目录里的项目；app = 装在 C 盘的软件
     public string Group { get; set; }
+    public int GroupOrder { get; set; }  // 组的先后：聊天记录、软件、其他文件夹、不适合搬的（表头排序只在组里面排）
     public string GroupTitle { get; set; }
     public string GroupNote { get; set; }
     public bool First { get; set; }
@@ -171,4 +172,5 @@ public class GrowRow {
     string _change; public string ChangeBrush { get { return Theme.F(_change); } set { _change = value; } }
     public double BeforeBytes { get; set; }
     public double NowBytes { get; set; }
+    public double Delta { get { return NowBytes - BeforeBytes; } }
 }
