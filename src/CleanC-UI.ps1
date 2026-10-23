@@ -1272,7 +1272,7 @@ public sealed class MftIndex {
     public int[] Parent; public ushort[] ParentSeq, Seq;
     public long[] Size, Write;
     public long[] Disk;                               // 这条记录里的数据实际占的盘（主记录和续页各记各的；压缩、稀疏、只在云端的文件比文件大小小，很小的文件放在记录里不另占）
-    public byte[] Flag;                               // 1 在用  2 文件夹  4 链接（重解析点）  8 有属性列表
+    public byte[] Flag;                               // 1 在用  2 文件夹  4 链接（重解析点）  8 有属性列表  16 别的重解析点  32 系统压缩或重复数据删除（对程序就是普通文件）
     public uint[] Attr;                               // $STANDARD_INFORMATION 里的文件属性（系统、脱机、云端占位、重解析点……），查重复文件时按它跳过
     public byte[] Cat;                                // 文件类别（FileCats）
     public string[] Name;                             // 只存文件夹、1 MB 以上的文件和有属性列表的文件的名字
@@ -1595,6 +1595,8 @@ public static class Mft {
                 // 数据太长放在盘上别处（很长的链接目标、云端文件夹的数据）：只有文件夹才去盘上读它的类型，文件用不着（读多了很慢）
                 else if ((ext ? (ix.Flag[owner] & 2) : (flags & 2)) != 0) known = ReparseTag(ix, b, a, len, out tag);
                 if (known && (tag & 0x20000000) != 0) ix.Flag[owner] |= 4; else ix.Flag[owner] |= 16;
+                // 系统压缩（WOF）、重复数据删除（Dedup）的文件对程序来说就是普通文件（列举时看不到重解析点）：记下来，查重复文件时和逐个列举一样对待
+                if (known && (tag == 0x80000017 || tag == 0x80000013)) ix.Flag[owner] |= 32;
             }
             a += len;
         }
@@ -1848,6 +1850,7 @@ public static class Mft {
             List<MftLink> l;
             bool multi = ix.Extra.TryGetValue(i, out l) && l.Count > 0;   // 有不止一个名字（硬链接）：每个名字下都算，但盘上只有一份
             uint at = ix.Attr != null && i < ix.Attr.Length ? ix.Attr[i] : 0; bool ha = ix.Attr != null;
+            if ((f & 32) != 0) at &= ~0x400u;          // 系统压缩、重复数据删除：程序看到的是普通文件
             bool any = AddFile(ix, nodes, reach, ix.Parent[i], ix.ParentSeq[i], ix.Name[i], size, disk, multi, wt, at, ha, big, ref files);
             if (multi) foreach (MftLink k in l) any |= AddFile(ix, nodes, reach, k.Parent, k.ParentSeq, k.Name, size, disk, true, wt, at, ha, big, ref files);
             if (any) { uniq += size; uniqDisk += disk; if (multi) linked += size; byte c = ix.Cat[i]; tc[c]++; tb[c] += size; td[c] += disk; }
@@ -6251,6 +6254,24 @@ function Get-LinkedAncestor([string]$path) {
 # 所有系统服务和驱动的程序路径（判断软件能不能搬时用）
 function Get-ServicePaths {
     $out = New-Object System.Collections.ArrayList
+    # 直接读注册表里每个服务和驱动登记的程序路径（服务管理器和 WMI 读的也是这一份；WMI 有时要等好几秒）。读不到再问 WMI
+    $root = $null
+    try {
+        $root = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey('SYSTEM\CurrentControlSet\Services')
+        if ($root) {
+            foreach ($n in $root.GetSubKeyNames()) {
+                $k = $null
+                try {
+                    $k = $root.OpenSubKey($n)
+                    if ($k) {
+                        $ip = [string]$k.GetValue('ImagePath')
+                        if ($ip) { $dn = [string]$k.GetValue('DisplayName'); if (-not $dn -or $dn.StartsWith('@')) { $dn = $n }; [void]$out.Add(@{ PathName = $ip; DisplayName = $dn }) }
+                    }
+                } catch {} finally { if ($k) { $k.Close() } }
+            }
+        }
+    } catch {} finally { if ($root) { $root.Close() } }
+    if ($out.Count -gt 0) { return ,$out }
     foreach ($cls in 'Win32_Service', 'Win32_SystemDriver') {
         try { foreach ($sv in @(Get-CimInstance -ClassName $cls -ErrorAction Stop)) { [void]$out.Add(@{ PathName = [string]$sv.PathName; DisplayName = [string]$sv.DisplayName }) } } catch {}
     }
@@ -21608,6 +21629,22 @@ function Invoke-UiTest {
             foreach ($v in @([InstallerRefs]::FromInstaller())) { [void]$new.Add($v) }
             if (-not $old.SetEquals($new) -or $nReg -ne $nReg2) { throw ("references differ: before {0} (registry {1}), now {2} (registry {3})" -f $old.Count, $nReg, $new.Count, $nReg2) }
             "{0} of {1} packages; {2} references, the same as asking one by one" -f $o.Count, $all.Count, $new.Count
+        }
+        & $step 'services and drivers read from the registry cover every program WMI lists' {
+            # 判断软件能不能搬时要知道哪些服务、驱动的程序在它的文件夹里：直接读注册表，不能比 WMI 少
+            $reg = @(Get-ServicePaths)
+            $wmi = @(@(Get-CimInstance -ClassName Win32_Service -ErrorAction Stop) + @(Get-CimInstance -ClassName Win32_SystemDriver -ErrorAction Stop))
+            $miss = @(); $n = 0
+            foreach ($w in $wmi) {
+                $m = [regex]::Match([string]$w.PathName, '(?i)([a-z]:\\[^"]*?\.(exe|sys|dll))')
+                if (-not $m.Success) { continue }
+                $dir = Split-Path $m.Groups[1].Value -Parent
+                if ($dir -match '(?i)^[a-z]:\\windows(\\|$)') { continue }   # 系统自带的不用看（在 Windows 文件夹里，不会是要搬的软件）
+                $n++
+                if (-not @($reg | Where-Object { ([string]$_.PathName).IndexOf($dir, [StringComparison]::OrdinalIgnoreCase) -ge 0 -or ([string]$_.PathName).IndexOf(($dir -replace '^[A-Za-z]:', ''), [StringComparison]::OrdinalIgnoreCase) -ge 0 }).Count) { $miss += ('{0} ({1})' -f $w.Name, $w.PathName) }
+            }
+            if ($reg.Count -lt 50 -or $miss.Count) { throw ("registry has {0} entries; missing {1} of {2}: {3}" -f $reg.Count, $miss.Count, $n, (($miss | Select-Object -First 4) -join ' | ')) }
+            "{0} services and drivers from the registry; all {1} outside the Windows folder that WMI lists are there" -f $reg.Count, $n
         }
         & $step 'save space: reserved storage, crash dump, temp folder, OneDrive' {
             Show-Page 'save'; $win.UpdateLayout()

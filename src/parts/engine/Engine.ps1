@@ -2758,6 +2758,24 @@ function Get-LinkedAncestor([string]$path) {
 # 所有系统服务和驱动的程序路径（判断软件能不能搬时用）
 function Get-ServicePaths {
     $out = New-Object System.Collections.ArrayList
+    # 直接读注册表里每个服务和驱动登记的程序路径（服务管理器和 WMI 读的也是这一份；WMI 有时要等好几秒）。读不到再问 WMI
+    $root = $null
+    try {
+        $root = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey('SYSTEM\CurrentControlSet\Services')
+        if ($root) {
+            foreach ($n in $root.GetSubKeyNames()) {
+                $k = $null
+                try {
+                    $k = $root.OpenSubKey($n)
+                    if ($k) {
+                        $ip = [string]$k.GetValue('ImagePath')
+                        if ($ip) { $dn = [string]$k.GetValue('DisplayName'); if (-not $dn -or $dn.StartsWith('@')) { $dn = $n }; [void]$out.Add(@{ PathName = $ip; DisplayName = $dn }) }
+                    }
+                } catch {} finally { if ($k) { $k.Close() } }
+            }
+        }
+    } catch {} finally { if ($root) { $root.Close() } }
+    if ($out.Count -gt 0) { return ,$out }
     foreach ($cls in 'Win32_Service', 'Win32_SystemDriver') {
         try { foreach ($sv in @(Get-CimInstance -ClassName $cls -ErrorAction Stop)) { [void]$out.Add(@{ PathName = [string]$sv.PathName; DisplayName = [string]$sv.DisplayName }) } } catch {}
     }
