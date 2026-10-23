@@ -38,6 +38,8 @@ foreach ($p in $arg.Plan) {
     $i++
     SetP @{ Steps = $total; Step = $i; StepName = [IO.Path]::GetFileName($p.Path); SubKind = 'none' }
     if ($arg.Protect -and (Test-Personal $p.Path)) { Log ((T "  跳过（C 盘个人文件夹，受保护）：{0}") -f $($p.Path)); continue }
+    $why = Get-DupBlock $p.Path (Test-Personal $p.Path)
+    if ($why) { Log ((T "  跳过（{0}）：{1}") -f $why, $p.Path); continue }
     $fi = Get-Item -LiteralPath $p.Path -Force -ErrorAction SilentlyContinue
     if (-not $fi) { continue }
     if ($fi.Length -ne $p.Size -or ($p.Mtime -and $fi.LastWriteTime.Ticks -ne [long]$p.Mtime)) { Log ((T "  跳过（文件在扫描后被修改过）：{0}") -f $($p.Path)); continue }
@@ -74,7 +76,7 @@ $ctl.BtnDupMerge.Add_Click({
             $root = [IO.Path]::GetPathRoot($r.Path)
             $k = @($keepers | Where-Object { [IO.Path]::GetPathRoot($_.Path) -ieq $root }) | Select-Object -First 1
             if (-not $k) { $skip++; continue }
-            [void]$plan.Add(@{ Path = $r.Path; Size = $r.Size; Keep = $k.Path; Verified = $r.Verified; Mtime = $r.ModifiedTicks })
+            [void]$plan.Add(@{ Path = $r.Path; Size = $r.Size; Keep = $k.Path; KeepMtime = $k.ModifiedTicks; Verified = $r.Verified; Mtime = $r.ModifiedTicks })
             $bytes += $r.Size
         }
     }
@@ -97,8 +99,11 @@ foreach ($p in $arg.Plan) {
     $i++
     SetP @{ Steps = $total; Step = $i; StepName = [IO.Path]::GetFileName($p.Path); SubKind = 'none' }
     if ($arg.Protect -and (Test-Personal $p.Path)) { continue }
+    $why = Get-DupBlock $p.Path (Test-Personal $p.Path)
+    if ($why) { Log ((T "  跳过（{0}）：{1}") -f $why, $p.Path); continue }
     $fi = Get-Item -LiteralPath $p.Path -Force -ErrorAction SilentlyContinue
     $ki = Get-Item -LiteralPath $p.Keep -Force -ErrorAction SilentlyContinue
+    if ($ki -and $p.KeepMtime -and $ki.LastWriteTime.Ticks -ne [long]$p.KeepMtime) { Log ((T "  跳过（保留的那份在扫描后被改过）：{0}") -f $($p.Keep)); continue }
     if (-not $fi -or -not $ki -or $fi.Length -ne $p.Size -or $ki.Length -ne $p.Size -or ($p.Mtime -and $fi.LastWriteTime.Ticks -ne [long]$p.Mtime)) { Log ((T "  跳过（文件在扫描后变了）：{0}") -f $($p.Path)); continue }
     if ([FsTools]::SameFile($p.Keep, $p.Path)) { Log ((T "  跳过（本来就是同一个文件）：{0}") -f $($p.Path)); continue }
     if (-not $p.Verified) {

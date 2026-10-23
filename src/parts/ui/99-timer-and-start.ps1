@@ -566,7 +566,7 @@ $win.Add_ContentRendered({
     }
     if ($script:riskShown) { return }
     $script:riskShown = $true
-    if (Test-Path -LiteralPath $script:riskFile) { return }
+    if (Test-Path -LiteralPath $script:riskFile) { Show-HalfMoves; return }
     $ans = Show-Sheet -Kind warn -Title (T '使用前请先阅读安全风险提示') `
         -Text (T "本工具会按你的选择删除或搬移电脑上的文件。删除的文件可能无法恢复，存在资料丢失的风险。`n`n每次删除前，请确认这些资料确实不再需要、删除不会给你带来损失；重要资料请先备份。因使用本工具造成的资料丢失或其他损失，责任由使用者自行承担，开发者不承担责任。`n`n完整说明随时可以在左侧「帮助」里查看。") `
         -Confirm (T '我已阅读并了解上述风险，同意自行承担使用本工具的后果。') -Buttons @((T '退出'), (T '同意并继续')) -Primary (T '同意并继续') -Cancel (T '退出')
@@ -576,7 +576,18 @@ $win.Add_ContentRendered({
         [IO.File]::WriteAllText($script:riskFile, ((T "{0:yyyy-MM-dd HH:mm:ss}  已同意（版本 {1}）") -f (Get-Date), $script:AppVersion), [Text.Encoding]::UTF8)
     } catch {}
     Write-LogFile (T '用户已同意安全风险提示')
+    Show-HalfMoves
 })
+# 打开时查一下有没有上次没做完的搬家（数据都在，只是要告诉用户在哪）
+function Show-HalfMoves {
+    $h = @(); try { $h = @(Find-HalfMoves) } catch { return }
+    if ($h.Count -eq 0) { return }
+    $items = @($h | ForEach-Object { if ($_.Kind -eq '.moved_backup') { (T "{0} 的数据在 {1}") -f $_.Src, $_.Bak } else { (T "{0}：搬回时复制回来的数据在 {1}") -f $_.Src, $_.Bak } })
+    Write-LogFile ((T '发现上次没做完的搬家：') + ($items -join (T '；')))
+    $ans = Show-Sheet -Kind warn -Title (T '有上次没做完的搬家') -Text (T "上次搬家或搬回 C 盘时中途停了（比如关机、断电），下面这些文件夹改了名还没收尾。数据都还在，没有删。`n`n如果软件里的数据看起来不见了：先退出那个软件，把原来名字的文件夹（多半是软件新建的空文件夹）移到别处，再把带后缀的文件夹改回原来的名字；也可以到「搬家管理」里重新搬一次。") `
+        -Items $items -Buttons @((T '知道了'), (T '打开所在位置')) -Primary (T '知道了') -Cancel (T '知道了')
+    if ($ans -eq (T '打开所在位置')) { Open-Location $h[0].Bak }
+}
 $global:CLEANC_UI_SHOWN = $true   # 告诉外层 exe：界面已经正常打开
 if ($script:uiTest) { $win.WindowStartupLocation = 'Manual'; $win.Left = -32000; $win.Top = -32000; $win.ShowActivated = $false; $win.ShowInTaskbar = $false }
 $win.ShowDialog() | Out-Null

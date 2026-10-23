@@ -156,6 +156,30 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+这里不能放搬过去的数据	Moved data can't go here
+{0} 在 {1} 里面。那是清理列表里的文件夹或临时文件夹，清理时会被清空，搬过去的数据会一起被删。请换一个位置。	{0} is inside {1}. That is a cleanup-list folder or a temporary folder, which gets emptied during cleanup, so moved data would be deleted with it. Please choose another location.
+\n但其中 {0} 项（{1}）由系统命令处理，不能放进回收站，会直接删除。	\nBut {0} of them ({1}) are handled by system commands and can't go to the Recycle Bin; they are deleted permanently.
+这个文件夹里已经有东西了	This folder already has files in it
+{0} 已经存在，里面有文件，不是本工具建的。临时文件夹会被定期清空，为了不删到你的文件，不用它。换一块盘，或者把这个文件夹改个名字再试。	{0} already exists, has files in it, and was not created by ClearC. The temporary folder is emptied regularly, so to avoid deleting your files it is not used. Choose another drive, or rename that folder and try again.
+腾挪 ClearC 建的临时文件夹：有这个文件，清理时才会把它当临时文件夹清。	Temporary folder created by ClearC: only with this file present is it cleaned as a temporary folder.
+{0} 的数据在 {1}	The data of {0} is in {1}
+{0}：搬回时复制回来的数据在 {1}	{0}: the data copied back while moving back is in {1}
+发现上次没做完的搬家：	Found an unfinished move: 
+有上次没做完的搬家	A previous move did not finish
+上次搬家或搬回 C 盘时中途停了（比如关机、断电），下面这些文件夹改了名还没收尾。数据都还在，没有删。\n\n如果软件里的数据看起来不见了：先退出那个软件，把原来名字的文件夹（多半是软件新建的空文件夹）移到别处，再把带后缀的文件夹改回原来的名字；也可以到「搬家管理」里重新搬一次。	A previous move to or from another drive stopped partway (for example a shutdown or power cut). The folders below were renamed but not finished. All data is still there; nothing was deleted.\n\nIf an app's data looks missing: quit that app, move the folder with the original name (most likely an empty folder the app created) somewhere else, then rename the folder with the suffix back to the original name. You can also move it again under "Moved folders".
+知道了	OK
+  跳过（路径里有 % 或引号，为了不删错地方不交给系统命令）：{0}	  skipped (the path contains % or a quote; not handed to a system command so nothing else gets deleted): {0}
+  夺权后又拆掉了 {0} 个链接	  removed {0} more links after taking ownership
+  跳过（上级文件夹 {0} 是链接，多半已经搬到其他盘，不跟进去删）：{1}	  skipped (the parent folder {0} is a link, probably moved to another drive; not followed): {1}
+复制时有名字对不上的项目（robocopy 代码 {0}：同一个名字一边是文件一边是文件夹），原目录未动。打开 {1} 看看	Some items did not match while copying (robocopy code {0}: a name is a file on one side and a folder on the other). The original folder was left untouched. Take a look at {1}
+C 盘上的旧文件夹没删干净（可能有文件被占用），数据已经在 {0}，可以以后再删：{1}	The old folder on C: was not fully deleted (a file may be in use). The data is already in {0}; you can delete this later: {1}
+这是聊天软件的聊天记录和文件，只能整体搬到其他盘，不能删。要腾地方请到「搬家管理」	This is chat history and files of a chat app. It can only be moved to another drive as a whole, not deleted. To free space, go to "Moved folders"
+所在的 {0} 是链接（多半是搬家留下的），这里看到的是另一个位置的文件	{0} is a link (probably left by a move), so this file actually lives somewhere else
+C 盘上的链接现在指向 {0}，和记录里的 {1} 不一样，没动。请刷新「搬家管理」再试	The link on C: now points to {0}, not {1} as recorded. Nothing was changed. Refresh "Moved folders" and try again
+路径里有 % 或引号，为了不删错地方，没法在这里搬回	The path contains % or a quote; to avoid deleting the wrong place, it can't be moved back here
+路径里有 % 或引号，为了不删错地方，没法在这里删	The path contains % or a quote; to avoid deleting the wrong place, it can't be deleted here
+路径里有 % 或引号，为了不删错地方不交给系统命令	the path contains % or a quote; not handed to a system command so nothing else gets deleted
+  跳过（保留的那份在扫描后被改过）：{0}	  skipped (the copy being kept was changed after the scan): {0}
 磁盘检查（chkdsk）修复时从损坏的文件里抢救出来的碎片，一般都没用；偶尔能从里面找回丢失的文件，删之前可以先打开看看	Fragments that a disk check (chkdsk) recovered from damaged files. Usually useless; occasionally a lost file can be recovered from them, so take a look before deleting
 已搬回 C 盘。{0} 不是本工具搬过去的（或者还有别的地方链接着它），没有删；确认不需要的话可以自己删	Moved back to C:. {0} was not moved there by ClearC (or another location still links to it), so it was not deleted; delete it yourself if you no longer need it
 搬回后保留目标盘上的文件夹	Kept the folder on the target drive after moving back
