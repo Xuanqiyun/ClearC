@@ -33,7 +33,7 @@ function Get-CleanExtraPaths([string]$n) {
 # 一行对应的、现在确实存在的位置（带 * 的展开成真实的文件夹，最多 30 个）
 function Get-CleanOpenPaths($it) {
     $out = New-Object System.Collections.Generic.List[string]
-    if (-not $it) { return ,$out.ToArray() }
+    if (-not $it) { return @() }   # 不用 ,数组：调用处都是 @(Get-CleanOpenPaths …)，那样会套一层
     foreach ($p in (@($it.Paths) + @(Get-CleanExtraPaths ([string]$it.N)))) {
         if (-not $p) { continue }
         $p = [Environment]::ExpandEnvironmentVariables([string]$p)
@@ -42,7 +42,7 @@ function Get-CleanOpenPaths($it) {
         foreach ($c in $cands) { if ($c -and -not $out.Contains($c) -and (Test-Path -LiteralPath $c)) { $out.Add($c) } }
         if ($out.Count -ge 30) { break }
     }
-    return ,$out.ToArray()
+    return $out.ToArray()
 }
 function Get-CleanRowFrom($src) {
     $v = $src

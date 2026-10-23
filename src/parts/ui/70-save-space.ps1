@@ -138,7 +138,7 @@ function Show-Health($r) {
         $row.When = '{0:yyyy-MM-dd HH:mm}' -f $d.Time; $row.File = $d.File
         $row.Code = if ($d.Ok) { ('0x{0:X} {1}' -f $d.Code, $d.CodeName).Trim() } else { (T '没解析出来') }
         $xp = Get-DumpExplain $d
-        $row.Plain = $xp.Plain + (T '。') + $(if ($d.Ok) { (T '常见原因：') + $xp.Causes + (T '。') } else { '' })
+        $row.Plain = $xp.Plain + (T '。') + $(if ($d.Ok -and $xp.Kind -ne 'other') { (T '常见原因：') + $xp.Causes + (T '。') } elseif ($d.Ok) { $xp.Causes + (T '。') } else { '' })
         $row.Suspect = ''; $row.SuspectBrush = '#C0101C'
         if ($d.Suspect -and $d.SuspectFrom -eq 'address' -and -not $d.SuspectMs) { $row.Suspect = (T "可能是 {0}") -f $d.Suspect }
         elseif ($d.Suspect) { $row.Suspect = (T "可能和 {0} 有关") -f $d.Suspect; $row.SuspectBrush = '#995700' }
