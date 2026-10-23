@@ -19,7 +19,7 @@ function Load-Moves {
     $script:moveRows = $col
     $ctl.MovesList.ItemsSource = $col
     $ctl.EmptyMoves.Visibility = if ($col.Count -gt 0) { 'Collapsed' } else { 'Visible' }
-    $ctl.MovesTabDone.Content = if ($col.Count -gt 0) { (T "已经搬走的（{0}）") -f $col.Count } else { (T '已经搬走的') }
+    Set-NavCount 'MovesTabDone' $col.Count
     Set-DoneInfo $(if ($col.Count -gt 0) { (T "共 {0} 个文件夹，正在统计大小…") -f $col.Count } else { (T '还没有搬过文件夹。') })
     if ($col.Count -gt 0 -and -not $script:worker) {
         $sync.Mode = 'movesize'
@@ -55,7 +55,23 @@ function Set-MovesTab([string]$t) {
     # 别处搬过、搬回过东西以后，切回来时重新看一遍
     if ($c -and -not $script:candScanned -and -not $script:worker -and $ctl.PageMoves.Visibility -eq 'Visible') { Start-CandScan }
 }
-$ctl.MovesTabCand.Add_Checked({ Set-MovesTab 'cand' })
+# 目录上的数字
+function Set-NavCount([string]$name, [int]$n) {
+    $ctl[$name + 'N'].Text = [string]$n
+    $ctl[$name + 'B'].Visibility = if ($n -gt 0) { 'Visible' } else { 'Collapsed' }
+}
+# 「可以搬的」下面一次只看一类：聊天记录、装在 C 盘的软件、其他可搬的文件夹、不适合搬的软件（空 = 全部）
+$script:candGroup = ''
+function Set-CandGroup([string]$g) {
+    $script:candGroup = $g
+    $cfg = $script:sortCfg['CandList']
+    if ($cfg) { $cfg.Filter = if ($g) { [Predicate[object]]{ param($o) [string]$o.Group -eq $script:candGroup } } else { $null } }
+    Apply-ListSort 'CandList'
+    $ctl.BtnCandAll.IsEnabled = ($g -ne 'other' -and $g -ne 'blocked')
+    if ($script:movesTab -ne 'cand') { Set-MovesTab 'cand' }
+}
+$ctl.MovesTabCand.Add_Checked({ Set-CandGroup '' })
+foreach ($n in 'MNavChat', 'MNavApp', 'MNavOther', 'MNavBlocked') { $ctl[$n].Add_Checked({ Set-CandGroup ([string]$this.Tag) }) }
 $ctl.MovesTabDone.Add_Checked({ Set-MovesTab 'done' })
 
 function Start-CandScan {
@@ -65,7 +81,7 @@ function Start-CandScan {
     $ctl.EmptyCandText.Text = (T '正在看 C 盘上还有什么能搬…')
     if ($script:movesTab -eq 'cand') { $ctl.EmptyCand.Visibility = 'Visible' }
     Set-CandInfo (T '正在看 C 盘上还有什么能搬，统计大小要一会儿…')
-    $ctl.MovesTabCand.Content = (T '可以搬的')
+    foreach ($k in 'MovesTabCand', 'MNavChat', 'MNavApp', 'MNavOther', 'MNavBlocked') { Set-NavCount $k 0 }
     $sync.Mode = 'movescan'; $sync.CandResult = $null; $sync.CandStore = $null
     Start-Op (T '看看 C 盘上还有什么能搬') -NoCard
     UI-Busy $true
@@ -190,10 +206,16 @@ function Update-CandInfo {
     if ($nOther) { $parts += ((T "其他文件夹 {0} 项") -f $nOther) }
     if ($rows.Count -gt 0) {
         Set-CandInfo ((T "C 盘上还能搬走约 {0}：{1}。勾选后点右下角「搬到其他盘」。") -f (Fmt $tot), ($parts -join (T '、')))
-        $ctl.MovesTabCand.Content = (T "可以搬的（{0}）") -f $rows.Count
     } else {
         Set-CandInfo (T 'C 盘上没找到还能搬的东西。')
-        $ctl.MovesTabCand.Content = (T '可以搬的')
+    }
+    Set-NavCount 'MovesTabCand' $rows.Count
+    $all = @(); if ($script:candRows) { $all = @($script:candRows) }
+    foreach ($p in @(@('MNavChat', 'chat'), @('MNavApp', 'app'), @('MNavOther', 'other'), @('MNavBlocked', 'blocked'))) {
+        $c = @($all | Where-Object { $_.Group -eq $p[1] }).Count
+        Set-NavCount $p[0] $c
+        # 这一类没有东西就不列（正在看的那一类除外）
+        $ctl[$p[0]].Visibility = if ($c -gt 0 -or $script:candGroup -eq $p[1]) { 'Visible' } else { 'Collapsed' }
     }
     $has = $script:candRows -and $script:candRows.Count -gt 0
     $ctl.EmptyCandText.Text = (T 'C 盘上没找到还能搬的东西：聊天记录和软件要么已经搬走，要么不在 C 盘。')
@@ -206,7 +228,8 @@ function Update-CandSel {
     $ctl.CandSel.Text = if ($sel.Count -gt 0) { (T "已选 {0} 项，约 {1}。") -f $sel.Count, (Fmt $tot) } else { (T '勾选要搬的项目。') }
     $ctl.BtnCandMove.IsEnabled = ($sel.Count -gt 0) -and -not $script:worker -and [bool](Get-Dest)
 }
-$ctl.BtnCandAll.Add_Click({ if ($script:candRows) { foreach ($r in $script:candRows) { if ($r.CanMove -and $r.Group -ne 'other') { $r.Checked = $true } } }; Update-CandSel })
+# 全选：聊天记录和软件（正在看其中一类时只选这一类）；「其他可搬的文件夹」要看清说明自己勾
+$ctl.BtnCandAll.Add_Click({ if ($script:candRows) { foreach ($r in $script:candRows) { if ($r.CanMove -and $r.Group -ne 'other' -and (-not $script:candGroup -or $r.Group -eq $script:candGroup)) { $r.Checked = $true } } }; Update-CandSel })
 $ctl.BtnCandNone.Add_Click({ if ($script:candRows) { foreach ($r in $script:candRows) { $r.Checked = $false } }; Update-CandSel })
 $ctl.BtnCandStore.Add_Click({ try { Start-Process 'ms-settings:appsfeatures' } catch {} })
 $ctl.CandList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent, [System.Windows.RoutedEventHandler]{

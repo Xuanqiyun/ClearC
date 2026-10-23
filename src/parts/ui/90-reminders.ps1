@@ -86,6 +86,12 @@ function Repair-AutoTasks {
 }
 function Remove-CleanTask([string]$name) { & "$env:SystemRoot\System32\schtasks.exe" /Delete /TN $name /F 2>$null | Out-Null }
 $script:autoSync = $false
+# 选项卡上的开关状态：开着是绿色的「已开启」，关着是灰色的「已关闭」
+function Set-TabState($badge, $text, [bool]$on) {
+    $text.Text = if ($on) { (T '已开启') } else { (T '已关闭') }
+    $badge.Background = if ($on) { New-Brush '#E5F4E9' 'b' } else { New-Brush '#DEDEE4' 'b' }
+    $text.Foreground = if ($on) { New-Brush '#1D7A35' } else { New-Brush '#6E6E73' }
+}
 function Load-Auto {
     $script:autoSync = $true
     $exe = [string]$env:CLEANC_SELF
@@ -111,8 +117,8 @@ function Load-Auto {
     $ctl.AutoCleanNote.Text += "`n" + $(if (Get-StorageSenseOn) { (T 'Windows 自带的「存储感知」现在是开着的：它也会定期清临时文件和回收站，和这里的自动清理不冲突，只是会各做一遍。') } else { (T 'Windows 自带的「存储感知」现在是关着的（在 Windows 设置 → 系统 → 存储里）。') })
     $script:autoSync = $false
     # 选项卡上写明开着还是关着，不点进去也知道
-    $ctl.ATabRemindState.Text = $(if ($r1) { (T '已开启') } else { (T '已关闭') })
-    $ctl.ATabCleanState.Text = $(if ($r2) { (T '已开启') } else { (T '已关闭') })
+    Set-TabState $ctl.ATabRemindB $ctl.ATabRemindState $r1
+    Set-TabState $ctl.ATabCleanB $ctl.ATabCleanState $r2
     Draw-History
 }
 # 自动提醒的三个选项卡
@@ -149,6 +155,7 @@ function Draw-History {
         $ctl.HistInfo.Text = (T "最近 {0} 天有记录：C 盘剩余从 {1} 变成 {2}（{3}{4}）。蓝色正常，橙色表示用掉了八成五以上，红色表示快满了。") -f $keys.Count, (Fmt $f.Free), (Fmt $l.Free), $(if ($d -ge 0) { (T '多了 ') } else { (T '少了 ') }), (Fmt ([math]::Abs($d)))
     } else { $ctl.HistInfo.Text = (T '还没有记录。每次打开本工具都会记一笔。'); $ctl.HistFirst.Text = ''; $ctl.HistLast.Text = '' }
     $ctl.ATabHistState.Text = $(if ($keys.Count -gt 0) { (T "{0} 天") -f $keys.Count } else { '' })
+    $ctl.ATabHistB.Visibility = if ($keys.Count -gt 0) { 'Visible' } else { 'Collapsed' }
 }
 $ctl.AutoRemindGB.Add_SelectionChanged({
     if ($script:autoSync) { return }

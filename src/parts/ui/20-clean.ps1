@@ -141,8 +141,10 @@ function Update-CleanTabs {
         $rb.GroupName = 'cleantab'; $rb.Style = $seg; $rb.Tag = $g
         $sp = New-Object System.Windows.Controls.StackPanel; $sp.Orientation = 'Horizontal'
         $t1 = New-Object System.Windows.Controls.TextBlock; $t1.Text = $g
-        $t2 = New-Object System.Windows.Controls.TextBlock; $t2.Text = [string]$cnt[$g]; $t2.Margin = New-Object System.Windows.Thickness 6, 0, 0, 0; $t2.Foreground = New-Brush '#86868B'
-        [void]$sp.Children.Add($t1); [void]$sp.Children.Add($t2); $rb.Content = $sp
+        $t2 = New-Object System.Windows.Controls.TextBlock; $t2.Text = [string]$cnt[$g]; $t2.Style = $win.FindResource('TabBadgeText')
+        $bd = New-Object System.Windows.Controls.Border; $bd.Style = $win.FindResource('TabBadge'); $bd.Child = $t2
+        [void]$sp.Children.Add($t1); [void]$sp.Children.Add($bd); $rb.Content = $sp
+        if ($ctl.CleanTabs.Children.Count -eq 0) { $rb.Uid = 'first' }
         if ($note[$g]) { $rb.ToolTip = $note[$g] }
         $rb.IsChecked = ($g -eq $script:cleanTab)
         $rb.Add_Checked({ Select-CleanTab ([string]$this.Tag) })
@@ -281,7 +283,7 @@ if (-not (Stopping)) { $sync.Sizes = $sizes }
 }
 
 $ctl.BtnScan.Add_Click({ UI-Log (T "开始扫描..."); Do-Scan })
-$ctl.BtnCleanCustom.Add_Click({ Show-Page 'settings'; $ctl.SetScroll.UpdateLayout(); $ctl.SetCleanCard.BringIntoView() })
+$ctl.BtnCleanCustom.Add_Click({ Show-Page 'settings'; Select-SetSection 'Clean'; $ctl.SetScroll.ScrollToTop() })
 
 $ctl.BtnHogs.Add_Click({
     Show-Page 'map'

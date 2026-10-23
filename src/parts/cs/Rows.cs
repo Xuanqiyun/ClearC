@@ -5,7 +5,9 @@ public static class L10n {
 }
 
 // ==================== 各页面列表的一行 ====================
-public class MapRow {
+public class MapRow : INotifyPropertyChanged {
+    private bool _mk; public bool Marked { get { return _mk; } set { if (_mk != value) { _mk = value; PropertyChangedEventHandler h = PropertyChanged; if (h != null) h(this, new PropertyChangedEventArgs("Marked")); } } }
+    public event PropertyChangedEventHandler PropertyChanged;
     public string Name { get; set; }
     public string Path { get; set; }
     public string SizeText { get; set; }
@@ -43,6 +45,9 @@ public class AppRow : INotifyPropertyChanged {
     public bool OnC { get; set; }
     public bool LocReg { get; set; }
     public bool CanMove { get; set; }
+    // 勾选了要一起处理（一次卸载多个）
+    private bool _pick; public bool Picked { get { return _pick; } set { if (_pick != value) { _pick = value; PickDirty = true; Raise("Picked"); } } }
+    public static volatile bool PickDirty;
     // winget 查到的新版本（空 = 没有或还没查）
     private string _upg = ""; public string Upgrade { get { return _upg; } set { _upg = value; Raise("Upgrade"); Raise("HasUpgrade"); } }
     public string UpgradeId { get; set; }
@@ -60,6 +65,8 @@ public class StartRow : INotifyPropertyChanged {
     public string Key1 { get; set; }        // startup: StartupApproved 的键   task: 任务路径   shellex: CLSID
     public string Key2 { get; set; }        // startup: 值名   task: 任务名
     public bool Ours { get; set; }          // 本工具自己建的任务
+    // 勾选了要一起处理（一次禁用、启用多个，或者一起移到回收站）
+    private bool _pick; public bool Picked { get { return _pick; } set { if (_pick != value) { _pick = value; AppRow.PickDirty = true; Raise("Picked"); } } }
     private bool _on = true;
     public bool Enabled { get { return _on; } set { _on = value; Raise("Enabled"); Raise("StatusText"); Raise("StatusBrush"); Raise("ToggleText"); } }
     public string Size { get; set; }

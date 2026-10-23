@@ -47,6 +47,7 @@ function Filter-Apps {
     $ctl.AppsInfo.Text = (T "{0} 个软件，合计约 {1}") -f $col.Count, (Fmt $tot)
     $ctl.EmptyApps.Visibility = if ($col.Count -gt 0) { 'Collapsed' } else { 'Visible' }
     if ($col.Count -eq 0) { $ctl.EmptyAppsText.Text = (T '没有符合条件的软件') }
+    Update-PickBar
 }
 foreach ($c in @($ctl.AppsAll, $ctl.AppsC, $ctl.AppsStore)) { $c.Add_Checked({ Filter-Apps }) }
 $ctl.AppsSearch.Add_TextChanged({ Filter-Apps })
@@ -238,15 +239,19 @@ $ctl.BtnAppsLeft.Add_Click({
     $ans = Show-Sheet -Kind danger -Title ((T "「{0}」留下了 {1} 个文件夹") -f $r.Name, $left.Count) -Text (T '这些文件夹以软件名命名，多半是卸载后剩下的设置和缓存。会移到回收站，需要的话还能恢复。') -Items $items `
         -Confirm (T '我已确认这些是已卸载软件留下的，删除不会给我带来损失。') -Buttons @((T '先不删'), (T '移到回收站')) -Primary (T '移到回收站') -Cancel (T '先不删')
     if ($ans -ne (T '移到回收站')) { return }
-    $sync.Mode = 'leftdel'; $sync.LeftRes = $null
+    $sync.Mode = 'leftdel'; $sync.LeftRes = $null; $script:leftBatch = $false
     Start-Op ((T "清理「{0}」的残留") -f $r.Name); UI-Busy $true
-    Start-Worker @'
+    Start-Worker $script:leftDelCode @{ Items = $left; Name = $r.Name }
+})
+# 残留文件夹移到回收站（「检查残留」和「残留文件夹」里一次选几个都用这一段）：删前再查一遍，链接不跟进，放不进回收站的不删
+$script:leftDelCode = @'
 $n = 0; $i = 0
 foreach ($x in $arg.Items) {
     if (Stopping) { break }
     $i++
     SetP @{ Steps = $arg.Items.Count; Step = $i; StepName = $x.Path; SubKind = 'none' }
     if (Get-DeleteBlock $x.Path -Leftover) { continue }
+    if (IsLink $x.Path) { Log ((T "  没删（是链接）：{0}") -f $x.Path); continue }
     $why = Test-RecycleOk $x.Path ([double]$x.Bytes)
     if ($why) { OpLog '删除' ((T "软件残留：没删（{0}）") -f $why) $x.Path ''; Log ((T "  没删（{0}）：{1}") -f $why, $x.Path); continue }
     [void][FsTools]::Recycle($x.Path, [long]$sync.Hwnd)
@@ -255,8 +260,7 @@ foreach ($x in $arg.Items) {
     OpLog '删除' ((T "软件残留：移到回收站（{0}）") -f $arg.Name) $x.Path $(if ($ok) { GB $x.Bytes } else { (T '没删掉，可能被占用') })
 }
 $sync.LeftRes = @{ Count = $n; Name = $arg.Name }
-'@ @{ Items = $left; Name = $r.Name }
-})
+'@
 
 # ---------- 开机启动 / 计划任务 / 右键菜单：同一个列表，按视图换内容 ----------
 $script:startRows = @{}   # kind -> List[StartRow]
@@ -292,6 +296,7 @@ function Filter-StartRows {
     }
     $ctl.EmptyApps.Visibility = if ($col.Count -gt 0) { 'Collapsed' } else { 'Visible' }
     if ($col.Count -eq 0) { $ctl.EmptyAppsText.Text = switch ($v) { 'startup' { (T '没有开机启动项') } 'task' { (T '没有第三方的计划任务') } 'leftover' { (T '没找到像是残留的文件夹') } default { (T '没有第三方的右键菜单扩展') } } }
+    Update-PickBar
 }
 function Load-StartRows([string]$kind) {
     if ($script:worker) { return }
@@ -365,18 +370,22 @@ function Build-StartRows([string]$kind, $list) {
     $script:startRows[$kind] = $sorted
     if ($script:appsView -eq $kind) { Filter-StartRows }
 }
-function Set-StartRow($r, [bool]$on) {
+function Set-StartRow($r, [bool]$on, [switch]$Quiet) {
     try {
         switch ($r.Kind) {
             'startup' { Set-StartupEnabled $r.Key1 $r.Key2 $on }
             'task'    { if ($on) { Enable-ScheduledTask -TaskPath $r.Key1 -TaskName $r.Key2 -ErrorAction Stop | Out-Null } else { Disable-ScheduledTask -TaskPath $r.Key1 -TaskName $r.Key2 -ErrorAction Stop | Out-Null } }
             default   { Set-ContextMenuEnabled $r.Key1 $on }
         }
-    } catch { Show-Sheet -Kind warn -Title $(if ($on) { (T '没启用成') } else { (T '没禁用成') }) -Text $_.Exception.Message | Out-Null; return }
+    } catch {
+        if ($Quiet) { return ((T "{0}：{1}") -f $r.Name, $_.Exception.Message) }
+        Show-Sheet -Kind warn -Title $(if ($on) { (T '没启用成') } else { (T '没禁用成') }) -Text $_.Exception.Message | Out-Null; return
+    }
     $r.Enabled = $on
     $what = switch ($r.Kind) { 'startup' { if ($on) { (T '启用开机启动项') } else { (T '禁用开机启动项') } } 'task' { if ($on) { (T '启用计划任务') } else { (T '禁用计划任务') } } default { if ($on) { (T '启用右键菜单扩展') } else { (T '禁用右键菜单扩展') } } }
     OpLog '系统设置' $what $r.Name $r.Detail
     UI-Log ((T "{0}：{1}") -f $what, $r.Name)
+    if ($Quiet) { return '' }
     if ($r.Kind -eq 'shellex') { $ctl.AppsInfo.Text = (T '右键菜单的改动对新打开的资源管理器窗口生效；还没生效的话注销再登录一次') }
     else { Filter-StartRows }
 }
@@ -414,6 +423,217 @@ $ctl.StartList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::Click
         Set-StartRow $r $false
     } else { Set-StartRow $r $true }
 })
+# ---------- 软件、开机启动、计划任务、右键菜单、残留文件夹：勾选几项一起处理 ----------
+# 点方框勾上或取消；Shift 点方框把上次点的那一行到这一行都勾上；按住左键在行上上下拖，拖过的行跟着按下的那一行变
+# （按下的那一行原来没勾，拖过的都勾上；原来勾着，拖过的都取消）。勾了以后下面出现一排按钮：一次卸载、禁用、启用、移到回收站
+$script:pickAnchor = -1; $script:pickSync = $false; $script:pdrag = $null
+function Get-PickList { if ($script:appsView -eq 'apps') { $ctl.AppsList } else { $ctl.StartList } }
+function Get-Picked { @(@((Get-PickList).Items) | Where-Object { $_.Picked }) }
+function Update-PickBar {
+    [AppRow]::PickDirty = $false
+    $v = $script:appsView
+    $items = @((Get-PickList).Items); $p = @($items | Where-Object { $_.Picked }); $n = $p.Count
+    $can = @($items | Where-Object { -not $_.Ours }).Count
+    $all = if ($v -eq 'apps') { $ctl.AppsPickAll } else { $ctl.StartPickAll }
+    $script:pickSync = $true
+    try { $all.IsChecked = if ($n -eq 0) { $false } elseif ($n -ge $can) { $true } else { $null }; $all.IsEnabled = $can -gt 0 } finally { $script:pickSync = $false }
+    $ctl.AppsPickBar.Visibility = if ($n -gt 0) { 'Visible' } else { 'Collapsed' }
+    if ($n -eq 0) { return }
+    $isStart = $v -in 'startup', 'task', 'shellex'
+    $ctl.BtnPickUninstall.Visibility = if ($v -eq 'apps') { 'Visible' } else { 'Collapsed' }
+    $ctl.BtnPickRecycle.Visibility = if ($v -eq 'leftover') { 'Visible' } else { 'Collapsed' }
+    $ctl.BtnPickDisable.Visibility = if ($isStart) { 'Visible' } else { 'Collapsed' }
+    $ctl.BtnPickEnable.Visibility = if ($isStart) { 'Visible' } else { 'Collapsed' }
+    if ($v -eq 'apps') { $b = [double]0; foreach ($r in $p) { if ($r.Size -gt 0) { $b += [double]$r.Size } }; $ctl.AppsPickText.Text = (T "已选 {0} 个软件，合计约 {1}") -f $n, (Fmt $b) }
+    elseif ($v -eq 'leftover') { $b = [double]0; foreach ($r in $p) { $b += [double]$r.Key2 }; $ctl.AppsPickText.Text = (T "已选 {0} 个文件夹，共 {1}") -f $n, (Fmt $b) }
+    else {
+        $on = @($p | Where-Object { $_.Enabled }).Count
+        $ctl.AppsPickText.Text = (T "已选 {0} 项：{1} 项启用中，{2} 项已禁用") -f $n, $on, ($n - $on)
+        $ctl.BtnPickDisable.IsEnabled = $on -gt 0; $ctl.BtnPickEnable.IsEnabled = ($n - $on) -gt 0
+    }
+}
+function Clear-Picks { foreach ($r in @((Get-PickList).Items)) { if ($r.Picked) { $r.Picked = $false } }; Update-PickBar }
+foreach ($cb in @($ctl.AppsPickAll, $ctl.StartPickAll)) {
+    $cb.Add_Click({ if ($script:pickSync) { return }; $on = [bool]$this.IsChecked; foreach ($r in @((Get-PickList).Items)) { if (-not $r.Ours -and $r.Picked -ne $on) { $r.Picked = $on } }; Update-PickBar })
+}
+$ctl.BtnPickClear.Add_Click({ Clear-Picks })
+function Get-PickRowIndex($lv, $el) {
+    $c = $null; try { $c = [System.Windows.Controls.ItemsControl]::ContainerFromElement($lv, $el) } catch {}
+    if (-not $c) { return -1 }
+    return $lv.ItemContainerGenerator.IndexFromContainer($c)
+}
+foreach ($lv in @($ctl.AppsList, $ctl.StartList)) {
+    # 点了行前面的方框：记下从哪一行接着用 Shift 勾
+    $lv.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent, [System.Windows.RoutedEventHandler]{
+        param($s, $e)
+        if ($e.OriginalSource -isnot [System.Windows.Controls.CheckBox]) { return }
+        $i = Get-PickRowIndex $s $e.OriginalSource
+        if ($i -lt 0) { return }
+        $shift = ([System.Windows.Input.Keyboard]::Modifiers -band [System.Windows.Input.ModifierKeys]::Shift) -ne 0
+        if ($shift -and $script:pickAnchor -ge 0 -and $script:pickAnchor -lt $s.Items.Count) {
+            $want = [bool]$s.Items[$i].Picked
+            for ($k = [math]::Min($i, $script:pickAnchor); $k -le [math]::Max($i, $script:pickAnchor); $k++) { $r = $s.Items[$k]; if (-not $r.Ours -and $r.Picked -ne $want) { $r.Picked = $want } }
+        }
+        $script:pickAnchor = $i
+        Update-PickBar
+    })
+    $lv.Add_PreviewMouseLeftButtonDown({
+        param($s, $e)
+        $script:pdrag = $null
+        $src = $e.OriginalSource
+        if ($src -isnot [System.Windows.DependencyObject]) { return }
+        try {
+            for ($v = $src; $v -and -not [object]::ReferenceEquals($v, $s); $v = [System.Windows.Media.VisualTreeHelper]::GetParent($v)) {
+                if ($v -is [System.Windows.Controls.Primitives.ButtonBase] -or $v -is [System.Windows.Controls.Primitives.ScrollBar]) { return }   # 按钮、方框、滚动条照常用
+                if ($v -is [System.Windows.Controls.ListViewItem]) { break }
+            }
+        } catch { return }
+        $i = Get-PickRowIndex $s $src
+        if ($i -lt 0 -or $s.Items[$i].Ours) { return }
+        $script:pdrag = @{ Lv = $s; Anchor = $i; Cur = $i; Moved = $false; Want = -not [bool]$s.Items[$i].Picked; Snap = $null }
+    })
+    $lv.Add_PreviewMouseMove({
+        param($s, $e)
+        $d = $script:pdrag
+        if (-not $d -or -not [object]::ReferenceEquals($d.Lv, $s)) { return }
+        if ($e.LeftButton -ne [System.Windows.Input.MouseButtonState]::Pressed) { $script:pdrag = $null; return }
+        $i = Get-RowAt $s ($e.GetPosition($s).Y)
+        if ($i -lt 0 -or $i -eq $d.Cur) { return }
+        if (-not $d.Moved) { $d.Moved = $true; $d.Snap = @(@($s.Items) | ForEach-Object { [bool]$_.Picked }) }
+        $a = [math]::Min($d.Anchor, $i); $b = [math]::Max($d.Anchor, $i); $k = 0
+        foreach ($r in @($s.Items)) {
+            if (-not $r.Ours) { $want = if ($k -ge $a -and $k -le $b) { $d.Want } else { $d.Snap[$k] }; if ($r.Picked -ne $want) { $r.Picked = $want } }
+            $k++
+        }
+        $d.Cur = $i; $script:pickAnchor = $i
+        Update-PickBar
+    })
+    $lv.Add_PreviewMouseLeftButtonUp({ $script:pdrag = $null })
+}
+# 一次卸载几个：应用商店的直接卸载；其余的依次打开各自的卸载程序，关掉一个再打开下一个（不加静默参数，每一步都看得见）
+$script:uq = $null
+$script:uqTimer = New-Object System.Windows.Threading.DispatcherTimer
+$script:uqTimer.Interval = [TimeSpan]::FromMilliseconds(800)
+$script:uqTimer.Add_Tick({ Step-UninstQueue })
+function Start-BatchUninstall {
+    $rows = @(Get-Picked | Where-Object { $_ -is [AppRow] })
+    if ($rows.Count -eq 0) { return }
+    if ($script:worker -or $script:uq) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return }
+    $store = @($rows | Where-Object { $_.Kind -eq 'store' -and $_.PackageName })
+    $win32 = @($rows | Where-Object { $_.Kind -ne 'store' -and $_.Uninstall })
+    $none = @($rows | Where-Object { -not ($_.Kind -eq 'store' -and $_.PackageName) -and -not ($_.Kind -ne 'store' -and $_.Uninstall) })
+    $items = @($rows | ForEach-Object { (T "{0}（{1}）") -f $_.Name, $_.SizeText })
+    $txt = ''
+    if ($win32.Count -gt 0) { $txt += (T "会依次打开 {0} 个软件自带的卸载程序：一个走完、窗口关掉后，自动打开下一个。每个都按它自己的提示操作，可以随时停下。") -f $win32.Count }
+    if ($store.Count -gt 0) { $txt += $(if ($txt) { "`n" } else { '' }) + ((T "应用商店的 {0} 个直接卸载。") -f $store.Count) }
+    if ($none.Count -gt 0) { $txt += "`n" + ((T "另有 {0} 个没有登记卸载方法，跳过：{1}") -f $none.Count, ((@($none | ForEach-Object { $_.Name })) -join (T '、'))) }
+    $txt += "`n`n" + (T '卸载会删除这些软件，它们保存在软件里的数据可能一起被删掉。')
+    if ((Show-Sheet -Kind warn -Title ((T "卸载选中的 {0} 个软件？") -f $rows.Count) -Text $txt -Items $items -Buttons @((T '取消'), (T '卸载')) -Primary (T '卸载') -Cancel (T '取消')) -ne (T '卸载')) { return }
+    $script:uq = @{ Win32 = $win32; I = -1; Proc = $null; At = (Get-Date); ExitAt = $null; Done = 0; Fail = (New-Object System.Collections.ArrayList); Stop = $false; Total = ($win32.Count + $store.Count) }
+    OpLog '卸载' (T '批量卸载') ((@($rows | ForEach-Object { $_.Name })) -join (T '、')) ((T "{0} 个") -f $rows.Count)
+    if ($store.Count -gt 0) {
+        $sync.Mode = 'uninstmany'; $sync.UninstMany = $null
+        Start-Op ((T "卸载 {0} 个应用商店软件") -f $store.Count); UI-Busy $true
+        Start-Worker @'
+$res = New-Object System.Collections.ArrayList; $i = 0
+foreach ($x in $arg.Items) {
+    if (Stopping) { break }
+    $i++
+    SetP @{ Steps = $arg.Items.Count; Step = $i; StepName = $x.Name; SubKind = 'none' }
+    $ok = $true; $msg = ''
+    try { Remove-AppxPackage -Package $x.Pkg -ErrorAction Stop } catch { $ok = $false; $msg = $_.Exception.Message }
+    OpLog '卸载' (T '卸载应用商店软件') $x.Name $(if ($ok) { ((T "约 {0}") -f $(GB $x.Size)) } else { (T '失败：') + $msg })
+    [void]$res.Add(@{ Name = $x.Name; Ok = $ok; Msg = $msg })
+}
+$sync.UninstMany = $res
+'@ @{ Items = @($store | ForEach-Object { @{ Pkg = $_.PackageName; Name = $_.Name; Size = [double]$_.Size } }) }
+    } else { Step-UninstQueue }
+}
+# 有的卸载程序把自己复制到临时文件夹再打开一次，原来那个马上退出：临时文件夹里在这之后开的程序还在，就当还没走完
+function Test-UninstChild($since) {
+    $tmp = [IO.Path]::GetTempPath().TrimEnd('\')
+    foreach ($p in @(Get-Process -ErrorAction SilentlyContinue)) {
+        try { if ($p.StartTime -ge $since -and $p.Path -and $p.Path.StartsWith($tmp, [StringComparison]::OrdinalIgnoreCase)) { return $true } } catch {}
+    }
+    return $false
+}
+function Step-UninstQueue([switch]$Next) {
+    $q = $script:uq
+    if (-not $q) { $script:uqTimer.Stop(); return }
+    if ($q.Proc -and -not $Next) {
+        $busy = $false
+        try { if (-not $q.Proc.HasExited) { $busy = $true } } catch {}
+        if (-not $busy -and (Test-UninstChild $q.At)) { $busy = $true }
+        if ($busy) { $q.ExitAt = $null; if (-not $script:uqTimer.IsEnabled) { $script:uqTimer.Start() }; return }
+        if (-not $q.ExitAt) { $q.ExitAt = Get-Date; return }
+        if (((Get-Date) - $q.ExitAt).TotalSeconds -lt 1.5) { return }   # 走完后停一下再开下一个，免得两个窗口叠在一起
+    }
+    $q.Proc = $null; $q.ExitAt = $null
+    if ($q.Stop -or ($q.I + 1) -ge $q.Win32.Count) { Finish-UninstQueue; return }
+    $q.I++
+    $r = $q.Win32[$q.I]
+    $pc = Split-Command $r.Uninstall
+    try {
+        if ($script:uiTest) { $script:uiFixRuns.Add('uninstall:' + $r.Name) }
+        elseif ($pc[1]) { $q.Proc = Start-Process -FilePath $pc[0] -ArgumentList $pc[1] -PassThru -ErrorAction Stop }
+        else { $q.Proc = Start-Process -FilePath $pc[0] -PassThru -ErrorAction Stop }
+        $q.At = Get-Date; $q.Done++
+        OpLog '卸载' (T '打开卸载程序') $r.Name $r.Uninstall
+    } catch { [void]$q.Fail.Add(((T "{0}：打不开卸载程序（{1}）") -f $r.Name, $_.Exception.Message)) }
+    $ctl.AppsBatchText.Text = (T "正在卸载第 {0} / {1} 个：{2}。按卸载程序的提示操作；它的窗口关掉后，自动打开下一个。") -f ($q.I + 1), $q.Win32.Count, $r.Name
+    $ctl.AppsBatchBox.Visibility = 'Visible'; $ctl.AppsLeftBox.Visibility = 'Collapsed'
+    if (-not $script:uqTimer.IsEnabled) { $script:uqTimer.Start() }
+}
+function Finish-UninstQueue {
+    $script:uqTimer.Stop()
+    $q = $script:uq; $script:uq = $null
+    $ctl.AppsBatchBox.Visibility = 'Collapsed'
+    if (-not $q) { return }
+    $msg = (T "处理了 {0} 个软件。") -f $q.Done
+    if ($q.Stop -and ($q.I + 1) -lt $q.Win32.Count) { $msg += (T '中途停下了，后面的没有打开。') }
+    if ($q.Fail.Count -gt 0) { $msg += "`n`n" + (T '没成的：') + "`n" + ((@($q.Fail)) -join "`n") }
+    $msg += "`n`n" + (T '卸载程序常会留下设置和缓存：可以到「残留文件夹」里看看。列表已经刷新。')
+    if ($script:uiTest) { $script:uiSheets.Add('batch-uninstall') } else { Show-Sheet -Kind done -Title (T '批量卸载走完了') -Text $msg | Out-Null }
+    Clear-Picks
+    if (-not $script:worker -and -not $script:uiTest) { Load-Apps }
+}
+$ctl.BtnPickUninstall.Add_Click({ Start-BatchUninstall })
+$ctl.BtnBatchNext.Add_Click({ if ($script:uq) { Step-UninstQueue -Next } })
+$ctl.BtnBatchStop.Add_Click({ if ($script:uq) { $script:uq.Stop = $true; Finish-UninstQueue } })
+# 一次禁用 / 启用几个开机启动项、计划任务、右键菜单扩展：先列出来确认一次
+function Start-BatchToggle([bool]$on) {
+    $rows = @(Get-Picked | Where-Object { $_ -is [StartRow] -and -not $_.Ours -and $_.Kind -ne 'leftover' -and [bool]$_.Enabled -ne $on })
+    if ($rows.Count -eq 0) { return }
+    $verb = if ($on) { (T '启用') } else { (T '禁用') }
+    $txt = if ($on) { (T '这些项目会重新生效：开机启动项下次开机时启动，计划任务到时间照常运行，右键菜单扩展对新打开的资源管理器窗口生效。') }
+           else { (T '这些项目会停用：开机时不再自动启动、计划任务到时间不再运行、右键菜单里不再出现。程序本身都不删，随时可以在这里重新启用。') }
+    $items = @($rows | ForEach-Object { $_.Name })
+    $title = if ($on) { (T "启用选中的 {0} 项？") -f $rows.Count } else { (T "禁用选中的 {0} 项？") -f $rows.Count }
+    if ((Show-Sheet -Title $title -Text $txt -Items $items -Buttons @((T '取消'), $verb) -Primary $verb -Cancel (T '取消')) -ne $verb) { return }
+    $errs = New-Object System.Collections.Generic.List[string]
+    foreach ($r in $rows) { $err = Set-StartRow $r $on -Quiet; if ($err) { $errs.Add([string]$err) } else { $r.Picked = $false } }
+    if (@($rows | Where-Object { $_.Kind -eq 'shellex' }).Count -gt 0) { $ctl.AppsInfo.Text = (T '右键菜单的改动对新打开的资源管理器窗口生效；还没生效的话注销再登录一次') }
+    Filter-StartRows; Update-PickBar
+    if ($errs.Count -gt 0) { Show-Sheet -Kind warn -Title $(if ($on) { (T "{0} 项没启用成") -f $errs.Count } else { (T "{0} 项没禁用成") -f $errs.Count }) -Text ($errs -join "`n") | Out-Null }
+    else { UI-Log $(if ($on) { (T "启用了 {0} 项") -f $rows.Count } else { (T "禁用了 {0} 项") -f $rows.Count }) }
+}
+$ctl.BtnPickDisable.Add_Click({ Start-BatchToggle $false })
+$ctl.BtnPickEnable.Add_Click({ Start-BatchToggle $true })
+# 一次把几个残留文件夹移到回收站
+function Start-BatchLeftover {
+    $rows = @(Get-Picked | Where-Object { $_ -is [StartRow] -and $_.Kind -eq 'leftover' })
+    if ($rows.Count -eq 0) { return }
+    if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return }
+    $tb = [double]0; foreach ($r in $rows) { $tb += [double]$r.Key2 }
+    $items = @($rows | ForEach-Object { (T "{0}（{1}）") -f $_.Detail, $_.Size })
+    $ans = Show-Sheet -Kind danger -Title ((T "把选中的 {0} 个文件夹移到回收站？") -f $rows.Count) -Text ((T "共 {0}。这些只是猜测：名字对不上任何已装软件、没有程序在用、一个月没动过。拿不准的先点「打开位置」看一眼。移到回收站后还能恢复。") -f (Fmt $tb)) -Items $items `
+        -Confirm (T '我看过了，这些是已卸载软件留下的，删除不会给我带来损失。') -Buttons @((T '先不删'), (T '移到回收站')) -Primary (T '移到回收站') -Cancel (T '先不删')
+    if ($ans -ne (T '移到回收站')) { return }
+    $sync.Mode = 'leftdel'; $sync.LeftRes = $null; $script:leftBatch = $true
+    Start-Op ((T "把 {0} 个残留文件夹移到回收站") -f $rows.Count); UI-Busy $true
+    Start-Worker $script:leftDelCode @{ Items = @($rows | ForEach-Object { @{ Path = [string]$_.Detail; Bytes = [double]$_.Key2 } }); Name = (T '残留文件夹') }
+}
+$ctl.BtnPickRecycle.Add_Click({ Start-BatchLeftover })
 # ---------- 检查新版本（winget）----------
 function Start-WingetCheck {
     if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return }

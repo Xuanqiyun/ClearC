@@ -156,6 +156,95 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+{0} 项所在的文件夹已经在待删清单里，不用再单独放	The folders holding {0} of these are already on the delete list
+{0} 现在空闲 {1}，删完约 {2}	{0} has {1} free now, about {2} after
+待删清单：{0} 项，共 {1}。	Delete list: {0} items, {1}. 
+（放进回收站的，清空回收站后才腾出来）	 (items sent to the Recycle Bin free their space once it is emptied)
+待删清单（{0} 项）	Delete list ({0} items)
+要去掉某一项：在列表里选中它，右键「从待删清单去掉」。	To take an item off, select it in the list and right-click "Remove from delete list".
+清空清单	Clear list
+关闭清单	Close
+删除清单里的…	Delete the list…
+看看清单	View list
+依赖包，要用时会重新下载	Packages; downloaded again when needed
+构建产物，重新编译会再生成	Build output; created again on the next build
+Python 虚拟环境，删了要重新建	Python virtual environment; has to be recreated
+临时文件和崩溃转储	Temporary files and crash dumps
+旧系统，删了就不能退回去	Previous Windows; you can no longer go back after deleting it
+安卓开发工具的数据	Android development tool data
+缓存，删了会自动重建	Cache; rebuilt automatically
+系统	System
+软件和软件数据	Apps and app data
+文档和桌面	Documents and desktop
+照片、视频、音乐	Photos, videos, music
+代码和开发	Code and development
+同步盘	Synced folders
+游戏	Games
+缓存和临时文件	Caches and temporary files
+其他文件夹	Other folders
+（带斜线：删了能腾出来）	 (hatched: space you can get back)
+从待删清单去掉	Remove from delete list
+加入待删清单	Add to delete list
+\n\n注意：其中 {0} 个是 git 仓库（{1}）。没提交、没推送到远程的改动删了就找不回来，先确认都推送过。	\n\nNote: {0} of them are git repositories ({1}). Changes that were never committed or pushed are gone for good once deleted; make sure everything has been pushed.
+正在后台刷新，下面先显示上次读到的…	Refreshing in the background; showing the last reading meanwhile…
+已选 {0} 个软件，合计约 {1}	{0} apps selected, about {1} in total
+已选 {0} 个文件夹，共 {1}	{0} folders selected, {1} in total
+已选 {0} 项：{1} 项启用中，{2} 项已禁用	{0} selected: {1} enabled, {2} disabled
+会依次打开 {0} 个软件自带的卸载程序：一个走完、窗口关掉后，自动打开下一个。每个都按它自己的提示操作，可以随时停下。	The uninstallers of {0} apps open one after another: when one finishes and its window closes, the next one opens. Follow each one's own steps; you can stop at any time.
+应用商店的 {0} 个直接卸载。	{0} Microsoft Store apps are uninstalled directly.
+另有 {0} 个没有登记卸载方法，跳过：{1}	{0} more have no registered way to uninstall and are skipped: {1}
+卸载会删除这些软件，它们保存在软件里的数据可能一起被删掉。	Uninstalling removes these apps, and data they keep may be removed with them.
+卸载选中的 {0} 个软件？	Uninstall the {0} selected apps?
+批量卸载	Batch uninstall
+卸载 {0} 个应用商店软件	Uninstall {0} Store apps
+{0}：打不开卸载程序（{1}）	{0}: the uninstaller could not be opened ({1})
+正在卸载第 {0} / {1} 个：{2}。按卸载程序的提示操作；它的窗口关掉后，自动打开下一个。	Uninstalling {0} of {1}: {2}. Follow the uninstaller's steps; when its window closes, the next one opens.
+处理了 {0} 个软件。	{0} apps handled.
+中途停下了，后面的没有打开。	Stopped part way; the rest were not opened.
+没成的：	Not done:
+卸载程序常会留下设置和缓存：可以到「残留文件夹」里看看。列表已经刷新。	Uninstallers often leave settings and caches behind; have a look under "Leftovers". The list has been refreshed.
+批量卸载走完了	Batch uninstall finished
+这些项目会重新生效：开机启动项下次开机时启动，计划任务到时间照常运行，右键菜单扩展对新打开的资源管理器窗口生效。	These take effect again: startup items start at the next sign-in, scheduled tasks run on time, and context menu extensions show in newly opened File Explorer windows.
+这些项目会停用：开机时不再自动启动、计划任务到时间不再运行、右键菜单里不再出现。程序本身都不删，随时可以在这里重新启用。	These are switched off: they no longer start with Windows, scheduled tasks no longer run, and they leave the context menu. Nothing is deleted, and you can enable them here again at any time.
+启用选中的 {0} 项？	Enable the {0} selected items?
+禁用选中的 {0} 项？	Disable the {0} selected items?
+{0} 项没启用成	{0} items could not be enabled
+{0} 项没禁用成	{0} items could not be disabled
+启用了 {0} 项	Enabled {0} items
+禁用了 {0} 项	Disabled {0} items
+把选中的 {0} 个文件夹移到回收站？	Move the {0} selected folders to the Recycle Bin?
+共 {0}。这些只是猜测：名字对不上任何已装软件、没有程序在用、一个月没动过。拿不准的先点「打开位置」看一眼。移到回收站后还能恢复。	{0} in total. These are guesses: the names match no installed app, no program is using them, and nothing changed for a month. If unsure, click "Open location" and look first. They can be restored from the Recycle Bin.
+我看过了，这些是已卸载软件留下的，删除不会给我带来损失。	I have looked: these were left behind by uninstalled apps, and deleting them causes me no loss.
+把 {0} 个残留文件夹移到回收站	Move {0} leftover folders to the Recycle Bin
+{0} 多出 {1}	{0} gained {1}
+{0} 个文件夹已移到回收站。清空回收站后才真正腾出空间。	{0} folders moved to the Recycle Bin. The space is freed once the Recycle Bin is emptied.
+空闲时在后台读取系统健康	Reading system health in the background while idle
+接上了新的磁盘：{0}	New drive connected: {0}
+磁盘拔掉了：{0}	Drive removed: {0}
+已经在待删清单里	On the delete list
+卸载选中的…	Uninstall selected…
+取消选择	Clear selection
+启用选中的	Enable selected
+禁用选中的	Disable selected
+打开下一个	Open next
+移到回收站…	Move to Recycle Bin…
+不再打开后面的卸载程序；已经打开的那个照常走完	Do not open the remaining uninstallers; the one already open finishes as usual
+先放进清单，不马上删：可以接着到别的文件夹里挑，下面一直显示删完以后还剩多少空间，看过清单再一起删	Put it on a list instead of deleting now: keep picking in other folders while the free space after deletion stays in view, then review the list and delete together
+前进（鼠标侧键、Alt+→）	Forward (mouse side button, Alt+→)
+后退到刚才看的文件夹（鼠标侧键、Alt+←）	Back to the previous folder (mouse side button, Alt+←)
+回到上一级文件夹（Backspace）	Up one folder (Backspace)
+这个卸载程序已经走完了但没自动接上时，点这里打开下一个	If this uninstaller has finished but the next one did not open, click here
+勾上这里列出的全部；再点一下全部取消	Tick everything listed here; click again to untick all
+不适合搬的软件	Apps not suited to moving
+值得一看	Worth a look
+其他可搬的文件夹	Other movable folders
+常用	General
+待删	Marked
+清理和扫描	Cleanup and scanning
+界面	Interface
+聊天记录	Chat history
+装在 C 盘的软件	Apps on C:
+这块盘上可能用不上、删了能腾出不少空间的大文件夹：缓存、依赖包（node_modules 等）、构建产物、虚拟环境、临时文件。只是按名字认的，点一下跳过去，看清楚再决定	Large folders on this drive you may not need that would free a lot of space: caches, packages (node_modules and the like), build output, virtual environments, temporary files. They are recognized by name only; click one to go there and look before deciding
 扫描到 {0} 项，分成 {1} 类：{2}。点下面的选项卡切换类别，点「名称」「大小」排序，右边的下拉框可以只看某一种操作。每一项都可以单独选「删除」「搬走」或「跳过」；「执行所选操作」会处理所有类别。双击一行打开它所在的文件夹，右键可以复制路径。	Found {0} items in {1} groups: {2}. Use the tabs below to switch groups, click "Name" or "Size" to sort, and use the drop-down on the right to show only one action. Each item can be set to "Delete", "Move" or "Skip" on its own; "Run selected" handles every group. Double-click a row to open its folder; right-click to copy the path.
 全部操作	All actions
 只看「{0}」	Only "{0}"

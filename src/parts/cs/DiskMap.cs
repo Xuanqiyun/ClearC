@@ -552,6 +552,21 @@ public static class DiskMap {
         return all;
     }
     // 一个文件夹里最大的几个子文件夹（不改动原来的顺序）
+    // 值得一看：名字是这些的文件夹（缓存、依赖包、构建产物……），至少 minSize，从大到小；找到一个就不再往它里面找
+    public static List<DmNode> Named(DmNode root, string[] names, long minSize, int max) {
+        HashSet<string> set = new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
+        List<DmNode> hits = new List<DmNode>();
+        Stack<DmNode> st = new Stack<DmNode>(); st.Push(root);
+        while (st.Count > 0) {
+            DmNode d = st.Pop();
+            if (d.IsLink) continue;
+            if (!object.ReferenceEquals(d, root) && set.Contains(d.Name)) { hits.Add(d); continue; }
+            foreach (DmNode k in d.Kids) if (k.Size >= minSize) st.Push(k);
+        }
+        hits.Sort((a, b) => b.Size.CompareTo(a.Size));
+        if (hits.Count > max) hits.RemoveRange(max, hits.Count - max);
+        return hits;
+    }
     public static List<DmNode> TopKids(DmNode n, int max) {
         List<DmNode> k = new List<DmNode>(n.Kids);
         k.Sort((a, b) => b.Size.CompareTo(a.Size));

@@ -13,6 +13,9 @@ $timer.Add_Tick({
     }
 
     if ([DupRow]::Dirty -and -not $script:worker) { [DupRow]::Dirty = $false; Update-DupSummary }
+    if ([AppRow]::PickDirty) { Update-PickBar }
+    if ($script:opHideAt -and (Get-Date) -ge $script:opHideAt) { $script:opHideAt = $null; if (-not $script:op -and -not $script:worker) { $ctl.OpPanel.Visibility = 'Collapsed' } }
+    Watch-Drives
     if ([CandRow]::Dirty) { [CandRow]::Dirty = $false; Update-CandSel }
     if ($sync.Status -and $script:candRows -and $sync.StatusVer -ne $script:candSeen) {
         $script:candSeen = $sync.StatusVer
@@ -143,6 +146,7 @@ $timer.Add_Tick({
                 [DiskMap]::Use($root)
                 $script:mapMethod = $mm
                 $script:mapRoot = $root; $script:mapCur = $root; $script:mapScanAt = Get-Date
+                Reset-MapHistory; $script:worthKey = $null
                 $script:movedTargets = $null
                 $script:prevSnap = $null
                 if (-not $stopped) { try { Update-Growth $root } catch { $script:growNote = (T '没能和上次比较') } } else { $script:growNote = (T '这次扫描中途停止了，不和上次比较') }
@@ -169,6 +173,11 @@ $timer.Add_Tick({
             $nOk = $okSet.Count; $fails = @(); if ($res) { $fails = @($res.Fail) }
             $one = (@($script:mapDelRows).Count -eq 1)
             $txt = if ($sync.WasCancelled) { (T "已中途取消，删除了 {0} 项") -f $nOk } elseif ($fails.Count -eq 0) { $(if ($one) { (T "已删除 {0}") -f @($script:mapDelRows)[0].Name } else { (T "已删除 {0} 项") -f $nOk }) } elseif ($nOk -eq 0) { (T '没有删掉') } else { (T "删除了 {0} 项，{1} 项没删掉") -f $nOk, $fails.Count }
+            # 实际多出来多少空间（删前删后各问一次 Windows）；删掉的从待删清单里拿掉
+            $gain = @(foreach ($d in @($script:mapDelFree.Keys)) { $g = (DriveFree ($d + '\')) - [double]$script:mapDelFree[$d]; if ($g -ge 10MB) { (T "{0} 多出 {1}") -f $d, (Fmt $g) } })
+            if ($gain.Count -gt 0) { $txt += (T '，') + ($gain -join (T '，')) }
+            foreach ($k in @($okSet.Keys)) { $kk = $k.TrimEnd(''); if ($script:mapMarks.Contains($kk)) { $script:mapMarks.Remove($kk) } }
+            Update-MapMarks
             End-Op $txt
             if ($nOk -gt 0) { if ($script:mapView -eq 'files') { Show-MapFiles } elseif ($script:mapView -ne 'grow') { Show-MapLevel $script:mapCur } }
             if ($fails.Count -gt 0) {
@@ -321,13 +330,29 @@ $timer.Add_Tick({
             if ($x -and -not $x.Ok) { $script:pendingDialog = @{ Title = (T '没卸载成'); Kind = 'warn'; Text = $x.Msg } }
             $script:runAfterApps = $true
         }
+        elseif ($sync.Mode -eq 'uninstmany') {
+            End-Op $(if ($sync.WasCancelled) { (T '已中途取消') } else { (T '完成') })
+            if ($script:uq) {
+                foreach ($u in @($sync.UninstMany)) { if ($u.Ok) { $script:uq.Done++ } else { [void]$script:uq.Fail.Add(((T "{0}：{1}") -f $u.Name, $u.Msg)) } }
+                if ($sync.WasCancelled) { $script:uq.Stop = $true }
+                Step-UninstQueue
+            }
+        }
         elseif ($sync.Mode -eq 'leftdel') {
             $x = $sync.LeftRes
             $cx = [bool]$sync.WasCancelled
             End-Op $(if ($cx) { (T '已中途取消') } else { (T '完成') })
             $ctl.AppsLeftBox.Visibility = 'Collapsed'; $script:leftApp = $null
-            if ($x) { $script:pendingDialog = @{ Title = $(if ($cx) { (T '已中途取消') } else { (T '残留已清理') }); Kind = 'done'; Text = ((T "「{0}」留下的 {1} 个文件夹已移到回收站。清空回收站后才真正腾出空间。") -f $x.Name, $x.Count) + $(if ($cx) { (T '剩下的没删。') } else { '' }) } }
-            $script:runAfterApps = $true
+            if ($script:leftBatch) {
+                # 从「残留文件夹」里一次选了几个：已经不在的从列表里拿掉
+                $script:leftBatch = $false
+                if ($script:startRows.ContainsKey('leftover')) { foreach ($lr in @($script:startRows['leftover'])) { if (-not (Test-Path -LiteralPath $lr.Detail)) { [void]$script:startRows['leftover'].Remove($lr) } } }
+                Filter-StartRows; Update-PickBar
+                if ($x) { $script:pendingDialog = @{ Title = $(if ($cx) { (T '已中途取消') } else { (T '残留已清理') }); Kind = 'done'; Text = ((T "{0} 个文件夹已移到回收站。清空回收站后才真正腾出空间。") -f $x.Count) + $(if ($cx) { (T '剩下的没删。') } else { '' }) } }
+            } else {
+                if ($x) { $script:pendingDialog = @{ Title = $(if ($cx) { (T '已中途取消') } else { (T '残留已清理') }); Kind = 'done'; Text = ((T "「{0}」留下的 {1} 个文件夹已移到回收站。清空回收站后才真正腾出空间。") -f $x.Name, $x.Count) + $(if ($cx) { (T '剩下的没删。') } else { '' }) } }
+                $script:runAfterApps = $true
+            }
         }
         elseif ($sync.Mode -eq 'movescan') {
             End-Op $(if ($sync.WasCancelled) { (T '已中途取消') } else { (T '完成') })
@@ -474,6 +499,54 @@ $ctl.AppVer.Text = ((T "版本 {0}") -f $script:AppVersion)
 Write-LogFile ((T "==== 腾挪 ClearC {0} 启动；Windows {1}；屏幕可用区域 {2:N0} x {3:N0}") -f $script:AppVersion, [Environment]::OSVersion.Version, $wa.Width, $wa.Height)
 if ($script:themeFail) { Write-LogFile ((T "深色界面没能打开，这次用浅色：{0}") -f $script:themeFail) }
 
+# ---------- 空闲时先把系统健康和盘的健康读好：点「系统健康」「空间地图」时不用干等 ----------
+# 打开后几秒、没有别的操作在做时在后台读（不占主工作线程，不弹进度条）；读过十分钟再打开那一页，在后台刷新一遍
+$script:prefetchStep = 0
+$script:prefetchTimer = New-Object System.Windows.Threading.DispatcherTimer
+$script:prefetchTimer.Interval = [TimeSpan]::FromSeconds(4)
+$script:prefetchTimer.Add_Tick({
+    if ($script:worker) { return }
+    $script:prefetchStep++
+    if ($script:prefetchStep -eq 1) {
+        if (-not $script:pageLoaded.health -and $ctl.NavHealth.Visibility -eq 'Visible') { $script:pageLoaded.health = $true; Load-Health; Write-LogFile (T '空闲时在后台读取系统健康') }
+        return
+    }
+    $this.Stop()
+    if (-not $script:pageLoaded.map -and $ctl.NavMap.Visibility -eq 'Visible') { $script:pageLoaded.map = $true; Fill-MapDrives; Start-DiskHealth }
+})
+# ---------- 插上、拔掉硬盘：自动刷新搬家目标、空间地图的盘、重复文件的查找位置、硬件卡片 ----------
+# 每两秒看一下盘符有没有变（只看盘符列表，不碰盘本身）；变了再等两秒多（新盘要一会儿才准备好）再刷新
+$script:driveSig = ([IO.Directory]::GetLogicalDrives() -join ','); $script:drivePend = $null; $script:driveTick = 0
+function Watch-Drives {
+    $script:driveTick++
+    if ($script:driveTick % 7 -ne 0) { return }
+    $sig = ''; try { $sig = ([IO.Directory]::GetLogicalDrives() -join ',') } catch { return }
+    if ($sig -eq $script:driveSig) { $script:drivePend = $null; return }
+    if (-not $script:drivePend) { $script:drivePend = Get-Date; return }
+    if (((Get-Date) - $script:drivePend).TotalSeconds -lt 2.5) { return }
+    $old = $script:driveSig; $script:driveSig = $sig; $script:drivePend = $null
+    Refresh-Drives $old $sig
+}
+function Refresh-Drives([string]$old, [string]$new) {
+    $o = @($old -split ',' | Where-Object { $_ }); $n = @($new -split ',' | Where-Object { $_ })
+    $add = @($n | Where-Object { $o -notcontains $_ }); $gone = @($o | Where-Object { $n -notcontains $_ })
+    if ($add.Count) { UI-Log ((T "接上了新的磁盘：{0}") -f ((@($add | ForEach-Object { $_.TrimEnd('\') })) -join ' ')) }
+    if ($gone.Count) { UI-Log ((T "磁盘拔掉了：{0}") -f ((@($gone | ForEach-Object { $_.TrimEnd('\') })) -join ' ')) }
+    try { Fill-DestChoices } catch {}
+    if ($script:pageLoaded.map) { try { Fill-MapDrives; Start-DiskHealth } catch {} }
+    # 重复文件：新接上的整块盘加进查找位置（不勾，要找自己勾上），拔掉的去掉
+    foreach ($d in $add) {
+        try {
+            $di = New-Object System.IO.DriveInfo $d
+            if ($di.DriveType -eq 'Fixed' -and $di.IsReady -and -not [FsTools]::IsSubst($di.Name)) { Add-Root $di.RootDirectory.FullName ((T "整个 {0} 盘") -f $di.Name.Substring(0, 1)) $false ((T "{0}  已用 {1}") -f $di.Name, (Fmt ($di.TotalSize - $di.TotalFreeSpace))) }
+        } catch {}
+    }
+    foreach ($d in $gone) { foreach ($rt in @($script:roots)) { if (([string]$rt.Path).TrimEnd('\') -ieq $d.TrimEnd('\')) { [void]$script:roots.Remove($rt) } } }
+    try { Update-FilterSummary } catch {}
+    if ($script:pageLoaded.save) { if ($ctl.PageSave.Visibility -eq 'Visible' -and -not $script:worker) { Load-Save } else { $script:pageLoaded.save = $false } }
+    if ($script:pageLoaded.health) { Load-Health }
+}
+
 # ---------- 各个列表的表头排序（点列名排序，再点一下反过来；记住每个列表上次怎么排的） ----------
 # 表格（GridView）：键是第几列；自己画表头的列表：键是表头按钮的 Tag
 Register-ListSort 'MonList' @{ '0' = @{ Prop = 'Name' }; '1' = @{ Prop = 'Cpu'; Num = $true }; '2' = @{ Prop = 'Ws'; Num = $true }; '3' = @{ Prop = 'Rate'; Num = $true }; '4' = @{ Prop = 'Since'; Num = $true }; '5' = @{ Prop = 'Total'; Num = $true } } -defProp 'Since'
@@ -490,6 +563,20 @@ Register-ListSort 'List' @{ name = @{ Prop = 'Name' }; size = @{ Prop = 'Bytes';
 foreach ($p in @(@('AppsList', 'AppsHead'), @('StartList', 'StartHead'), @('MovesList', 'MovesHead'), @('MapList', 'MapHead'), @('CandList', 'CandHead'))) { Register-HeadPad $ctl[$p[0]] $ctl[$p[1]] }
 $script:headOf = [ordered]@{ AppsList = $ctl.AppsHead; StartList = $ctl.StartHead; CandList = $ctl.CandHead; MovesList = $ctl.MovesHeadBox; MapList = $ctl.MapHeadBox }
 Update-HeadVis
+# 分段选项卡：每组第一项前面不画分隔线
+function Set-SegFirst($root) {
+    $seg = $win.FindResource('Seg')
+    $q = New-Object System.Collections.Queue; $q.Enqueue($root)
+    while ($q.Count -gt 0) {
+        $v = $q.Dequeue()
+        if ($v -is [System.Windows.Controls.Panel]) {
+            $first = $true
+            foreach ($c in $v.Children) { if ($c -is [System.Windows.Controls.RadioButton] -and $c.Style -and ([object]::ReferenceEquals($c.Style, $seg) -or [object]::ReferenceEquals($c.Style.BasedOn, $seg))) { if ($first) { $c.Uid = 'first'; $first = $false } elseif ($c.Uid -eq 'first') { $c.Uid = '' } } }
+        }
+        foreach ($c in [System.Windows.LogicalTreeHelper]::GetChildren($v)) { if ($c -is [System.Windows.DependencyObject]) { $q.Enqueue($c) } }
+    }
+}
+Set-SegFirst $win
 
 $script:statusColor = @{ wait = '#86868B'; run = '#0071E3'; ok = '#248A3D'; warn = '#B25000'; fail = '#D70015'; skip = '#86868B' }
 $script:pendingDialog = $null
@@ -583,6 +670,7 @@ $win.Add_ContentRendered({
     }
     if ($script:riskShown) { return }
     $script:riskShown = $true
+    $script:prefetchTimer.Start()
     if (Test-Path -LiteralPath $script:riskFile) { Show-HalfMoves; return }
     $ans = Show-Sheet -Kind warn -Title (T '使用前请先阅读安全风险提示') `
         -Text (T "本工具会按你的选择删除或搬移电脑上的文件。删除的文件可能无法恢复，存在资料丢失的风险。`n`n每次删除前，请确认这些资料确实不再需要、删除不会给你带来损失；重要资料请先备份。因使用本工具造成的资料丢失或其他损失，责任由使用者自行承担，开发者不承担责任。`n`n完整说明随时可以在左侧「帮助」里查看。") `
