@@ -334,7 +334,7 @@ public static class DupFinder {
     [DllImport("kernel32.dll")]
     static extern bool FindClose(IntPtr hFindFile);
 
-    const uint ATTR_DIR = 0x10, ATTR_REPARSE = 0x400, ATTR_SYSTEM = 0x4, ATTR_OFFLINE = 0x1000, ATTR_RECALL = 0x440000;
+    const uint ATTR_DIR = 0x10, ATTR_REPARSE = 0x400, ATTR_SYSTEM = 0x4, ATTR_OFFLINE = 0x1000, ATTR_RECALL = 0x440000, ATTR_RECALL_DATA = 0x400000;
 
     sealed class EnumJob {
         public readonly ConcurrentStack<string> Work = new ConcurrentStack<string>();
@@ -622,7 +622,8 @@ public static class DupFinder {
             if (Cancel) break;
             if (f.Dir == null || !ok.Contains(f.Dir)) continue;
             if (!f.HasAttr) continue;
-            if ((f.Attr & (ATTR_REPARSE | ATTR_SYSTEM | ATTR_OFFLINE | ATTR_RECALL)) != 0) continue;
+            // 文件表里 0x40000 是「有扩展属性」（Windows 给程序文件记签名缓存时常有），不是逐个列举时看到的「打开时调回」：不能按它跳过
+            if ((f.Attr & (ATTR_REPARSE | ATTR_SYSTEM | ATTR_OFFLINE | ATTR_RECALL_DATA)) != 0) continue;
             if (f.Size > 0 && f.Disk == 0) continue;                       // 盘上没有数据（只在云端）：读它会触发下载
             long size = f.Size; string name = f.Name;
             if (size < job.MinSize) continue;
@@ -18875,6 +18876,7 @@ if (-not $sync.WasCancelled) {
     Mark-Phase 'chat and other folders'
     $got = Wait-Parallel $par
     Mark-Phase 'wait for services, apps, Store'
+    if ($script:phList) { foreach ($k in @($got.Keys)) { [void]$script:phList.Add(@{ N = "$k (alongside)"; Ms = [double]$got[$k].Ms }) } }
     $apps = if ($got.ContainsKey('apps')) { $got.apps.V } else { Get-InstalledApps -NoStore }
     $svc = if ($got.ContainsKey('svc')) { $got.svc.V } else { Get-ServicePaths }
     $sd = $env:SystemDrive
@@ -22369,22 +22371,24 @@ function Invoke-UiTest {
                     $hok = & $waitUi { $ctl.BtnHealthRefresh.IsEnabled } 180000
                     $L.Add(("timing system health: {0:N1} s (reported {1}){2}" -f ($th.ElapsedMilliseconds / 1000), $(if ($script:healthData) { $script:healthData.Secs } else { '?' }), $(if ($hok) { '' } else { ' (did not finish)' })))
                     if ($script:healthData -and $script:healthData.PartMs) { $pm = $script:healthData.PartMs; $L.Add(('timing     ' + ((@($pm.Keys) | Sort-Object { - [double]$pm[$_] } | ForEach-Object { '{0} {1:N0} ms' -f $_, [double]$pm[$_] }) -join '; '))) }
-                    # 重复文件：在 Program Files 里找（只找不删）
+                    # 重复文件：在 Program Files 里几个装了很多大文件的文件夹里找（只找不删；整个 Program Files 逐个列举在测试机上要好几分钟）
                     [DupFinder]::Cancel = $false
+                    $droots = @(@("$env:ProgramFiles\dotnet", "$env:ProgramFiles\Android", "${env:ProgramFiles(x86)}\Android", "${env:ProgramFiles(x86)}\Windows Kits", "$env:ProgramFiles\Java") | Where-Object { Test-Path -LiteralPath $_ })
+                    if ($droots.Count -eq 0) { $droots = @($env:ProgramFiles) }
                     $td = [Diagnostics.Stopwatch]::StartNew()
-                    $dg = [DupFinder]::Find([string[]]@($env:ProgramFiles, ${env:ProgramFiles(x86)}), [long]1MB, [long]0, $false, $null, $false, [string[]]@('C:=4'))
-                    $L.Add(("timing duplicates in Program Files (1 MB+): {0:N1} s, {1} groups" -f ($td.ElapsedMilliseconds / 1000), @($dg).Count))
+                    $dg = [DupFinder]::Find([string[]]$droots, [long]1MB, [long]0, $false, $null, $false, [string[]]@('C:=4'))
+                    $L.Add(("timing duplicates in {0} folders under Program Files (1 MB+): {1:N1} s, {2} groups" -f $droots.Count, ($td.ElapsedMilliseconds / 1000), @($dg).Count))
                     $dph = { "timing     list {0:N1} s ({1:N0} files); quick {2:N1} s ({3:N0} files, {4}); deep {5:N1} s ({6:N0} files, {7})" -f ([DupFinder]::ListMs / 1000), [DupFinder]::FilesSeen, ([DupFinder]::QuickMs / 1000), [DupFinder]::QuickFiles, (Fmt ([double][DupFinder]::QuickBytes)), ([DupFinder]::DeepMs / 1000), [DupFinder]::DeepFiles, (Fmt ([double][DupFinder]::DeepBytes)) }
                     $L.Add((& $dph))
                     # 同样的查找，这次从 C 盘的文件表列出文件：结果必须和逐个文件夹列举的完全一样
                     $ct = [DiskMap]::GetTree($env:SystemDrive, [DirStat]::ThreadsFor($env:SystemDrive), $false, $false)
                     $td2 = [Diagnostics.Stopwatch]::StartNew()
-                    $dg2 = [DupFinder]::Find([string[]]@($env:ProgramFiles, ${env:ProgramFiles(x86)}), [long]1MB, [long]0, $false, $null, $false, [string[]]@('C:=4'), [DmNode[]]@($ct))
-                    $L.Add(("timing duplicates again, listed from the file table ({0} of 2 places): {1:N1} s, {2} groups" -f [DupFinder]::FromTreeRoots, ($td2.ElapsedMilliseconds / 1000), @($dg2).Count))
+                    $dg2 = [DupFinder]::Find([string[]]$droots, [long]1MB, [long]0, $false, $null, $false, [string[]]@('C:=4'), [DmNode[]]@($ct))
+                    $L.Add(("timing duplicates again, listed from the file table ({0} of {1} places): {2:N1} s, {3} groups" -f [DupFinder]::FromTreeRoots, $droots.Count, ($td2.ElapsedMilliseconds / 1000), @($dg2).Count))
                     $L.Add((& $dph))
                     $p1 = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase); foreach ($g in @($dg)) { foreach ($f in $g.Files) { [void]$p1.Add([string]$f.Path) } }
                     $p2 = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase); foreach ($g in @($dg2)) { foreach ($f in $g.Files) { [void]$p2.Add([string]$f.Path) } }
-                    if ([DupFinder]::FromTreeRoots -ne 2 -or -not $p1.SetEquals($p2)) {
+                    if ([DupFinder]::FromTreeRoots -ne $droots.Count -or -not $p1.SetEquals($p2)) {
                         $only1 = @($p1 | Where-Object { -not $p2.Contains($_) } | Select-Object -First 4); $only2 = @($p2 | Where-Object { -not $p1.Contains($_) } | Select-Object -First 4)
                         throw ("file-table listing differs: {0} vs {1} files; only walking: {2}; only the file table: {3}" -f $p1.Count, $p2.Count, ($only1 -join ' | '), ($only2 -join ' | '))
                     }

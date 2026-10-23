@@ -270,7 +270,7 @@ public static class DupFinder {
     [DllImport("kernel32.dll")]
     static extern bool FindClose(IntPtr hFindFile);
 
-    const uint ATTR_DIR = 0x10, ATTR_REPARSE = 0x400, ATTR_SYSTEM = 0x4, ATTR_OFFLINE = 0x1000, ATTR_RECALL = 0x440000;
+    const uint ATTR_DIR = 0x10, ATTR_REPARSE = 0x400, ATTR_SYSTEM = 0x4, ATTR_OFFLINE = 0x1000, ATTR_RECALL = 0x440000, ATTR_RECALL_DATA = 0x400000;
 
     sealed class EnumJob {
         public readonly ConcurrentStack<string> Work = new ConcurrentStack<string>();
@@ -558,7 +558,8 @@ public static class DupFinder {
             if (Cancel) break;
             if (f.Dir == null || !ok.Contains(f.Dir)) continue;
             if (!f.HasAttr) continue;
-            if ((f.Attr & (ATTR_REPARSE | ATTR_SYSTEM | ATTR_OFFLINE | ATTR_RECALL)) != 0) continue;
+            // 文件表里 0x40000 是「有扩展属性」（Windows 给程序文件记签名缓存时常有），不是逐个列举时看到的「打开时调回」：不能按它跳过
+            if ((f.Attr & (ATTR_REPARSE | ATTR_SYSTEM | ATTR_OFFLINE | ATTR_RECALL_DATA)) != 0) continue;
             if (f.Size > 0 && f.Disk == 0) continue;                       // 盘上没有数据（只在云端）：读它会触发下载
             long size = f.Size; string name = f.Name;
             if (size < job.MinSize) continue;
