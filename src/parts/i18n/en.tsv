@@ -156,6 +156,8 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+← 上一项：{0}	← Previous: {0}
+下一项：{0} →	Next: {0} →
 {0} 项所在的文件夹已经在待删清单里，不用再单独放	The folders holding {0} of these are already on the delete list
 {0} 现在空闲 {1}，删完约 {2}	{0} has {1} free now, about {2} after
 待删清单：{0} 项，共 {1}。	Delete list: {0} items, {1}. 

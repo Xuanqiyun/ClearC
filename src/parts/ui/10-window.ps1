@@ -81,7 +81,7 @@ foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageM
                'BtnMovesRefresh','MovesInfo','MovesList','EmptyMoves','EmptyMovesText',
                'AutoRemindOn','AutoRemindGB','AutoRemindNote','AutoCleanOn','AutoCleanNote','HistInfo','HistChart','HistLast','HistFirst','ATabRemind','ATabClean','ATabHist','ATabRemindState','ATabCleanState','ATabHistState','ATabRemindB','ATabCleanB','ATabHistB','AutoViewRemind','AutoViewClean','AutoViewHist',
                'BtnLogOpenDir','BtnLogRefresh','LogKeep','LogKeepNote','LogCats','LogRange','LogSearch','LogCount','LogList','EmptyLog','EmptyLogText',
-               'BtnLang','BtnLangText','BtnTheme','BtnThemeText','NavHelp','PageHelp','HelpScroll','HelpSections','HelpFaq','BtnHelpExpand','FeedbackCard','RiskCard','BtnFeedback','BtnGitHub','BtnIssue','BtnCopyDiag','BtnOpenLog','CopyHint','BtnSelfTest','BtnCheckUpdate','MapFast','MapChat',
+               'BtnLang','BtnLangText','BtnTheme','BtnThemeText','NavHelp','PageHelp','HelpScroll','HelpSections','HelpFaq','HelpNav','HelpPaneStart','HelpPaneFaq','BtnHelpPrev','BtnHelpNext','FeedbackCard','RiskCard','BtnFeedback','BtnGitHub','BtnIssue','BtnCopyDiag','BtnOpenLog','CopyHint','BtnSelfTest','BtnCheckUpdate','MapFast','MapChat',
                'NavClean','NavDup','PageClean','PageDup','AppVer','BtnLog','BtnLogText','BtnLogHide','LogPanel','Dim',
                'CapFree','CapTotal','CapBar','CapReclaim','EmptyClean','EmptyCleanText','EmptyDup','EmptyDupText','SizeCustomRow',
                'DestPick','BtnDestBrowse','DestHint','BtnOneClick','BtnScan','BtnRun','BtnHogs','Hint','List','CleanMenu','CmOpen','CmOpenAll','CmCopy','Summary','Log',
@@ -285,40 +285,46 @@ foreach ($k in $script:pageList.Keys) {
 
 # ---------- 帮助页：使用反馈 ----------
 function Show-CopyHint([string]$t) { $ctl.CopyHint.Text = $t }
-$ctl.BtnFeedback.Add_Click({
-    Show-Page 'help'
-    $ctl.HelpScroll.UpdateLayout()
-    $ctl.FeedbackCard.BringIntoView()
-})
-# 点左侧「帮助」总是回到帮助的开头（先点「使用反馈」滚到下面后，帮助已是选中状态，Checked 不会再触发）
-$ctl.NavHelp.Add_Click({ $ctl.HelpScroll.ScrollToTop() })
-# 帮助的各节默认收起，点标题展开；「全部展开」一下展开或收起全部
-function Get-HelpSections { @($ctl.HelpSections.Children | Where-Object { $_ -is [System.Windows.Controls.Expander] }) }
-function Update-HelpExpand {
-    $all = Get-HelpSections
-    $open = @($all | Where-Object { $_.IsExpanded }).Count
-    $ctl.BtnHelpExpand.Content = if ($all.Count -and $open -eq $all.Count) { T '全部收起' } else { T '全部展开' }
+# ---------- 帮助页：左边目录，右边只显示点开的那一项（和设置页一样） ----------
+# 目录的每一项：键 → 右边的内容、左边的那一行。顺序就是目录里从上到下的顺序（「上一项」「下一项」按这个走）
+$script:helpPanes = [ordered]@{}
+foreach ($rb in @($ctl.HelpNav.Children | Where-Object { $_ -is [System.Windows.Controls.RadioButton] })) {
+    $k = [string]$rb.Tag
+    $pane = switch -regex ($k) { '^start$' { $ctl.HelpPaneStart } '^faq$' { $ctl.HelpPaneFaq } '^fb$' { $ctl.FeedbackCard } '^s(\d+)$' { $win.FindName('HelpSec' + $Matches[1]) } }
+    if ($pane) { $script:helpPanes[$k] = @{ Pane = $pane; Nav = $rb; Name = [string]$rb.ToolTip } }
 }
-$script:helpBulk = $false
-$ctl.BtnHelpExpand.Add_Click({
-    $all = Get-HelpSections
-    $open = @($all | Where-Object { -not $_.IsExpanded }).Count -gt 0
-    $script:helpBulk = $true
-    try { foreach ($x in $all) { $x.IsExpanded = $open } } finally { $script:helpBulk = $false }
-    Update-HelpExpand
-})
-# 单独点开的一节（或一个问题）在页面下方时，往上滚到能看见它的内容
-$helpOpened = {
-    param($s, $e)
-    if (-not [object]::ReferenceEquals($e.OriginalSource, $s)) { return }
-    Update-HelpExpand
-    if ($script:helpBulk) { return }
-    $x = $s
-    [void]$win.Dispatcher.BeginInvoke([Action]{ try { $x.BringIntoView() } catch {} }.GetNewClosure(), [System.Windows.Threading.DispatcherPriority]::Loaded)
+$script:helpPane = ''; $script:helpPick = 'start'; $script:helpNavQuiet = $false
+function Select-HelpPane([string]$k, [switch]$NoRemember) {
+    if (-not $script:helpPanes.Contains($k)) { $k = 'start' }
+    $script:helpPane = $k
+    foreach ($x in $script:helpPanes.Keys) { $script:helpPanes[$x].Pane.Visibility = $(if ($x -eq $k) { 'Visible' } else { 'Collapsed' }) }
+    $rb = $script:helpPanes[$k].Nav
+    if (-not $rb.IsChecked) { $script:helpNavQuiet = $true; try { $rb.IsChecked = $true } finally { $script:helpNavQuiet = $false } }
+    $keys = @($script:helpPanes.Keys); $i = [array]::IndexOf($keys, $k)
+    $prev = if ($i -gt 0) { $keys[$i - 1] } else { '' }; $next = if ($i -lt $keys.Count - 1) { $keys[$i + 1] } else { '' }
+    $ctl.BtnHelpPrev.Tag = $prev; $ctl.BtnHelpNext.Tag = $next
+    $ctl.BtnHelpPrev.Content = if ($prev) { (T "← 上一项：{0}") -f $script:helpPanes[$prev].Name } else { '' }
+    $ctl.BtnHelpNext.Content = if ($next) { (T "下一项：{0} →") -f $script:helpPanes[$next].Name } else { '' }
+    $ctl.BtnHelpPrev.Visibility = if ($prev) { 'Visible' } else { 'Collapsed' }; $ctl.BtnHelpNext.Visibility = if ($next) { 'Visible' } else { 'Collapsed' }
+    $ctl.HelpScroll.ScrollToTop()
+    if (-not $NoRemember) { $script:helpPick = $k; Set-Setting 'HelpPane' $k }
 }
-foreach ($x in @(Get-HelpSections) + @($ctl.HelpFaq.Children)) {
-    $x.Add_Expanded($helpOpened)
-    $x.Add_Collapsed({ param($s, $e) if ([object]::ReferenceEquals($e.OriginalSource, $s)) { Update-HelpExpand } })
+foreach ($x in @($script:helpPanes.Values)) { $x.Nav.Add_Checked({ if ($script:helpNavQuiet) { return }; Select-HelpPane ([string]$this.Tag) }) }
+$ctl.BtnHelpPrev.Add_Click({ if ($this.Tag) { Select-HelpPane ([string]$this.Tag) } })
+$ctl.BtnHelpNext.Add_Click({ if ($this.Tag) { Select-HelpPane ([string]$this.Tag) } })
+Select-HelpPane (Get-Setting 'HelpPane' 'start') -NoRemember
+$script:helpPick = $script:helpPane
+# 左下角「使用反馈」：直接打开帮助里的「反馈和新版本」；再点左侧的「帮助」回到原来在看的那一项（从头显示）
+$ctl.BtnFeedback.Add_Click({ Show-Page 'help'; Select-HelpPane 'fb' -NoRemember })
+$ctl.NavHelp.Add_Click({ if ($script:helpPane -ne $script:helpPick) { Select-HelpPane $script:helpPick -NoRemember } else { $ctl.HelpScroll.ScrollToTop() } })
+# 常见问题：点开的一个问题在下面时，往上滚到能看见它的答案
+foreach ($x in @($ctl.HelpFaq.Children)) {
+    $x.Add_Expanded({
+        param($s, $e)
+        if (-not [object]::ReferenceEquals($e.OriginalSource, $s)) { return }
+        $q = $s
+        [void]$win.Dispatcher.BeginInvoke([Action]{ try { $q.BringIntoView() } catch {} }.GetNewClosure(), [System.Windows.Threading.DispatcherPriority]::Loaded)
+    })
 }
 $script:projectPage = 'https://github.com/Xuanqiyun/ClearC'
 function Open-Web([string]$url) {

@@ -148,10 +148,30 @@ function Get-SysTree {
     if ([DiskMap]::LastFailed -gt 0) { Log ((T "文件表里有 {0} 条记录这次没读到，下次扫描时再补") -f [DiskMap]::LastFailed) }
     return $t
 }
+# 别的盘（D 盘这些）的文件夹树：读那块盘的文件表，同一个后台里只读一次；不是 NTFS、读不了就是空（调用的地方照旧逐个统计）。只用于显示和估算
+$script:driveTrees = @{}
+function Get-DriveTree([string]$path) {
+    if (-not $path -or $path.Length -lt 2 -or $path[1] -ne ':') { return $null }
+    $k = $path.Substring(0, 1).ToUpperInvariant()
+    if ($script:driveTrees.ContainsKey($k)) { return $script:driveTrees[$k] }
+    $t = $null
+    if ($env:SystemDrive -and $k -eq $env:SystemDrive.Substring(0, 1).ToUpperInvariant()) { $t = Get-SysTree }
+    else {
+        try {
+            $t = [DiskMap]::GetTree("$($k):", [DirStat]::ThreadsFor("$($k):"), $false, $false)
+            if ([string][DiskMap]::LastMethod -eq 'mft-partial') { $t = $null }
+            if ($t) { Log ((T "读取 {0} 盘的文件表：{1:N0} 个文件，用时 {2:N1} 秒") -f $k, $t.Files, ([double][DiskMap]::LastMs / 1000)) }
+        } catch { $t = $null }
+    }
+    $script:driveTrees[$k] = $t
+    return $t
+}
 # 估计一个文件夹的大小：树上有就直接查，查不到（不在 C 盘、路径里有链接、短文件名等）再逐个统计
 function Est-Bytes([string]$p, $tree) {
     if ($tree) {
         try { $n = [DiskMap]::Find($tree, $p); if ($n -and -not $n.IsLink) { return [double]$n.Size } } catch {}
+        # 短文件名（%TEMP% 常常是 C:\Users\ADMINI~1\...）：换成长路径再查一次，不用逐个文件夹统计
+        if ($p.IndexOf('~') -ge 0) { try { $lp = [FsTools]::LongPath($p); if ($lp -and $lp -ne $p) { $n = [DiskMap]::Find($tree, $lp); if ($n -and -not $n.IsLink) { return [double]$n.Size } } } catch {} }
     }
     $t0 = [Environment]::TickCount
     $b = DirBytes $p
@@ -751,7 +771,7 @@ function Get-DiskHealth([string]$drive) {
 # ---------- Windows 自带的「存储感知」开没开 ----------
 function Get-StorageSenseOn { try { return ([int](Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy' -ErrorAction Stop).'01' -eq 1) } catch { return $false } }
 # ---------- 已卸载软件可能留下的文件夹：名字对不上任何已装软件、没有程序在用、很久没动过 ----------
-function Get-OrphanFolders($apps) {
+function Get-OrphanFolders($apps, $tree = $null) {
     $norm = { param($x) (([string]$x).ToLowerInvariant() -replace '[^\p{L}\p{N}]', '') }
     $tokens = New-Object System.Collections.Generic.List[string]
     $locs = @()
@@ -791,11 +811,18 @@ function Get-OrphanFolders($apps) {
             foreach ($pdir in $procDirs) { if ($pdir -ieq $full -or $pdir.StartsWith("$full\", [StringComparison]::OrdinalIgnoreCase)) { $hit = $true; break } }
             if ($hit) { continue }
             if (Get-DeleteBlock $full -Leftover) { continue }
-            # 里面最近改过的文件也算在用（LastWriteTime 只看文件夹本身）
+            # 里面最近改过的文件也算在用（LastWriteTime 只看文件夹本身）。C 盘的文件表在手上就直接查（里面每个文件都看到了，也不用再逐个统计大小）
             $newest = $d.LastWriteTime
-            try { foreach ($f in @(Get-ChildItem -LiteralPath $full -Recurse -File -Force -ErrorAction SilentlyContinue | Select-Object -First 400)) { if ($f.LastWriteTime -gt $newest) { $newest = $f.LastWriteTime } } } catch {}
-            if ($newest -gt $cut) { continue }
-            $bytes = [double](DirBytes $full)
+            $node = $null; if ($tree) { try { $node = [DiskMap]::Find($tree, $full) } catch { $node = $null } }
+            if ($node -and -not $node.IsLink) {
+                if ($node.LastWrite -gt 0) { try { $nw = [DateTime]::FromFileTime([long]$node.LastWrite); if ($nw -gt $newest) { $newest = $nw } } catch {} }
+                if ($newest -gt $cut) { continue }
+                $bytes = [double]$node.Size
+            } else {
+                try { foreach ($f in @(Get-ChildItem -LiteralPath $full -Recurse -File -Force -ErrorAction SilentlyContinue | Select-Object -First 400)) { if ($f.LastWriteTime -gt $newest) { $newest = $f.LastWriteTime } } } catch {}
+                if ($newest -gt $cut) { continue }
+                $bytes = [double](DirBytes $full)
+            }
             if ($bytes -lt 1MB) { continue }
             $out += @{ Path = $full; Bytes = $bytes; Modified = $newest }
         }
@@ -1687,7 +1714,7 @@ function Get-Catalog {
     }
     $list += @(
         @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); N=(T '清空回收站');            Note=(T '回收站里是你以前删掉、但还能找回的文件。清空后就永远找不回了，请先打开回收站确认里面没有要的东西')
-           Size={ try { $s = ((New-Object -ComObject Shell.Application).NameSpace(0xA).Items() | Measure-Object -Property Size -Sum).Sum; if ($s) { $s } else { 0 } } catch { 0 } }
+           Size={ $q = [FsTools]::RecycleBinBytes(); if ($q -ge 0) { [double]$q } else { try { $s = ((New-Object -ComObject Shell.Application).NameSpace(0xA).Items() | Measure-Object -Property Size -Sum).Sum; if ($s) { $s } else { 0 } } catch { 0 } } }
            Act ={ if ($script:recycledThisRun) { Log (T '  这一轮刚把文件放进回收站，不清空回收站（下次再清）') } else { Clear-RecycleBin -Force -ErrorAction SilentlyContinue } } }
         @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Windows 传递优化缓存'); Note=(T 'Windows 更新的点对点分发缓存')
            Size={ try { $s = (Get-DeliveryOptimizationStatus -ErrorAction Stop | Measure-Object -Property FileSize -Sum).Sum; if ($s) { $s } else { 0 } } catch { 0 } }
@@ -2658,8 +2685,13 @@ function Get-AppMoveBlock($app, $others, $svc = $null) {
 # 上面哪一级文件夹是链接（已经搬走了）。没有就返回空
 function Get-LinkedAncestor([string]$path) {
     $p = Split-Path $path.TrimEnd('\') -Parent
+    $memo = $script:linkMemo   # 只在清理扫描（统计大小）时有：同一个上级文件夹只查一次；删除时每次都现查
     while ($p -and $p.TrimEnd('\').Length -gt 2) {
-        if (IsLink $p) { return $p.TrimEnd('\') }
+        if ($null -ne $memo) {
+            $k = $p.TrimEnd('\').ToLowerInvariant()
+            if (-not $memo.ContainsKey($k)) { $memo[$k] = [bool](IsLink $p) }
+            if ($memo[$k]) { return $p.TrimEnd('\') }
+        } elseif (IsLink $p) { return $p.TrimEnd('\') }
         $p = Split-Path $p -Parent
     }
     return ''
@@ -2699,7 +2731,14 @@ function Get-InstalledApps([switch]$NoStore) {
     try {
         foreach ($a in @(Get-AppxPackage -PackageTypeFilter Main -ErrorAction Stop | Where-Object { -not $_.IsFramework -and $_.SignatureKind -ne 'System' -and -not $_.NonRemovable })) {
             $dn = $a.Name
-            try { $m = Get-AppxPackageManifest -Package $a.PackageFullName -ErrorAction Stop; $x = [string]$m.Package.Properties.DisplayName; if ($x -and $x -notlike 'ms-resource:*') { $dn = $x } } catch {}
+            # 显示名直接从安装文件夹里的 AppxManifest.xml 读（Get-AppxPackageManifest 每个要零点几秒，几十个应用就要等很久）
+            try {
+                $mf = Join-Path ([string]$a.InstallLocation) 'AppxManifest.xml'
+                if ($a.InstallLocation -and [IO.File]::Exists($mf)) {
+                    $mx = [regex]::Match([IO.File]::ReadAllText($mf), '(?s)<Properties>.*?<DisplayName>([^<]+)</DisplayName>')
+                    if ($mx.Success) { $x = [Net.WebUtility]::HtmlDecode($mx.Groups[1].Value.Trim()); if ($x -and $x -notlike 'ms-resource:*') { $dn = $x } }
+                }
+            } catch {}
             [void]$out.Add(@{ Name = $dn; Publisher = ([string]$a.Publisher -replace '^CN=([^,]+).*$', '$1'); Version = [string]$a.Version; Date = ''
                 Location = [string]$a.InstallLocation; LocReg = $true; Est = [double]0; Uninstall = ''; Kind = 'store'; Package = $a.PackageFullName })
         }

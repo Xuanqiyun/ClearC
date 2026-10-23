@@ -103,6 +103,17 @@ public static class FsTools {
         if (!Win || string.IsNullOrEmpty(drive)) return false;
         try { StringBuilder sb = new StringBuilder(1024); if (QueryDosDeviceW(drive.Substring(0, 2), sb, sb.Capacity) == 0) return false; return sb.ToString().StartsWith("\\??\\"); } catch { return false; }
     }
+    // 回收站一共多大：系统直接给出合计，不用一项一项问（回收站里东西多时一项一项问要很久）。读不到返回 -1
+    [StructLayout(LayoutKind.Sequential)] struct RbInfo { public int cbSize; public long Size; public long Items; }
+    [StructLayout(LayoutKind.Sequential, Pack = 1)] struct RbInfoPacked { public int cbSize; public long Size; public long Items; }
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, EntryPoint = "SHQueryRecycleBinW")] static extern int QueryRb(string root, ref RbInfo info);
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, EntryPoint = "SHQueryRecycleBinW")] static extern int QueryRbPacked(string root, ref RbInfoPacked info);
+    public static long RecycleBinBytes() {
+        if (!Win) return -1;
+        try { RbInfo q = new RbInfo(); q.cbSize = Marshal.SizeOf(typeof(RbInfo)); if (QueryRb(null, ref q) == 0 && q.Size >= 0) return q.Size; } catch { }
+        try { RbInfoPacked p = new RbInfoPacked(); p.cbSize = Marshal.SizeOf(typeof(RbInfoPacked)); if (QueryRbPacked(null, ref p) == 0 && p.Size >= 0) return p.Size; } catch { }
+        return -1;
+    }
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     static extern uint GetLongPathNameW(string shortPath, StringBuilder longPath, int len);
     // 8.3 短路径换成长路径（路径不存在就原样返回）
