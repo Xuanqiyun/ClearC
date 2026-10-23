@@ -7,12 +7,12 @@
   - 打开本工具几秒后、空闲时在后台先把 C 盘的文件表读进内存（只读），之后清理扫描、软件管理、搬家、空间地图只按变更日志补读改过的部分。
   - 右键菜单扩展：直接读注册表，从 6.0 秒到 0.4 秒。
   - 系统健康：硬件、开机、蓝屏、事件、时钟各部分同时读，从 9.8 秒到 4.0 秒。
-  - 搬家「可以搬的」：已装软件、应用商店聊天软件同时读；判断软件带没带系统服务和驱动时，直接读注册表里登记的程序路径，不再等 WMI（测试机上 WMI 有时要等将近 10 秒）。
+  - 搬家「可以搬的」：已装软件、应用商店聊天软件同时读；判断软件带没带系统服务和驱动时，直接读注册表里登记的程序路径，不再等 WMI（测试机上 WMI 有时要等将近 10 秒），从 4.6 秒到 1.8 秒。
   - 残留文件夹：最近改动和大小直接从 C 盘文件表查，不再逐个文件夹统计；装在别的盘上的软件、已经搬走的文件夹读那块盘的文件表一次；应用商店软件的名字直接读安装文件夹里的清单。
   - 重复文件：NTFS 盘上找 1 MB 以上的文件时，直接从文件表列出文件（规则和一个个文件夹去看一样：同样跳过系统、软件、开发环境的文件夹，链接、云端文件夹不进，系统、脱机、云端占位文件不比），不用再一个个文件夹去看：测试机上整个 Program Files 逐个文件夹列举要 2 到 6 分钟，文件表在内存里时不到 1 秒；文件表里多记了每个文件的属性。算指纹前核对文件大小和列出来时一样。
   - 驱动存储里的旧版驱动包：同一次打开程序里驱动包没变就不再问 DISM；开发者和 IT 模式空闲时顺便先问好。
   - 扫描时记下每一项用了多久，写进日志，以后哪里慢一看就知道。
-- 测试：界面自测覆盖帮助页目录（只显示选中的一项、上一项下一项、使用反馈和回到原来那一项、每一项都有内容）；Windows 测试第一遍量一下各种扫描的用时（报告里 timing 开头的几行）；核对安装包登记一次问完和一条一条问的结果相同；安全规则测试更新（接口读不了就不判断孤儿安装包）。
+- 测试：界面自测核对读注册表得到的服务、驱动不比 WMI 少；测速时同样的重复文件查找从文件表列一次，结果必须和逐个文件夹列举的完全一样（测试机上逐个列举 7 分钟，从文件表不到 1 秒）；界面自测覆盖帮助页目录（只显示选中的一项、上一项下一项、使用反馈和回到原来那一项、每一项都有内容）；Windows 测试第一遍量一下各种扫描的用时（报告里 timing 开头的几行）；核对安装包登记一次问完和一条一条问的结果相同；安全规则测试更新（接口读不了就不判断孤儿安装包）。
 - The help page has a contents list on the left like Settings and shows one item at a time. Scans are faster: the cleanup scan only measures what the current mode lists and asks Windows for the slow items (installer packages, driver packages, Delivery Optimization, broken shortcuts) in parallel; the C: file table is read in the background while idle; system health, move candidates and context-menu extensions read their parts in parallel or straight from the registry; leftovers and apps on other drives use the file table.
 
 ## 3.4
