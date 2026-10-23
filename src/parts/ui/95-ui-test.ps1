@@ -215,7 +215,7 @@ function Invoke-UiTest {
         }
         & $step 'services and drivers read from the registry cover every program WMI lists' {
             # 判断软件能不能搬时要知道哪些服务、驱动的程序在它的文件夹里：直接读注册表，不能比 WMI 少
-            $reg = @(Get-ServicePaths)
+            $reg = Get-ServicePaths   # 返回的是一个列表（不要再套 @()，那样会变成只有一项）
             $wmi = @(@(Get-CimInstance -ClassName Win32_Service -ErrorAction Stop) + @(Get-CimInstance -ClassName Win32_SystemDriver -ErrorAction Stop))
             $miss = @(); $n = 0
             foreach ($w in $wmi) {
