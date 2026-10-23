@@ -7,6 +7,7 @@ $ctl.Roots.ItemsSource = $script:roots
 function Add-Root($path, $label, $on, $detail, [bool]$removable = $false) {
     if (-not $path) { return }
     if (-not (Test-Path -LiteralPath $path)) { return }
+    if (IsLink $path) { return }   # 链接（多半是搬走后留下的）：和它指向的地方是同一份东西，不单独当一个位置
     foreach ($r in $script:roots) { if ($r.Path -ieq $path) { return } }
     $ri = New-Object RootItem
     $ri.Path = $path; $ri.Label = $label; $ri.Enabled = [bool]$on
@@ -501,7 +502,7 @@ $ctl.BtnDupDelete.Add_Click({
         if ($del.Count -ge $rows.Count) { $allChecked++; continue }
         $keep = @($rows | Where-Object { -not $_.ToDelete } | ForEach-Object { $_.Path })
         foreach ($r in $del) {
-            [void]$plan.Add(@{ Path = $r.Path; Size = $r.Size; Keep = $keep; Verified = $r.Verified })
+            [void]$plan.Add(@{ Path = $r.Path; Size = $r.Size; Keep = $keep; Verified = $r.Verified; Mtime = $r.ModifiedTicks })
             $bytes += $r.Size
             if ($r.HasRisk) { $risky++ }
         }
@@ -531,7 +532,7 @@ $ctl.BtnDupDelete.Add_Click({
     Start-Worker @'
 Add-Type -AssemblyName Microsoft.VisualBasic
 $done = New-Object System.Collections.ArrayList
-$i = 0; $total = $arg.Plan.Count; $freed = [double]0
+$i = 0; $total = $arg.Plan.Count; $freed = [double]0; $same = $false
 foreach ($p in $arg.Plan) {
     if (Stopping) { break }
     $i++
@@ -541,24 +542,29 @@ foreach ($p in $arg.Plan) {
     # 删之前再确认一次：要删的文件大小没变，并且至少有一份保留的副本还在、大小相同
     $fi = Get-Item -LiteralPath $p.Path -Force -ErrorAction SilentlyContinue
     if (-not $fi) { [void]$done.Add($p.Path); continue }
-    if ($fi.Length -ne $p.Size) { Log ((T "  跳过（文件在扫描后被修改过）：{0}") -f $($p.Path)); continue }
+    if ($fi.Length -ne $p.Size -or ($p.Mtime -and $fi.LastWriteTime.Ticks -ne [long]$p.Mtime)) { Log ((T "  跳过（文件在扫描后被修改过）：{0}") -f $($p.Path)); continue }
     $kept = $false
     foreach ($k in $p.Keep) {
         $ki = Get-Item -LiteralPath $k -Force -ErrorAction SilentlyContinue
-        if ($p.Similar) { if ($ki) { $kept = $true; break }; continue }   # 相似照片：保留的那份还在就行（大小本来就不同）
-        if (-not $ki -or $ki.Length -ne $p.Size) { continue }
+        if (-not $ki) { continue }
+        # 保留的那份和要删的其实是同一个文件（硬链接的两个名字，或者经过目录链接的两条路径）：删了就一份都不剩
+        if ([FsTools]::SameFile($k, $p.Path)) { Log ((T "  跳过（和保留的那份是同一个文件，只是路径不同）：{0}") -f $($p.Path)); $kept = $false; $same = $true; break }
+        if ($p.Similar) { $kept = $true; break }   # 相似照片：保留的那份还在就行（大小本来就不同）
+        if ($ki.Length -ne $p.Size) { continue }
         if ($p.Verified) { $kept = $true; break }
         # 抽样判定的组：和保留的那份逐字节比一遍，完全相同才删
         SetP @{ SubKind = 'verify'; Detail = $p.Path }
         if ([DupFinder]::SameContent($k, $p.Path)) { $kept = $true; break }
     }
     SetP @{ SubKind = 'none' }
+    if ($same) { $same = $false; continue }
     if (-not $kept -and (Stopping)) { break }   # 核对到一半取消了：这个文件不删
     if (-not $kept) { Log ((T "  没有删除（和保留的那份内容不完全相同，或保留的那份已不在）：{0}") -f $($p.Path)); continue }
     try {
         if ($fi.Attributes -band [IO.FileAttributes]::ReadOnly) { $fi.Attributes = $fi.Attributes -bxor [IO.FileAttributes]::ReadOnly }
         if ($arg.Recycle) {
-            [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($p.Path, [Microsoft.VisualBasic.FileIO.UIOption]::OnlyErrorDialogs, [Microsoft.VisualBasic.FileIO.RecycleOption]::SendToRecycleBin)
+            $rc = [FsTools]::Recycle($p.Path, [long]$sync.Hwnd)
+            if (Test-Path -LiteralPath $p.Path) { throw ((T "没能放进回收站（代码 {0}）：可能回收站放不下或被禁用，这个文件没有删") -f $rc) }
         } else {
             [IO.File]::Delete($p.Path)
         }

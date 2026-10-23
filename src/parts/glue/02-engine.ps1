@@ -23,9 +23,14 @@ public static class PhotoHash {
         List<PhotoItem> list = new List<PhotoItem>();
         Seen = 0; Hashed = 0; Failed = 0; Cancel = false;
         Stack<string> st = new Stack<string>();
-        foreach (string r in roots) st.Push(r);
+        HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string r in roots) {
+            string rr; try { rr = Path.GetFullPath(r).TrimEnd('\\'); if ((File.GetAttributes(rr) & FileAttributes.ReparsePoint) != 0) continue; } catch { continue; }
+            st.Push(rr);
+        }
         while (st.Count > 0 && !Cancel) {
             string d = st.Pop(); Current = d;
+            if (!seen.Add(d)) continue;   // 同一个文件夹只看一次（一个根在另一个根里面时）
             IEnumerable<string> dirs = null, files = null;
             try { dirs = Directory.EnumerateDirectories(d); files = Directory.EnumerateFiles(d); } catch { continue; }
             try { foreach (string s in dirs) { string n = Path.GetFileName(s); if (skip.Contains(n)) continue; try { if ((File.GetAttributes(s) & FileAttributes.ReparsePoint) != 0) continue; } catch { continue; } st.Push(s); } } catch { }
@@ -34,6 +39,8 @@ public static class PhotoHash {
                     if (!Exts.Contains(Path.GetExtension(f))) continue;
                     FileInfo fi; try { fi = new FileInfo(f); } catch { continue; }
                     if (fi.Length < min || (max > 0 && fi.Length > max)) continue;
+                    // 只在云端的占位文件（OneDrive 等）：读它会触发下载，跳过
+                    if ((((int)fi.Attributes) & (0x1000 | 0x40000 | 0x400000)) != 0) continue;
                     Seen++;
                     PhotoItem p = new PhotoItem(); p.Path = f; p.Size = fi.Length; p.Modified = fi.LastWriteTime; list.Add(p);
                     if (list.Count >= limit) { Cancel = true; break; }

@@ -207,6 +207,7 @@ function Recycle-Flush {
     if ($r -ne 0) { Log ((T "  有 {0} 项没能放进回收站（错误 {1}）") -f $arr.Count, $r) }
 }
 function Remove-Path($it) {
+    if ($script:autoMinAge -and $it.LastWriteTime -gt $script:autoMinAge) { return }
     if ($script:recycleNow) {
         if (-not $script:recycleBatch) { $script:recycleBatch = New-Object System.Collections.Generic.List[string] }
         $script:recycleBatch.Add($it.FullName)
@@ -217,6 +218,33 @@ function Remove-Path($it) {
 }
 function Remove-Contents([string[]]$paths, [string]$filter, [bool]$wholeDir) {
     try { Remove-Contents2 $paths $filter $wholeDir } finally { Recycle-Flush }
+}
+# 一个文件夹里面的所有链接（目录联接、符号链接）只拆链接本身，不跟进去：自己一层层走，碰到重解析点就 rmdir 掉它
+function Remove-LinksInside([string]$dir) {
+    $n = 0
+    $st = New-Object System.Collections.Generic.Stack[string]; $st.Push($dir)
+    while ($st.Count -gt 0) {
+        $d = $st.Pop()
+        $subs = $null; try { $subs = [IO.Directory]::GetDirectories($d) } catch { continue }
+        foreach ($s in $subs) {
+            $a = $null; try { $a = [IO.File]::GetAttributes($s) } catch { continue }
+            if (($a -band [IO.FileAttributes]::ReparsePoint) -ne 0) { & "$sys32\cmd.exe" /c rmdir "\\?\$s" 2>$null | Out-Null; $n++ }
+            else { $st.Push($s) }
+        }
+    }
+    return $n
+}
+# Windows.old：里面 Users\<user>\Application Data 这类是指向当前系统活目录的绝对路径链接，Remove-Item -Recurse（PowerShell 5.1）和 icacls /T 会跟进去。
+# 所以先把里面的链接全部拆掉，再夺权、再 rd（rd 对剩下的链接也只拆不跟）
+function Remove-WindowsOld {
+    $p = 'C:\Windows.old'
+    if (-not (Test-Path -LiteralPath $p)) { return }
+    if (IsLink $p) { Log (T '  C:\Windows.old 本身是链接，不删'); return }
+    $links = Remove-LinksInside $p
+    if ($links -gt 0) { Log ((T "  先拆掉了 Windows.old 里的 {0} 个链接（它们指向现在系统的文件夹，不能跟进去删）") -f $links) }
+    & "$env:SystemRoot\System32\takeown.exe" /F $p /R /A /D Y 2>$null | Out-Null
+    & "$env:SystemRoot\System32\icacls.exe" $p /grant Administrators:F /T /C /Q 2>$null | Out-Null
+    Remove-OneDir (Get-Item -LiteralPath $p -Force)
 }
 function Remove-Contents2([string[]]$paths, [string]$filter, [bool]$wholeDir) {
     $ex = Get-ExcludeList
@@ -942,14 +970,14 @@ function Get-Catalog {
     $list += @(
         @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); N=(T '清空回收站');            Note=(T '回收站里是你以前删掉、但还能找回的文件。清空后就永远找不回了，请先打开回收站确认里面没有要的东西')
            Size={ try { $s = ((New-Object -ComObject Shell.Application).NameSpace(0xA).Items() | Measure-Object -Property Size -Sum).Sum; if ($s) { $s } else { 0 } } catch { 0 } }
-           Act ={ Clear-RecycleBin -Force -ErrorAction SilentlyContinue } }
+           Act ={ if ($script:recycledThisRun) { Log (T '  这一轮刚把文件放进回收站，不清空回收站（下次再清）') } else { Clear-RecycleBin -Force -ErrorAction SilentlyContinue } } }
         @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Windows 传递优化缓存'); Note=(T 'Windows 更新的点对点分发缓存')
            Size={ try { $s = (Get-DeliveryOptimizationStatus -ErrorAction Stop | Measure-Object -Property FileSize -Sum).Sum; if ($s) { $s } else { 0 } } catch { 0 } }
            Act ={ Delete-DeliveryOptimizationCache -Force -ErrorAction SilentlyContinue } }
 
         # ---- 需确认：有代价 ----
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache';  Def=(T '跳过'); One=(T '删除'); N='Windows.old';        Paths=@('C:\Windows.old'); Whole=$true; Note=(T '上一版 Windows 的完整副本。删后不能回退到上一版系统（系统升级 10 天后会自动删）')
-           Act ={ & "$env:SystemRoot\System32\takeown.exe" /F 'C:\Windows.old' /R /A /D Y | Out-Null; & "$env:SystemRoot\System32\icacls.exe" 'C:\Windows.old' /grant Administrators:F /T /C /Q | Out-Null; Remove-Item 'C:\Windows.old' -Recurse -Force -ErrorAction SilentlyContinue } }
+        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache';  Def=(T '跳过'); One=(T '跳过'); N='Windows.old';        Paths=@('C:\Windows.old'); Whole=$true; Note=(T '上一版 Windows 的完整副本。删后不能回退到上一版系统（系统升级 10 天后会自动删）')
+           Act ={ Remove-WindowsOld } }
         @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def=(T '跳过'); One=(T '执行'); N=(T '重建 Windows 搜索索引'); Lvl=1; Note=(T '搜索索引膨胀时可重建，重建后通常只剩 1 到 2 GB。重建期间（约 1 小时）搜文件会变慢')
            Size={ $s = 0; foreach ($f in 'C:\ProgramData\Microsoft\Search\Data\Applications\Windows\Windows.edb','C:\ProgramData\Microsoft\Search\Data\Applications\Windows\Windows.db') { $i = Get-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue; if ($i) { $s += $i.Length } }; if ($s -gt 2GB) { $s } else { 0 } }
            Act ={ Stop-Service WSearch -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 3; Remove-Item 'C:\ProgramData\Microsoft\Search\Data\Applications\Windows\Windows.edb','C:\ProgramData\Microsoft\Search\Data\Applications\Windows\Windows.db' -Force -ErrorAction SilentlyContinue; Set-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows Search' -Name SetupCompletedSuccessfully -Value 0 -ErrorAction SilentlyContinue; Start-Service WSearch -ErrorAction SilentlyContinue } }
@@ -1033,9 +1061,12 @@ function Measure-Item($it, $tree = $null) {
     return Get-Size $paths $it.Filter $tree (Get-ExcludeList)
 }
 
+$script:recycledThisRun = $false
+$script:autoMinAge = $null
 function Invoke-Delete($it, $res, [switch]$Auto) {
     $f0 = FreeC
     $script:recycleNow = (-not $Auto) -and ((Get-Setting 'Recycle' '0') -eq '1') -and -not $it.Act
+    $script:autoMinAge = if ($Auto) { (Get-Date).AddDays(-1) } else { $null }   # 自动清理：一天内写过的临时文件可能还在用，不碰
     $kind = if ($it.Slow) { 'slow' } elseif ($it.Act) { 'action' } else { 'delete' }
     SetP @{ SubKind = $kind; SubStart = (Get-Date); FreeC0 = [double]$f0; Detail = $it.Note }
     if ($it.Svc) { $it.Svc | ForEach-Object { Stop-Service $_ -Force -ErrorAction SilentlyContinue } }
@@ -1045,6 +1076,8 @@ function Invoke-Delete($it, $res, [switch]$Auto) {
         if ($res -and $sync -and $sync.WasCancelled) { $res.Cancelled = $true }
     }
     if ($it.Svc) { $it.Svc | ForEach-Object { Start-Service $_ -ErrorAction SilentlyContinue } }
+    if ($script:recycleNow) { $script:recycledThisRun = $true }
+    $script:autoMinAge = $null
     $freed = [math]::Max([double]0, [double]((FreeC) - $f0))
     if ($res) { $res.Freed = $freed }
     Log ((T "  完成  {0,-26} 释放 {1}") -f $it.N, (GB $freed))
@@ -1232,6 +1265,20 @@ function Rename-WithRetry([string]$from, [string]$to, $it, [int]$tries = 8) {
     return @{ Err = $err; Tries = $tries }
 }
 
+# OneDrive 的同步根目录（个人版、公司版，可能有好几个）：里面的文件夹换成链接，OneDrive 会当成删除同步到云端
+function Get-OneDriveRoots {
+    $out = New-Object System.Collections.Generic.List[string]
+    foreach ($v in @($env:OneDrive, $env:OneDriveConsumer, $env:OneDriveCommercial)) { if ($v) { $out.Add($v.TrimEnd('\')) } }
+    try { foreach ($k in @(Get-ChildItem 'HKCU:\Software\Microsoft\OneDrive\Accounts' -ErrorAction Stop)) { $uf = (Get-ItemProperty $k.PSPath -ErrorAction SilentlyContinue).UserFolder; if ($uf) { $out.Add(([string]$uf).TrimEnd('\')) } } } catch {}
+    if ($env:USERPROFILE) { foreach ($d in @(Get-ChildItem -LiteralPath $env:USERPROFILE -Directory -Filter 'OneDrive*' -Force -ErrorAction SilentlyContinue)) { $out.Add($d.FullName.TrimEnd('\')) } }
+    return @($out | Where-Object { $_ } | Select-Object -Unique)
+}
+function Test-InOneDrive([string]$path) {
+    if (-not $path) { return $false }
+    $p = $path.TrimEnd('\')
+    foreach ($r in (Get-OneDriveRoots)) { if ($p -ieq $r -or $p.StartsWith($r + '\', [StringComparison]::OrdinalIgnoreCase)) { return $true } }
+    return $false
+}
 function Invoke-Move($it, $destRoot, $res) {
     if (-not $res) { $res = @{} }
     $res.Done = 0; $res.Fail = 0; $res.Wait = 0; $res.Moved = [double]0; $res.Dest = @(); $res.Msgs = @(); $res.Skipped = 0
@@ -1249,7 +1296,7 @@ function Invoke-Move($it, $destRoot, $res) {
         if (-not (Test-Path -LiteralPath $src)) { continue }
         if (Stopping) { $m = (T '已取消，剩下的文件夹没有搬'); Log "  $m"; $res.Cancelled = $true; $res.Msgs += $m; break }
         if (IsLink $src) { Log ((T "  已经搬过（是链接），跳过 {0}") -f $src); $res.Skipped++; continue }
-        if ($it.NoOneDrive -and $src -like '*OneDrive*') { Log ((T "  {0} 由 OneDrive 管理，不搬") -f $src); $res.Skipped++; continue }
+        if (($it.NoOneDrive -and $src -like '*OneDrive*') -or (Test-InOneDrive $src)) { $m = ((T "  {0} 在 OneDrive 同步目录里，不搬：换成链接后 OneDrive 会当成删除同步到云端") -f $src); Log $m; OpLog '搬运' (T '不搬：在 OneDrive 同步目录里') $src ''; $res.Skipped++; $res.Msgs += $m.Trim(); continue }
         if ($src.Substring(0,1) -ieq $destRoot.Substring(0,1)) { Log ((T "  {0} 已在目标盘") -f $src); $res.Skipped++; continue }
         $leaf = Split-Path $src -Leaf
         $pick = Find-MoveDest $src $destRoot
@@ -1298,7 +1345,8 @@ function Invoke-Move($it, $destRoot, $res) {
         SetP @{ MovePhase = 'copy'; SubKind = 'copy'; SubTotal = [double]$srcBytes; SubBase = $base; SubDone = $base; SubStart = (Get-Date); DestDrive = $destDrive; DestFree0 = $destFree0; Detail = "$src  ->  $dst" }
         # 每复制完一个文件，robocopy 输出一行「大小<Tab>文件名」，累加起来就是已复制的字节数。
         # 用上次的副本时用 /MIR：副本和原目录完全一致（原目录里已删掉的旧文件，副本里也删掉）
-        $mode = if ($reuse) { '/MIR' } else { '/E' }
+        # 副本里有一个 C 盘上没有的文件（在允许范围内）也不用 /MIR：那些文件留着不删，只补新的
+        $mode = if ($reuse -and $extra -eq 0) { '/MIR' } else { '/E' }
         $more = @(); if ($reuse -and $it.Sddl) { $more += '/SECFIX' }   # 用上次的副本时，连没变的文件的权限也改对
         $rc = Invoke-Tool "$sys32\robocopy.exe" (@($src, $dst, $mode, $cp) + $more + @('/DCOPY:DAT', '/R:2', '/W:2', '/NDL', '/NJH', '/NJS', '/NP', '/BYTES', '/XJ')) '' $base
         $cxHalf = (T "已取消：{0} 原文件夹没动。已复制的部分留在 {1}，下次再搬这一项会接着复制；不需要的话，可以在「搬家管理」里删掉这份副本") -f $src, $dst
@@ -1337,8 +1385,10 @@ function Invoke-Move($it, $destRoot, $res) {
         Set-CanCancel $false
         & "$sys32\cmd.exe" /c mklink /J "$src" "$dst" | Out-Null
         if (-not (IsLink $src)) {
-            try { [IO.Directory]::Move($bak, $src) } catch {}
-            $m = ((T "建链接失败，已改回原目录，副本在 {0}") -f $dst); Log "  $m"; OpLog '搬运' (T '搬家失败') $src $m; $res.Fail++; $res.Msgs += $m; continue
+            $back = $true
+            try { if (Test-Path -LiteralPath $src) { Remove-Item -LiteralPath $src -Force -ErrorAction Stop }; [IO.Directory]::Move($bak, $src) } catch { $back = $false }
+            $m = if ($back) { ((T "建链接失败，已改回原目录，副本在 {0}") -f $dst) } else { ((T "建链接失败，而且没能把原目录改回来：你的数据在 {0}，请手动把它改名回 {1}（{1} 现在可能是别的程序新建的空文件夹）；副本在 {2}") -f $bak, $src, $dst) }
+            Log "  $m"; OpLog '搬运' (T '搬家失败') $src $m; $res.Fail++; $res.Msgs += $m; continue
         }
         # 核对之后到改名之间可能有程序又写了文件，补复制一遍新文件；补不过去就保留 C 盘上的旧文件夹
         SetP @{ Detail = (T '补复制最后写入的文件') }
@@ -1487,6 +1537,8 @@ function Get-DeleteBlock([string]$path, [switch]$Leftover) {
     $full = $full.TrimEnd('\')
     if ($full.Length -le 2) { return (T '整块磁盘不能删') }
     if (Test-Personal $full) { return (T 'C 盘个人文件夹（桌面、文档、下载、图片、视频、音乐等）里的东西不删') }
+    # 任何一块盘根下的这些文件夹：回收站（所有用户的）、还原点、恢复分区的东西、启动文件
+    if ($full -match '^[A-Za-z]:\\(\$Recycle\.Bin|System Volume Information|Recovery|EFI|Boot|Config\.Msi|\$WinREAgent)(\\|$)') { return (T '系统文件夹，删了 Windows 可能出问题') }
     $sd = $env:SystemDrive
     foreach ($d in @($env:SystemRoot, "$sd\System Volume Information", "$sd\`$Recycle.Bin", "$sd\Recovery", "$sd\Boot", "$sd\EFI", "$sd\Config.Msi", "$sd\Documents and Settings", "$sd\ProgramData\Microsoft")) {
         if ($full -ieq $d -or $full.StartsWith("$d\", [StringComparison]::OrdinalIgnoreCase)) { return (T '系统文件夹，删了 Windows 可能出问题') }
