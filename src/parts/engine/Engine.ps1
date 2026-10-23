@@ -44,20 +44,31 @@ function Start-Parallel($jobs, [int]$max = 4) {
     }
     return $h
 }
-# 等一起做的那几件做完：返回 键 → @{ V = 结果; Ms = 用了多少毫秒 }。出错的、没开成的不在里面（调用的地方自己再做一遍）。点了取消就停下不等
-function Wait-Parallel($h) {
+# 等一起做的那几件做完：返回 键 → @{ V = 结果; Ms = 用了多少毫秒 }。出错的、没开成的不在里面（调用的地方自己再做一遍）。
+# 点了取消就停下不等；超过 $limitSec 秒还没回答的（系统那边卡住了）也不等了，放进 $h.Late，调用的地方当作没问到
+function Wait-Parallel($h, [int]$limitSec = 120) {
     $res = @{}
     if (-not $h -or -not $h.Run) { return $res }
+    $h.Late = @()
+    $until = (Get-Date).AddSeconds($limitSec)
+    $hung = $false
     try {
         foreach ($k in @($h.Run.Keys)) {
             $j = $h.Run[$k]
-            while (-not $j.AR.AsyncWaitHandle.WaitOne(200)) { if (Stopping) { foreach ($x in @($h.Run.Values)) { try { $x.PS.Stop() } catch {} }; break } }
+            $late = $false
+            while (-not $j.AR.AsyncWaitHandle.WaitOne(200)) {
+                if (Stopping) { break }
+                if ((Get-Date) -gt $until) { $late = $true; break }
+            }
             if (Stopping) { break }
+            if ($late) { $h.Late += $k; $hung = $true; try { [void]$j.PS.BeginStop($null, $null) } catch {}; continue }
             try { $out = $j.PS.EndInvoke($j.AR); if ($out.Count -gt 0 -and $out[$out.Count - 1] -is [hashtable]) { $res[$k] = $out[$out.Count - 1] } } catch {}
+            try { $j.PS.Dispose() } catch {}; $j.Done = $true
         }
+        if (Stopping) { foreach ($x in @($h.Run.Values)) { if (-not $x.Done) { $hung = $true; try { [void]$x.PS.BeginStop($null, $null) } catch {} } } }
     } finally {
-        foreach ($j in @($h.Run.Values)) { try { $j.PS.Dispose() } catch {} }
-        if ($h.Pool) { try { $h.Pool.Close(); $h.Pool.Dispose() } catch {} }
+        # 卡住的那个不等它（关掉它的后台会一直等下去）：留着让它自己结束
+        if ($h.Pool -and -not $hung) { try { $h.Pool.Close(); $h.Pool.Dispose() } catch {} }
         $h.Run = @{}; $h.Pool = $null
     }
     return $res

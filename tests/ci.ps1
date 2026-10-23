@@ -73,7 +73,7 @@ public static class CiDisplay {
         $env:CLEANC_REPORT = Join-Path $PWD ('out\' + $run.Report)
         # 第一遍顺便量一下各种扫描用了多久（报告里 timing 开头的几行，单独写成一条说明注释）
         $env:CLEANC_SPEED = $(if ($run.Title -eq 'UI test') { '1' } else { '' })
-        $limit = $(if ($env:CLEANC_SPEED) { 900000 } else { 300000 })   # 不设 CLEANC_TEST：那会让启动器不用 STA 线程，WPF 窗口打不开
+        $limit = $(if ($env:CLEANC_SPEED) { 1500000 } else { 300000 })   # 测速那一遍要多等一会儿（测试机的硬盘时快时慢）   # 不设 CLEANC_TEST：那会让启动器不用 STA 线程，WPF 窗口打不开
         $u = Start-Process -FilePath .\out\ClearC.exe -ArgumentList '/uitest' -PassThru
         $ulines = @()
         if (-not $u.WaitForExit($limit)) { Write-Host ("::error title={0}::did not finish within {1} minutes" -f $run.Title, ($limit / 60000)); $fail = 1; try { $u.Kill() } catch {} }   # 只结束这次测试自己开的进程

@@ -935,13 +935,14 @@ function Invoke-UiTest {
         # 各种扫描用了多久（CLEANC_SPEED=1 时；开发者和 IT 模式，只统计不删）：报告里以 timing 开头的几行
         if ($env:CLEANC_SPEED -eq '1') {
             & $step 'speed: how long each scan takes (developer mode, nothing is deleted)' {
-                $keepMode = Get-Setting 'Mode' 'basic'
+                $keepMode = Get-Setting 'Mode' 'basic'; $script:speedStuck = $false
                 $tm = {
                     param([string]$name, [scriptblock]$go, [int]$limit)
                     $sync.PhaseTimes = $null
                     $t = [Diagnostics.Stopwatch]::StartNew(); & $go
                     $ok = & $waitUi { -not $script:worker } $limit
-                    $L.Add(("timing {0}: {1:N1} s{2}" -f $name, ($t.ElapsedMilliseconds / 1000), $(if ($ok) { '' } else { ' (did not finish)' })))
+                    $L.Add(("timing {0}: {1:N1} s{2}" -f $name, ($t.ElapsedMilliseconds / 1000), $(if ($ok) { '' } else { (' (did not finish; at step {0}: {1} / {2})' -f $sync.P.Step, $sync.P.StepName, $sync.P.Detail) })))
+                    if (-not $ok) { Set-CancelFlags; [void](& $waitUi { -not $script:worker } 60000); $script:speedStuck = $true }
                     if ($sync.PhaseTimes) { $L.Add(('timing     ' + ((@($sync.PhaseTimes) | ForEach-Object { '{0} {1:N0} ms' -f $_.N, [double]$_.Ms }) -join '; '))) }
                 }
                 $wk = {
@@ -995,6 +996,7 @@ function Invoke-UiTest {
                     }
                     $tw = [Diagnostics.Stopwatch]::StartNew(); $wb = [DirStat]::Measure("$env:SystemRoot\System32")
                     $L.Add(("timing walk System32: {0:N1} s, {1}" -f ($tw.ElapsedMilliseconds / 1000), (Fmt $wb)))
+                    if ($script:speedStuck) { throw 'a scan did not finish in time (see the timing lines)' }
                 } finally { Set-Setting 'Mode' $keepMode }
             }
         }
