@@ -16976,8 +16976,8 @@ function Show-MapLevel($node) {
 $script:mapBack = New-Object System.Collections.Generic.List[object]; $script:mapFwd = New-Object System.Collections.Generic.List[object]; $script:mapNavQuiet = $false
 function Reset-MapHistory { $script:mapBack.Clear(); $script:mapFwd.Clear(); $ctl.BtnMapBack.IsEnabled = $false; $ctl.BtnMapFwd.IsEnabled = $false }
 function Move-MapHistory([int]$dir) {
-    $from = if ($dir -lt 0) { $script:mapBack } else { $script:mapFwd }
-    $to = if ($dir -lt 0) { $script:mapFwd } else { $script:mapBack }
+    # 直接赋值（不用 if 表达式）：if 表达式会把列表展开成固定大小的数组，RemoveAt 就会出错
+    if ($dir -lt 0) { $from = $script:mapBack; $to = $script:mapFwd } else { $from = $script:mapFwd; $to = $script:mapBack }
     if ($from.Count -eq 0 -or -not $script:mapCur) { return }
     $n = $from[$from.Count - 1]; $from.RemoveAt($from.Count - 1)
     $to.Add($script:mapCur)
@@ -17053,6 +17053,8 @@ function Clear-MapMarks { foreach ($m in @($script:mapMarks.Values)) { $m.Marked
 function Get-MarkBytes($r) { if ($r.Disk -ge 0 -and $script:mapRoot -and $script:mapRoot.HasDisk) { [double]$r.Disk } else { [double]$r.Size } }
 function Update-MapMarks {
     $n = $script:mapMarks.Count
+    # 列表里现在显示的行（换过文件夹再回来是新的行）跟着清单走：清空、去掉、合进上级文件夹以后不再标「待删」
+    foreach ($x in @($ctl.MapList.Items)) { if ($x -is [MapRow] -and $x.Path) { $want = ($n -gt 0 -and $script:mapMarks.Contains((Get-MarkKey $x))); if ([bool]$x.Marked -ne $want) { $x.Marked = $want } } }
     $ctl.MapMarkBar.Visibility = if ($n -gt 0) { 'Visible' } else { 'Collapsed' }
     if ($n -eq 0) { return }
     $tot = [double]0; $byDrive = @{}
@@ -21593,7 +21595,7 @@ function Invoke-UiTest {
                 if ($script:uiSheets.Count -ne $n0 + 1 -or $script:worker) { throw 'deleting the list did not ask first' }
                 if ($script:uiSheets[$script:uiSheets.Count - 1] -notmatch 'git') { throw 'no warning about the git checkout' }
                 Clear-MapMarks
-                if ($ctl.MapMarkBar.Visibility -ne 'Collapsed' -or $ra.Marked) { throw 'clear left marks' }
+                if ($ctl.MapMarkBar.Visibility -ne 'Collapsed' -or $ra.Marked -or @($ctl.MapList.Items | Where-Object { $_.Marked }).Count) { throw 'clear left marks' }
                 # 方块图：按类型上色，下面有图例
                 $ctl.MapViewTree.IsChecked = $true; $win.UpdateLayout(); Draw-MapTree
                 if ($ctl.MapTreeLegend.Children.Count -lt 1) { throw 'no treemap legend' }
