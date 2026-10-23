@@ -8,9 +8,10 @@ using System.Text;
 [assembly: AssemblyTitle("腾挪 ClearC")]
 [assembly: AssemblyDescription("C 盘清理和搬家：清理 C 盘、把聊天记录和软件搬到其他盘、查找大文件和重复文件")]
 [assembly: AssemblyProduct("腾挪 ClearC")]
-[assembly: AssemblyVersion("2.7.0.0")]
-[assembly: AssemblyFileVersion("2.7.0.0")]
-[assembly: AssemblyInformationalVersion("2.7")]
+// 下面三个版本号和版权由 build/version.ps1 在构建时按 src/CleanC-UI.ps1 的 $script:AppVersion 和 LICENSE 改写，这里不用手改
+[assembly: AssemblyVersion("0.0.0.0")]
+[assembly: AssemblyFileVersion("0.0.0.0")]
+[assembly: AssemblyInformationalVersion("0.0")]
 [assembly: System.Runtime.Versioning.TargetFramework(".NETFramework,Version=v4.8", FrameworkDisplayName = ".NET Framework 4.8")]
 
 // 启动器：把内置的 PowerShell 程序放进本进程里的 PowerShell 引擎运行（用 Windows 自带的 PowerShell 5.1，不需要另装任何东西）。

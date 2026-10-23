@@ -37,4 +37,8 @@ $roslyn = @("$pw/Microsoft.CodeAnalysis.dll", "$pw/Microsoft.CodeAnalysis.CSharp
 Add-Type -IgnoreWarnings -Path "$B/ExeBuilder.cs" -ReferencedAssemblies ($roslyn + @('System.Collections.Immutable', 'System.Linq', 'System.Collections', 'System.Runtime', 'System.IO', 'netstandard')) 3>$null
 $net48 = @("$B/refasm/v4.8/mscorlib.dll", "$B/refasm/v4.8/System.dll", "$B/refasm/v4.8/System.Core.dll")
 foreach ($r in $net48) { if (-not (Test-Path $r)) { throw "缺少 $r，请先按文件开头的说明下载引用程序集" } }
-"exe build : " + [ExeBuilder]::Build('exe', [string[]]@("$B/launcher.cs", "$obj/types_row.cs", "$obj/types_dup.cs"), [string[]]$net48, "$obj/cleanc.ps1", "$B/app.manifest", "$B/icon.ico", $Out)
+# 版本号和版权写进 exe 的文件属性（同 build.ps1）
+. (Join-Path $B 'version.ps1')
+$vs = New-VersionedSources $root $obj $src
+"version   : $($vs.Version) ($($vs.Version4)), $($vs.Copyright)"
+"exe build : " + [ExeBuilder]::Build('exe', [string[]]@($vs.Launcher, "$obj/types_row.cs", "$obj/types_dup.cs"), [string[]]$net48, "$obj/cleanc.ps1", $vs.Manifest, "$B/icon.ico", $Out)

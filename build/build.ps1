@@ -37,18 +37,23 @@ $utf8 = New-Object Text.UTF8Encoding $false
 # 内嵌的脚本里写上构建时间（UTC），写进诊断信息和运行记录
 [IO.File]::WriteAllText((Join-Path $obj 'cleanc.ps1'), ($src -replace "`r?`n", "`r`n").Replace("`$script:AppBuildStamp = ''", ("`$script:AppBuildStamp = '{0}'" -f [DateTime]::UtcNow.ToString("yyyy-MM-dd'T'HH':'mm'Z'", [Globalization.CultureInfo]::InvariantCulture))), $utf8)
 
-# 3. 编译
+# 3. 版本号和版权写进 exe 的文件属性：从脚本的 $script:AppVersion 和 LICENSE 取，在 obj 里生成改好的启动器和清单
+. (Join-Path $here 'version.ps1')
+$vs = New-VersionedSources $root $obj $src
+"版本：$($vs.Version)（文件版本 $($vs.Version4)），$($vs.Copyright)"
+
+# 4. 编译
 $csc = Join-Path ([Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory()) 'csc.exe'
 if (-not (Test-Path -LiteralPath $csc)) { $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe' }
 if (-not (Test-Path -LiteralPath $csc)) { throw '找不到 .NET Framework 的 csc.exe' }
 & $csc /nologo /target:winexe /platform:anycpu /optimize+ /codepage:65001 /utf8output `
-    "/out:$Out" "/win32icon:$here\icon.ico" "/win32manifest:$here\app.manifest" `
+    "/out:$Out" "/win32icon:$here\icon.ico" "/win32manifest:$($vs.Manifest)" `
     "/resource:$obj\cleanc.ps1,cleanc.ps1" /main:CleanCLauncher `
-    "$here\launcher.cs" "$obj\types_row.cs" "$obj\types_dup.cs"
+    "$($vs.Launcher)" "$obj\types_row.cs" "$obj\types_dup.cs"
 if ($LASTEXITCODE -ne 0) { throw "编译失败（csc 返回 $LASTEXITCODE）" }
 "已生成：$Out"
 
-# 4. 代码签名（可选）：设置了证书才签，没设置就跳过。证书从哪来见 README 的「代码签名」
+# 5. 代码签名（可选）：设置了证书才签，没设置就跳过。证书从哪来见 README 的「代码签名」
 #    CLEARC_SIGN_PFX（.pfx 文件路径）+ CLEARC_SIGN_PASSWORD，或者 CLEARC_SIGN_THUMBPRINT（装在「当前用户 → 个人」里的证书）
 $pfx = $env:CLEARC_SIGN_PFX; $thumb = $env:CLEARC_SIGN_THUMBPRINT
 if ($pfx -or $thumb) {

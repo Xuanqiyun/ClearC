@@ -20,6 +20,19 @@ Step 'checks (PS 5.1)' { powershell -NoProfile -ExecutionPolicy Bypass -File tes
 Step 'engine tests (PS 5.1)' { powershell -NoProfile -ExecutionPolicy Bypass -File tests\Engine.Tests.ps1 }
 Step 'safety tests (PS 5.1)' { powershell -NoProfile -ExecutionPolicy Bypass -File tests\Safety.Tests.ps1 }
 Step 'build exe' { powershell -NoProfile -ExecutionPolicy Bypass -File build\build.ps1 }
+# exe 的文件属性：版本号要和程序里的一致（挪位置后重建定时任务时靠它比新旧），版权、原始文件名要对
+Step 'exe file properties' {
+    $want = [regex]::Match([IO.File]::ReadAllText('src\CleanC-UI.ps1'), "\`$script:AppVersion = '([\d.]+)'").Groups[1].Value
+    $v = [Diagnostics.FileVersionInfo]::GetVersionInfo((Resolve-Path out\ClearC.exe).Path)
+    "file version {0}, product version {1}, product {2}, copyright {3}, original name {4}" -f $v.FileVersion, $v.ProductVersion, $v.ProductName, $v.LegalCopyright, $v.OriginalFilename
+    $bad = @()
+    if (-not ([string]$v.FileVersion).StartsWith($want + '.')) { $bad += "FAIL file version $($v.FileVersion) is not $want" }
+    if ([string]$v.ProductVersion -ne $want) { $bad += "FAIL product version $($v.ProductVersion) is not $want" }
+    if (-not $v.LegalCopyright) { $bad += 'FAIL no copyright' }
+    if ([string]$v.OriginalFilename -ne 'ClearC.exe') { $bad += "FAIL original file name $($v.OriginalFilename)" }
+    $bad
+    if ($bad.Count) { cmd /c exit 1 } else { cmd /c exit 0 }
+}
 if (Test-Path out\ClearC.exe) {
     # 界面自测：照常打开窗口（放在屏幕外），把界面功能点一遍，对话框都当作点了取消，做完自己关掉。
     # 跑三遍：先照这台测试机的显示语言（英文）、浅色，再在设置里写上中文浅色、中文深色各跑一遍（测完设置原样放回）。注释标题里不能有逗号

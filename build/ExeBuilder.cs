@@ -17,7 +17,7 @@ public static class ExeBuilder {
             mainTypeName: kind == "exe" ? "CleanCLauncher" : null,
             optimizationLevel: OptimizationLevel.Release,
             platform: Platform.AnyCpu);
-        CSharpCompilation comp = CSharpCompilation.Create(kind == "exe" ? "CleanC" : "CleanCTest", trees, mrefs, opts);
+        CSharpCompilation comp = CSharpCompilation.Create(kind == "exe" ? "ClearC" : "CleanCTest", trees, mrefs, opts);
         byte[] script = File.ReadAllBytes(scriptPath);
         ResourceDescription[] res = { new ResourceDescription("cleanc.ps1", () => new MemoryStream(script), true) };
         Stream win32 = null;

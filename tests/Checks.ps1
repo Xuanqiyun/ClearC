@@ -84,6 +84,12 @@ foreach ($l in ($libText -split "`r?`n")) {
     [void]$keys.Add($f[0].Trim()); [void]$keys.Add($f[2].Trim()); $libN++
 }
 if ($libN -lt 40) { Bad "cache library: only $libN entries parsed" } else { Ok "cache library: $libN entries" }
+# exe 的版本号只有一个来源：两个构建脚本都要经过 build/version.ps1，启动器和清单里不能再写死版本号
+$bdir = Join-Path (Join-Path (Split-Path $Script -Parent) '..') 'build'
+$bOk = $true
+foreach ($bf in 'build.ps1', 'build-roslyn.ps1') { $bt = [IO.File]::ReadAllText((Join-Path $bdir $bf)); if ($bt -notmatch 'New-VersionedSources' -or $bt -notmatch '\$vs\.Launcher' -or $bt -notmatch '\$vs\.Manifest') { $bOk = $false } }
+$lt = [IO.File]::ReadAllText((Join-Path $bdir 'launcher.cs')); $mt = [IO.File]::ReadAllText((Join-Path $bdir 'app.manifest'))
+if ($bOk -and $lt -match 'AssemblyFileVersion\("0\.0\.0\.0"\)' -and $mt -match 'assemblyIdentity version="0\.0\.0\.0"') { Ok 'exe version comes from $script:AppVersion (build/version.ps1)' } else { Bad 'exe version must come from $script:AppVersion through build/version.ps1 (no hard-coded version in launcher.cs / app.manifest)' }
 # 发布日期（判断系统时钟往回走用）：发版时要改，一年没改就报
 $bm = [regex]::Match($src, "\`$script:AppBuilt = \[DateTime\]'(\d{4}-\d\d-\d\d)'")
 if (-not $bm.Success) { Bad 'release date $script:AppBuilt not found' } elseif (([DateTime]$bm.Groups[1].Value) -gt (Get-Date).AddDays(2) -or ([DateTime]$bm.Groups[1].Value) -lt (Get-Date).AddDays(-365)) { Bad ("release date {0} is in the future or more than a year old: update it when releasing" -f $bm.Groups[1].Value) } else { Ok ("release date {0}" -f $bm.Groups[1].Value) }
