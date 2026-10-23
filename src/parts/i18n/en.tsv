@@ -156,6 +156,44 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+扫描到 {0} 项，分成 {1} 类：{2}。点下面的选项卡切换类别，点「名称」「大小」排序，右边的下拉框可以只看某一种操作。每一项都可以单独选「删除」「搬走」或「跳过」；「执行所选操作」会处理所有类别。双击一行打开它所在的文件夹，右键可以复制路径。	Found {0} items in {1} groups: {2}. Use the tabs below to switch groups, click "Name" or "Size" to sort, and use the drop-down on the right to show only one action. Each item can be set to "Delete", "Move" or "Skip" on its own; "Run selected" handles every group. Double-click a row to open its folder; right-click to copy the path.
+全部操作	All actions
+只看「{0}」	Only "{0}"
+显示 {0} / {1} 项	Showing {0} of {1}
+{0} 项，约 {1}	{0} items, about {1}
+{0} 个	{0}
+名字和内容	Name and content
+只看内容	Content only
+ · 	 · 
+展开条件	Show options
+相关事件和驱动	Events and drivers
+已开启	On
+已关闭	Off
+{0} 天	{0} days
+每次蓝屏	Each crash
+蓝屏转储大小	Crash dump size
+发行商	Publisher
+安装日期	Installed
+状态	Status
+只看某一种操作的项目，比如只看要删除的、只看跳过的。排序不变	Show only items with one action, for example only the ones to delete or only the skipped ones. The sort order stays the same
+OneDrive 仅在线	OneDrive online-only
+休眠文件	Hibernation file
+保留的存储	Reserved storage
+系统压缩	System compression
+系统还原点	Restore points
+虚拟磁盘和虚拟机	Virtual disks and VMs
+页面文件	Page file
+点一下按这一列排序，再点一下反过来	Click to sort by this column; click again to reverse
+不删任何文件也能腾出空间：系统压缩、把大系统文件挪到其他盘、压缩不常用的文件夹和虚拟磁盘。左边选一项，右边是它的说明和按钮。	Free up space without deleting any files: system compression, moving large system files to another drive, and compressing rarely used folders and virtual disks. Pick an item on the left to see what it does and its buttons on the right.
+左边选遇到的问题，右边是对应的修法，从上往下、从轻到重地试。「只看」不改任何东西；「会改动」点了会先说明要改什么，能撤销的写明怎么撤销；「要重启」重启后才生效。用的都是 Windows 自带的命令，在看得见的窗口里运行。	Pick your problem on the left; the fixes for it are on the right. Try them from top to bottom, lightest first. "Read-only" changes nothing; "Changes system" explains what it changes before doing it, and how to undo it where possible; "Needs restart" takes effect after a restart. All of them are built-in Windows commands that run in a visible window.
+意外关机、硬件错误（WHEA）、磁盘和文件系统错误按来源归并；蓝屏时间和最近装的驱动对得上的，优先怀疑那个驱动。	Unexpected shutdowns, hardware errors (WHEA) and disk and file system errors are grouped by source. If a crash lines up with a recently installed driver, suspect that driver first.
+点「开始监控」，每 3 秒采一次样：各个程序这段时间用了多少 CPU、占多少内存、往磁盘写了多少。点列名按那一列从高到低排，再点一下从低到高。不装常驻服务，关掉本工具就停。	Click "Start monitoring" to sample every 3 seconds: how much CPU each program used, how much memory it holds and how much it wrote to disk. Click a column name to sort high to low, and again for low to high. No resident service; it stops when ClearC closes.
+空间变化	Space history
+空间提醒	Low space alert
+系统文件	System files
+虚拟磁盘	Virtual disks
+还原点和临时文件	Restore points and temp files
+这一类里没有这种操作的项目，换一个操作看看	Nothing in this group has that action; try another one
 按建议处理…	Fix as suggested…
 会做：	Will do: 
 本工具能做的都已经做过了。剩下的要你自己做，见结论下面「需要你自己做的」。	Everything ClearC can do has been done. The rest is up to you: see "Things to do yourself" under the diagnosis.

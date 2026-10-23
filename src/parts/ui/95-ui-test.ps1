@@ -258,16 +258,16 @@ function Invoke-UiTest {
         & $step 'modes hide and show features' {
             Set-Mode 'basic'
             if ($ctl.NavDup.Visibility -ne 'Collapsed' -or $ctl.NavLog.Visibility -ne 'Collapsed' -or $ctl.BtnLog.Visibility -ne 'Collapsed') { throw 'basic mode still shows advanced pages' }
-            if ($ctl.SaveCardRs.Visibility -ne 'Collapsed' -or $ctl.AppsViewBox.Visibility -ne 'Collapsed' -or $ctl.MapViewFiles.Visibility -ne 'Collapsed' -or $ctl.BtnSetCustomAdd.Visibility -ne 'Collapsed') { throw 'basic mode still shows advanced cards' }
-            if ($ctl.NavClean.Visibility -ne 'Visible' -or $ctl.SaveCardCos.Visibility -ne 'Visible' -or $ctl.SaveCardOd.Visibility -ne 'Visible' -or $ctl.NavHealth.Visibility -ne 'Visible' -or $ctl.HTabHw.Visibility -ne 'Visible' -or $ctl.HTabCrash.Visibility -ne 'Visible' -or $ctl.HTabFix.Visibility -ne 'Visible') { throw 'basic mode hides basic things' }
+            if ($ctl.SaveNavRs.Visibility -ne 'Collapsed' -or $ctl.AppsViewBox.Visibility -ne 'Collapsed' -or $ctl.MapViewFiles.Visibility -ne 'Collapsed' -or $ctl.BtnSetCustomAdd.Visibility -ne 'Collapsed') { throw 'basic mode still shows advanced cards' }
+            if ($ctl.NavClean.Visibility -ne 'Visible' -or $ctl.SaveNavCos.Visibility -ne 'Visible' -or $ctl.SaveNavOd.Visibility -ne 'Visible' -or $ctl.NavHealth.Visibility -ne 'Visible' -or $ctl.HTabHw.Visibility -ne 'Visible' -or $ctl.HTabCrash.Visibility -ne 'Visible' -or $ctl.HTabFix.Visibility -ne 'Visible') { throw 'basic mode hides basic things' }
             if ($ctl.HTabBoot.Visibility -ne 'Collapsed' -or $ctl.HTabMon.Visibility -ne 'Collapsed' -or $ctl.HTabEvents.Visibility -ne 'Collapsed') { throw 'basic mode shows advanced health tabs' }
             $basicSteps = @(@($ctl.FixGroups.Items) | ForEach-Object { @($_.Steps) } | ForEach-Object { $_.Id })
             if ($basicSteps -contains 'netreset' -or $basicSteps -contains 'wureset' -or $basicSteps -notcontains 'sfcrepair') { throw ('basic mode repair steps: ' + ($basicSteps -join ',')) }
             if ($ctl.ModeTag.Text -ne ((T '普通用户') + (T '模式'))) { throw ('mode tag: ' + $ctl.ModeTag.Text) }
             Set-Mode 'pro'
-            if ($ctl.NavDup.Visibility -ne 'Visible' -or $ctl.AppsViewStartup.Visibility -ne 'Visible' -or $ctl.AppsViewTasks.Visibility -ne 'Collapsed' -or $ctl.SaveCardPf.Visibility -ne 'Visible' -or $ctl.SaveCardRs.Visibility -ne 'Collapsed') { throw 'pro mode wrong' }
+            if ($ctl.NavDup.Visibility -ne 'Visible' -or $ctl.AppsViewStartup.Visibility -ne 'Visible' -or $ctl.AppsViewTasks.Visibility -ne 'Collapsed' -or $ctl.SaveNavPf.Visibility -ne 'Visible' -or $ctl.SaveNavRs.Visibility -ne 'Collapsed') { throw 'pro mode wrong' }
             Set-Mode 'expert'
-            if ($ctl.AppsViewTasks.Visibility -ne 'Visible' -or $ctl.SaveCardRs.Visibility -ne 'Visible' -or $ctl.BtnLog.Visibility -ne 'Visible' -or $ctl.BtnSetCustomAdd.Visibility -ne 'Visible' -or $ctl.BtnSfcRepair.Visibility -ne 'Visible' -or $ctl.HTabEvents.Visibility -ne 'Visible') { throw 'expert mode wrong' }
+            if ($ctl.AppsViewTasks.Visibility -ne 'Visible' -or $ctl.SaveNavRs.Visibility -ne 'Visible' -or $ctl.BtnLog.Visibility -ne 'Visible' -or $ctl.BtnSetCustomAdd.Visibility -ne 'Visible' -or $ctl.BtnSfcRepair.Visibility -ne 'Visible' -or $ctl.HTabEvents.Visibility -ne 'Visible') { throw 'expert mode wrong' }
             if (@($catalog | Where-Object { [int]$_.Lvl -eq 2 }).Count -lt 5 -or @($catalog | Where-Object { [int]$_.Lvl -eq 1 }).Count -lt 5) { throw 'catalog levels missing' }
         }
         & $step 'cleanup tiers: careful group, delete preview, recycle switch' {
@@ -305,7 +305,22 @@ function Invoke-UiTest {
             Refresh-Monitor
             if ($ctl.MonList.Items.Count -lt 1) { throw 'monitor list empty' }
             $L.Add(('  monitor: ' + $ctl.MonList.Items.Count + ' rows, top ' + $ctl.MonList.Items[0].Name + ' ' + $ctl.MonList.Items[0].SinceText))
-            $ctl.MonSortCpu.IsChecked = $true; if ($ctl.MonList.Items.Count -lt 1) { throw 'monitor list empty after sort' }
+            # 点表头排序：点「内存」从高到低，再点一下从低到高；点「CPU」重新取 CPU 最高的 25 个，按 CPU 从高到低
+            Select-HealthTab 'mon'; $win.UpdateLayout()
+            $hd = Find-GridHead $ctl.MonList 2
+            if (-not $hd) { throw 'memory column header not found' }
+            & $click $hd
+            if ($script:sortCfg.MonList.Prop -ne 'Ws' -or -not $script:sortCfg.MonList.Desc) { throw 'clicking the memory header did not sort high to low' }
+            if (-not (Test-SortedBy @($ctl.MonList.Items) 'Ws' $true)) { throw 'monitor rows not sorted by memory' }
+            if ([string]$ctl.MonList.View.Columns[2].Header -notlike '*↓') { throw ('no arrow on the memory header: ' + $ctl.MonList.View.Columns[2].Header) }
+            Invoke-HeaderSort 'MonList' '2'
+            if (-not (Test-SortedBy @($ctl.MonList.Items) 'Ws' $false) -or [string]$ctl.MonList.View.Columns[2].Header -notlike '*↑') { throw 'second click did not reverse the order' }
+            Invoke-HeaderSort 'MonList' '1'
+            if ($ctl.MonList.Items.Count -lt 1) { throw 'monitor list empty after sort' }
+            if (-not (Test-SortedBy @($ctl.MonList.Items) 'Cpu' $true)) { throw 'monitor rows not sorted by CPU' }
+            if ([string]$ctl.MonList.View.Columns[2].Header -like '*↓' -or [string]$ctl.MonList.View.Columns[2].Header -like '*↑') { throw 'old arrow left on the memory header' }
+            $L.Add(('  monitor by CPU: ' + (@($ctl.MonList.Items | Select-Object -First 3 | ForEach-Object { $_.Name + ' ' + $_.CpuText }) -join ', ')))
+            Reset-ListSort 'MonList' 'Since' $true
             Stop-Monitor
             if ($ctl.BtnMonStop.IsEnabled -or -not $script:monShared.Stop) { throw 'monitor not stopped' }
             if (-not (& $waitUi { -not $script:bg['monitor'] } 15000)) { throw 'monitor thread did not end' }
@@ -346,6 +361,14 @@ function Invoke-UiTest {
                 if ($script:healthTab -ne $k) { throw "current tab is $($script:healthTab), not $k" }
                 & $snap $ctl.PageHealth ('health-' + $k)
             }
+            # 蓝屏和崩溃里的三个小选项卡：点哪个只显示哪个
+            Select-HealthTab 'crash'
+            foreach ($k in @($script:crashTabs.Keys)) {
+                $ctl[$script:crashTabs[$k][0]].IsChecked = $true; $win.UpdateLayout()
+                foreach ($j in @($script:crashTabs.Keys)) { $want = if ($j -eq $k) { 'Visible' } else { 'Collapsed' }; if ($ctl[$script:crashTabs[$j][1]].Visibility -ne $want) { throw "crash tab ${k}: $j is not $want" } }
+                if ($k -ne 'verdict') { & $snap $ctl.PageHealth ('health-crash-' + $k) }
+            }
+            Select-CrashTab 'verdict'
             if ($ctl.HealthVerdicts.Items.Count -lt 1) { throw 'no verdict shown' }
             $L.Add(('  verdicts: ' + (@($ctl.HealthVerdicts.Items | ForEach-Object { $_.Title }) -join ' | ')))
             # 后台线程里算出来的文字也要跟着界面语言走
@@ -359,8 +382,13 @@ function Invoke-UiTest {
             if ($script:uiSheets.Count -lt $n0 + 5) { throw ('changing steps did not all ask first ({0} sheets)' -f ($script:uiSheets.Count - $n0)) }
             if ((Get-Setting 'PowerFixUndo' '') -ne $undo0 -or (Get-FastStartup) -ne $fs0) { throw 'power settings changed without confirmation' }
             # 列表里的按钮点下去走同一套
-            Select-HealthTab 'fix'; $win.UpdateLayout(); $script:uiFixRuns.Clear()
-            $q = New-Object System.Collections.Queue; $q.Enqueue($ctl.FixGroups); $hit = $null
+            Select-HealthTab 'fix'; $script:uiFixRuns.Clear()
+            # 左边选「时间不准」那个问题，右边只显示它的修法
+            $tg = @(@($ctl.FixGroups.Items) | Where-Object { @($_.Steps | Where-Object { $_.Id -eq 'timecheck' }).Count -gt 0 })[0]
+            if (-not $tg) { throw 'no problem group has the clock check' }
+            $ctl.FixGroups.SelectedItem = $tg; $win.UpdateLayout()
+            if (-not [object]::ReferenceEquals($ctl.FixDetail.Content, $tg)) { throw 'the detail pane does not show the selected problem' }
+            $q = New-Object System.Collections.Queue; $q.Enqueue($ctl.FixDetail); $hit = $null
             while ($q.Count -gt 0 -and -not $hit) { $v = $q.Dequeue(); if ($v -is [System.Windows.Controls.Button] -and [string]$v.Tag -eq 'timecheck') { $hit = $v; break }; for ($i = 0; $i -lt [System.Windows.Media.VisualTreeHelper]::GetChildrenCount($v); $i++) { $q.Enqueue([System.Windows.Media.VisualTreeHelper]::GetChild($v, $i)) } }
             if (-not $hit) { throw 'repair button not found in the list' }
             & $click $hit
@@ -378,6 +406,99 @@ function Invoke-UiTest {
             $rep = Get-HealthReportText $script:healthData
             if ($rep.Length -lt 200 -or $rep -notmatch [regex]::Escape((T '诊断结论'))) { throw 'report text too short' }
             Select-HealthTab 'hw'
+        }
+        & $step 'list headers sort; cleanup tabs, action filter and sticky bar; filter, save and reminder tabs' {
+            # 清理页：用假的大小排一个列表（不扫描），至少两类
+            $sizes = @{}; $i = 0
+            foreach ($it in @($catalog | Where-Object { -not $_.Lvl -or [int]$_.Lvl -le (Get-Mode) })) { $i++; $sizes[$it.Idx] = [double](($i * 7919) % 997 + 1) * 1MB }
+            Show-Page 'clean'; Build-Rows $sizes; $win.UpdateLayout()
+            $groups = @($script:cleanGroups.Order)
+            if ($groups.Count -lt 2) { throw ('only {0} groups' -f $groups.Count) }
+            if ($ctl.CleanTabs.Children.Count -ne $groups.Count) { throw ('{0} tabs for {1} groups' -f $ctl.CleanTabs.Children.Count, $groups.Count) }
+            $bad = @(@($ctl.List.Items) | Where-Object { $_.GroupTitle -ne $groups[0] }).Count
+            if ($ctl.List.Items.Count -lt 1 -or $bad -gt 0) { throw 'first tab does not show only the first group' }
+            $ctl.CleanTabs.Children[1].IsChecked = $true; $win.UpdateLayout()
+            if (@(@($ctl.List.Items) | Where-Object { $_.GroupTitle -ne $groups[1] }).Count -gt 0 -or $ctl.List.Items.Count -ne $script:cleanGroups.Cnt[$groups[1]]) { throw 'second tab does not show the second group' }
+            # 表头「大小」：从大到小；只看「跳过」以后还是按大小排
+            $bs = @(Find-Buttons $ctl.CleanHead | Where-Object { [string]$_.Tag -eq 'List|size' })[0]
+            if (-not $bs) { throw 'size header button not found' }
+            & $click $bs; $win.UpdateLayout()
+            if (-not (Test-SortedBy @($ctl.List.Items) 'Bytes' $true)) { throw 'cleanup rows not sorted by size' }
+            if ([string]$bs.Content -notlike '*↓') { throw 'no arrow on the size header' }
+            # 下拉框只看某一种操作：用这一类第一行的操作
+            $ctl.CleanTabs.Children[0].IsChecked = $true; $win.UpdateLayout()
+            $op = [string]$ctl.List.Items[0].Action
+            $opItem = @($ctl.CleanOpFilter.Items | Where-Object { [string]$_.Tag -eq $op })[0]
+            if (-not $opItem) { throw ('no filter entry for "{0}"' -f $op) }
+            $ctl.CleanOpFilter.SelectedItem = $opItem; $win.UpdateLayout()
+            $n = $ctl.List.Items.Count
+            $want = @($script:rows | Where-Object { $_.GroupTitle -eq $groups[0] -and $_.Action -eq $op }).Count
+            if ($n -ne $want -or @(@($ctl.List.Items) | Where-Object { $_.Action -ne $op -or $_.GroupTitle -ne $groups[0] }).Count -gt 0) { throw ('action filter shows {0} rows, expected {1}' -f $n, $want) }
+            if (-not (Test-SortedBy @($ctl.List.Items) 'Bytes' $true)) { throw 'action filter lost the sort order' }
+            $L.Add(('  cleanup: {0} groups; "{1}" filtered to "{2}" shows {3} rows, still largest first' -f $groups.Count, $groups[0], $op, $n))
+            $ctl.CleanOpFilter.SelectedIndex = 0; $win.UpdateLayout()
+            if ($ctl.List.Items.Count -ne $script:cleanGroups.Cnt[$groups[0]]) { throw 'all actions does not show the whole group again' }
+            # 「名称」：A 到 Z；再点两下回到本来的顺序
+            $bn = @(Find-Buttons $ctl.CleanHead | Where-Object { [string]$_.Tag -eq 'List|name' })[0]
+            & $click $bn; if (-not (Test-SortedBy @($ctl.List.Items) 'Name' $false)) { throw 'cleanup rows not sorted by name' }
+            & $click $bn; & $click $bn
+            if ($script:sortCfg.List.Prop) { throw 'third click did not go back to the original order' }
+            # 选项卡和表头：往下滚以后停在顶上（列表要够长才滚得动）
+            $ctl.CleanScroll.ScrollToTop(); $win.UpdateLayout(); [void](& $waitUi { $false } 150)
+            $y0 = (Get-CleanSlotPos).Y; $t0 = $ctl.CleanBar.Margin.Top
+            if ([math]::Abs($y0 - $t0) -gt 1) { throw ('bar is not over its slot at the top: slot {0}, bar {1}' -f $y0, $t0) }
+            & $snap $ctl.PageClean 'clean-tabs'
+            if ($ctl.CleanScroll.ScrollableHeight -gt $y0 + 20) {
+                $ctl.CleanScroll.ScrollToVerticalOffset($y0 + 200); $win.UpdateLayout(); [void](& $waitUi { $false } 150)
+                $p = Get-CleanSlotPos
+                if ($p.Y -ge 0 -or [math]::Abs($ctl.CleanBar.Margin.Top) -gt 0.5) { throw ('bar did not stick: slot {0}, bar {1}' -f $p.Y, $ctl.CleanBar.Margin.Top) }
+                $L.Add(('  sticky bar: slot at {0:N0}, scrolled to {1:N0}, bar stays at {2:N0}, {3:N0} px tall' -f $y0, $ctl.CleanScroll.VerticalOffset, $ctl.CleanBar.Margin.Top, $ctl.CleanBar.ActualHeight))
+                & $snap $ctl.PageClean 'clean-sticky'
+                # 停在顶上时换类：列表从头显示
+                $ctl.CleanTabs.Children[1].IsChecked = $true; $win.UpdateLayout()
+                $p = Get-CleanSlotPos
+                if ([math]::Abs($p.Y) -gt 1.5 -and $ctl.CleanScroll.VerticalOffset -lt $ctl.CleanScroll.ScrollableHeight - 1) { throw ('switching tabs while stuck did not show the list from the top: slot at {0}' -f $p.Y) }
+            } else { $L.Add(('  sticky bar: page not tall enough to scroll ({0:N0})' -f $ctl.CleanScroll.ScrollableHeight)) }
+            $script:rows = $null; $script:cleanOp = ''; $ctl.List.ItemsSource = $null; Update-CleanOverview
+            if ($ctl.CleanBar.Visibility -ne 'Collapsed') { throw 'tabs still shown without rows' }
+            # 重复文件：查找条件的选项卡，开始查找时收起
+            Show-Page 'dup'
+            Set-DupFilterOpen $true 'type'; $win.UpdateLayout()
+            if ($ctl.DPaneType.Visibility -ne 'Visible' -or $ctl.DPaneRoots.Visibility -ne 'Collapsed' -or -not $ctl.DTabType.IsChecked) { throw 'file type tab not shown' }
+            Set-DupFilterOpen $false
+            if ($ctl.DupFilterBody.Visibility -ne 'Collapsed' -or $ctl.DTabType.IsChecked) { throw 'filter options did not fold' }
+            $ctl.DTabSize.IsChecked = $true
+            if ($ctl.DupFilterBody.Visibility -ne 'Visible' -or $ctl.DPaneSize.Visibility -ne 'Visible') { throw 'clicking a folded tab did not open it' }
+            if (-not $ctl.DTabRootsVal.Text -or -not $ctl.DTabTypeVal.Text -or -not $ctl.DTabSizeVal.Text -or -not $ctl.DTabModeVal.Text) { throw 'tab values empty' }
+            $L.Add(('  duplicate options: {0} | {1} | {2} | {3}' -f $ctl.DTabRootsVal.Text, $ctl.DTabTypeVal.Text, $ctl.DTabSizeVal.Text, $ctl.DTabModeVal.Text))
+            & $snap $ctl.PageDup 'dup-tabs'
+            Set-DupFilterOpen $true 'roots'
+            # 省空间：左边目录点哪项，右边只显示那一项
+            Show-Page 'save'
+            foreach ($g in $script:saveGroups.Keys) { foreach ($k in $script:saveGroups[$g]) {
+                if ($ctl['SaveNav' + $k].Visibility -ne 'Visible') { continue }
+                $ctl['SaveNav' + $k].IsChecked = $true
+                $shown = @(foreach ($g2 in $script:saveGroups.Keys) { foreach ($x in $script:saveGroups[$g2]) { if ($ctl['SaveCard' + $x].Visibility -eq 'Visible') { $x } } })
+                if ($shown.Count -ne 1 -or $shown[0] -ne $k) { throw ("save nav ${k}: shows " + ($shown -join ',')) }
+            } }
+            $ctl.SaveNavPf.IsChecked = $true; & $snap $ctl.PageSave 'save-nav'
+            # 自动提醒：三个选项卡
+            Show-Page 'auto'
+            foreach ($k in @($script:autoTabs.Keys)) {
+                $ctl[$script:autoTabs[$k][0]].IsChecked = $true
+                foreach ($j in @($script:autoTabs.Keys)) { $want = if ($j -eq $k) { 'Visible' } else { 'Collapsed' }; if ($ctl[$script:autoTabs[$j][1]].Visibility -ne $want) { throw "auto tab ${k}: $j is not $want" } }
+            }
+            Select-AutoTab 'remind'
+            # 操作日志：点「时间」从早到晚，再点一下从晚到早
+            Show-Page 'log'; $win.UpdateLayout()
+            if ($ctl.LogList.Items.Count -gt 1) {
+                $hd = Find-GridHead $ctl.LogList 0; if (-not $hd) { throw 'log time header not found' }
+                $was = $script:sortCfg.LogList.Desc
+                & $click $hd
+                if ($script:sortCfg.LogList.Desc -eq $was -or -not (Test-SortedBy @($ctl.LogList.Items) 'When' $script:sortCfg.LogList.Desc)) { throw 'log not re-sorted by time' }
+                Reset-ListSort 'LogList' 'When' $true
+                if (-not (Test-SortedBy @($ctl.LogList.Items) 'When' $true)) { throw 'log not back to newest first' }
+            }
         }
         & $step 'similar photos and keep rules' {
             if (-not ('PhotoHash' -as [type])) { throw 'PhotoHash did not compile' }

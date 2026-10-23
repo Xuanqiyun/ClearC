@@ -404,6 +404,12 @@ public class ProcRow {
     public string TotalText { get; set; }
     public double Bar { get; set; }
     public double Sort { get; set; }
+    // 表头排序用的数字（文字列显示用，排序按这些）
+    public double Cpu { get; set; }
+    public double Ws { get; set; }
+    public double Rate { get; set; }
+    public double Since { get; set; }
+    public double Total { get; set; }
 }
 public class DumpRow {
     public string When { get; set; }

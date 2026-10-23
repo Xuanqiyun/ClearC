@@ -69,37 +69,184 @@ $script:tUi = $script:startClock.Elapsed.TotalSeconds
 $ctl = @{}
 foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageMap','PageSave','PageApps','PageMoves','PageAuto','PageLog','BtnDupMerge',
                'MapDrive','BtnMapStop','BtnMapScan','MapViewDirs','MapViewFiles','MapViewGrow','BtnMapUp','MapPath','MapInfo','MapList','MapGrow','EmptyMap','EmptyMapText','BtnMapOpen','BtnMapCompress','BtnMapDelete','MapSel',
-               'SaveScroll','BtnSaveRefresh','BtnCosOff','BtnCosOn','SaveCosState','SavePfState','SavePfDrive','BtnPfMove','BtnPfAuto','SaveHibState','BtnHibReduced','BtnHibOff','BtnHibFull','BtnFolderCompress','SaveFcState','VdList','VdEmpty','BtnGoDup',
+               'SaveScroll','SaveNav','SaveNavCos','SaveNavPf','SaveNavHib','SaveNavRs','SaveNavCs','SaveNavDump','SaveNavRp','SaveNavTmp','SaveNavFc','SaveNavOd','SaveNavMerge','SaveNavVd','SaveHeadSys','SaveHeadSafe','SaveHeadFiles','SaveHeadVd','BtnSaveRefresh','BtnCosOff','BtnCosOn','SaveCosState','SavePfState','SavePfDrive','BtnPfMove','BtnPfAuto','SaveHibState','BtnHibReduced','BtnHibOff','BtnHibFull','BtnFolderCompress','SaveFcState','VdList','VdEmpty','BtnGoDup',
                'BtnAppsRefresh','AppsAll','AppsC','AppsStore','AppsInfo','AppsSearch','AppsLeftBox','BtnAppsLeftClose','BtnAppsLeft','AppsLeftText','AppsList','EmptyApps','EmptyAppsText',
                'BtnAppsUpdates','AppsViewApps','AppsViewStartup','AppsViewTasks','AppsViewMenu','AppsViewLeft','AppsViewBox','AppsFilterBox','StartList','MapHealthBox','MapHealth','MapHealthNote','SetMapHealth',
                'MapViewTypes','MapViewRecent','MapOwner','MapSort','MapGrowBar','MapGrowBase','MapRecentBar','MapRecentDays','BtnMapRecent','MapGrid','MapOverview','MapOvPct','MapOvTitle','MapOvUsed','MapOvBar','MapOvLegend',
                'NavHealth','PageHealth','HTabHw','HTabBoot','HTabCrash','HTabFix','HTabMon','HTabEvents','HealthViewHw','HealthViewBoot','HealthViewCrash','HealthViewFix','HealthViewMon','HealthViewEvents',
-               'HealthCardVerdict','BtnCopyReport','BtnDiagPack','HealthVerdicts','HealthCardFix','FixRecBox','FixRecHead','FixRec','FixGroups','BtnHealthRefresh','HealthNote','HealthCardHw','HealthCards','HealthCardBoot','HealthBootText','HealthSlow','HealthCardCrash','BtnSfcCheck','BtnSfcRepair','HealthCrashText','HealthDumps','HealthEventsHead','HealthEvents','HealthDriversHead','HealthDrivers',
-               'HealthCardMon','MonSortWrite','MonSortCpu','MonSortMem','BtnMonStart','BtnMonStop','HealthMonText','MonList','HealthCardEvents','HealthWinText','HealthErrors','SetPageHealth',
+               'HealthCardVerdict','BtnCopyReport','BtnDiagPack','HealthVerdicts','HealthCardFix','FixRecBox','FixRecHead','FixRec','FixGroups','FixDetail','FixDetailScroll','CTabVerdict','CTabDumps','CTabEvents','CrashViewVerdict','CrashViewDumps','CrashViewEvents','BtnHealthRefresh','HealthNote','HealthCardHw','HealthCards','HealthCardBoot','HealthBootText','HealthSlow','HealthCardCrash','BtnSfcCheck','BtnSfcRepair','HealthCrashText','HealthDumps','HealthEventsHead','HealthEvents','HealthDriversHead','HealthDrivers',
+               'HealthCardMon','BtnMonStart','BtnMonStop','HealthMonText','MonList','HealthCardEvents','HealthWinText','HealthErrors','SetPageHealth',
                'SaveCardCos','SaveCardPf','SaveCardHib','SaveCardRp','SaveCardFc','SaveCardOd','SaveCardRs','SaveCardCs','SaveCardDump','SaveCardTmp','SaveCardVd','SaveCardMerge','SetCardMode','SetCardDisplay','SetCardScan','SetModeBasic','SetModePro','SetModeExpert','SetModeNote','ModeTag','AutoJunkRow','FbCopyDiag','FbSelfTest','FbCheckUpdate','MapViewBox',
                'BtnOdFree','SaveOdState','BtnRsOn','BtnRsOff','SaveRsState','BtnCsAnalyze','BtnCsClean','SaveCsState','BtnDumpSmall','BtnDumpAuto','SaveDumpState','SaveTmpState','SaveTmpDrive','BtnTmpMove','BtnTmpAuto','BtnCleanCustom','AutoJunkGB','AutoCleanWhen','SetCleanCard','SetRecycle','SetRecycleRow','SetCustomHead','SetCustomNote','SetExcludeHead','SetExcludeNote','SetCustomList','SetCustomEmpty','BtnSetCustomAdd','SetExcludeList','SetExcludeEmpty','BtnSetExcludeAdd',
                'BtnMovesRefresh','MovesInfo','MovesList','EmptyMoves','EmptyMovesText',
-               'AutoRemindOn','AutoRemindGB','AutoRemindNote','AutoCleanOn','AutoCleanNote','HistInfo','HistChart','HistLast','HistFirst',
+               'AutoRemindOn','AutoRemindGB','AutoRemindNote','AutoCleanOn','AutoCleanNote','HistInfo','HistChart','HistLast','HistFirst','ATabRemind','ATabClean','ATabHist','ATabRemindState','ATabCleanState','ATabHistState','AutoViewRemind','AutoViewClean','AutoViewHist',
                'BtnLogOpenDir','BtnLogRefresh','LogKeep','LogKeepNote','LogCats','LogRange','LogSearch','LogCount','LogList','EmptyLog','EmptyLogText',
                'BtnLang','BtnLangText','BtnTheme','BtnThemeText','NavHelp','PageHelp','HelpScroll','HelpSections','HelpFaq','BtnHelpExpand','FeedbackCard','RiskCard','BtnFeedback','BtnGitHub','BtnIssue','BtnCopyDiag','BtnOpenLog','CopyHint','BtnSelfTest','BtnCheckUpdate','MapFast','MapChat',
                'NavClean','NavDup','PageClean','PageDup','AppVer','BtnLog','BtnLogText','BtnLogHide','LogPanel','Dim',
                'CapFree','CapTotal','CapBar','CapReclaim','EmptyClean','EmptyCleanText','EmptyDup','EmptyDupText','SizeCustomRow',
                'DestPick','BtnDestBrowse','DestHint','BtnOneClick','BtnScan','BtnRun','BtnHogs','Hint','List','CleanMenu','CmOpen','CmOpenAll','CmCopy','Summary','Log',
                'Roots','BtnAddRoot','BtnDupScan','BtnDupStop',
-               'FilterExpander','FilterSummary','TypeChips','TypeReset','ExtraExt','SizeChips',
+               'DupFilterCard','DupFilterToggle','DupFilterBody','DTabRoots','DTabType','DTabSize','DTabMode','DTabRootsVal','DTabTypeVal','DTabSizeVal','DTabModeVal','DPaneRoots','DPaneType','DPaneSize','DPaneMode','FilterSummary','TypeChips','TypeReset','ExtraExt','SizeChips',
                'SizeMin','SizeMinUnit','SizeMax','SizeMaxUnit','SizeHint','ModeName','ModeContent','SpeedFast','SpeedExact',
                'DupProgressText','DupList','DupRecycle','DupProtect','BtnDupDelete','ModeSimilar','SimilarRow','SimStrict','SimNormal','SimLoose','BtnKeepIn','BtnKeepShort','BtnDupMove',
                'OpPanel','OpTime','OpTitle','OpBar','OpSubTime','OpDetail','OpSubBar','Root',
                'Overlay','OvTitle','OvTime','OvBar','OvStep','OvWhat','OvChecklist','OvDetail','OvSubBar','OvPlanBox','OvPlanScroll','OvPlan','OvHide','OvClose','OvNote',
                'BtnKeepNew','BtnKeepOld','BtnPickC','BtnPickNone','DupSummary',
-               'CleanScroll','CleanMore','CleanMoreText','CleanOverview','CleanOverviewText',
+               'CleanScroll','CleanMore','CleanMoreText','CleanOverview','CleanOverviewText','CleanHost','CleanBar','CleanBarSlot','CleanListCard','CleanFilterEmpty','CleanTabs','CleanTabInfo','CleanTabNote','CleanHead','CleanOpFilter',
                'OvCancel','OpCancel','MovesTabCand','MovesTabDone','CandList','EmptyCand','EmptyCandText','MovesCard','CandStore','BtnCandStore','CandStoreText','CandBar','MovesDest','BtnCandMove','BtnCandAll','BtnCandNone','CandSel','MapViewTree','BtnMapReport','MapTree','BtnMapExport','MapFilter','MapMinSize','MapAge','MapType','MapName','MapUnder',
                'MapAll','BtnMapAcct','MapMenu','MmEnter','MmOpen','MmCopy','MmCompress','MmDelete','NavHeadManage','NavSettings','PageSettings','SetScroll','BtnSetReset',
-               'SetThemeLight','SetThemeDark','SetThemeSystem','SetLangZh','SetLangEn','SetPageDup','SetPageSave','SetPageApps','SetPageMoves','SetPageAuto','SetPageLog',
+               'AppsHeadBox','AppsHead','StartHead','CandBox','CandHead','MovesHeadBox','MovesHead','MapHeadBox','MapHead','SetThemeLight','SetThemeDark','SetThemeSystem','SetLangZh','SetLangEn','SetPageDup','SetPageSave','SetPageApps','SetPageMoves','SetPageAuto','SetPageLog',
                'SetLinkTheme','SetLinkLang','SetLinkFeedback','SetLinkLog','SetPageSub','SetMapCheck','SetMapBar','SetMapPct','SetMapMeta','SetMapDisk','SetMapFastBtn','SetFast','SetLowIo',
                'SaveRpState','BtnRestoreOpen') { $ctl[$n] = $win.FindName($n) }
 # 右键菜单不在窗口的元素树里：万一按名字找不到，就从菜单里一个个取
 if (-not $ctl.MmDelete -and $ctl.MapList.ContextMenu) { $ctl.MapMenu = $ctl.MapList.ContextMenu; foreach ($it in $ctl.MapMenu.Items) { if ($it.Name) { $ctl[$it.Name] = $it } } }
+if (-not $ctl.CmOpen -and $ctl.List.ContextMenu) { $ctl.CleanMenu = $ctl.List.ContextMenu; foreach ($it in $ctl.CleanMenu.Items) { if ($it.Name) { $ctl[$it.Name] = $it } } }
+
+# ---------- 列表排序：点表头按这一列排，再点一下反过来；切换筛选、数据刷新以后还按原来的排 ----------
+# 每个列表一份配置：Cols 是「表头的键 → 按哪个属性排、是不是数字」（数字第一次点从大到小，文字从 A 到 Z）；
+# Pre 是排在前面、不随表头变的键（比如「其余 N 项」那一行永远在最后、重复文件按组）；Filter 是筛选（清理页按组和操作）
+$script:sortCfg = @{}
+function Register-ListSort([string]$name, [hashtable]$cols, [string[]]$pre = @(), $bar = $null, [string]$defProp = '', [bool]$defDesc = $true, [switch]$Tri) {
+    $lv = $ctl[$name]; if (-not $lv) { return }
+    $cfg = @{ Name = $name; Cols = $cols; Pre = $pre; Prop = ''; Desc = $true; Heads = @{}; Bar = $bar; Filter = $null; Tri = [bool]$Tri; After = $null }
+    # 记住的排序（每个列表一个设置）；没有就用默认的
+    $saved = Get-Setting ('Sort.' + $name) ''
+    if ($saved -match '^(\w+)\|([01])$' -and @($cols.Values | Where-Object { $_.Prop -eq $Matches[1] }).Count) { $cfg.Prop = $Matches[1]; $cfg.Desc = ($Matches[2] -eq '1') }
+    elseif ($defProp) { $cfg.Prop = $defProp; $cfg.Desc = $defDesc }
+    $script:sortCfg[$name] = $cfg
+    if ($lv.View -is [System.Windows.Controls.GridView]) {
+        $i = 0; foreach ($c in $lv.View.Columns) { $cfg.Heads[[string]$i] = [string]$c.Header; $i++ }
+        $lv.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent, [System.Windows.RoutedEventHandler]{
+            param($s, $e)
+            $h = $e.OriginalSource
+            if ($h -isnot [System.Windows.Controls.GridViewColumnHeader] -or -not $h.Column) { return }
+            Invoke-HeaderSort ([string]$s.Name) ([string]$s.View.Columns.IndexOf($h.Column))
+        })
+    }
+    if ($bar) {
+        foreach ($b in @(Find-Buttons $bar)) { if ($b.Tag -is [string] -and $cols.ContainsKey([string]$b.Tag)) { $cfg.Heads[[string]$b.Tag] = [string]$b.Content; $b.Tag = $name + '|' + [string]$b.Tag } }
+        $bar.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent, [System.Windows.RoutedEventHandler]{
+            param($s, $e)
+            $b = $e.OriginalSource
+            if ($b -is [System.Windows.Controls.Button] -and [string]$b.Tag -match '^(\w+)\|(\w+)$') { Invoke-HeaderSort $Matches[1] $Matches[2] }
+        })
+    }
+    # 换了数据（ItemsSource）就按记住的方式重新排、重新筛
+    $dpd = [System.ComponentModel.DependencyPropertyDescriptor]::FromProperty([System.Windows.Controls.ItemsControl]::ItemsSourceProperty, [System.Windows.Controls.ItemsControl])
+    $dpd.AddValueChanged($lv, [EventHandler]{ param($s, $e) Apply-ListSort ([string]$s.Name); Update-HeadVis })
+    Update-SortHeads $name
+    Apply-ListSort $name
+}
+# 自己画的表头和列表对齐：列表出现竖滚动条时，表头右边让出滚动条那么宽
+$script:headPads = @{}
+function Register-HeadPad($lv, $head) {
+    if (-not $lv -or -not $head) { return }
+    $script:headPads[[string]$lv.Name] = @{ Head = $head; Base = $head.Margin; Pad = -1 }
+    $lv.AddHandler([System.Windows.Controls.ScrollViewer]::ScrollChangedEvent, [System.Windows.Controls.ScrollChangedEventHandler]{
+        param($s, $e)
+        $sv = $e.OriginalSource
+        if ($sv -isnot [System.Windows.Controls.ScrollViewer]) { return }
+        $hp = $script:headPads[[string]$s.Name]; if (-not $hp) { return }
+        $pad = if ($sv.ComputedVerticalScrollBarVisibility -eq 'Visible') { [double][System.Windows.SystemParameters]::VerticalScrollBarWidth } else { [double]0 }
+        if ($pad -eq $hp.Pad) { return }
+        $hp.Pad = $pad; $b = $hp.Base
+        $hp.Head.Margin = New-Object System.Windows.Thickness $b.Left, $b.Top, ($b.Right + $pad), $b.Bottom
+    })
+}
+# 表头只在列表显示、而且有内容时出现（空列表上面不留一排孤零零的列名）
+$script:headOf = [ordered]@{}
+function Update-HeadVis {
+    foreach ($n in @($script:headOf.Keys)) {
+        $lv = $ctl[$n]; $h = $script:headOf[$n]; if (-not $lv -or -not $h) { continue }
+        $h.Visibility = if ($lv.Visibility -eq 'Visible' -and $lv.Items.Count -gt 0) { 'Visible' } else { 'Collapsed' }
+    }
+    if ($ctl.AppsHeadBox) { $ctl.AppsHeadBox.Visibility = if ($ctl.AppsHead.Visibility -eq 'Visible' -or $ctl.StartHead.Visibility -eq 'Visible') { 'Visible' } else { 'Collapsed' } }
+}
+function Find-Buttons($root) {
+    $out = New-Object System.Collections.Generic.List[object]
+    $q = New-Object System.Collections.Queue; $q.Enqueue($root)
+    while ($q.Count -gt 0) {
+        $v = $q.Dequeue()
+        if ($v -is [System.Windows.Controls.Button]) { $out.Add($v) }
+        if ($v -is [System.Windows.DependencyObject]) { foreach ($c in [System.Windows.LogicalTreeHelper]::GetChildren($v)) { if ($c -is [System.Windows.DependencyObject]) { $q.Enqueue($c) } } }
+    }
+    return $out
+}
+function Invoke-HeaderSort([string]$name, [string]$key) {
+    $cfg = $script:sortCfg[$name]; if (-not $cfg -or -not $cfg.Cols.ContainsKey($key)) { return }
+    $col = $cfg.Cols[$key]
+    $first = [bool]$col.Num   # 数字第一次点从大到小，文字从 A 到 Z
+    if ($cfg.Prop -eq $col.Prop) {
+        # 本来的顺序有意义的列表（清理页按安全程度排、空间地图按大小排）：点第三下回到本来的顺序
+        if ($cfg.Tri -and $cfg.Desc -ne $first) { $cfg.Prop = ''; $cfg.Desc = $true } else { $cfg.Desc = -not $cfg.Desc }
+    } else { $cfg.Prop = $col.Prop; $cfg.Desc = $first }
+    Set-Setting ('Sort.' + $name) $(if ($cfg.Prop) { '{0}|{1}' -f $cfg.Prop, [int]$cfg.Desc } else { '' })
+    Apply-ListSort $name
+    Update-SortHeads $name
+    if ($cfg.After) { & $cfg.After }   # 比如活动监控：换了排序就重新取前 25 个
+}
+# 表头上的箭头：↓ 从大到小（或 Z 到 A），↑ 从小到大（或 A 到 Z）
+function Update-SortHeads([string]$name) {
+    $cfg = $script:sortCfg[$name]; if (-not $cfg) { return }
+    $lv = $ctl[$name]
+    foreach ($k in @($cfg.Cols.Keys)) {
+        $label = [string]$cfg.Heads[$k]
+        $on = $cfg.Prop -and $cfg.Cols[$k].Prop -eq $cfg.Prop
+        $text = $label + $(if ($on) { $(if ($cfg.Desc) { ' ↓' } else { ' ↑' }) } else { '' })
+        if ($lv.View -is [System.Windows.Controls.GridView] -and $k -match '^\d+$' -and [int]$k -lt $lv.View.Columns.Count) { $lv.View.Columns[[int]$k].Header = $text }
+        if ($cfg.Bar) {
+            foreach ($b in @(Find-Buttons $cfg.Bar)) {
+                if ([string]$b.Tag -ne ($name + '|' + $k)) { continue }
+                $b.Content = $text; $b.FontWeight = $(if ($on) { 'SemiBold' } else { 'Normal' })
+                if ($on) { $b.Foreground = New-Brush '#1D1D1F' } else { $b.ClearValue([System.Windows.Controls.Control]::ForegroundProperty) }
+            }
+        }
+    }
+}
+# 排序换回默认（自测用完恢复，不改用户记住的设置）
+function Reset-ListSort([string]$name, [string]$prop, [bool]$desc) {
+    $cfg = $script:sortCfg[$name]; if (-not $cfg) { return }
+    $cfg.Prop = $prop; $cfg.Desc = $desc; Set-Setting ('Sort.' + $name) $(if ($prop) { '{0}|{1}' -f $prop, [int]$desc } else { '' })
+    Apply-ListSort $name; Update-SortHeads $name
+}
+# 自测用：表格某一列的表头（GridViewColumnHeader），用来模拟点表头
+function Find-GridHead($lv, [int]$i) {
+    $col = $lv.View.Columns[$i]
+    $q = New-Object System.Collections.Queue; $q.Enqueue($lv)
+    while ($q.Count -gt 0) {
+        $v = $q.Dequeue()
+        if ($v -is [System.Windows.Controls.GridViewColumnHeader] -and [object]::ReferenceEquals($v.Column, $col)) { return $v }
+        for ($k = 0; $k -lt [System.Windows.Media.VisualTreeHelper]::GetChildrenCount($v); $k++) { $q.Enqueue([System.Windows.Media.VisualTreeHelper]::GetChild($v, $k)) }
+    }
+    return $null
+}
+# 自测用：列表是不是按某个属性排好的（数字按大小，文字按当前语言的顺序）
+function Test-SortedBy($items, [string]$prop, [bool]$desc) {
+    $a = @($items)
+    $cmp = [System.Collections.Comparer]::new([Globalization.CultureInfo]::CurrentCulture)
+    for ($i = 1; $i -lt $a.Count; $i++) {
+        $c = $cmp.Compare($a[$i - 1].$prop, $a[$i].$prop)
+        if (($desc -and $c -lt 0) -or (-not $desc -and $c -gt 0)) { return $false }
+    }
+    return $true
+}
+function Apply-ListSort([string]$name) {
+    $cfg = $script:sortCfg[$name]; $lv = $ctl[$name]
+    if (-not $cfg -or -not $lv -or $null -eq $lv.ItemsSource) { return }
+    $view = [System.Windows.Data.CollectionViewSource]::GetDefaultView($lv.ItemsSource)
+    if (-not $view) { return }
+    try {
+        $d = $view.DeferRefresh()
+        try {
+            $view.SortDescriptions.Clear()
+            if ($cfg.Prop) {
+                foreach ($p in @($cfg.Pre)) { if ($p) { $view.SortDescriptions.Add((New-Object System.ComponentModel.SortDescription $p, ([System.ComponentModel.ListSortDirection]::Ascending))) } }
+                $view.SortDescriptions.Add((New-Object System.ComponentModel.SortDescription $cfg.Prop, $(if ($cfg.Desc) { [System.ComponentModel.ListSortDirection]::Descending } else { [System.ComponentModel.ListSortDirection]::Ascending })))
+            }
+            if ($view.CanFilter) { $view.Filter = $cfg.Filter }
+        } finally { $d.Dispose() }
+    } catch { Write-LogFile ("sort {0}: {1}" -f $name, $_.Exception.Message) }
+}
 
 # ---------- 左侧导航：两页切换 ----------
 $script:pageList = [ordered]@{

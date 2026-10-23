@@ -19,9 +19,8 @@ function Apply-Mode {
     # 空间地图：找文件、和上次比、导出、压缩是工程师的；快速扫描开关、空间明细是开发者的
     foreach ($n in 'MapViewFiles', 'MapViewGrow', 'MapViewRecent', 'BtnMapExport', 'BtnMapReport', 'BtnMapCompress') { $ctl[$n].Visibility = & $v 1 }
     if ($m -lt 1 -and -not $ctl.MapViewDirs.IsChecked -and -not $ctl.MapViewTree.IsChecked -and -not $ctl.MapViewTypes.IsChecked) { $ctl.MapViewDirs.IsChecked = $true }
-    # 省空间
-    foreach ($n in 'SaveCardPf', 'SaveCardRp', 'SaveCardFc', 'SaveCardVd', 'SaveCardMerge') { $ctl[$n].Visibility = & $v 1 }
-    foreach ($n in 'SaveCardRs', 'SaveCardCs', 'SaveCardDump', 'SaveCardTmp') { $ctl[$n].Visibility = & $v 2 }
+    # 省空间：左边目录里只列这个模式能用的项
+    Update-SaveNav
     # 软件管理
     $ctl.AppsViewBox.Visibility = & $v 1
     foreach ($n in 'AppsViewStartup', 'AppsViewLeft') { $ctl[$n].Visibility = & $v 1 }

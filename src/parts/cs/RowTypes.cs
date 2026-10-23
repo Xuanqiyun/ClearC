@@ -13,6 +13,7 @@ public class RowItem : INotifyPropertyChanged {
     public bool First { get; set; }
     public string Name { get; set; }
     public string SizeText { get; set; }
+    public double Bytes { get; set; }      // 表头按大小排序用（-1 = 运行后才知道）
     public string Note { get; set; }
     public string[] Actions { get; set; }
     private string _action;
