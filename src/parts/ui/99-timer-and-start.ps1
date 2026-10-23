@@ -515,7 +515,8 @@ $script:prefetchTimer.Add_Tick({
         # C 盘的文件表也先读进内存（只读）：之后清理扫描、软件管理、搬家、空间地图只按变更日志补读改过的部分，几秒钟的事变成不到一秒
         if (-not $script:uiTest -and -not $script:mftWarm) {
             $script:mftWarm = $true
-            [void](Start-BgEngine 'mftwarm' 'Init-DriveThreads; $t = [DiskMap]::GetTree($env:SystemDrive, [DirStat]::ThreadsFor($env:SystemDrive), $false, $false); if ($t) { (T "{0:N0} 个文件，用时 {1:N1} 秒") -f $t.Files, ([double][DiskMap]::LastMs / 1000) } else { [string][DiskMap]::LastNote }' $null {
+            # 开发者和 IT 模式顺便问一下驱动存储里的旧版驱动包（DISM 要好几秒；同一次打开程序里驱动包没变就不用再问）
+            [void](Start-BgEngine 'mftwarm' 'Init-DriveThreads; $t = [DiskMap]::GetTree($env:SystemDrive, [DirStat]::ThreadsFor($env:SystemDrive), $false, $false); $msg = if ($t) { (T "{0:N0} 个文件，用时 {1:N1} 秒") -f $t.Files, ([double][DiskMap]::LastMs / 1000) } else { [string][DiskMap]::LastNote }; if ((Get-Mode) -ge 2) { [void](Get-OldDriverPackages) }; $msg' $null {
                 param($r, $err) if ($r) { Write-LogFile ((T '空闲时在后台读了 C 盘的文件表：') + $r) } })
         }
         return

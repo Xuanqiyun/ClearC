@@ -586,7 +586,14 @@ function Select-OldDrivers($drivers) {
     }
     return $old
 }
-function Get-OldDriverPackages {
+function Get-OldDriverPackages([switch]$Fresh) {
+    # 问 DISM 要好几秒：同一次打开程序里，驱动包没变（C:\Windows\INF 里的 oem*.inf 一个没多、没少、没改）就用上次问到的，半小时内有效。删除时（-Fresh）每次现问
+    $sig = ''
+    try { $sig = ((@([IO.Directory]::GetFiles((Join-Path $env:SystemRoot 'INF'), 'oem*.inf')) | Sort-Object | ForEach-Object { $_ + '=' + [IO.File]::GetLastWriteTimeUtc($_).Ticks }) -join '|') } catch { $sig = '' }
+    if (-not $Fresh -and $sig) {
+        $c = [AppDomain]::CurrentDomain.GetData('ClearC.OldDrivers')
+        if ($c -and $c.Sig -eq $sig -and ((Get-Date) - $c.At).TotalMinutes -lt 30) { return @($c.List) }
+    }
     $drivers = $null
     try { Import-Module Dism -ErrorAction Stop; $drivers = @(Get-WindowsDriver -Online -ErrorAction Stop) } catch { return @() }
     $out = @()
@@ -596,6 +603,7 @@ function Get-OldDriverPackages {
         if ($dir -and (Test-Path -LiteralPath $dir)) { try { $bytes = [double][FsTools]::OnDiskTree($dir) } catch { $bytes = 0 } }
         $out += @{ Published = [string]$d.Driver; Original = (([string]$d.OriginalFileName) -replace '^.*[\\/]', ''); Provider = [string]$d.ProviderName; Class = [string]$d.ClassName; Version = [string]$d.Version; Dir = $dir; Bytes = $bytes }
     }
+    if ($sig) { [AppDomain]::CurrentDomain.SetData('ClearC.OldDrivers', @{ Sig = $sig; At = (Get-Date); List = @($out) }) }
     return $out
 }
 # 用 pnputil 删一个驱动包（不加 /force：正在用的删不掉）。返回空表示成功
@@ -1775,7 +1783,7 @@ function Get-Catalog {
            Act ={ $n = 0; $b = [double]0; foreach ($f in (Get-InstallerOrphans)) { try { Remove-Item -LiteralPath $f.FullName -Force -ErrorAction Stop; $n++; $b += $f.Length } catch { Log ((T "  没删掉：{0}（{1}）") -f $f.FullName, $_.Exception.Message) } }; Log ((T "  Windows Installer 孤儿安装包：删了 {0} 个，{1}") -f $n, (GB $b)) } }
         @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T '驱动存储里的旧版驱动包'); Lvl=2; Bg=$true; Note=(T '驱动更新后，旧版本的安装包还留在 C:\Windows\System32\DriverStore 里（和 Driver Store Explorer 的判断一样：同一个驱动、同一厂商有更新版本的那些）。用 pnputil 删除，正在使用的删不掉、启动必需的不碰。删了以后不能回滚到旧版驱动')
            Size={ $s = [double]0; foreach ($d in (Get-OldDriverPackages)) { $s += $d.Bytes }; $s }
-           Act ={ $n = 0; $b = [double]0; foreach ($d in (Get-OldDriverPackages)) { if (Stopping) { break }; $r = Remove-DriverPackage $d.Published; if ($r -eq '') { $n++; $b += $d.Bytes; Log ((T "  已删除旧版驱动包 {0}（{1} {2}）") -f $d.Published, $d.Provider, $d.Version) } else { Log ((T "  没删掉 {0}：{1}") -f $d.Published, $r) } }; Log ((T "  旧版驱动包：删了 {0} 个，{1}") -f $n, (GB $b)) } }
+           Act ={ $n = 0; $b = [double]0; foreach ($d in (Get-OldDriverPackages -Fresh)) { if (Stopping) { break }; $r = Remove-DriverPackage $d.Published; if ($r -eq '') { $n++; $b += $d.Bytes; Log ((T "  已删除旧版驱动包 {0}（{1} {2}）") -f $d.Published, $d.Provider, $d.Version) } else { Log ((T "  没删掉 {0}：{1}") -f $d.Published, $r) } }; Log ((T "  旧版驱动包：删了 {0} 个，{1}") -f $n, (GB $b)) } }
         @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T '开始菜单里失效的快捷方式'); Lvl=1; Bg=$true; Note=(T '指向的程序已经不在了的快捷方式（只看开始菜单，不碰桌面）。目标在没插着的硬盘上的不算。不占什么空间，只是清爽')
            Size={ $s = [double]0; foreach ($f in (Get-BrokenShortcuts)) { $s += $f.Length }; $s }
            Act ={ $n = 0; foreach ($f in (Get-BrokenShortcuts)) { try { Remove-Item -LiteralPath $f.FullName -Force -ErrorAction Stop; $n++; OpLog '删除' (T '失效的快捷方式') $f.FullName '' } catch {} }; Log ((T "  删了 {0} 个失效的快捷方式") -f $n) } }

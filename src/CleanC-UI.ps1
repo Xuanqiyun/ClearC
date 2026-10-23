@@ -6,7 +6,7 @@
 param()
 
 $ErrorActionPreference = 'SilentlyContinue'
-$script:AppVersion = '3.4'
+$script:AppVersion = '3.5'
 $script:AppBuildStamp = ''   # 构建 exe 时由 build 脚本填上构建时间（UTC）：写进诊断信息和运行记录，反馈问题时好对上是哪一次构建的
 $script:startClock = [Diagnostics.Stopwatch]::StartNew()   # 记下启动各阶段用了多久，写进运行记录
 
@@ -4078,7 +4078,14 @@ function Select-OldDrivers($drivers) {
     }
     return $old
 }
-function Get-OldDriverPackages {
+function Get-OldDriverPackages([switch]$Fresh) {
+    # 问 DISM 要好几秒：同一次打开程序里，驱动包没变（C:\Windows\INF 里的 oem*.inf 一个没多、没少、没改）就用上次问到的，半小时内有效。删除时（-Fresh）每次现问
+    $sig = ''
+    try { $sig = ((@([IO.Directory]::GetFiles((Join-Path $env:SystemRoot 'INF'), 'oem*.inf')) | Sort-Object | ForEach-Object { $_ + '=' + [IO.File]::GetLastWriteTimeUtc($_).Ticks }) -join '|') } catch { $sig = '' }
+    if (-not $Fresh -and $sig) {
+        $c = [AppDomain]::CurrentDomain.GetData('ClearC.OldDrivers')
+        if ($c -and $c.Sig -eq $sig -and ((Get-Date) - $c.At).TotalMinutes -lt 30) { return @($c.List) }
+    }
     $drivers = $null
     try { Import-Module Dism -ErrorAction Stop; $drivers = @(Get-WindowsDriver -Online -ErrorAction Stop) } catch { return @() }
     $out = @()
@@ -4088,6 +4095,7 @@ function Get-OldDriverPackages {
         if ($dir -and (Test-Path -LiteralPath $dir)) { try { $bytes = [double][FsTools]::OnDiskTree($dir) } catch { $bytes = 0 } }
         $out += @{ Published = [string]$d.Driver; Original = (([string]$d.OriginalFileName) -replace '^.*[\\/]', ''); Provider = [string]$d.ProviderName; Class = [string]$d.ClassName; Version = [string]$d.Version; Dir = $dir; Bytes = $bytes }
     }
+    if ($sig) { [AppDomain]::CurrentDomain.SetData('ClearC.OldDrivers', @{ Sig = $sig; At = (Get-Date); List = @($out) }) }
     return $out
 }
 # 用 pnputil 删一个驱动包（不加 /force：正在用的删不掉）。返回空表示成功
@@ -5267,7 +5275,7 @@ function Get-Catalog {
            Act ={ $n = 0; $b = [double]0; foreach ($f in (Get-InstallerOrphans)) { try { Remove-Item -LiteralPath $f.FullName -Force -ErrorAction Stop; $n++; $b += $f.Length } catch { Log ((T "  没删掉：{0}（{1}）") -f $f.FullName, $_.Exception.Message) } }; Log ((T "  Windows Installer 孤儿安装包：删了 {0} 个，{1}") -f $n, (GB $b)) } }
         @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T '驱动存储里的旧版驱动包'); Lvl=2; Bg=$true; Note=(T '驱动更新后，旧版本的安装包还留在 C:\Windows\System32\DriverStore 里（和 Driver Store Explorer 的判断一样：同一个驱动、同一厂商有更新版本的那些）。用 pnputil 删除，正在使用的删不掉、启动必需的不碰。删了以后不能回滚到旧版驱动')
            Size={ $s = [double]0; foreach ($d in (Get-OldDriverPackages)) { $s += $d.Bytes }; $s }
-           Act ={ $n = 0; $b = [double]0; foreach ($d in (Get-OldDriverPackages)) { if (Stopping) { break }; $r = Remove-DriverPackage $d.Published; if ($r -eq '') { $n++; $b += $d.Bytes; Log ((T "  已删除旧版驱动包 {0}（{1} {2}）") -f $d.Published, $d.Provider, $d.Version) } else { Log ((T "  没删掉 {0}：{1}") -f $d.Published, $r) } }; Log ((T "  旧版驱动包：删了 {0} 个，{1}") -f $n, (GB $b)) } }
+           Act ={ $n = 0; $b = [double]0; foreach ($d in (Get-OldDriverPackages -Fresh)) { if (Stopping) { break }; $r = Remove-DriverPackage $d.Published; if ($r -eq '') { $n++; $b += $d.Bytes; Log ((T "  已删除旧版驱动包 {0}（{1} {2}）") -f $d.Published, $d.Provider, $d.Version) } else { Log ((T "  没删掉 {0}：{1}") -f $d.Published, $r) } }; Log ((T "  旧版驱动包：删了 {0} 个，{1}") -f $n, (GB $b)) } }
         @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T '开始菜单里失效的快捷方式'); Lvl=1; Bg=$true; Note=(T '指向的程序已经不在了的快捷方式（只看开始菜单，不碰桌面）。目标在没插着的硬盘上的不算。不占什么空间，只是清爽')
            Size={ $s = [double]0; foreach ($f in (Get-BrokenShortcuts)) { $s += $f.Length }; $s }
            Act ={ $n = 0; foreach ($f in (Get-BrokenShortcuts)) { try { Remove-Item -LiteralPath $f.FullName -Force -ErrorAction Stop; $n++; OpLog '删除' (T '失效的快捷方式') $f.FullName '' } catch {} }; Log ((T "  删了 {0} 个失效的快捷方式") -f $n) } }
@@ -9501,6 +9509,11 @@ $script:helpEnXaml = @'
                     <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>The drop-down on the right of the header shows only items with one action, for example only the ones to delete or only the skipped ones; the sort order stays as it is.</Run></TextBlock></DockPanel>
                   </StackPanel>
                   <StackPanel Margin="0,16,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="Why the scan is quick"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Folder sizes come straight from the file table (MFT) of C: instead of counting folder by folder; a few seconds after ClearC opens, while it is idle, the file table is read in the background, and later scans only re-read what changed. The items that need Windows to answer (orphaned installer packages, old driver packages, Delivery Optimization cache, broken shortcuts) are asked at the same time. Only the items your mode lists are measured. A scan usually takes a few seconds.</Run></TextBlock>
+                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>The file table is only used to show sizes; when deleting, every item is checked and measured again.</Run></TextBlock></DockPanel>
+                  </StackPanel>
+                  <StackPanel Margin="0,16,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="Analyze usage"/>
                     <TextBlock Style="{StaticResource HelpBody}"><Run>Opens the "Space map" and scans drive C:, so you can see which folders and files take up the most space.</Run></TextBlock>
                   </StackPanel>
@@ -9594,6 +9607,7 @@ $script:helpEnXaml = @'
                   <StackPanel Margin="0,16,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="File type and size"/>
                     <TextBlock Style="{StaticResource HelpBody}"><Run>Only the selected types and size range are searched; the narrower the range, the faster the search. Choose "Custom" to enter a size yourself.</Run></TextBlock>
+                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>On NTFS drives, when looking for files of 1 MB or more, the files are listed straight from the drive's file table (with the same rules as going through the folders), which is much faster on large drives.</Run></TextBlock></DockPanel>
                   </StackPanel>
                   <StackPanel Margin="0,16,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="What counts as a duplicate"/>
@@ -13937,6 +13951,11 @@ if ($script:mode -match '(?i)/autoclean') {
                     <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>表头右边的下拉框可以只看某一种操作，比如只看要删除的、只看跳过的；排过的顺序不变。</Run></TextBlock></DockPanel>
                   </StackPanel>
                   <StackPanel Margin="0,16,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="扫描为什么快"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>文件夹大小直接从 C 盘的文件表（MFT）里查，不用一个个文件夹去数；打开本工具几秒后、空闲时就在后台把文件表读好，之后每次扫描只补读改过的部分。要问 Windows 的几项（孤儿安装包、旧版驱动包、传递优化缓存、失效的快捷方式）另外同时问。只统计你这个使用模式下会列出的项目。一般几秒钟就扫完。</Run></TextBlock>
+                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>文件表只用来显示大小；真正删除时，每一项都会重新检查、重新统计。</Run></TextBlock></DockPanel>
+                  </StackPanel>
+                  <StackPanel Margin="0,16,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="分析占用"/>
                     <TextBlock Style="{StaticResource HelpBody}"><Run>打开「空间地图」并扫描 C 盘，看清哪些文件夹和文件最占地方。</Run></TextBlock>
                   </StackPanel>
@@ -14030,6 +14049,7 @@ if ($script:mode -match '(?i)/autoclean') {
                   <StackPanel Margin="0,16,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="文件类型和大小"/>
                     <TextBlock Style="{StaticResource HelpBody}"><Run>只找选中的类型和大小范围，范围越小找得越快。选「自定义」可以手填大小。</Run></TextBlock>
+                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>NTFS 盘上找 1 MB 以上的文件时，直接从这块盘的文件表里列出文件（规则和一个个文件夹去看一样），大盘上快很多。</Run></TextBlock></DockPanel>
                   </StackPanel>
                   <StackPanel Margin="0,16,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="怎样算重复"/>
@@ -22891,7 +22911,8 @@ $script:prefetchTimer.Add_Tick({
         # C 盘的文件表也先读进内存（只读）：之后清理扫描、软件管理、搬家、空间地图只按变更日志补读改过的部分，几秒钟的事变成不到一秒
         if (-not $script:uiTest -and -not $script:mftWarm) {
             $script:mftWarm = $true
-            [void](Start-BgEngine 'mftwarm' 'Init-DriveThreads; $t = [DiskMap]::GetTree($env:SystemDrive, [DirStat]::ThreadsFor($env:SystemDrive), $false, $false); if ($t) { (T "{0:N0} 个文件，用时 {1:N1} 秒") -f $t.Files, ([double][DiskMap]::LastMs / 1000) } else { [string][DiskMap]::LastNote }' $null {
+            # 开发者和 IT 模式顺便问一下驱动存储里的旧版驱动包（DISM 要好几秒；同一次打开程序里驱动包没变就不用再问）
+            [void](Start-BgEngine 'mftwarm' 'Init-DriveThreads; $t = [DiskMap]::GetTree($env:SystemDrive, [DirStat]::ThreadsFor($env:SystemDrive), $false, $false); $msg = if ($t) { (T "{0:N0} 个文件，用时 {1:N1} 秒") -f $t.Files, ([double][DiskMap]::LastMs / 1000) } else { [string][DiskMap]::LastNote }; if ((Get-Mode) -ge 2) { [void](Get-OldDriverPackages) }; $msg' $null {
                 param($r, $err) if ($r) { Write-LogFile ((T '空闲时在后台读了 C 盘的文件表：') + $r) } })
         }
         return

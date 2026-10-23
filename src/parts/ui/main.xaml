@@ -3427,6 +3427,11 @@
                     <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>表头右边的下拉框可以只看某一种操作，比如只看要删除的、只看跳过的；排过的顺序不变。</Run></TextBlock></DockPanel>
                   </StackPanel>
                   <StackPanel Margin="0,16,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="扫描为什么快"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>文件夹大小直接从 C 盘的文件表（MFT）里查，不用一个个文件夹去数；打开本工具几秒后、空闲时就在后台把文件表读好，之后每次扫描只补读改过的部分。要问 Windows 的几项（孤儿安装包、旧版驱动包、传递优化缓存、失效的快捷方式）另外同时问。只统计你这个使用模式下会列出的项目。一般几秒钟就扫完。</Run></TextBlock>
+                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>文件表只用来显示大小；真正删除时，每一项都会重新检查、重新统计。</Run></TextBlock></DockPanel>
+                  </StackPanel>
+                  <StackPanel Margin="0,16,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="分析占用"/>
                     <TextBlock Style="{StaticResource HelpBody}"><Run>打开「空间地图」并扫描 C 盘，看清哪些文件夹和文件最占地方。</Run></TextBlock>
                   </StackPanel>
@@ -3520,6 +3525,7 @@
                   <StackPanel Margin="0,16,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="文件类型和大小"/>
                     <TextBlock Style="{StaticResource HelpBody}"><Run>只找选中的类型和大小范围，范围越小找得越快。选「自定义」可以手填大小。</Run></TextBlock>
+                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>NTFS 盘上找 1 MB 以上的文件时，直接从这块盘的文件表里列出文件（规则和一个个文件夹去看一样），大盘上快很多。</Run></TextBlock></DockPanel>
                   </StackPanel>
                   <StackPanel Margin="0,16,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="怎样算重复"/>

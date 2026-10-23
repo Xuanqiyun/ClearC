@@ -153,6 +153,11 @@
                     <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>The drop-down on the right of the header shows only items with one action, for example only the ones to delete or only the skipped ones; the sort order stays as it is.</Run></TextBlock></DockPanel>
                   </StackPanel>
                   <StackPanel Margin="0,16,0,0">
+                    <TextBlock Style="{StaticResource HelpLead}" Text="Why the scan is quick"/>
+                    <TextBlock Style="{StaticResource HelpBody}"><Run>Folder sizes come straight from the file table (MFT) of C: instead of counting folder by folder; a few seconds after ClearC opens, while it is idle, the file table is read in the background, and later scans only re-read what changed. The items that need Windows to answer (orphaned installer packages, old driver packages, Delivery Optimization cache, broken shortcuts) are asked at the same time. Only the items your mode lists are measured. A scan usually takes a few seconds.</Run></TextBlock>
+                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>The file table is only used to show sizes; when deleting, every item is checked and measured again.</Run></TextBlock></DockPanel>
+                  </StackPanel>
+                  <StackPanel Margin="0,16,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="Analyze usage"/>
                     <TextBlock Style="{StaticResource HelpBody}"><Run>Opens the "Space map" and scans drive C:, so you can see which folders and files take up the most space.</Run></TextBlock>
                   </StackPanel>
@@ -246,6 +251,7 @@
                   <StackPanel Margin="0,16,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="File type and size"/>
                     <TextBlock Style="{StaticResource HelpBody}"><Run>Only the selected types and size range are searched; the narrower the range, the faster the search. Choose "Custom" to enter a size yourself.</Run></TextBlock>
+                    <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>On NTFS drives, when looking for files of 1 MB or more, the files are listed straight from the drive's file table (with the same rules as going through the folders), which is much faster on large drives.</Run></TextBlock></DockPanel>
                   </StackPanel>
                   <StackPanel Margin="0,16,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="What counts as a duplicate"/>
