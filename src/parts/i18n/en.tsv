@@ -156,6 +156,9 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+  没能同时做几件事，改成一件一件做（{0}）	  Could not run these side by side, doing them one by one ({0})
+等系统回答安装包、驱动包这几项	Waiting for Windows to report installer and driver packages
+读取 {0} 盘的文件表：{1:N0} 个文件，用时 {2:N1} 秒	Read the file table of {0}: {1:N0} files in {2:N1} s
 ← 上一项：{0}	← Previous: {0}
 下一项：{0} →	Next: {0} →
 {0} 项所在的文件夹已经在待删清单里，不用再单独放	The folders holding {0} of these are already on the delete list

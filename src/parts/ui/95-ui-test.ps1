@@ -192,7 +192,26 @@ function Invoke-UiTest {
             $all = @(Get-ChildItem -LiteralPath (Join-Path $env:SystemRoot 'Installer') -File -Force -ErrorAction SilentlyContinue | Where-Object { $_.Extension -match '^\.(msi|msp)$' })
             $o = @(Get-InstallerOrphans)
             if ($all.Count -gt 0 -and $o.Count -ge $all.Count) { throw ("all {0} packages look orphaned; the references were not read" -f $all.Count) }
-            "{0} of {1} packages" -f $o.Count, $all.Count
+            # 一次问完的结果必须和原来在 PowerShell 里一条一条问的完全一样（同样的注册表位置、同样的接口调用）
+            $old = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+            foreach ($root in @('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\*\Products\*\InstallProperties', 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\*\Patches\*',
+                                   'HKLM:\SOFTWARE\Classes\Installer\Patches\*', 'HKCU:\Software\Microsoft\Installer\Patches\*')) {
+                foreach ($p in @(Get-ItemProperty -Path $root -ErrorAction SilentlyContinue)) { $v = [string]$p.LocalPackage; if ($v) { [void]$old.Add((Split-Path $v -Leaf)) } }
+            }
+            $nReg = $old.Count
+            $inst = New-Object -ComObject WindowsInstaller.Installer; $t = $inst.GetType()
+            foreach ($code in @($t.InvokeMember('Products', 'GetProperty', $null, $inst, $null))) {
+                try { $lp = [string]$t.InvokeMember('ProductInfo', 'GetProperty', $null, $inst, @([string]$code, 'LocalPackage')); if ($lp) { [void]$old.Add((Split-Path $lp -Leaf)) } } catch {}
+                foreach ($pa in @(@([string]$code, '', 7, 15), @([string]$code, 's-1-1-0', 3, 15))) {
+                    try { foreach ($pt in @($t.InvokeMember('PatchesEx', 'GetProperty', $null, $inst, $pa))) { try { $lp = [string]$pt.GetType().InvokeMember('PatchProperty', 'GetProperty', $null, $pt, @('LocalPackage')); if ($lp) { [void]$old.Add((Split-Path $lp -Leaf)) } } catch {} } } catch {}
+                }
+            }
+            $new = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+            $r1 = @([InstallerRefs]::FromRegistry()); foreach ($v in $r1) { [void]$new.Add($v) }
+            $nReg2 = $new.Count
+            foreach ($v in @([InstallerRefs]::FromInstaller())) { [void]$new.Add($v) }
+            if (-not $old.SetEquals($new) -or $nReg -ne $nReg2) { throw ("references differ: before {0} (registry {1}), now {2} (registry {3})" -f $old.Count, $nReg, $new.Count, $nReg2) }
+            "{0} of {1} packages; {2} references, the same as asking one by one" -f $o.Count, $all.Count, $new.Count
         }
         & $step 'save space: reserved storage, crash dump, temp folder, OneDrive' {
             Show-Page 'save'; $win.UpdateLayout()
@@ -919,9 +938,11 @@ function Invoke-UiTest {
                 $keepMode = Get-Setting 'Mode' 'basic'
                 $tm = {
                     param([string]$name, [scriptblock]$go, [int]$limit)
+                    $sync.PhaseTimes = $null
                     $t = [Diagnostics.Stopwatch]::StartNew(); & $go
                     $ok = & $waitUi { -not $script:worker } $limit
                     $L.Add(("timing {0}: {1:N1} s{2}" -f $name, ($t.ElapsedMilliseconds / 1000), $(if ($ok) { '' } else { ' (did not finish)' })))
+                    if ($sync.PhaseTimes) { $L.Add(('timing     ' + ((@($sync.PhaseTimes) | ForEach-Object { '{0} {1:N0} ms' -f $_.N, [double]$_.Ms }) -join '; '))) }
                 }
                 $wk = {
                     param([string]$label)
@@ -952,11 +973,13 @@ function Invoke-UiTest {
                     $th = [Diagnostics.Stopwatch]::StartNew(); Load-Health
                     $hok = & $waitUi { $ctl.BtnHealthRefresh.IsEnabled } 180000
                     $L.Add(("timing system health: {0:N1} s (reported {1}){2}" -f ($th.ElapsedMilliseconds / 1000), $(if ($script:healthData) { $script:healthData.Secs } else { '?' }), $(if ($hok) { '' } else { ' (did not finish)' })))
+                    if ($script:healthData -and $script:healthData.PartMs) { $pm = $script:healthData.PartMs; $L.Add(('timing     ' + ((@($pm.Keys) | Sort-Object { - [double]$pm[$_] } | ForEach-Object { '{0} {1:N0} ms' -f $_, [double]$pm[$_] }) -join '; '))) }
                     # 重复文件：在 Program Files 里找（只找不删）
                     [DupFinder]::Cancel = $false
                     $td = [Diagnostics.Stopwatch]::StartNew()
                     $dg = [DupFinder]::Find([string[]]@($env:ProgramFiles, ${env:ProgramFiles(x86)}), [long]1MB, [long]0, $false, $null, $false, [string[]]@('C:=4'))
                     $L.Add(("timing duplicates in Program Files (1 MB+): {0:N1} s, {1} groups" -f ($td.ElapsedMilliseconds / 1000), @($dg).Count))
+                    $L.Add(("timing     list {0:N1} s ({1:N0} files); quick {2:N1} s ({3:N0} files, {4}); deep {5:N1} s ({6:N0} files, {7})" -f ([DupFinder]::ListMs / 1000), [DupFinder]::FilesSeen, ([DupFinder]::QuickMs / 1000), [DupFinder]::QuickFiles, (Fmt ([double][DupFinder]::QuickBytes)), ([DupFinder]::DeepMs / 1000), [DupFinder]::DeepFiles, (Fmt ([double][DupFinder]::DeepBytes))))
                     $tw = [Diagnostics.Stopwatch]::StartNew(); $wb = [DirStat]::Measure("$env:SystemRoot\System32")
                     $L.Add(("timing walk System32: {0:N1} s, {1}" -f ($tw.ElapsedMilliseconds / 1000), (Fmt $wb)))
                 } finally { Set-Setting 'Mode' $keepMode }

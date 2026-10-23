@@ -152,6 +152,66 @@ public sealed class FastHasher {
     }
 }
 
+// Windows Installer 登记的本地安装包（C:\Windows\Installer 里哪些 .msi / .msp 还有软件、补丁在用）：只要文件名。
+// 和原来 PowerShell 里一条一条问的结果一样（同样的注册表位置、同样的接口调用），只是在这里一次问完，快很多
+public static class InstallerRefs {
+    static string Leaf(string p) { if (string.IsNullOrEmpty(p)) return null; int i = Math.Max(p.LastIndexOf('\\'), p.LastIndexOf('/')); string s = i >= 0 ? p.Substring(i + 1) : p; return s.Length > 0 ? s : null; }
+    static void Add(List<string> outp, object v) { string s = Leaf(v as string); if (s != null) outp.Add(s); }
+    static void Each(Microsoft.Win32.RegistryKey root, string path, string sub, List<string> outp) {
+        Microsoft.Win32.RegistryKey k = null;
+        try {
+            k = root.OpenSubKey(path); if (k == null) return;
+            foreach (string n in k.GetSubKeyNames()) {
+                Microsoft.Win32.RegistryKey c = null;
+                try { c = k.OpenSubKey(sub == null ? n : n + "\\" + sub); if (c != null) Add(outp, c.GetValue("LocalPackage")); } catch { } finally { if (c != null) c.Close(); }
+            }
+        } catch { } finally { if (k != null) k.Close(); }
+    }
+    // 注册表：每个用户（UserData\<SID>）登记的产品、补丁，以及按机器、按用户登记的补丁
+    public static List<string> FromRegistry() {
+        List<string> outp = new List<string>();
+        Microsoft.Win32.RegistryKey ud = null;
+        try {
+            ud = Microsoft.Win32.Registry.LocalMachine.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Installer\\UserData");
+            if (ud != null) foreach (string sid in ud.GetSubKeyNames()) {
+                Each(ud, sid + "\\Products", "InstallProperties", outp);
+                Each(ud, sid + "\\Patches", null, outp);
+            }
+        } catch { } finally { if (ud != null) ud.Close(); }
+        Each(Microsoft.Win32.Registry.LocalMachine, "SOFTWARE\\Classes\\Installer\\Patches", null, outp);
+        Each(Microsoft.Win32.Registry.CurrentUser, "Software\\Microsoft\\Installer\\Patches", null, outp);
+        return outp;
+    }
+    static object Get(object o, string name, object[] args) { return o.GetType().InvokeMember(name, System.Reflection.BindingFlags.GetProperty, null, o, args); }
+    // Windows Installer 自己的接口：每个产品的 LocalPackage，和它的补丁（当前用户的全部上下文、所有用户的按用户安装）。接口读不了返回 null
+    public static List<string> FromInstaller() {
+        Type t = null; object inst = null;
+        try { t = Type.GetTypeFromProgID("WindowsInstaller.Installer"); if (t == null) return null; inst = Activator.CreateInstance(t); } catch { return null; }
+        List<string> outp = new List<string>();
+        try {
+            object products = Get(inst, "Products", null);
+            int n = Convert.ToInt32(Get(products, "Count", null));
+            for (int i = 0; i < n; i++) {
+                string code = null;
+                try { code = Get(products, "Item", new object[] { i }) as string; } catch { }
+                if (string.IsNullOrEmpty(code)) continue;
+                try { Add(outp, Get(inst, "ProductInfo", new object[] { code, "LocalPackage" })); } catch { }
+                foreach (object[] a in new object[][] { new object[] { code, "", 7, 15 }, new object[] { code, "s-1-1-0", 3, 15 } }) {
+                    try {
+                        object pts = Get(inst, "PatchesEx", a);
+                        int m = Convert.ToInt32(Get(pts, "Count", null));
+                        for (int j = 0; j < m; j++) {
+                            try { object pt = Get(pts, "Item", new object[] { j }); Add(outp, Get(pt, "PatchProperty", new object[] { "LocalPackage" })); } catch { }
+                        }
+                    } catch { }
+                }
+            }
+        } catch { return null; }
+        finally { try { Marshal.ReleaseComObject(inst); } catch { } }
+        return outp;
+    }
+}
+
 // 查重：
 // 1. 多线程列举文件，按（名字, 大小）分桶，只有桶里有 2 个以上才可能重复
 // 2. 只读头尾各 64 KB 算指纹，筛掉绝大多数
@@ -163,6 +223,7 @@ public static class DupFinder {
     public static volatile string Current = "";
     public static long FilesSeen, DirsSeen, CandidateFiles, BytesDone, BytesTotal, GroupsFound, FilesDone, FilesTotal;
     public static long VerifyDone, VerifyTotal;
+    public static long ListMs, QuickMs, DeepMs, QuickFiles, DeepFiles, QuickBytes, DeepBytes;   // 每一步用了多久、读了多少（日志里写，排查慢在哪）
     public static volatile bool Cancel;
     public static volatile bool UsedFastEnum;
 
@@ -463,6 +524,8 @@ public static class DupFinder {
     public static List<DupGroup> Find(string[] roots, long minSize, long maxSize, bool matchName, string[] onlyExt, bool exact, string[] driveThreads) {
         FilesSeen = 0; DirsSeen = 0; CandidateFiles = 0; BytesDone = 0; BytesTotal = 0;
         GroupsFound = 0; FilesDone = 0; FilesTotal = 0;
+        ListMs = 0; QuickMs = 0; DeepMs = 0; QuickFiles = 0; DeepFiles = 0; QuickBytes = 0; DeepBytes = 0;
+        Stopwatch phase = Stopwatch.StartNew();
         Phase = "list"; Current = "";
         progDirCache = new ConcurrentDictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
         Dictionary<string, int> threads = ParseThreads(driveThreads);
@@ -488,6 +551,7 @@ public static class DupFinder {
             t.IsBackground = true; t.Start(); ets.Add(t);
         }
         foreach (Thread t in ets) t.Join();
+        ListMs = phase.ElapsedMilliseconds;
         if (Cancel) return new List<DupGroup>();
 
         Dictionary<string, List<DupFile>> buckets = new Dictionary<string, List<DupFile>>();
@@ -510,7 +574,9 @@ public static class DupFinder {
         CandidateFiles = cands.Count;
         BytesDone = 0; BytesTotal = quickBytes; FilesDone = 0; FilesTotal = cands.Count;
         Phase = "quick";
+        phase.Restart(); QuickFiles = cands.Count; QuickBytes = quickBytes;
         RunPerVolume(cands, threads, HashHeadTail);
+        QuickMs = phase.ElapsedMilliseconds;
         if (Cancel) return new List<DupGroup>();
 
         Dictionary<string, List<DupFile>> b2 = GroupBy(cands, false);
@@ -529,7 +595,9 @@ public static class DupFinder {
         }
         BytesDone = 0; BytesTotal = deepBytes; FilesDone = 0; FilesTotal = deep.Count;
         Phase = "deep";
+        phase.Restart(); DeepFiles = deep.Count; DeepBytes = deepBytes;
         RunPerVolume(deep, threads, delegate (DupFile f, IoWorker w) { HashDeep(f, w, exact); });
+        DeepMs = phase.ElapsedMilliseconds;
         if (Cancel) return new List<DupGroup>();
 
         List<DupFile> survivors = new List<DupFile>();

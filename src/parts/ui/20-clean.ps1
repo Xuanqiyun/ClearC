@@ -279,7 +279,19 @@ $cat = Get-Catalog; $i = 1; $steps = $cat.Count + 1
 SetP @{ Steps = $steps; Step = 1; StepName = (T '读取 C 盘的文件表') }
 $t0 = $sw.ElapsedMilliseconds; $tree = Get-SysTree; [void]$times.Add(@{ N = 'MFT'; Ms = $sw.ElapsedMilliseconds - $t0 })
 $cat = @($cat | Where-Object { -not $_.Lvl -or [int]$_.Lvl -le [int]$arg.Mode }); $steps = $cat.Count + 1   # 这个模式下不列的不统计（换到更高的模式再扫描就有）
-foreach ($it in $cat) { if (Stopping) { break }; $i++; SetP @{ Steps = $steps; Step = $i; StepName = $it.N; SubKind = 'measure'; SubStart = (Get-Date); Detail = (T '统计大小') }; $t0 = $sw.ElapsedMilliseconds; $sizes[$it.Idx] = Measure-Item $it $tree; [void]$times.Add(@{ N = $it.N; Ms = $sw.ElapsedMilliseconds - $t0 }) }
+# 要问系统、要等几秒的那几项（安装包、驱动包、传递优化、快捷方式）另外开后台同时问，这边接着读文件表、统计别的
+$bg = @{}; foreach ($it in $cat) { if ($it.Bg -and $it.Size) { $bg[[string]$it.Idx] = $it.Size.ToString() } }
+$par = Start-Parallel $bg 4
+foreach ($it in $cat) { if (Stopping) { break }; if ($par.Run.ContainsKey([string]$it.Idx)) { continue }; $i++; SetP @{ Steps = $steps; Step = $i; StepName = $it.N; SubKind = 'measure'; SubStart = (Get-Date); Detail = (T '统计大小') }; $t0 = $sw.ElapsedMilliseconds; $sizes[$it.Idx] = Measure-Item $it $tree; [void]$times.Add(@{ N = $it.N; Ms = $sw.ElapsedMilliseconds - $t0 }) }
+if ($par.Run.Count -gt 0) {
+    SetP @{ Steps = $steps; Step = $steps; StepName = (T '等系统回答安装包、驱动包这几项'); SubKind = 'measure'; SubStart = (Get-Date); Detail = (T '统计大小') }
+    $t0 = $sw.ElapsedMilliseconds; $got = Wait-Parallel $par; [void]$times.Add(@{ N = 'wait for the parallel ones'; Ms = $sw.ElapsedMilliseconds - $t0 })
+    foreach ($it in $cat) {
+        $k = [string]$it.Idx; if (-not $bg.ContainsKey($k) -or (Stopping)) { continue }
+        if ($got.ContainsKey($k)) { $sizes[$it.Idx] = [double]$got[$k].V; [void]$times.Add(@{ N = $it.N + ' (alongside)'; Ms = [double]$got[$k].Ms }) }
+        else { $t0 = $sw.ElapsedMilliseconds; $sizes[$it.Idx] = Measure-Item $it $tree; [void]$times.Add(@{ N = $it.N; Ms = $sw.ElapsedMilliseconds - $t0 }) }
+    }
+}
 $sync.ScanTimes = $times; $sync.ScanMs = $sw.ElapsedMilliseconds; $sync.ScanWalks = $script:walkLog; $script:walkLog = $null; $script:linkMemo = $null
 if (-not (Stopping)) { $sync.Sizes = $sizes }
 '@ @{ Mode = (Get-Mode) }

@@ -87,7 +87,11 @@ function Start-CandScan {
     UI-Busy $true
     Start-Worker @'
 $out = New-Object System.Collections.ArrayList
+Start-Phases
+# 系统服务和驱动（WMI）、已装的软件、应用商店里的聊天软件：另外开后台同时读，这边先统计聊天记录这些
+$par = Start-Parallel ([ordered]@{ svc = 'Get-ServicePaths'; apps = 'Get-InstalledApps -NoStore'; store = 'Get-StoreChatApps' }) 3
 $cat = @(Get-Catalog | Where-Object { ($_.Kind -eq 'move' -or $_.Kind -eq 'flex') -and $_.Paths })
+Mark-Phase 'catalog'
 # 上次搬了一半的（目标盘上已经有副本），这次再搬只补差异
 $partial = @{}
 foreach ($root in (All-MoveRoots)) { foreach ($pr in (Read-MoveMapPairs $root)) { $partial[([string]$pr[0]).TrimEnd('\').ToLowerInvariant()] = $true } }
@@ -95,6 +99,7 @@ $catKeys = @()
 $steps = $cat.Count + 3; $step = 1
 SetP @{ Steps = $steps; Step = 1; StepName = (T '读取 C 盘的文件表') }
 $tree = Get-SysTree
+Mark-Phase 'MFT'
 foreach ($c in $cat) {
     if (Stopping) { break }
     $step++
@@ -119,8 +124,11 @@ foreach ($c in $cat) {
 if (-not $sync.WasCancelled) {
     $step++
     SetP @{ Step = $step; StepName = (T '读取装在 C 盘的软件'); SubKind = 'action'; SubStart = (Get-Date); Detail = (T '读取已安装的软件和系统服务') }
-    $apps = Get-InstalledApps -NoStore
-    $svc = Get-ServicePaths
+    Mark-Phase 'chat and other folders'
+    $got = Wait-Parallel $par
+    Mark-Phase 'wait for services, apps, Store'
+    $apps = if ($got.ContainsKey('apps')) { $got.apps.V } else { Get-InstalledApps -NoStore }
+    $svc = if ($got.ContainsKey('svc')) { $got.svc.V } else { Get-ServicePaths }
     $sd = $env:SystemDrive
     $onC = @($apps | Where-Object { $_.Location -and $_.Location.StartsWith("$sd\", [StringComparison]::OrdinalIgnoreCase) })
     $step++; $n = 0; $seenLoc = @{}
@@ -144,8 +152,10 @@ if (-not $sync.WasCancelled) {
         [void]$out.Add(@{ Type = 'app'; Idx = 0; Name = $a.Name; Location = $loc; Paths = @($loc); Bytes = $bytes; Publisher = $a.Publisher; Version = $a.Version
             Block = $why; Partial = $partial.ContainsKey($lk); Measured = $measured })
     }
-    if (-not $sync.WasCancelled) { $sync.CandStore = Get-StoreChatApps }
-}
+    Mark-Phase 'apps on C:'
+    if (-not $sync.WasCancelled) { $sync.CandStore = if ($got.ContainsKey('store')) { @($got.store.V) } else { Get-StoreChatApps } }
+} else { [void](Wait-Parallel $par) }
+End-Phases
 $sync.CandResult = $out
 '@ $null
 }
