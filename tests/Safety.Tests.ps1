@@ -83,7 +83,8 @@ try { & {
         Check 'Get-LinkedAncestor finds a link in the path' ([bool](Get-LinkedAncestor (Join-Path $target 'deep')) -eq $false -and -not (Test-Path -LiteralPath $cache))
     } else { Skip 'link deletion tests' }
     # ============ 4. 目录库：每条路径都落在该落的地方 ============
-    $lib = Get-CacheLibrary
+    $savedTemp4 = $env:TEMP; $env:TEMP = Join-Path $home2 (Join-Path 'AppData' (Join-Path 'Local' 'Temp'))   # 假用户目录配它自己的 TEMP
+    try { $lib = Get-CacheLibrary } finally { $env:TEMP = $savedTemp4 }
     $bad = @()
     foreach ($x in $lib) {
         foreach ($p in $x.Paths) {
@@ -275,7 +276,7 @@ try { & {
     Check 'the delete preview does not list it either' (@(Get-DeletePreview @(@{ N = 't'; Paths = @($cachePath) }) 100).Count -eq 0)
     # 临时文件夹：只有 Windows 默认的、系统的、本工具建的（有标记）才当临时文件夹清
     $defTemp = Join-Path $env:USERPROFILE (Join-Path 'AppData' (Join-Path 'Local' 'Temp'))
-    $userTemp = Join-Path $T 'Temp'; New-Item -ItemType Directory -Force -Path $userTemp | Out-Null
+    $userTemp = Join-Path $T 'UserTemp'; New-Item -ItemType Directory -Force -Path $userTemp | Out-Null   # 像用户自己的 D:\Temp：没有标记
     $okDefault = Test-TempOk $defTemp; $okUser = Test-TempOk $userTemp
     [IO.File]::WriteAllText((Join-Path $userTemp '.cleanc-temp'), 'x'); $okMarked = Test-TempOk $userTemp
     Check ("TEMP: the Windows default is cleaned, a D:\Temp of the user is not, a ClearC-made one is ({0}/{1}/{2})" -f $okDefault, $okUser, $okMarked) ($okDefault -and -not $okUser -and $okMarked)
