@@ -401,6 +401,10 @@
                 </StackPanel>
                 <DockPanel Margin="0,26,0,0"><TextBlock DockPanel.Dock="Left" Text="Browsing" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
                 <StackPanel Margin="0,10,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Back, forward and the path"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>The back and forward buttons at the top left (or the mouse side buttons, Alt+← and Alt+→) move between the folders you have looked at; Backspace goes up one level. Every level of the path can be clicked to go back to it.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Drill down"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>Double-click a folder to open the next level, and click "Up one level" to go back. The blue bar on each row shows how large it is within the current level.</Run></TextBlock>
                   <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>When a level holds a lot (WinSxS has tens of thousands of items), only the 500 largest are listed and the rest are combined into the last row; "Open location" shows everything in File Explorer.</Run></TextBlock></DockPanel>
@@ -415,7 +419,16 @@
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Treemap"/>
-                  <TextBlock Style="{StaticResource HelpBody}"><Run>Draws the folders and files of the current level as blocks; the bigger the block, the more space it takes, so the largest ones stand out at a glance. Click to select; double-click a folder to open it.</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Draws the folders and files of the current level as blocks; the bigger the block, the more space it takes, so the largest ones stand out at a glance. Click to select; double-click a folder to open it. The colour says what a folder holds (system, app data, documents, photos and videos, code, synced folders, games); caches and temporary files are hatched, meaning the space can be had back. A legend sits underneath.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Worth a look"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>After scanning a whole drive, the overview lists large folders (300 MB or more) whose names say they are caches, packages (node_modules and the like), build output, Python virtual environments or temporary files. Click one to go there and look before deciding. They are recognized by name only.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Delete list"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Pick what to delete in different folders and "Add to delete list" (also in the right-click menu) instead of deleting right away; a bar underneath keeps showing how big the list is, how much the drive has free now and roughly how much after. Adding a folder absorbs the items inside it that were already listed. Review the list, then "Delete the list…": it asks first as usual and can use the Recycle Bin, and afterwards says how much space the drive actually gained.</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>When a folder to delete is a git repository, the confirmation warns that changes never committed or pushed are gone for good.</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Find files"/>
@@ -522,6 +535,7 @@
                 <StackPanel Margin="0,14,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="App list"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>Lists all installed apps (including Microsoft Store apps), sorted by size from largest to smallest. You can show only apps installed on C:, or search by name. Click "Name", "Publisher", "Installed" or "Size" in the header to sort, and again to reverse; startup items, scheduled tasks and context menu entries sort by name or status.</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Several at once</Run><Run>: tick the box in front of a row, or hold the left mouse button and drag over rows to tick them all; Shift-click a box to tick a run, and the box in the header ticks everything. Buttons then appear underneath. For apps, "Uninstall selected" opens each uninstaller in turn: when one finishes and its window closes, the next one opens, and you can stop at any time; Store apps are uninstalled directly. Startup items, scheduled tasks and context menu entries get "Disable selected" and "Enable selected"; leftovers get "Move to Recycle Bin". Each lists the items and asks once first.</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Uninstall"/>
@@ -553,7 +567,7 @@
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Leftovers"/>
-                  <TextBlock Style="{StaticResource HelpBody}"><Run>Finds folders that uninstalled apps may have left behind: the name matches no installed app, no program is using them, nothing changed for a month, and they are at least 1 MB. It is only a guess, so click "Open location" first; they go to the Recycle Bin and can be restored.</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Finds folders that uninstalled apps may have left behind: the name matches no installed app, no program is using them, nothing changed for a month, and they are at least 1 MB. It is only a guess, so click "Open location" first; they go to the Recycle Bin and can be restored. Tick several to move them to the Recycle Bin together.</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Check for updates"/>
@@ -590,6 +604,7 @@
                   <TextBlock Style="{StaticResource HelpBody}"><Run>A row of tabs next to the title: Hardware, Boot time, Blue screens and crashes, Common fixes, Activity monitor, Windows events. Click one to show only that section, each with its own scroll bar, so you never scroll through the whole page. The page reopens on the tab you looked at last.</Run></TextBlock>
                   <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>"Blue screens and crashes" has three smaller tabs: Diagnosis, Each crash, and Events and drivers, each showing how many entries it has.</Run></TextBlock></DockPanel>
                   <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>"Common fixes" lists the problems on the left and shows the fixes for the selected one on the right; the activity monitor table fills the page and scrolls on its own.</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>A few seconds after ClearC opens, while nothing else is running, all this is read in the background, so the page is ready when you click it; after ten minutes it is refreshed in the background. Plug in or remove a drive and the hardware cards, the space map drives and the move targets follow.</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Hardware"/>
@@ -653,7 +668,7 @@
                 <DockPanel Margin="0,16,0,0"><TextBlock DockPanel.Dock="Left" Text="Can be moved" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
                 <StackPanel Margin="0,10,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Move several at once"/>
-                  <TextBlock Style="{StaticResource HelpBody}"><Run>Automatically lists what can still be moved off C:, in three groups (chat histories, apps installed on C:, and other folders), each with its size. Tick the items, choose the target drive at the bottom right and click "Move to another drive".</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Automatically lists what can still be moved off C:, in three groups (chat histories, apps installed on C:, and other folders), each with its size. The list on the left shows one group at a time (plus "Apps not suited to moving" and "Moved"). Tick the items, choose the target drive at the bottom right and click "Move to another drive".</Run></TextBlock>
                   <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Before starting, every item is listed, along with any apps that need to be closed first.</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
@@ -764,6 +779,10 @@
               </Expander.Header>
               <StackPanel>
                 <StackPanel Margin="0,14,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Contents"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>The list on the left is grouped into General, Interface, and Cleanup and scanning; click an item to show only that part on the right.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Mode"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>Three modes decide how much the window shows. ClearC asks once on first start; after that, change it at the top of Settings at any time. Switching never loses settings or records. The current mode is written under the version number at the bottom left; click it to go to Settings.</Run></TextBlock>
                   <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Home user</Run><Run>: Clean C:, Save space, Space map, Apps, System health (hardware, blue screens and crashes, common fixes) and Help. The cleanup list only has common caches and temporary files that apps rebuild; items with a cost are still skipped by default.</Run></TextBlock></DockPanel>

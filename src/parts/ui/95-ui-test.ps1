@@ -500,6 +500,120 @@ function Invoke-UiTest {
                 if (-not (Test-SortedBy @($ctl.LogList.Items) 'When' $true)) { throw 'log not back to newest first' }
             }
         }
+        & $step 'apps: tick several, uninstall one after another, disable or recycle several at once' {
+            # 假的软件列表：两个只有卸载命令的软件（自测里卸载程序不真的打开）
+            $fake = @(
+                @{ Name = 'ClearC UiTest A'; Publisher = 'Test'; Version = '1'; Location = ''; Uninstall = 'cmd.exe /c exit'; Kind = 'win32'; Package = ''; Size = 3MB; Measured = $true; Date = '20240101'; LocReg = $false },
+                @{ Name = 'ClearC UiTest B'; Publisher = 'Test'; Version = '1'; Location = ''; Uninstall = 'cmd.exe /c exit'; Kind = 'win32'; Package = ''; Size = 2MB; Measured = $true; Date = '20240102'; LocReg = $false },
+                @{ Name = 'ClearC UiTest C'; Publisher = 'Test'; Version = '1'; Location = ''; Uninstall = 'cmd.exe /c exit'; Kind = 'win32'; Package = ''; Size = 1MB; Measured = $true; Date = '20240103'; LocReg = $false })
+            $keepRows = $script:appRows
+            try {
+                $script:pageLoaded.apps = $true; Show-Page 'apps'; $ctl.AppsViewApps.IsChecked = $true
+                Build-AppRows $fake; $win.UpdateLayout()
+                $rows = @($ctl.AppsList.Items)
+                if ($rows.Count -ne 3) { throw ('{0} app rows' -f $rows.Count) }
+                $rows[0].Picked = $true; $rows[2].Picked = $true; Update-PickBar
+                if ($ctl.AppsPickBar.Visibility -ne 'Visible' -or $ctl.BtnPickUninstall.Visibility -ne 'Visible' -or $null -ne $ctl.AppsPickAll.IsChecked) { throw 'pick bar not shown for two ticked apps' }
+                $L.Add(('  apps picked: ' + $ctl.AppsPickText.Text))
+                # 全选、全部取消
+                $ctl.AppsPickAll.IsChecked = $true; & $click $ctl.AppsPickAll
+                if (@($rows | Where-Object { $_.Picked }).Count -ne 3) { throw 'select all did not tick every app' }
+                $ctl.AppsPickAll.IsChecked = $false; & $click $ctl.AppsPickAll
+                if (@($rows | Where-Object { $_.Picked }).Count -ne 0 -or $ctl.AppsPickBar.Visibility -ne 'Collapsed') { throw 'untick all left something ticked' }
+                # 卸载：先列出来确认（自测里当作取消），所以什么都不打开
+                $rows[0].Picked = $true; $rows[1].Picked = $true
+                $n0 = $script:uiSheets.Count; $script:uiFixRuns.Clear()
+                Start-BatchUninstall
+                if ($script:uiSheets.Count -ne $n0 + 1 -or $script:uq -or @($script:uiFixRuns | Where-Object { $_ -like 'uninstall:*' }).Count) { throw 'batch uninstall did not ask first, or started anyway' }
+                # 排队：一个走完才开下一个，走完收尾
+                $script:uq = @{ Win32 = @($rows[0], $rows[1]); I = -1; Proc = $null; At = (Get-Date); ExitAt = $null; Done = 0; Fail = (New-Object System.Collections.ArrayList); Stop = $false; Total = 2 }
+                Step-UninstQueue
+                if (@($script:uiFixRuns) -join '|' -ne ('uninstall:' + $rows[0].Name) -or $ctl.AppsBatchBox.Visibility -ne 'Visible') { throw ('first uninstaller: ' + (@($script:uiFixRuns) -join '|')) }
+                Step-UninstQueue; Step-UninstQueue
+                if (@($script:uiFixRuns) -join '|' -ne ('uninstall:' + $rows[0].Name + '|uninstall:' + $rows[1].Name) -or $script:uq -or $ctl.AppsBatchBox.Visibility -ne 'Collapsed') { throw ('queue order: ' + (@($script:uiFixRuns) -join '|')) }
+                if (@($rows | Where-Object { $_.Picked }).Count -ne 0) { throw 'ticks left after the batch' }
+            } finally { $script:uq = $null; $script:uqTimer.Stop(); $script:appRows = $keepRows; $ctl.AppsList.ItemsSource = $null; $ctl.AppsBatchBox.Visibility = 'Collapsed' }
+            # 开机启动：一次禁用几个也先确认
+            $ap = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run'
+            $sr = @(foreach ($i in 1..2) { $r = New-Object StartRow; $r.Kind = 'startup'; $r.Name = "ClearC UiTest $i"; $r.Key1 = $ap; $r.Key2 = "ClearC-UiTest-$i"; $r.Enabled = $true; $r.Open = ''; $r })
+            $script:startRows['startup'] = New-Object System.Collections.Generic.List[StartRow]; foreach ($r in $sr) { $script:startRows['startup'].Add($r) }
+            $ctl.AppsViewStartup.IsChecked = $true; $win.UpdateLayout()
+            foreach ($r in $sr) { $r.Picked = $true }; Update-PickBar
+            if ($ctl.BtnPickDisable.Visibility -ne 'Visible' -or -not $ctl.BtnPickDisable.IsEnabled -or $ctl.BtnPickEnable.IsEnabled) { throw 'disable / enable buttons wrong for two enabled items' }
+            $n0 = $script:uiSheets.Count; Start-BatchToggle $false
+            if ($script:uiSheets.Count -ne $n0 + 1 -or @($sr | Where-Object { -not $_.Enabled }).Count) { throw 'batch disable did not ask first, or changed something' }
+            # 残留文件夹：一次移到回收站几个，也先确认
+            $lr = @(foreach ($i in 1..2) { $r = New-Object StartRow; $r.Kind = 'leftover'; $r.Name = "leftover $i"; $r.Detail = (Join-Path ([IO.Path]::GetTempPath()) "clearc-uitest-left-$i"); $r.Key2 = '1048576'; $r.Size = '1 MB'; $r.Open = ''; $r })
+            $script:startRows['leftover'] = New-Object System.Collections.Generic.List[StartRow]; foreach ($r in $lr) { $script:startRows['leftover'].Add($r) }
+            $ctl.AppsViewLeft.IsChecked = $true; $win.UpdateLayout()
+            foreach ($r in $lr) { $r.Picked = $true }; Update-PickBar
+            if ($ctl.BtnPickRecycle.Visibility -ne 'Visible') { throw 'recycle button not shown for leftovers' }
+            $n0 = $script:uiSheets.Count; Start-BatchLeftover
+            if ($script:uiSheets.Count -ne $n0 + 1 -or $script:worker) { throw 'batch recycle did not ask first, or started anyway' }
+            $script:startRows.Clear(); $ctl.StartList.ItemsSource = $null; $ctl.AppsViewApps.IsChecked = $true; Update-PickBar
+        }
+        & $step 'settings and moves have a contents list; tree items are indented' {
+            Show-Page 'settings'
+            foreach ($g in $script:setGroups.Keys) { foreach ($k in $script:setGroups[$g]) {
+                if ($ctl['SetNav' + $k].Visibility -ne 'Visible') { continue }
+                $ctl['SetNav' + $k].IsChecked = $true
+                $shown = @(foreach ($x in $script:setCards.Keys) { if ($ctl[$script:setCards[$x]].Visibility -eq 'Visible') { $x } })
+                if ($shown.Count -ne 1 -or $shown[0] -ne $k) { throw ("settings nav ${k}: shows " + ($shown -join ',')) }
+            } }
+            & $snap $ctl.PageSettings 'settings-nav'
+            Show-ModeCard
+            if ($ctl.SetCardMode.Visibility -ne 'Visible' -or -not $ctl.SetNavMode.IsChecked) { throw 'mode tag did not open the mode section' }
+            # 不打开搬家管理页（一打开就会在后台统计），只点目录
+            $ctl.MNavApp.IsChecked = $true
+            if ($script:candGroup -ne 'app' -or $script:movesTab -ne 'cand') { throw 'moves nav did not pick the app group' }
+            if ($script:candRows) { if (@(@($ctl.CandList.Items) | Where-Object { $_.Group -ne 'app' }).Count) { throw 'other groups still listed' } }
+            $ctl.MovesTabDone.IsChecked = $true
+            if ($ctl.MovesCard.Visibility -ne 'Visible') { throw 'moved list not shown' }
+            $ctl.MovesTabCand.IsChecked = $true
+            if ($script:candGroup -ne '') { throw 'all candidates not back' }
+        }
+        & $step 'space map: back and forward, clickable path, delete list, worth a look, colours by kind' {
+            $d = Join-Path ([IO.Path]::GetTempPath()) ('clearc-uitest-map-' + [guid]::NewGuid().ToString('N').Substring(0, 6))
+            New-Item -ItemType Directory -Force -Path "$d\a\.git", "$d\b\node_modules\x" | Out-Null
+            [IO.File]::WriteAllText("$d\a\f1.bin", ('x' * 3000)); [IO.File]::WriteAllText("$d\b\node_modules\x\m.js", ('y' * 5000)); [IO.File]::WriteAllText("$d\b\keep.txt", 'z')
+            $keepRoot = $script:mapRoot; $keepCur = $script:mapCur
+            try {
+                $t2 = [DiskMap]::Scan($d, 2); [DiskMap]::Use($t2); $script:mapRoot = $t2; $script:mapCur = $t2; Reset-MapHistory
+                Show-Page 'map'; $ctl.MapViewDirs.IsChecked = $true; Show-MapLevel $t2; $win.UpdateLayout()
+                if ($ctl.MapCrumbs.Visibility -ne 'Visible' -or $ctl.MapCrumbs.Children.Count -lt 1) { throw 'no clickable path' }
+                $nb = [DiskMap]::Find($t2, "$d\b"); $nn = [DiskMap]::Find($t2, "$d\b\node_modules")
+                Show-MapLevel $nb; Show-MapLevel $nn
+                Move-MapHistory -1; if (-not [object]::ReferenceEquals($script:mapCur, $nb)) { throw 'back did not return to b' }
+                Move-MapHistory -1; if (-not [object]::ReferenceEquals($script:mapCur, $t2)) { throw 'back did not return to the top' }
+                Move-MapHistory 1; if (-not [object]::ReferenceEquals($script:mapCur, $nb) -or -not $ctl.BtnMapFwd.IsEnabled) { throw 'forward did not go to b' }
+                $cb = @($ctl.MapCrumbs.Children | Where-Object { $_ -is [System.Windows.Controls.Button] })[0]
+                & $click $cb; if (-not [object]::ReferenceEquals($script:mapCur, $t2)) { throw 'clicking the path did not go up' }
+                $hits = @([DiskMap]::Named($t2, [string[]]$script:worthNames, 1, 10))
+                if (-not @($hits | Where-Object { $_.Name -eq 'node_modules' }).Count) { throw 'worth-a-look did not find node_modules' }
+                # 待删清单：放进 a；再放 b 里面的 node_modules；再放 b，node_modules 合进 b
+                $ra = @($ctl.MapList.Items | Where-Object { $_.Name -eq 'a' })[0]
+                [void](Add-MapMarks @($ra))
+                if ($script:mapMarks.Count -ne 1 -or -not $ra.Marked -or $ctl.MapMarkBar.Visibility -ne 'Visible') { throw 'mark a failed' }
+                Show-MapLevel $nb; $rn = @($ctl.MapList.Items | Where-Object { $_.Name -eq 'node_modules' })[0]; [void](Add-MapMarks @($rn))
+                Show-MapLevel $t2; $rb = @($ctl.MapList.Items | Where-Object { $_.Name -eq 'b' })[0]; [void](Add-MapMarks @($rb))
+                if ($script:mapMarks.Count -ne 2 -or $script:mapMarks.Contains((Get-MarkKey $rn))) { throw ('marks: ' + (@($script:mapMarks.Keys) -join ', ')) }
+                if (-not @($ctl.MapList.Items | Where-Object { $_.Name -eq 'a' })[0].Marked) { throw 'marked row not flagged after coming back' }
+                $L.Add(('  delete list: ' + $ctl.MapMarkText.Text))
+                $n0 = $script:uiSheets.Count; Start-MapDelete @($script:mapMarks.Values)
+                if ($script:uiSheets.Count -ne $n0 + 1 -or $script:worker) { throw 'deleting the list did not ask first' }
+                if ($script:uiSheets[$script:uiSheets.Count - 1] -notmatch 'git') { throw 'no warning about the git checkout' }
+                Clear-MapMarks
+                if ($ctl.MapMarkBar.Visibility -ne 'Collapsed' -or $ra.Marked) { throw 'clear left marks' }
+                # 方块图：按类型上色，下面有图例
+                $ctl.MapViewTree.IsChecked = $true; $win.UpdateLayout(); Draw-MapTree
+                if ($ctl.MapTreeLegend.Children.Count -lt 1) { throw 'no treemap legend' }
+                $ctl.MapViewDirs.IsChecked = $true
+            } finally {
+                Clear-MapMarks; Reset-MapHistory
+                $script:mapRoot = $keepRoot; $script:mapCur = $keepCur; if ($keepRoot) { [DiskMap]::Use($keepRoot) }
+                Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        }
         & $step 'similar photos and keep rules' {
             if (-not ('PhotoHash' -as [type])) { throw 'PhotoHash did not compile' }
             # 放在临时文件夹里：本工具自己的文件夹（appDir）在重复文件里是删不得的，勾不上

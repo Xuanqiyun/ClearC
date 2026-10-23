@@ -366,6 +366,14 @@ try { & {
     # 空间地图点盘卡片、清理页打开文件夹：只看不改
     $op = [regex]::Match($src, '(?s)function Get-CleanOpenPaths.*?function Update-CleanMore').Value
     Check 'opening a cleanup row only opens folders (no delete, move or write)' ($op.Length -gt 500 -and $op -notmatch '(?i)Remove-|Move-Item|rd /s|Delete\(|Set-Content|Out-File|Copy-Item')
+    # 一次处理几个（3.4）：批量卸载先确认一次、用每个软件自己的卸载程序一个一个来、不加静默参数；批量移走残留和单个走同一段后台代码
+    $bu = [regex]::Match($src, '(?s)function Start-BatchUninstall.*?function Test-UninstChild').Value
+    $sq = [regex]::Match($src, '(?s)function Step-UninstQueue.*?\r?\n\}').Value
+    Check 'batch uninstall asks once first and only then starts the queue' ($bu -match "(?s)Show-Sheet -Kind warn.*?-ne \(T '卸载'\)\) \{ return \}.*?Step-UninstQueue")
+    Check 'batch uninstall opens one uninstaller at a time (waits for it to exit), never silently, and the UI self-test never starts one' ($sq -match '(?s)HasExited.*?if \(\$script:uiTest\) \{ \$script:uiFixRuns\.Add\(''uninstall:'' \+ \$r\.Name\) \}\s*\r?\n\s*elseif \(\$pc\[1\]\) \{ \$q\.Proc = Start-Process' -and ($bu + $sq) -notmatch '(?i)QuietUninstall|/quiet|/qn\b|/silent|/verysilent|-WindowStyle Hidden')
+    Check 'batch leftover recycling reuses the leftover worker (Get-DeleteBlock -Leftover, IsLink, Test-RecycleOk)' (([regex]::Matches($src, 'Start-Worker \$script:leftDelCode')).Count -eq 2 -and ([regex]::Match($src, "(?s)\`$script:leftDelCode = @'.*?'@").Value) -match '(?s)Get-DeleteBlock \$x\.Path -Leftover.*?IsLink \$x\.Path.*?Test-RecycleOk')
+    Check 'batch disable / enable never touches ClearC''s own entries or leftovers' ([regex]::Match($src, '(?s)function Start-BatchToggle.*?\r?\n\}').Value -match "-not \`$_\.Ours -and \`$_\.Kind -ne 'leftover'")
+    Check 'the space-map delete list deletes through Start-MapDelete (same checks as a normal delete)' ($src -match '\$ctl\.BtnMarkDelete\.Add_Click\(\{[^\r\n]*Start-MapDelete @\(\$script:mapMarks\.Values\)')
     # ============ 8. 源码锁：改坏了就报 ============
     Check 'recycle bin: SHFileOperation asks when a file is too big instead of nuking it (ALLOWUNDO|NOCONFIRMATION|WANTNUKEWARNING)' (([regex]::Matches($dupCode, '0x40 \| 0x10 \| 0x4000')).Count -ge 2)
     Check 'restore points are never deleted (no vssadmin delete / Win32_ShadowCopy.Delete / Remove-ComputerRestorePoint)' ($src -notmatch '(?i)vssadmin\s+delete|Remove-ComputerRestorePoint|Disable-ComputerRestore|ShadowCopy[^\r\n]*\.Delete\(')

@@ -13,6 +13,34 @@ $script:pageLvl = @{ dup = 1; moves = 1; auto = 1; log = 1 }
 $script:linkLvl = @{ log = 2 }
 $script:appsUpdatesAllowed = $true
 function Get-ModeName([int]$m = (Get-Mode)) { switch ($m) { 0 { (T '普通用户') } 1 { (T '工程师') } default { (T '开发者和 IT') } } }
+# ---------- 设置：左边目录，点哪项右边只显示那一项（记住上次看的） ----------
+$script:setGroups = [ordered]@{ General = @('Mode', 'Look'); Ui = @('Display', 'Map'); Clean = @('Clean', 'Scan') }
+$script:setLvl = @{ Display = 1; Scan = 2 }
+$script:setCards = @{ Mode = 'SetCardMode'; Look = 'SetCardLook'; Display = 'SetCardDisplay'; Map = 'SetCardMap'; Clean = 'SetCleanCard'; Scan = 'SetCardScan' }
+$script:setSec = Get-Setting 'SetSection' 'Mode'
+function Update-SetNav {
+    $m = Get-Mode; $first = ''
+    foreach ($g in $script:setGroups.Keys) {
+        $any = $false
+        foreach ($k in $script:setGroups[$g]) {
+            $ok = $m -ge [int]$script:setLvl[$k]
+            $ctl['SetNav' + $k].Visibility = $(if ($ok) { 'Visible' } else { 'Collapsed' })
+            if ($ok) { $any = $true; if (-not $first) { $first = $k } }
+        }
+        $ctl['SetHead' + $g].Visibility = $(if ($any) { 'Visible' } else { 'Collapsed' })
+    }
+    $k = $script:setSec
+    if (-not $ctl['SetNav' + $k] -or $ctl['SetNav' + $k].Visibility -ne 'Visible') { $k = $first }
+    Select-SetSection $k
+}
+function Select-SetSection([string]$k) {
+    if (-not $script:setCards.ContainsKey($k)) { return }
+    $script:setSec = $k
+    foreach ($x in $script:setCards.Keys) { $ctl[$script:setCards[$x]].Visibility = $(if ($x -eq $k) { 'Visible' } else { 'Collapsed' }) }
+    $rb = $ctl['SetNav' + $k]; if (-not $rb.IsChecked) { $script:setNavQuiet = $true; try { $rb.IsChecked = $true } finally { $script:setNavQuiet = $false } }
+    $ctl.SetScroll.ScrollToTop()
+}
+foreach ($g in $script:setGroups.Keys) { foreach ($k in $script:setGroups[$g]) { $ctl['SetNav' + $k].Add_Checked({ if ($script:setNavQuiet) { return }; Select-SetSection ([string]$this.Tag); Set-Setting 'SetSection' $script:setSec }) } }
 function Apply-Mode {
     $m = Get-Mode
     $v = { param([int]$need) if ($m -ge $need) { [System.Windows.Visibility]::Visible } else { [System.Windows.Visibility]::Collapsed } }
@@ -38,7 +66,7 @@ function Apply-Mode {
     Select-HealthTab $script:healthTab
     Show-Fixes $(if ($script:healthData) { $script:healthData.Power } else { $null })
     $ctl.FbCopyDiag.Visibility = & $v 1; $ctl.FbSelfTest.Visibility = & $v 2
-    $ctl.SetCardDisplay.Visibility = & $v 1; $ctl.SetCardScan.Visibility = & $v 2
+    Update-SetNav
     foreach ($n in 'SetCustomList', 'SetCustomEmpty', 'BtnSetCustomAdd', 'SetExcludeList', 'SetExcludeEmpty', 'BtnSetExcludeAdd', 'SetCustomHead', 'SetCustomNote', 'SetExcludeHead', 'SetExcludeNote') { $ctl[$n].Visibility = & $v 2 }
     $ctl.ModeTag.Text = (Get-ModeName $m) + (T '模式')
     $ctl.SetModeNote.Text = switch ($m) {
@@ -81,7 +109,7 @@ function Flash-Card($el) {
     } catch {}
 }
 function Show-ModeCard {
-    Show-Page 'settings'; $ctl.SetScroll.ScrollToTop()
+    Show-Page 'settings'; Select-SetSection 'Mode'; $ctl.SetScroll.ScrollToTop()
     $ctl.SetCardMode.BringIntoView()
     Flash-Card $ctl.SetCardMode
 }

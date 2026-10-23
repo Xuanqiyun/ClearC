@@ -6,7 +6,7 @@
 # ------------------------------------------------------------
 $script:healthData = $null
 function Load-Health {
-    $ctl.HealthNote.Text = (T '正在读取硬件、事件日志和转储文件，要十几秒…')
+    $ctl.HealthNote.Text = if ($script:healthData) { (T '正在后台刷新，下面先显示上次读到的…') } else { (T '正在读取硬件、事件日志和转储文件，要十几秒…') }
     $ctl.BtnHealthRefresh.IsEnabled = $false
     $ok = Start-BgEngine 'health' 'Get-HealthAll' $null {
         param($r, $err)
@@ -25,6 +25,22 @@ $script:hcGreen = @('#1D7A35', '#E5F4E9'); $script:hcAmber = @('#995700', '#FFF1
 function New-Chip([string]$text, $tier) { $c = New-Object HealthChip; $c.Text = $text; $c.Fg = $tier[0]; $c.Bg = $tier[1]; return $c }
 function New-HealthCard([string]$title, [string]$sub, $tier) { $c = New-Object HealthCard; $c.Title = $title; $c.Sub = $sub; $c.Stripe = $tier[0]; $c.BarBrush = $tier[0]; return $c }
 function Tier-Worst($a, $b) { $rank = @{ ($script:hcGrey[0]) = 0; ($script:hcGreen[0]) = 1; ($script:hcBlue[0]) = 1; ($script:hcAmber[0]) = 2; ($script:hcRed[0]) = 3 }; if ($rank[$b[0]] -gt $rank[$a[0]]) { $b } else { $a } }
+# 硬件卡片的宽度跟着这一页的宽度走：每张至少 270，一排能放几张放几张，正好排满（最大化时右边不留空白，也不用往下拉很长）
+$win.Resources['HcCardW'] = [double]290
+$ctl.HealthCards.Add_SizeChanged({
+    param($s, $e)
+    $w = [double]$s.ActualWidth; if ($w -lt 100) { return }
+    $cols = [math]::Max(1, [math]::Floor(($w + 1) / (270 + 12)))
+    $cw = [math]::Floor($w / $cols) - 12
+    if ([math]::Abs([double]$win.Resources['HcCardW'] - $cw) -ge 1) { $win.Resources['HcCardW'] = [double]$cw }
+})
+# 事件的说明文字：一行一行合起来，太长的截到 300 字（完整的在鼠标提示里）
+function Shorten-Note([string]$t) {
+    if (-not $t) { return '' }
+    $t = ($t -replace '\s*[\r\n]+\s*', ' ').Trim()
+    if ($t.Length -gt 300) { $t = $t.Substring(0, 300) + '…' }
+    return $t
+}
 function Show-Health($r) {
     $ctl.HealthNote.Text = (T "读取于 {0:HH:mm}，用了 {1:N0} 秒。读取只看不改；修复的按钮点了会先说明要改什么。") -f $r.At, $r.Secs
     $bad = @($r.Verdicts | Where-Object { $_.Level -eq 'red' })
@@ -126,7 +142,7 @@ function Show-Health($r) {
         $ctl.HealthBootText.Text = (T "最近一次开机（{0:yyyy-MM-dd HH:mm}）用了 {1:N0} 秒：到桌面 {2:N0} 秒，桌面出来后开机程序又忙了 {3:N0} 秒才安静下来。") -f $bt.At, ($bt.BootMs / 1000), ($bt.MainMs / 1000), ($bt.PostMs / 1000)
         if ($bt.History.Count -ge 3) { $avg = ($bt.History | ForEach-Object { $_.BootMs } | Measure-Object -Average).Average; $ctl.HealthBootText.Text += (T "最近 {0} 次平均 {1:N0} 秒。") -f $bt.History.Count, ($avg / 1000) }
         if ($bt.BootMs -gt 120000) { $ctl.HealthBootText.Text += (T '超过两分钟算慢的。') }
-        foreach ($s in @($bt.Slow)) { $n = New-Object NoteRow; $n.Head = $s.Name; $n.Path = $s.Path; $n.Body = (T "拖慢 {0:N0} 秒，{1} 次") -f ($s.DegradeMs / 1000), $s.Times; $slow.Add($n) }
+        foreach ($s in @($bt.Slow)) { $n = New-Object NoteRow; $n.Head = $s.Name; $n.Sub = [string]$s.Path; $n.Path = $s.Path; $n.Body = (T "拖慢 {0:N0} 秒，{1} 次") -f ($s.DegradeMs / 1000), $s.Times; $slow.Add($n) }
         if ($slow.Count -eq 0) { $ctl.HealthBootText.Text += (T '最近 30 天 Windows 没有点名拖慢开机的程序。') }
     } else { $ctl.HealthBootText.Text = $bt.Why }
     $ctl.HealthSlow.ItemsSource = $slow
@@ -156,20 +172,20 @@ function Show-Health($r) {
     $ctl.HealthCrashText.Text = if ($dumps.Count -gt 0) { (T "{0} 里有 {1} 个转储文件（最近的 10 个）。") -f $cr.DumpDir, $dumps.Count } else { (T "没有转储文件：最近没有蓝屏，或者蓝屏时没来得及写出转储。") }
     if ($cr.MemoryDmp) { $ctl.HealthCrashText.Text += (T "另有完整转储 MEMORY.DMP（{0}，{1:yyyy-MM-dd}），在「省空间」里可以改成只存小转储。") -f (Fmt $cr.MemoryDmp.Size), $cr.MemoryDmp.Time }
     $evs = New-Object 'System.Collections.ObjectModel.ObservableCollection[NoteRow]'
-    foreach ($x in @($cr.Events)) { $n = New-Object NoteRow; $n.Head = ("{0}（{1}）" -f $x.What, $x.Source); $n.Path = $x.Sample; $n.Body = (T "{0} 次，最近 {1:MM-dd HH:mm}") -f $x.Count, $x.Last; $evs.Add($n) }
+    foreach ($x in @($cr.Events)) { $n = New-Object NoteRow; $n.Head = ("{0}（{1}）" -f $x.What, $x.Source); $n.Sub = Shorten-Note ([string]$x.Sample); $n.Path = $x.Sample; $n.Body = (T "{0} 次，最近 {1:MM-dd HH:mm}") -f $x.Count, $x.Last; $evs.Add($n) }
     if ($evs.Count -eq 0) { $n = New-Object NoteRow; $n.Head = (T '没有意外关机、硬件错误和磁盘错误的记录'); $evs.Add($n) }
     $ctl.HealthEvents.ItemsSource = $evs
     $drs = New-Object 'System.Collections.ObjectModel.ObservableCollection[NoteRow]'
-    foreach ($x in @($cr.Drivers | Select-Object -First 12)) { $n = New-Object NoteRow; $n.Head = ("{0} {1} {2}" -f $x.Provider, $x.Name, $x.Version).Trim(); $n.Path = $x.Device; $n.Body = '{0:MM-dd HH:mm}' -f $x.When; $drs.Add($n) }
+    foreach ($x in @($cr.Drivers | Select-Object -First 12)) { $n = New-Object NoteRow; $n.Head = ("{0} {1} {2}" -f $x.Provider, $x.Name, $x.Version).Trim(); $n.Sub = [string]$x.Device; $n.Path = $x.Device; $n.Body = '{0:MM-dd HH:mm}' -f $x.When; $drs.Add($n) }
     if ($drs.Count -eq 0) { $n = New-Object NoteRow; $n.Head = (T '最近 30 天没有装过驱动'); $drs.Add($n) }
     $ctl.HealthDrivers.ItemsSource = $drs
     # 小选项卡上写明有几条，不点进去也知道
-    $ctl.CTabDumps.Content = (T '每次蓝屏') + $(if ($dumps.Count -gt 0) { '  ' + $dumps.Count } else { '' })
+    $ctl.CTabDumpsN.Text = [string]$dumps.Count; $ctl.CTabDumpsB.Visibility = if ($dumps.Count -gt 0) { 'Visible' } else { 'Collapsed' }
     $nEv = @($cr.Events).Count + @($cr.Drivers).Count
-    $ctl.CTabEvents.Content = (T '相关事件和驱动') + $(if ($nEv -gt 0) { '  ' + $nEv } else { '' })
+    $ctl.CTabEventsN.Text = [string]$nEv; $ctl.CTabEventsB.Visibility = if ($nEv -gt 0) { 'Visible' } else { 'Collapsed' }
     # Windows 事件
     $errs = New-Object 'System.Collections.ObjectModel.ObservableCollection[NoteRow]'
-    foreach ($x in @($w.Errors)) { $n = New-Object NoteRow; $n.Head = ("{0}：{1}" -f $x.Source, $x.Sample); $n.Path = $x.Sample; $n.Body = (T "{0} 次，最近 {1:MM-dd HH:mm}") -f $x.Count, $x.Last; $errs.Add($n) }
+    foreach ($x in @($w.Errors)) { $n = New-Object NoteRow; $n.Head = [string]$x.Source; $n.Sub = Shorten-Note ([string]$x.Sample); $n.Path = $x.Sample; $n.Body = (T "{0} 次，最近 {1:MM-dd HH:mm}") -f $x.Count, $x.Last; $errs.Add($n) }
     $ctl.HealthErrors.ItemsSource = $errs
     $ctl.HealthWinText.Text = if ($w.ErrorCount -gt 0) { (T "最近 7 天系统日志里有 {0} 条严重或错误事件，来源最多的几个：") -f $w.ErrorCount } else { (T '最近 7 天系统日志里没有严重或错误事件。') }
 }

@@ -350,24 +350,29 @@
       </Setter>
     </Style>
     <!-- ===== 页面左侧的目录（省空间、常见问题修复）：一级标题下面一项一项，点哪项右边显示哪项 ===== -->
+    <!-- 一级标题：黑色加粗，不缩进 -->
     <Style x:Key="TreeHead" TargetType="TextBlock">
-      <Setter Property="FontSize" Value="11.5"/>
+      <Setter Property="FontSize" Value="13"/>
       <Setter Property="FontWeight" Value="SemiBold"/>
-      <Setter Property="Foreground" Value="#86868B"/>
-      <Setter Property="Margin" Value="10,16,0,5"/>
-    </Style>
-    <Style x:Key="TreeItem" TargetType="RadioButton">
       <Setter Property="Foreground" Value="#1D1D1F"/>
+      <Setter Property="Margin" Value="10,16,0,6"/>
+    </Style>
+    <!-- 二级菜单：缩进，左边一条细的竖线把同一组连起来，看得出属于哪个一级标题 -->
+    <Style x:Key="TreeItem" TargetType="RadioButton">
+      <Setter Property="Foreground" Value="#3A3A3C"/>
       <Setter Property="FontSize" Value="13"/>
       <Setter Property="Cursor" Value="Hand"/>
       <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-      <Setter Property="Margin" Value="0,0,0,2"/>
+      <Setter Property="Margin" Value="0,0,0,1"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="RadioButton">
-            <Border x:Name="Bd" CornerRadius="7" Padding="10,7" Background="Transparent">
-              <ContentPresenter VerticalAlignment="Center"/>
-            </Border>
+            <Grid Background="Transparent">
+              <Rectangle Width="1" Fill="#D9D9DE" HorizontalAlignment="Left" Margin="15,0,0,0"/>
+              <Border x:Name="Bd" CornerRadius="7" Padding="12,6,10,6" Margin="22,0,0,0" Background="Transparent">
+                <ContentPresenter VerticalAlignment="Center"/>
+              </Border>
+            </Grid>
             <ControlTemplate.Triggers>
               <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="#E8E8ED"/></Trigger>
               <Trigger Property="IsChecked" Value="True">
@@ -380,8 +385,47 @@
         </Setter.Value>
       </Setter>
     </Style>
+    <!-- 能点的一级菜单（搬家管理的「可以搬的」「已经搬走的」）：黑色加粗，不缩进 -->
+    <Style x:Key="TreeTop" TargetType="RadioButton">
+      <Setter Property="Foreground" Value="#1D1D1F"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Margin" Value="0,10,0,2"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="RadioButton">
+            <Border x:Name="Bd" CornerRadius="7" Padding="10,7" Background="Transparent">
+              <ContentPresenter VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="#E8E8ED"/></Trigger>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="#E3EEFF"/>
+                <Setter Property="Foreground" Value="#0A5BC4"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <!-- 选项卡、目录上的数字和状态：小圆角标签，和名字分开 -->
+    <Style x:Key="TabBadge" TargetType="Border">
+      <Setter Property="Background" Value="#DEDEE4"/>
+      <Setter Property="CornerRadius" Value="8"/>
+      <Setter Property="Padding" Value="6,0,6,1"/>
+      <Setter Property="Margin" Value="7,0,0,0"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style x:Key="TabBadgeText" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="11.5"/>
+      <Setter Property="FontWeight" Value="Normal"/>
+      <Setter Property="Foreground" Value="#6E6E73"/>
+    </Style>
     <Style x:Key="NavItem" TargetType="ListBoxItem">
       <Setter Property="Foreground" Value="#1D1D1F"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
       <Setter Property="Cursor" Value="Hand"/>
       <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
       <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
@@ -436,6 +480,10 @@
       </Setter>
     </Style>
 
+    <!-- 侧边栏分组标题下面的项：比标题缩进一点 -->
+    <Style x:Key="NavSub" TargetType="RadioButton" BasedOn="{StaticResource Nav}">
+      <Setter Property="Margin" Value="10,0,0,3"/>
+    </Style>
     <!-- ===== 分段控件（单选） ===== -->
     <Style x:Key="Seg" TargetType="RadioButton">
       <Setter Property="Foreground" Value="#1D1D1F"/>
@@ -445,10 +493,18 @@
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="RadioButton">
-            <Border x:Name="Bd" CornerRadius="6" Padding="12,4,12,5" Background="Transparent">
-              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-            </Border>
+            <Grid>
+              <!-- 和前一项之间的细竖线：第一项（Uid=first）、选中的、鼠标在上面的不画 -->
+              <Rectangle x:Name="Sep" Width="1" Fill="#C9C9CF" HorizontalAlignment="Left" Margin="0,6"/>
+              <Border x:Name="Bd" CornerRadius="6" Padding="12,4,12,5" Margin="1,0,0,0" Background="Transparent">
+                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+              </Border>
+            </Grid>
             <ControlTemplate.Triggers>
+              <Trigger Property="Uid" Value="first"><Setter TargetName="Sep" Property="Visibility" Value="Hidden"/></Trigger>
+              <Trigger Property="Uid" Value="nosep"><Setter TargetName="Sep" Property="Visibility" Value="Hidden"/></Trigger>
+              <Trigger Property="IsChecked" Value="True"><Setter TargetName="Sep" Property="Visibility" Value="Hidden"/></Trigger>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Sep" Property="Visibility" Value="Hidden"/></Trigger>
               <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="#DEDEE4"/></Trigger>
               <Trigger Property="IsChecked" Value="True">
                 <Setter TargetName="Bd" Property="Background" Value="#FEFEFE"/>
@@ -1010,8 +1066,8 @@
     <Style x:Key="NavHead" TargetType="TextBlock">
       <Setter Property="FontSize" Value="11.5"/>
       <Setter Property="FontWeight" Value="SemiBold"/>
-      <Setter Property="Foreground" Value="#86868B"/>
-      <Setter Property="Margin" Value="11,12,0,5"/>
+      <Setter Property="Foreground" Value="#6E6E73"/>
+      <Setter Property="Margin" Value="4,14,0,5"/>
     </Style>
     <!-- ===== 开关（勾选框的另一种样子） ===== -->
     <Style x:Key="Switch" TargetType="CheckBox">
@@ -1072,6 +1128,22 @@
       <Setter Property="TextWrapping" Value="Wrap"/>
       <Setter Property="LineHeight" Value="21"/>
     </Style>
+    <!-- 系统健康里的一条记录（事件、拖慢开机的程序、驱动）：第一行加粗，详细说明在下面一行，右边是次数和时间，行与行之间一条细线 -->
+    <DataTemplate x:Key="NoteRowTpl">
+      <Border BorderBrush="#EFEFF4" BorderThickness="0,0,0,1" Padding="0,10,0,10">
+        <DockPanel>
+          <TextBlock DockPanel.Dock="Right" Text="{Binding Body}" Style="{StaticResource Caption}" Margin="18,1,0,0" VerticalAlignment="Top"/>
+          <StackPanel>
+            <TextBlock Text="{Binding Head}" FontWeight="SemiBold" TextWrapping="Wrap" LineHeight="20"/>
+            <TextBlock x:Name="Sub" Text="{Binding Sub}" Style="{StaticResource Caption}" TextWrapping="Wrap" LineHeight="19" Margin="0,3,0,0" ToolTip="{Binding Path}"/>
+          </StackPanel>
+        </DockPanel>
+      </Border>
+      <DataTemplate.Triggers>
+        <DataTrigger Binding="{Binding Sub}" Value="{x:Null}"><Setter TargetName="Sub" Property="Visibility" Value="Collapsed"/></DataTrigger>
+        <DataTrigger Binding="{Binding Sub}" Value=""><Setter TargetName="Sub" Property="Visibility" Value="Collapsed"/></DataTrigger>
+      </DataTemplate.Triggers>
+    </DataTemplate>
     <!-- 空间地图的一行：图标、名字、占比条、大小、百分比 -->
     <DataTemplate x:Key="CandRowTpl">
       <Grid Margin="14,11,14,11">
@@ -1115,6 +1187,9 @@
           <DockPanel>
             <TextBlock x:Name="Lk" DockPanel.Dock="Right" Text="&#xE72E;" FontFamily="{StaticResource Icons}" FontSize="11" Foreground="#86868B"
                        Margin="8,0,0,0" VerticalAlignment="Center" Visibility="Collapsed" ToolTip="{Binding LockTip}"/>
+            <Border x:Name="Mk" DockPanel.Dock="Right" Background="#FDEBEC" CornerRadius="6" Padding="6,0,6,1" Margin="8,0,0,0" VerticalAlignment="Center" Visibility="Collapsed" ToolTip="已经在待删清单里">
+              <TextBlock Text="待删" FontSize="11" Foreground="#C0101C"/>
+            </Border>
             <TextBlock Text="{Binding Name}" FontSize="13.5" TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}"/>
           </DockPanel>
           <TextBlock Text="{Binding Meta}" FontSize="11.5" Foreground="#86868B" TextTrimming="CharacterEllipsis" Margin="0,1,0,0" Visibility="{DynamicResource MapMetaVis}" ToolTip="{Binding Meta}"/>
@@ -1127,6 +1202,7 @@
       </Grid>
       <DataTemplate.Triggers>
         <DataTrigger Binding="{Binding Locked}" Value="True"><Setter TargetName="Lk" Property="Visibility" Value="Visible"/></DataTrigger>
+        <DataTrigger Binding="{Binding Marked}" Value="True"><Setter TargetName="Mk" Property="Visibility" Value="Visible"/></DataTrigger>
       </DataTemplate.Triggers>
     </DataTemplate>
   </Window.Resources>
@@ -1190,18 +1266,18 @@
         <!-- 窗口矮的时候（比如笔记本 150% 缩放）放不下全部页面：这一栏可以上下滚动，「设置」不会被挤掉 -->
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
         <StackPanel>
-          <TextBlock Text="清理" Style="{StaticResource NavHead}" Margin="11,0,0,5"/>
-          <RadioButton x:Name="NavClean" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xEDA2;" Content="清理 C 盘" IsChecked="True"/>
-          <RadioButton x:Name="NavDup" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE8C8;" Content="重复文件"/>
-          <RadioButton x:Name="NavSave" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE7B8;" Content="省空间"/>
+          <TextBlock Text="清理" Style="{StaticResource NavHead}" Margin="4,0,0,5"/>
+          <RadioButton x:Name="NavClean" GroupName="nav" Style="{StaticResource NavSub}" Tag="&#xEDA2;" Content="清理 C 盘" IsChecked="True"/>
+          <RadioButton x:Name="NavDup" GroupName="nav" Style="{StaticResource NavSub}" Tag="&#xE8C8;" Content="重复文件"/>
+          <RadioButton x:Name="NavSave" GroupName="nav" Style="{StaticResource NavSub}" Tag="&#xE7B8;" Content="省空间"/>
           <TextBlock Text="分析" Style="{StaticResource NavHead}"/>
-          <RadioButton x:Name="NavMap" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE9D9;" Content="空间地图"/>
-          <RadioButton x:Name="NavApps" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE71D;" Content="软件管理"/>
-          <RadioButton x:Name="NavHealth" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE95E;" Content="系统健康"/>
+          <RadioButton x:Name="NavMap" GroupName="nav" Style="{StaticResource NavSub}" Tag="&#xE9D9;" Content="空间地图"/>
+          <RadioButton x:Name="NavApps" GroupName="nav" Style="{StaticResource NavSub}" Tag="&#xE71D;" Content="软件管理"/>
+          <RadioButton x:Name="NavHealth" GroupName="nav" Style="{StaticResource NavSub}" Tag="&#xE95E;" Content="系统健康"/>
           <TextBlock x:Name="NavHeadManage" Text="管理" Style="{StaticResource NavHead}"/>
-          <RadioButton x:Name="NavMoves" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE8AB;" Content="搬家管理"/>
-          <RadioButton x:Name="NavAuto" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE823;" Content="自动提醒"/>
-          <RadioButton x:Name="NavLog" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE81C;" Content="操作日志"/>
+          <RadioButton x:Name="NavMoves" GroupName="nav" Style="{StaticResource NavSub}" Tag="&#xE8AB;" Content="搬家管理"/>
+          <RadioButton x:Name="NavAuto" GroupName="nav" Style="{StaticResource NavSub}" Tag="&#xE823;" Content="自动提醒"/>
+          <RadioButton x:Name="NavLog" GroupName="nav" Style="{StaticResource NavSub}" Tag="&#xE81C;" Content="操作日志"/>
           <RadioButton x:Name="NavHelp" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE897;" Content="帮助" Margin="0,12,0,3"/>
           <RadioButton x:Name="NavSettings" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE713;" Content="设置"/>
         </StackPanel>
@@ -1396,16 +1472,16 @@
             <TextBlock x:Name="FilterSummary" DockPanel.Dock="Right" Visibility="Collapsed"/>
             <WrapPanel>
               <RadioButton x:Name="DTabRoots" GroupName="dtab" Style="{StaticResource SubTab}" IsChecked="True">
-                <StackPanel Orientation="Horizontal"><TextBlock Text="查找位置"/><TextBlock x:Name="DTabRootsVal" Margin="8,0,0,0" Foreground="#86868B" FontWeight="Normal" MaxWidth="230" TextTrimming="CharacterEllipsis"/></StackPanel>
+                <StackPanel Orientation="Horizontal"><TextBlock Text="查找位置"/><Border Style="{StaticResource TabBadge}" Background="#EFEFF4" Margin="8,0,0,0"><TextBlock x:Name="DTabRootsVal" Style="{StaticResource TabBadgeText}" MaxWidth="230" TextTrimming="CharacterEllipsis"/></Border></StackPanel>
               </RadioButton>
               <RadioButton x:Name="DTabType" GroupName="dtab" Style="{StaticResource SubTab}">
-                <StackPanel Orientation="Horizontal"><TextBlock Text="文件类型"/><TextBlock x:Name="DTabTypeVal" Margin="8,0,0,0" Foreground="#86868B" FontWeight="Normal" MaxWidth="230" TextTrimming="CharacterEllipsis"/></StackPanel>
+                <StackPanel Orientation="Horizontal"><TextBlock Text="文件类型"/><Border Style="{StaticResource TabBadge}" Background="#EFEFF4" Margin="8,0,0,0"><TextBlock x:Name="DTabTypeVal" Style="{StaticResource TabBadgeText}" MaxWidth="230" TextTrimming="CharacterEllipsis"/></Border></StackPanel>
               </RadioButton>
               <RadioButton x:Name="DTabSize" GroupName="dtab" Style="{StaticResource SubTab}">
-                <StackPanel Orientation="Horizontal"><TextBlock Text="文件大小"/><TextBlock x:Name="DTabSizeVal" Margin="8,0,0,0" Foreground="#86868B" FontWeight="Normal" MaxWidth="230" TextTrimming="CharacterEllipsis"/></StackPanel>
+                <StackPanel Orientation="Horizontal"><TextBlock Text="文件大小"/><Border Style="{StaticResource TabBadge}" Background="#EFEFF4" Margin="8,0,0,0"><TextBlock x:Name="DTabSizeVal" Style="{StaticResource TabBadgeText}" MaxWidth="230" TextTrimming="CharacterEllipsis"/></Border></StackPanel>
               </RadioButton>
               <RadioButton x:Name="DTabMode" GroupName="dtab" Style="{StaticResource SubTab}">
-                <StackPanel Orientation="Horizontal"><TextBlock Text="怎样算重复"/><TextBlock x:Name="DTabModeVal" Margin="8,0,0,0" Foreground="#86868B" FontWeight="Normal" MaxWidth="230" TextTrimming="CharacterEllipsis"/></StackPanel>
+                <StackPanel Orientation="Horizontal"><TextBlock Text="怎样算重复"/><Border Style="{StaticResource TabBadge}" Background="#EFEFF4" Margin="8,0,0,0"><TextBlock x:Name="DTabModeVal" Style="{StaticResource TabBadgeText}" MaxWidth="230" TextTrimming="CharacterEllipsis"/></Border></StackPanel>
               </RadioButton>
             </WrapPanel>
           </DockPanel>
@@ -1682,13 +1758,23 @@
                 ToolTip="把这块盘的空间情况存成一个网页报告：方块图、最大的文件夹和文件、各类文件占多少、和上次比的变化。在浏览器里按 Ctrl+P 可以存成 PDF"/>
         <!-- 左边是「上一级」和路径；地方不够时说明文字末尾省略，「空间明细」靠右一直看得见，不会被右边的按钮挡住 -->
         <DockPanel VerticalAlignment="Center" Margin="0,0,12,0">
-          <Button x:Name="BtnMapUp" DockPanel.Dock="Left" Style="{StaticResource Small}" Margin="0,0,10,0" IsEnabled="False" ToolTip="回到上一级文件夹" VerticalAlignment="Center">
-            <StackPanel Orientation="Horizontal">
-              <TextBlock Text="&#xE72B;" FontFamily="{StaticResource Icons}" FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0"/>
-              <TextBlock Text="上一级" VerticalAlignment="Center"/>
-            </StackPanel>
-          </Button>
+          <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
+            <Button x:Name="BtnMapBack" Style="{StaticResource Small}" Padding="8,3" Margin="0,0,4,0" IsEnabled="False" ToolTip="后退到刚才看的文件夹（鼠标侧键、Alt+←）">
+              <TextBlock Text="&#xE72B;" FontFamily="{StaticResource Icons}" FontSize="11" VerticalAlignment="Center"/>
+            </Button>
+            <Button x:Name="BtnMapFwd" Style="{StaticResource Small}" Padding="8,3" Margin="0,0,8,0" IsEnabled="False" ToolTip="前进（鼠标侧键、Alt+→）">
+              <TextBlock Text="&#xE72A;" FontFamily="{StaticResource Icons}" FontSize="11" VerticalAlignment="Center"/>
+            </Button>
+            <Button x:Name="BtnMapUp" Style="{StaticResource Small}" IsEnabled="False" ToolTip="回到上一级文件夹（Backspace）" VerticalAlignment="Center">
+              <StackPanel Orientation="Horizontal">
+                <TextBlock Text="&#xE74A;" FontFamily="{StaticResource Icons}" FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <TextBlock Text="上一级" VerticalAlignment="Center"/>
+              </StackPanel>
+            </Button>
+          </StackPanel>
           <StackPanel VerticalAlignment="Center">
+            <!-- 路径上的每一层都能点，点哪一层回到哪一层 -->
+            <StackPanel x:Name="MapCrumbs" Orientation="Horizontal" Visibility="Collapsed" ClipToBounds="True"/>
             <TextBlock x:Name="MapPath" Text="还没有扫描" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" MaxWidth="560" HorizontalAlignment="Left"/>
             <DockPanel>
               <Button x:Name="BtnMapAcct" DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="空间明细" FontSize="12" Padding="10,0,2,0" VerticalAlignment="Center" Visibility="Collapsed"
@@ -1798,9 +1884,19 @@
                 <Border Grid.Column="4" Background="#9B6FD6" CornerRadius="0,5,5,0"/>
               </Grid>
               <WrapPanel x:Name="MapOvLegend" Margin="0,8,0,0"/>
+              <!-- 值得一看：可能用不上、删了能腾出不少空间的大文件夹（缓存、依赖包、构建产物、虚拟环境、临时文件），点一下跳过去看 -->
+              <DockPanel x:Name="MapWorthBox" Margin="0,10,0,0" Visibility="Collapsed">
+                <TextBlock DockPanel.Dock="Left" Text="值得一看" FontWeight="SemiBold" VerticalAlignment="Top" Margin="0,4,12,0"
+                           ToolTip="这块盘上可能用不上、删了能腾出不少空间的大文件夹：缓存、依赖包（node_modules 等）、构建产物、虚拟环境、临时文件。只是按名字认的，点一下跳过去，看清楚再决定"/>
+                <WrapPanel x:Name="MapWorth"/>
+              </DockPanel>
             </StackPanel>
           </Border>
-          <Canvas x:Name="MapTree" Grid.Row="1" Margin="10,4,10,8" ClipToBounds="True" Background="White" Visibility="Collapsed"/>
+          <DockPanel x:Name="MapTreeBox" Grid.Row="1" Visibility="Collapsed">
+            <!-- 颜色是这个文件夹装的是哪一类东西；带斜线的是能腾出来的（缓存、依赖包、临时文件） -->
+            <WrapPanel x:Name="MapTreeLegend" DockPanel.Dock="Bottom" Margin="12,0,12,6"/>
+            <Canvas x:Name="MapTree" Margin="10,4,10,6" ClipToBounds="True" Background="White"/>
+          </DockPanel>
           <DockPanel Grid.Row="2">
           <!-- 表头：点「名称」「修改时间」「大小」排序，点第三下回到按大小排 -->
           <Border x:Name="MapHeadBox" DockPanel.Dock="Top" Style="{StaticResource HeadBar}" Margin="6,0,6,2" Visibility="Collapsed">
@@ -1830,6 +1926,7 @@
                 <MenuItem x:Name="MmCopy" Header="复制路径" Style="{StaticResource MenuRow}"/>
                 <Separator Style="{StaticResource MenuSep}"/>
                 <MenuItem x:Name="MmCompress" Header="压缩（不删文件）" Style="{StaticResource MenuRow}"/>
+                <MenuItem x:Name="MmMark" Header="加入待删清单" Style="{StaticResource MenuRow}"/>
                 <MenuItem x:Name="MmDelete" Header="删除…" Style="{StaticResource MenuRow}"/>
               </ContextMenu>
             </ListView.ContextMenu>
@@ -1859,17 +1956,32 @@
           </StackPanel>
         </Grid>
       </Border>
-      <DockPanel Grid.Row="5" Margin="0,14,0,0">
+      <StackPanel Grid.Row="5">
+      <!-- 待删清单：在不同文件夹里挑的都放在这里，一直看得见删完以后这块盘还剩多少；看过清单再一起删 -->
+      <Border x:Name="MapMarkBar" Background="#FFF4E5" BorderBrush="#F3D9A8" BorderThickness="1" CornerRadius="10" Padding="14,8" Margin="0,12,0,0" Visibility="Collapsed">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+            <Button x:Name="BtnMarkClear" Content="清空清单" Style="{StaticResource Small}" Margin="0,0,8,0"/>
+            <Button x:Name="BtnMarkShow" Content="看看清单" Style="{StaticResource Small}" Margin="0,0,8,0"/>
+            <Button x:Name="BtnMarkDelete" Content="删除清单里的…" Style="{StaticResource Danger}" Padding="14,4"/>
+          </StackPanel>
+          <TextBlock x:Name="MapMarkText" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,12,0"/>
+        </DockPanel>
+      </Border>
+      <DockPanel Margin="0,14,0,0">
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
           <Button x:Name="BtnMapOpen" Content="打开位置" Margin="0,0,8,0" IsEnabled="False"/>
           <Button x:Name="BtnMapCompress" Content="压缩（不删文件）" Margin="0,0,8,0" IsEnabled="False"
                   ToolTip="用 NTFS 压缩这个文件夹：文件照常打开、照常修改，只是占的空间变小。适合不常用的资料、旧项目"/>
+          <Button x:Name="BtnMapMark" Content="加入待删清单" Margin="0,0,8,0" IsEnabled="False"
+                  ToolTip="先放进清单，不马上删：可以接着到别的文件夹里挑，下面一直显示删完以后还剩多少空间，看过清单再一起删"/>
           <Button x:Name="BtnMapDelete" Content="删除…" Style="{StaticResource Danger}" Padding="18,6" IsEnabled="False"/>
         </StackPanel>
         <CheckBox x:Name="MapAll" DockPanel.Dock="Left" Content="全选" Visibility="{DynamicResource MapCkVis}" VerticalAlignment="Center" Margin="18,0,12,0" ToolTip="选中这一层列出的全部项目；再点一下全部取消"/>
         <TextBlock x:Name="MapSel" VerticalAlignment="Center" TextWrapping="Wrap" Foreground="#6E6E73" Margin="2,0,16,0"
                    Text="选中一行可以打开位置、压缩或删除；勾选前面的方框，或按住 Ctrl、Shift，可以选多项一起删；按住鼠标（左键或右键）上下拖可以一次选中连着的几行。系统文件夹、软件安装文件夹、C 盘个人文件夹和搬家后的数据带小锁，不能在这里删。"/>
       </DockPanel>
+      </StackPanel>
     </Grid>
 
     <!-- ==================== 省空间（不删文件） ==================== -->
@@ -2124,8 +2236,8 @@
       <TextBlock Grid.Row="1" x:Name="HealthNote" Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap" Text="正在读取…"/>
       <Grid Grid.Row="2" Margin="0,12,0,0">
         <ScrollViewer x:Name="HealthViewHw" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
-          <StackPanel MaxWidth="980" HorizontalAlignment="Left" Margin="0,0,6,14">
-          <!-- 硬件：每一项一张小卡片 -->
+          <StackPanel Margin="0,0,6,14">
+          <!-- 硬件：每一项一张小卡片；卡片宽度跟着窗口变，窗口拉宽（最大化）时一排放更多张，不在右边留一大块空白 -->
           <Border x:Name="HealthCardHw" Style="{StaticResource Card}" Padding="24,20">
             <StackPanel>
               <TextBlock Text="硬件" Style="{StaticResource CardHead}"/>
@@ -2133,7 +2245,7 @@
                 <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                   <DataTemplate>
-                    <Border Width="290" Margin="0,0,12,12" Padding="0" Background="#F7F7F9" CornerRadius="10" ToolTip="{Binding Tip}">
+                    <Border Width="{DynamicResource HcCardW}" Margin="0,0,12,12" Padding="0" Background="#F7F7F9" CornerRadius="10" ToolTip="{Binding Tip}">
                       <DockPanel>
                         <Border DockPanel.Dock="Left" Width="5" Background="{Binding Stripe}" CornerRadius="10,0,0,10"/>
                         <StackPanel Margin="14,10,14,12">
@@ -2170,22 +2282,13 @@
           </StackPanel>
         </ScrollViewer>
         <ScrollViewer x:Name="HealthViewBoot" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
-          <StackPanel MaxWidth="980" HorizontalAlignment="Left" Margin="0,0,6,14">
+          <StackPanel MaxWidth="1280" HorizontalAlignment="Left" Margin="0,0,6,14">
           <!-- 开机 -->
           <Border x:Name="HealthCardBoot" Style="{StaticResource Card}" Padding="24,20">
             <StackPanel>
               <TextBlock Text="开机用时" Style="{StaticResource CardHead}"/>
               <TextBlock x:Name="HealthBootText" Style="{StaticResource Body}" Margin="0,8,0,0" TextWrapping="Wrap" Text=""/>
-              <ItemsControl x:Name="HealthSlow" Margin="0,8,0,0">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate>
-                    <DockPanel Margin="0,4,0,0">
-                      <TextBlock DockPanel.Dock="Right" Text="{Binding Body}" Style="{StaticResource Caption}" Margin="12,0,0,0" VerticalAlignment="Center"/>
-                      <TextBlock Text="{Binding Head}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}" VerticalAlignment="Center"/>
-                    </DockPanel>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
+              <ItemsControl x:Name="HealthSlow" Margin="0,6,0,0" ItemTemplate="{StaticResource NoteRowTpl}"/>
               <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap" Text="数据来自 Windows 自己的「诊断-性能」日志（事件 100 和 101）。拖慢开机的程序可以到「软件管理 → 开机启动」里关掉。"/>
             </StackPanel>
           </Border>
@@ -2194,13 +2297,17 @@
         </ScrollViewer>
         <!-- 蓝屏和崩溃：再分三个小选项卡（诊断结论 / 蓝屏记录 / 相关事件和驱动），各自滚动，不用一路滚到底 -->
         <Grid x:Name="HealthViewCrash" Visibility="Collapsed">
-          <Grid.ColumnDefinitions><ColumnDefinition Width="*" MaxWidth="980"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
+          <Grid.ColumnDefinitions><ColumnDefinition Width="*" MaxWidth="1280"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
           <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
           <Border Grid.Row="0" BorderBrush="#E5E5EA" BorderThickness="0,0,0,1" Margin="0,0,6,12">
             <StackPanel Orientation="Horizontal">
               <RadioButton x:Name="CTabVerdict" GroupName="ctab" Content="诊断结论" IsChecked="True" Style="{StaticResource SubTab}"/>
-              <RadioButton x:Name="CTabDumps" GroupName="ctab" Content="每次蓝屏" Style="{StaticResource SubTab}"/>
-              <RadioButton x:Name="CTabEvents" GroupName="ctab" Content="相关事件和驱动" Style="{StaticResource SubTab}"/>
+              <RadioButton x:Name="CTabDumps" GroupName="ctab" Style="{StaticResource SubTab}">
+                <StackPanel Orientation="Horizontal"><TextBlock Text="每次蓝屏"/><Border x:Name="CTabDumpsB" Style="{StaticResource TabBadge}" Visibility="Collapsed"><TextBlock x:Name="CTabDumpsN" Style="{StaticResource TabBadgeText}"/></Border></StackPanel>
+              </RadioButton>
+              <RadioButton x:Name="CTabEvents" GroupName="ctab" Style="{StaticResource SubTab}">
+                <StackPanel Orientation="Horizontal"><TextBlock Text="相关事件和驱动"/><Border x:Name="CTabEventsB" Style="{StaticResource TabBadge}" Visibility="Collapsed"><TextBlock x:Name="CTabEventsN" Style="{StaticResource TabBadgeText}"/></Border></StackPanel>
+              </RadioButton>
             </StackPanel>
           </Border>
           <ScrollViewer x:Name="CrashViewVerdict" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
@@ -2291,27 +2398,9 @@
           <Border x:Name="HealthCardCrashEv" Style="{StaticResource Card}" Padding="24,20">
             <StackPanel>
               <TextBlock x:Name="HealthEventsHead" Text="最近 30 天的相关事件" Style="{StaticResource CardHead}"/>
-              <ItemsControl x:Name="HealthEvents">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate>
-                    <DockPanel Margin="0,5,0,0">
-                      <TextBlock DockPanel.Dock="Right" Text="{Binding Body}" Style="{StaticResource Caption}" Margin="12,0,0,0" VerticalAlignment="Top"/>
-                      <TextBlock Text="{Binding Head}" TextWrapping="Wrap" ToolTip="{Binding Path}"/>
-                    </DockPanel>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
+              <ItemsControl x:Name="HealthEvents" Margin="0,6,0,0" ItemTemplate="{StaticResource NoteRowTpl}"/>
               <TextBlock x:Name="HealthDriversHead" Text="最近 30 天装的驱动" Style="{StaticResource CardHead}" Margin="0,20,0,0"/>
-              <ItemsControl x:Name="HealthDrivers">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate>
-                    <DockPanel Margin="0,4,0,0">
-                      <TextBlock DockPanel.Dock="Right" Text="{Binding Body}" Style="{StaticResource Caption}" Margin="12,0,0,0" VerticalAlignment="Center"/>
-                      <TextBlock Text="{Binding Head}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}"/>
-                    </DockPanel>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
+              <ItemsControl x:Name="HealthDrivers" Margin="0,6,0,0" ItemTemplate="{StaticResource NoteRowTpl}"/>
               <TextBlock Style="{StaticResource Caption}" Margin="0,12,0,0" TextWrapping="Wrap" Text="意外关机、硬件错误（WHEA）、磁盘和文件系统错误按来源归并；蓝屏时间和最近装的驱动对得上的，优先怀疑那个驱动。"/>
             </StackPanel>
           </Border>
@@ -2320,7 +2409,7 @@
         </Grid>
         <!-- 常见问题修复：左边选问题，右边只显示这个问题的修法 -->
         <Grid x:Name="HealthViewFix" Visibility="Collapsed" Margin="0,0,6,10">
-          <Grid.ColumnDefinitions><ColumnDefinition Width="*" MaxWidth="980"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
+          <Grid.ColumnDefinitions><ColumnDefinition Width="*" MaxWidth="1280"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
           <Border x:Name="HealthCardFix" Style="{StaticResource Card}" Padding="0">
             <DockPanel>
               <StackPanel DockPanel.Dock="Top" Margin="24,18,24,0">
@@ -2342,7 +2431,7 @@
                 <Border Grid.Column="0" BorderBrush="#E5E5EA" BorderThickness="0,1,1,1">
                   <ListBox x:Name="FixGroups" Background="Transparent" BorderThickness="0" Padding="10,8" ItemContainerStyle="{StaticResource NavItem}"
                            ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                    <ListBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Title}" TextWrapping="Wrap"/></DataTemplate></ListBox.ItemTemplate>
+                    <ListBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Title}" TextWrapping="Wrap" FontWeight="SemiBold"/></DataTemplate></ListBox.ItemTemplate>
                   </ListBox>
                 </Border>
                 <Border Grid.Column="1" BorderBrush="#E5E5EA" BorderThickness="0,1,0,1">
@@ -2351,19 +2440,19 @@
                       <ContentControl.ContentTemplate>
                         <DataTemplate>
                           <StackPanel Grid.IsSharedSizeScope="True">
-                            <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap"/>
-                            <TextBlock Text="{Binding Desc}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,6"/>
+                            <TextBlock Text="{Binding Title}" FontSize="16" TextWrapping="Wrap"/>
+                            <TextBlock Text="{Binding Desc}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,8"/>
                             <ItemsControl ItemsSource="{Binding Steps}">
                               <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                  <Grid Margin="0,6,0,0">
+                                  <Grid Margin="0,8,0,0">
                                     <Grid.ColumnDefinitions>
                                       <ColumnDefinition Width="Auto" SharedSizeGroup="FixBtn"/>
                                       <ColumnDefinition Width="Auto" SharedSizeGroup="FixTag"/>
                                       <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
                                     <Button Grid.Column="0" Content="{Binding Name}" Tag="{Binding Id}" IsEnabled="{Binding Enabled}" ToolTip="{Binding Desc}" Style="{StaticResource Small}" HorizontalAlignment="Stretch" VerticalAlignment="Top"/>
-                                    <Border Grid.Column="1" Background="{Binding TagBg}" CornerRadius="6" Padding="7,2" Margin="10,3,0,0" VerticalAlignment="Top"><TextBlock Text="{Binding Tag}" FontSize="11.5" FontWeight="SemiBold" Foreground="{Binding TagFg}" HorizontalAlignment="Center"/></Border>
+                                    <Border Grid.Column="1" Background="{Binding TagBg}" CornerRadius="6" Padding="7,2" Margin="10,3,0,0" VerticalAlignment="Top"><TextBlock Text="{Binding Tag}" FontSize="11.5" Foreground="{Binding TagFg}" HorizontalAlignment="Center"/></Border>
                                     <TextBlock Grid.Column="2" Text="{Binding Desc}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="10,4,0,0"/>
                                   </Grid>
                                 </DataTemplate>
@@ -2382,7 +2471,7 @@
 
         <!-- 活动监控：表格占满这一页，表格自己滚动；点列名（CPU、内存、写入速度……）按那一列从高到低排 -->
         <Grid x:Name="HealthViewMon" Visibility="Collapsed" Margin="0,0,6,10">
-          <Grid.ColumnDefinitions><ColumnDefinition Width="*" MaxWidth="980"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
+          <Grid.ColumnDefinitions><ColumnDefinition Width="*" MaxWidth="1280"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
           <Border x:Name="HealthCardMon" Style="{StaticResource Card}" Padding="24,18,24,14">
             <DockPanel>
               <DockPanel DockPanel.Dock="Top">
@@ -2416,22 +2505,13 @@
           </Border>
         </Grid>
         <ScrollViewer x:Name="HealthViewEvents" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
-          <StackPanel MaxWidth="980" HorizontalAlignment="Left" Margin="0,0,6,14">
+          <StackPanel MaxWidth="1280" HorizontalAlignment="Left" Margin="0,0,6,14">
           <!-- Windows 事件 -->
           <Border x:Name="HealthCardEvents" Style="{StaticResource Card}" Padding="24,20">
             <StackPanel>
               <TextBlock Text="Windows 事件：最近 7 天的严重错误" Style="{StaticResource CardHead}"/>
               <TextBlock x:Name="HealthWinText" Style="{StaticResource Body}" Margin="0,8,0,0" TextWrapping="Wrap" Text=""/>
-              <ItemsControl x:Name="HealthErrors" Margin="0,8,0,0">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate>
-                    <DockPanel Margin="0,5,0,0">
-                      <TextBlock DockPanel.Dock="Right" Text="{Binding Body}" Style="{StaticResource Caption}" Margin="12,0,0,0" VerticalAlignment="Top"/>
-                      <TextBlock Text="{Binding Head}" TextWrapping="Wrap" ToolTip="{Binding Path}"/>
-                    </DockPanel>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
+              <ItemsControl x:Name="HealthErrors" Margin="0,6,0,0" ItemTemplate="{StaticResource NoteRowTpl}"/>
               <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap" Text="系统日志里「严重」和「错误」两级，按来源归并。很多错误是无害的（比如某个服务启动慢了一次）；同一个来源反复出现、时间又和故障对得上的才值得查。详细内容在 Windows 的「事件查看器」里。"/>
             </StackPanel>
           </Border>
@@ -2479,13 +2559,22 @@
           <TextBox x:Name="AppsSearch" MaxWidth="320" HorizontalAlignment="Left" MinWidth="200" ToolTip="按名字或发行商搜索"/>
         </DockPanel>
       </DockPanel>
-      <Border Grid.Row="2" x:Name="AppsLeftBox" Background="#FFF8EC" BorderBrush="#F3D9A8" BorderThickness="1" CornerRadius="10" Padding="16,10" Margin="0,0,0,10" Visibility="Collapsed">
+      <StackPanel Grid.Row="2">
+      <Border x:Name="AppsBatchBox" Background="#E3EEFF" BorderBrush="#B9D3F7" BorderThickness="1" CornerRadius="10" Padding="16,10" Margin="0,0,0,10" Visibility="Collapsed">
+        <DockPanel>
+          <Button x:Name="BtnBatchStop" DockPanel.Dock="Right" Content="停止" Style="{StaticResource Small}" Margin="8,0,0,0" ToolTip="不再打开后面的卸载程序；已经打开的那个照常走完"/>
+          <Button x:Name="BtnBatchNext" DockPanel.Dock="Right" Content="打开下一个" Style="{StaticResource Small}" ToolTip="这个卸载程序已经走完了但没自动接上时，点这里打开下一个"/>
+          <TextBlock x:Name="AppsBatchText" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,12,0"/>
+        </DockPanel>
+      </Border>
+      <Border x:Name="AppsLeftBox" Background="#FFF8EC" BorderBrush="#F3D9A8" BorderThickness="1" CornerRadius="10" Padding="16,10" Margin="0,0,0,10" Visibility="Collapsed">
         <DockPanel>
           <Button x:Name="BtnAppsLeftClose" DockPanel.Dock="Right" Content="不用了" Style="{StaticResource Small}" Margin="8,0,0,0"/>
           <Button x:Name="BtnAppsLeft" DockPanel.Dock="Right" Content="检查残留" Style="{StaticResource Small}"/>
           <TextBlock x:Name="AppsLeftText" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,12,0"/>
         </DockPanel>
       </Border>
+      </StackPanel>
       <Border Grid.Row="3" Style="{StaticResource Card}" Padding="0,2,0,6">
         <DockPanel Grid.IsSharedSizeScope="True">
         <!-- 表头：点列名排序（软件：名称、发行商、安装日期、大小；开机启动等：名称、状态） -->
@@ -2493,30 +2582,47 @@
           <Grid>
             <Grid x:Name="AppsHead" Margin="12,0,10,0">
               <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="30"/>
                 <ColumnDefinition Width="40"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="100"/>
                 <ColumnDefinition Width="Auto" SharedSizeGroup="AppAct"/>
               </Grid.ColumnDefinitions>
-              <StackPanel Grid.Column="1" Orientation="Horizontal">
+              <CheckBox x:Name="AppsPickAll" Grid.Column="0" VerticalAlignment="Center" ToolTip="勾上这里列出的全部；再点一下全部取消"/>
+              <StackPanel Grid.Column="2" Orientation="Horizontal">
                 <Button Tag="name" Content="名称" Style="{StaticResource ColHead}"/>
                 <TextBlock Text="·" Foreground="#C7C7CC" Margin="7,0" VerticalAlignment="Center"/>
                 <Button Tag="pub" Content="发行商" Style="{StaticResource ColHead}"/>
                 <TextBlock Text="·" Foreground="#C7C7CC" Margin="7,0" VerticalAlignment="Center"/>
                 <Button Tag="date" Content="安装日期" Style="{StaticResource ColHead}"/>
               </StackPanel>
-              <Button Grid.Column="2" Tag="size" Content="大小" Style="{StaticResource ColHead}" HorizontalAlignment="Right" Margin="0,0,14,0"/>
+              <Button Grid.Column="3" Tag="size" Content="大小" Style="{StaticResource ColHead}" HorizontalAlignment="Right" Margin="0,0,14,0"/>
             </Grid>
             <Grid x:Name="StartHead" Margin="12,0,10,0" Visibility="Collapsed">
               <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="30"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="80"/>
                 <ColumnDefinition Width="Auto" SharedSizeGroup="StartAct"/>
               </Grid.ColumnDefinitions>
-              <Button Grid.Column="0" Tag="name" Content="名称" Style="{StaticResource ColHead}"/>
-              <Button Grid.Column="1" Tag="status" Content="状态" Style="{StaticResource ColHead}"/>
+              <CheckBox x:Name="StartPickAll" Grid.Column="0" VerticalAlignment="Center" ToolTip="勾上这里列出的全部；再点一下全部取消"/>
+              <Button Grid.Column="1" Tag="name" Content="名称" Style="{StaticResource ColHead}"/>
+              <Button Grid.Column="2" Tag="status" Content="状态" Style="{StaticResource ColHead}"/>
             </Grid>
           </Grid>
+        </Border>
+        <!-- 勾选了几项时出现：一次卸载 / 禁用 / 启用 / 移到回收站 -->
+        <Border x:Name="AppsPickBar" DockPanel.Dock="Bottom" BorderBrush="#E5E5EA" BorderThickness="0,1,0,0" Padding="18,10,14,6" Visibility="Collapsed">
+          <DockPanel>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+              <Button x:Name="BtnPickClear" Content="取消选择" Style="{StaticResource Small}" Margin="0,0,8,0"/>
+              <Button x:Name="BtnPickEnable" Content="启用选中的" Style="{StaticResource Small}" Margin="0,0,8,0"/>
+              <Button x:Name="BtnPickDisable" Content="禁用选中的" Style="{StaticResource Small}" Margin="0,0,8,0"/>
+              <Button x:Name="BtnPickRecycle" Content="移到回收站…" Style="{StaticResource Danger}" Padding="14,4"/>
+              <Button x:Name="BtnPickUninstall" Content="卸载选中的…" Style="{StaticResource Danger}" Padding="14,4"/>
+            </StackPanel>
+            <TextBlock x:Name="AppsPickText" VerticalAlignment="Center" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+          </DockPanel>
         </Border>
         <Grid>
           <ListView x:Name="AppsList" Background="Transparent" BorderThickness="0" ItemContainerStyle="{StaticResource SelRow}"
@@ -2525,20 +2631,22 @@
               <DataTemplate>
                 <Grid Margin="12,8,10,8">
                   <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="30"/>
                     <ColumnDefinition Width="40"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="100"/>
                     <ColumnDefinition Width="Auto" SharedSizeGroup="AppAct"/>
                   </Grid.ColumnDefinitions>
-                  <Border Width="30" Height="30" CornerRadius="8" Background="#EFEFF4" HorizontalAlignment="Left" VerticalAlignment="Center">
+                  <CheckBox Grid.Column="0" IsChecked="{Binding Picked, Mode=TwoWay}" VerticalAlignment="Center" Focusable="False" Cursor="Hand"/>
+                  <Border Grid.Column="1" Width="30" Height="30" CornerRadius="8" Background="#EFEFF4" HorizontalAlignment="Left" VerticalAlignment="Center">
                     <TextBlock Text="{Binding Icon}" FontWeight="SemiBold" Foreground="#6E6E73" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                   </Border>
-                  <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
+                  <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="0,0,12,0">
                     <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
                     <TextBlock Text="{Binding Meta}" FontSize="11.5" Foreground="#86868B" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
                   </StackPanel>
-                  <TextBlock Grid.Column="2" Text="{Binding SizeText}" FontWeight="SemiBold" TextAlignment="Right" VerticalAlignment="Center" Margin="0,0,14,0"/>
-                  <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                  <TextBlock Grid.Column="3" Text="{Binding SizeText}" FontWeight="SemiBold" TextAlignment="Right" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                  <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button x:Name="AppUpgrade" Content="升级" Tag="{Binding}" Style="{StaticResource Small}" Foreground="#0066CC" Margin="0,0,6,0" Visibility="Collapsed"
                             ToolTip="在终端窗口里用 winget 升级这个软件，过程和提示都看得见"/>
                     <Button x:Name="AppOpen" Content="打开位置" Tag="{Binding}" Style="{StaticResource Small}" Margin="0,0,6,0"/>
@@ -2561,24 +2669,26 @@
               <DataTemplate>
                 <Grid Margin="12,8,10,8">
                   <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="30"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="80"/>
                     <ColumnDefinition Width="Auto" SharedSizeGroup="StartAct"/>
                   </Grid.ColumnDefinitions>
-                  <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+                  <CheckBox x:Name="Pk" Grid.Column="0" IsChecked="{Binding Picked, Mode=TwoWay}" VerticalAlignment="Center" Focusable="False" Cursor="Hand"/>
+                  <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
                     <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
                     <TextBlock Text="{Binding Meta}" FontSize="11.5" Foreground="#86868B" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
                     <TextBlock Text="{Binding Detail}" FontSize="11.5" Foreground="#86868B" TextTrimming="CharacterEllipsis" Margin="0,1,0,0" ToolTip="{Binding Detail}"/>
                   </StackPanel>
-                  <TextBlock Grid.Column="1" Text="{Binding StatusText}" Foreground="{Binding StatusBrush}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,14,0"/>
-                  <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                  <TextBlock Grid.Column="2" Text="{Binding StatusText}" Foreground="{Binding StatusBrush}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                  <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button x:Name="StartOpen" Content="打开位置" Tag="{Binding}" Style="{StaticResource Small}" Margin="0,0,6,0"/>
                     <Button x:Name="StartToggle" Content="{Binding ToggleText}" Tag="{Binding}" Style="{StaticResource Small}" MinWidth="64"/>
                   </StackPanel>
                 </Grid>
                 <DataTemplate.Triggers>
                   <DataTrigger Binding="{Binding Open}" Value=""><Setter TargetName="StartOpen" Property="Visibility" Value="Collapsed"/></DataTrigger>
-                  <DataTrigger Binding="{Binding Ours}" Value="True"><Setter TargetName="StartToggle" Property="IsEnabled" Value="False"/><Setter TargetName="StartToggle" Property="ToolTip" Value="本工具自己的任务，请在「自动提醒」页开关"/></DataTrigger>
+                  <DataTrigger Binding="{Binding Ours}" Value="True"><Setter TargetName="StartToggle" Property="IsEnabled" Value="False"/><Setter TargetName="StartToggle" Property="ToolTip" Value="本工具自己的任务，请在「自动提醒」页开关"/><Setter TargetName="Pk" Property="Visibility" Value="Hidden"/></DataTrigger>
                 </DataTemplate.Triggers>
               </DataTemplate>
             </ListView.ItemTemplate>
@@ -2608,16 +2718,33 @@
           <TextBlock Style="{StaticResource PageSub}" Text="把 C 盘上的聊天记录、软件和其他大文件夹搬到其他盘，原位置留一个链接，软件照常使用。搬走的也在这里：看链接是否正常、搬回 C 盘、修复断掉的链接。"/>
         </StackPanel>
       </DockPanel>
-      <DockPanel Grid.Row="1" Margin="0,0,0,12">
-        <Border DockPanel.Dock="Right" Style="{StaticResource SegBox}" VerticalAlignment="Center" Margin="16,0,0,0">
-          <StackPanel Orientation="Horizontal">
-            <RadioButton x:Name="MovesTabCand" GroupName="movestab" Content="可以搬的" IsChecked="True" Style="{StaticResource Seg}"/>
-            <RadioButton x:Name="MovesTabDone" GroupName="movestab" Content="已经搬走的" Style="{StaticResource Seg}"/>
+      <TextBlock Grid.Row="1" x:Name="MovesInfo" FontWeight="SemiBold" Margin="2,0,0,12" TextWrapping="Wrap"/>
+      <!-- 左边目录：「可以搬的」下面按聊天记录、软件、其他文件夹、不适合搬的分开看；「已经搬走的」单独一项 -->
+      <Grid Grid.Row="2">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="214"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+        <Border Grid.Column="0" Style="{StaticResource Card}" Padding="8,0,8,10" Margin="0,0,16,0" VerticalAlignment="Top">
+          <StackPanel>
+            <RadioButton x:Name="MovesTabCand" GroupName="movestab" Style="{StaticResource TreeTop}" IsChecked="True">
+              <DockPanel><Border x:Name="MovesTabCandB" DockPanel.Dock="Right" Style="{StaticResource TabBadge}" Visibility="Collapsed"><TextBlock x:Name="MovesTabCandN" Style="{StaticResource TabBadgeText}"/></Border><TextBlock Text="可以搬的" TextTrimming="CharacterEllipsis"/></DockPanel>
+            </RadioButton>
+            <RadioButton x:Name="MNavChat" GroupName="movestab" Tag="chat" Style="{StaticResource TreeItem}">
+              <DockPanel><Border x:Name="MNavChatB" DockPanel.Dock="Right" Style="{StaticResource TabBadge}" Visibility="Collapsed"><TextBlock x:Name="MNavChatN" Style="{StaticResource TabBadgeText}"/></Border><TextBlock Text="聊天记录" TextTrimming="CharacterEllipsis"/></DockPanel>
+            </RadioButton>
+            <RadioButton x:Name="MNavApp" GroupName="movestab" Tag="app" Style="{StaticResource TreeItem}">
+              <DockPanel><Border x:Name="MNavAppB" DockPanel.Dock="Right" Style="{StaticResource TabBadge}" Visibility="Collapsed"><TextBlock x:Name="MNavAppN" Style="{StaticResource TabBadgeText}"/></Border><TextBlock Text="装在 C 盘的软件" TextTrimming="CharacterEllipsis"/></DockPanel>
+            </RadioButton>
+            <RadioButton x:Name="MNavOther" GroupName="movestab" Tag="other" Style="{StaticResource TreeItem}">
+              <DockPanel><Border x:Name="MNavOtherB" DockPanel.Dock="Right" Style="{StaticResource TabBadge}" Visibility="Collapsed"><TextBlock x:Name="MNavOtherN" Style="{StaticResource TabBadgeText}"/></Border><TextBlock Text="其他可搬的文件夹" TextTrimming="CharacterEllipsis"/></DockPanel>
+            </RadioButton>
+            <RadioButton x:Name="MNavBlocked" GroupName="movestab" Tag="blocked" Style="{StaticResource TreeItem}">
+              <DockPanel><Border x:Name="MNavBlockedB" DockPanel.Dock="Right" Style="{StaticResource TabBadge}" Visibility="Collapsed"><TextBlock x:Name="MNavBlockedN" Style="{StaticResource TabBadgeText}"/></Border><TextBlock Text="不适合搬的软件" TextTrimming="CharacterEllipsis"/></DockPanel>
+            </RadioButton>
+            <RadioButton x:Name="MovesTabDone" GroupName="movestab" Style="{StaticResource TreeTop}">
+              <DockPanel><Border x:Name="MovesTabDoneB" DockPanel.Dock="Right" Style="{StaticResource TabBadge}" Visibility="Collapsed"><TextBlock x:Name="MovesTabDoneN" Style="{StaticResource TabBadgeText}"/></Border><TextBlock Text="已经搬走的" TextTrimming="CharacterEllipsis"/></DockPanel>
+            </RadioButton>
           </StackPanel>
         </Border>
-        <TextBlock x:Name="MovesInfo" FontWeight="SemiBold" Margin="2,0,0,0" TextWrapping="Wrap" VerticalAlignment="Center"/>
-      </DockPanel>
-      <Grid Grid.Row="2" Grid.IsSharedSizeScope="True">
+      <Grid Grid.Column="1" Grid.IsSharedSizeScope="True">
         <!-- 可以搬的：按聊天记录、软件、其他文件夹分组，勾选后一起搬；表头排序在每一组里面排 -->
         <DockPanel x:Name="CandBox">
         <Grid x:Name="CandHead" DockPanel.Dock="Top" Margin="15,0,15,6">
@@ -2700,6 +2827,7 @@
         </DockPanel>
         </Border>
       </Grid>
+      </Grid>
       <DockPanel x:Name="CandStore" Grid.Row="3" Margin="2,10,0,0" Visibility="Collapsed">
         <Button x:Name="BtnCandStore" DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="打开 Windows 设置" VerticalAlignment="Center" Margin="12,0,0,0"/>
         <TextBlock x:Name="CandStoreText" Style="{StaticResource Caption}" TextWrapping="Wrap"/>
@@ -2727,13 +2855,13 @@
         <Border Style="{StaticResource SegBox}" VerticalAlignment="Center" Margin="0,2,0,4">
           <StackPanel Orientation="Horizontal">
               <RadioButton x:Name="ATabRemind" GroupName="atab" Style="{StaticResource Seg}" IsChecked="True">
-                <StackPanel Orientation="Horizontal"><TextBlock Text="空间提醒"/><TextBlock x:Name="ATabRemindState" Margin="7,0,0,0" Foreground="#86868B" FontWeight="Normal"/></StackPanel>
+                <StackPanel Orientation="Horizontal"><TextBlock Text="空间提醒"/><Border x:Name="ATabRemindB" Style="{StaticResource TabBadge}"><TextBlock x:Name="ATabRemindState" Style="{StaticResource TabBadgeText}"/></Border></StackPanel>
               </RadioButton>
               <RadioButton x:Name="ATabClean" GroupName="atab" Style="{StaticResource Seg}">
-                <StackPanel Orientation="Horizontal"><TextBlock Text="定期自动清理"/><TextBlock x:Name="ATabCleanState" Margin="7,0,0,0" Foreground="#86868B" FontWeight="Normal"/></StackPanel>
+                <StackPanel Orientation="Horizontal"><TextBlock Text="定期自动清理"/><Border x:Name="ATabCleanB" Style="{StaticResource TabBadge}"><TextBlock x:Name="ATabCleanState" Style="{StaticResource TabBadgeText}"/></Border></StackPanel>
               </RadioButton>
               <RadioButton x:Name="ATabHist" GroupName="atab" Style="{StaticResource Seg}">
-                <StackPanel Orientation="Horizontal"><TextBlock Text="空间变化"/><TextBlock x:Name="ATabHistState" Margin="7,0,0,0" Foreground="#86868B" FontWeight="Normal"/></StackPanel>
+                <StackPanel Orientation="Horizontal"><TextBlock Text="空间变化"/><Border x:Name="ATabHistB" Style="{StaticResource TabBadge}"><TextBlock x:Name="ATabHistState" Style="{StaticResource TabBadgeText}"/></Border></StackPanel>
               </RadioButton>
           </StackPanel>
         </Border>
@@ -2913,213 +3041,235 @@
     </Grid>
 
     <!-- ==================== 设置：外观、语言、显示哪些内容 ==================== -->
-    <Grid x:Name="PageSettings" Grid.Column="1" Grid.Row="0" Visibility="Collapsed">
-      <ScrollViewer x:Name="SetScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
-        <StackPanel Margin="30,24,30,28" MaxWidth="900" HorizontalAlignment="Left">
-          <DockPanel>
-            <Button x:Name="BtnSetReset" DockPanel.Dock="Right" Content="恢复默认显示" VerticalAlignment="Top" Margin="16,4,0,0"
-                    ToolTip="页面、按钮、列和说明全部恢复成默认显示。外观、语言和扫描设置不变"/>
-            <StackPanel>
-              <TextBlock Text="设置" Style="{StaticResource PageTitle}"/>
-              <TextBlock Style="{StaticResource PageSub}" Text="外观、语言，以及界面上显示哪些内容。用不上的页面、按钮和说明可以关掉，界面更清爽；随时可以回来打开，不会丢任何设置和记录。"/>
-            </StackPanel>
-          </DockPanel>
-
-          <Border x:Name="SetCardMode" Style="{StaticResource Card}" Padding="24,20" Margin="0,20,0,0">
-            <StackPanel>
-              <TextBlock Text="使用模式" Style="{StaticResource CardHead}"/>
-              <TextBlock Style="{StaticResource SetNote}" Text="按你的需要决定界面上有多少东西。换模式不会丢任何设置和记录，随时可以换回来。"/>
-              <Border Style="{StaticResource SegBox}" HorizontalAlignment="Left" Margin="0,12,0,0">
-                <StackPanel Orientation="Horizontal">
-                  <RadioButton x:Name="SetModeBasic" GroupName="mode" Content="普通用户" Style="{StaticResource Seg}"/>
-                  <RadioButton x:Name="SetModePro" GroupName="mode" Content="工程师" Style="{StaticResource Seg}"/>
-                  <RadioButton x:Name="SetModeExpert" GroupName="mode" Content="开发者和 IT" Style="{StaticResource Seg}"/>
-                </StackPanel>
-              </Border>
-              <TextBlock x:Name="SetModeNote" Style="{StaticResource SetNote}" Margin="0,10,0,0"/>
-            </StackPanel>
-          </Border>
-
-          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
-            <StackPanel>
-              <TextBlock Text="外观和语言" Style="{StaticResource CardHead}"/>
-              <DockPanel Margin="0,14,0,0">
-                <Border DockPanel.Dock="Right" Style="{StaticResource SegBox}" VerticalAlignment="Center" Margin="20,0,0,0">
-                  <StackPanel Orientation="Horizontal">
-                    <RadioButton x:Name="SetThemeLight" GroupName="settheme" Content="浅色" Style="{StaticResource Seg}"/>
-                    <RadioButton x:Name="SetThemeDark" GroupName="settheme" Content="深色" Style="{StaticResource Seg}"/>
-                    <RadioButton x:Name="SetThemeSystem" GroupName="settheme" Content="跟随系统" Style="{StaticResource Seg}"/>
-                  </StackPanel>
-                </Border>
-                <StackPanel VerticalAlignment="Center">
-                  <TextBlock Text="外观" Style="{StaticResource SetName}"/>
-                  <TextBlock Style="{StaticResource SetNote}" Text="跟随系统会照 Windows 设置里「选择应用模式」来。换了以后本工具会关闭，再自动打开。"/>
-                </StackPanel>
-              </DockPanel>
-              <DockPanel Margin="0,16,0,0">
-                <Border DockPanel.Dock="Right" Style="{StaticResource SegBox}" VerticalAlignment="Center" Margin="20,0,0,0">
-                  <StackPanel Orientation="Horizontal">
-                    <RadioButton x:Name="SetLangZh" GroupName="setlang" Style="{StaticResource Seg}"/>
-                    <RadioButton x:Name="SetLangEn" GroupName="setlang" Style="{StaticResource Seg}"/>
-                  </StackPanel>
-                </Border>
-                <StackPanel VerticalAlignment="Center">
-                  <TextBlock Text="界面语言" Style="{StaticResource SetName}"/>
-                  <TextBlock Style="{StaticResource SetNote}" Text="换了以后本工具会关闭，再用新的语言打开。"/>
-                </StackPanel>
-              </DockPanel>
-            </StackPanel>
-          </Border>
-
-          <Border x:Name="SetCardDisplay" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
-            <StackPanel>
-              <TextBlock Text="界面上显示什么" Style="{StaticResource CardHead}"/>
-              <TextBlock Text="左侧显示的页面" Style="{StaticResource SetName}" Margin="0,14,0,0"/>
-              <TextBlock Style="{StaticResource SetNote}" Text="「清理 C 盘」「空间地图」「帮助」和「设置」一直显示。关掉的页面只是不在左侧列出，里面的设置、搬家记录和自动提醒都照旧。"/>
-              <WrapPanel Margin="0,2,0,0">
-                <CheckBox x:Name="SetPageDup" Content="重复文件" Width="170" Margin="0,10,0,0"/>
-                <CheckBox x:Name="SetPageSave" Content="省空间" Width="170" Margin="0,10,0,0"/>
-                <CheckBox x:Name="SetPageApps" Content="软件管理" Width="170" Margin="0,10,0,0"/>
-                <CheckBox x:Name="SetPageHealth" Content="系统健康" Width="170" Margin="0,10,0,0"/>
-                <CheckBox x:Name="SetPageMoves" Content="搬家管理" Width="170" Margin="0,10,0,0"/>
-                <CheckBox x:Name="SetPageAuto" Content="自动提醒" Width="170" Margin="0,10,0,0"/>
-                <CheckBox x:Name="SetPageLog" Content="操作日志" Width="170" Margin="0,10,0,0"/>
-              </WrapPanel>
-              <TextBlock Text="左下角的按钮" Style="{StaticResource SetName}" Margin="0,18,0,0"/>
-              <TextBlock Style="{StaticResource SetNote}" Text="外观和语言也可以在这一页上面改；「使用反馈」和「运行记录」也在「帮助」页里。"/>
-              <WrapPanel Margin="0,2,0,0">
-                <CheckBox x:Name="SetLinkTheme" Content="外观" Width="170" Margin="0,10,0,0"/>
-                <CheckBox x:Name="SetLinkLang" Content="切换语言" Width="170" Margin="0,10,0,0"/>
-                <CheckBox x:Name="SetLinkFeedback" Content="使用反馈" Width="170" Margin="0,10,0,0"/>
-                <CheckBox x:Name="SetLinkLog" Content="运行记录" Width="170" Margin="0,10,0,0"/>
-              </WrapPanel>
-              <DockPanel Margin="0,18,0,0">
-                <CheckBox x:Name="SetPageSub" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
-                <StackPanel>
-                  <TextBlock Text="页面标题下的说明" Style="{StaticResource SetName}"/>
-                  <TextBlock Style="{StaticResource SetNote}" Text="每一页标题下面那行灰色的说明文字。用熟了可以关掉，列表能多显示几行。"/>
-                </StackPanel>
-              </DockPanel>
-            </StackPanel>
-          </Border>
-
-          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
-            <StackPanel>
-              <TextBlock Text="空间地图" Style="{StaticResource CardHead}"/>
-              <DockPanel Margin="0,14,0,0">
-                <CheckBox x:Name="SetMapCheck" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
-                <StackPanel>
-                  <TextBlock Text="项目复选框" Style="{StaticResource SetName}"/>
-                  <TextBlock Style="{StaticResource SetNote}" Text="每一行前面显示一个复选框（和资源管理器「查看」里的「项目复选框」一样）：只有点方框才选中或取消，单击行的其他地方不会选中，按 Esc 全部取消。关掉就照 Windows 列表原来的做法：单击选中一行，按住 Ctrl、Shift 多选。开不开都可以按住鼠标（左键或右键）上下拖，一次选中连着的几行。"/>
-                </StackPanel>
-              </DockPanel>
-              <DockPanel Margin="0,16,0,0">
-                <CheckBox x:Name="SetMapBar" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
-                <StackPanel>
-                  <TextBlock Text="占比条" Style="{StaticResource SetName}"/>
-                  <TextBlock Style="{StaticResource SetNote}" Text="名字右边的蓝色横条，一眼看出谁大。"/>
-                </StackPanel>
-              </DockPanel>
-              <DockPanel Margin="0,16,0,0">
-                <CheckBox x:Name="SetMapPct" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
-                <StackPanel>
-                  <TextBlock Text="百分比" Style="{StaticResource SetName}"/>
-                  <TextBlock Style="{StaticResource SetNote}" Text="占这一层的百分之几。"/>
-                </StackPanel>
-              </DockPanel>
-              <DockPanel Margin="0,16,0,0">
-                <CheckBox x:Name="SetMapMeta" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
-                <StackPanel>
-                  <TextBlock Text="名字下面的详细信息" Style="{StaticResource SetName}"/>
-                  <TextBlock Style="{StaticResource SetNote}" Text="文件个数、最近修改时间、比上次扫描变了多少、链接指向哪里。"/>
-                </StackPanel>
-              </DockPanel>
-              <DockPanel Margin="0,16,0,0">
-                <CheckBox x:Name="SetMapDisk" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
-                <StackPanel>
-                  <TextBlock Text="实际占用和硬链接" Style="{StaticResource SetName}"/>
-                  <TextBlock Style="{StaticResource SetNote}" Text="快速扫描时在名字下面注明：压缩、稀疏和只在云端（OneDrive 等）的文件实际占的盘比文件大小小；WinSxS 这类文件夹里很多文件和系统其他位置是同一份（硬链接），删了也不腾空间。"/>
-                </StackPanel>
-              </DockPanel>
-              <DockPanel Margin="0,16,0,0">
-                <CheckBox x:Name="SetMapHealth" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
-                <StackPanel>
-                  <TextBlock Text="磁盘健康卡片" Style="{StaticResource SetName}"/>
-                  <TextBlock Style="{StaticResource SetNote}" Text="页面上方每块盘一张卡片：用了多少、健康状态，固态硬盘还有温度、磨损和通电时间。只读，不改任何东西。"/>
-                </StackPanel>
-              </DockPanel>
-              <DockPanel Margin="0,16,0,0">
-                <CheckBox x:Name="SetMapFastBtn" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
-                <StackPanel>
-                  <TextBlock Text="右上角的「快速扫描」开关" Style="{StaticResource SetName}"/>
-                  <TextBlock Style="{StaticResource SetNote}" Text="关掉只是不在空间地图上显示这个开关；快速扫描本身在下面「扫描和查重」里开关。"/>
-                </StackPanel>
-              </DockPanel>
-            </StackPanel>
-          </Border>
-
-          <Border x:Name="SetCardScan" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
-            <StackPanel>
-              <TextBlock Text="扫描和查重" Style="{StaticResource CardHead}"/>
-              <DockPanel Margin="0,14,0,0">
-                <CheckBox x:Name="SetFast" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
-                <StackPanel>
-                  <TextBlock Text="快速扫描" Style="{StaticResource SetName}"/>
-                  <TextBlock Style="{StaticResource SetNote}" Text="直接读取 NTFS 的文件表（MFT），比逐个文件夹查看快得多，还能看出实际占用和硬链接。少数安全软件对直接读盘会提示，可以关掉，改为逐个文件夹扫描。清理、搬家、软件管理统计大小时也按这个设置。"/>
-                </StackPanel>
-              </DockPanel>
-              <DockPanel Margin="0,16,0,0">
-                <CheckBox x:Name="SetLowIo" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
-                <StackPanel>
-                  <TextBlock Text="查重复文件时让着其他程序" Style="{StaticResource SetName}"/>
-                  <TextBlock Style="{StaticResource SetNote}" Text="读文件时用 Windows 的后台模式，磁盘和内存都排在其他程序后面：不拖慢正在用的程序，也不把它们缓存在内存里的数据挤掉。电脑空闲时速度基本不受影响，同时在做别的事时查得慢一些。"/>
-                </StackPanel>
-              </DockPanel>
-            </StackPanel>
-          </Border>
-
-          <Border x:Name="SetCleanCard" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
-            <StackPanel>
-              <TextBlock Text="清理列表" Style="{StaticResource CardHead}"/>
-              <DockPanel x:Name="SetRecycleRow" Margin="0,14,0,0">
-                <CheckBox x:Name="SetRecycle" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
-                <StackPanel>
-                  <TextBlock Text="删除时先放进回收站" Style="{StaticResource SetName}"/>
-                  <TextBlock Style="{StaticResource SetNote}" Text="手动清理删掉的文件先放进回收站，删错了可以从回收站恢复。慢一些，回收站会变大（清空回收站才真正腾出空间）；放不进回收站的（网络位置、U 盘、比回收站还大）不删。定期自动清理不受这个影响，照样直接删。"/>
-                </StackPanel>
-              </DockPanel>
-              <TextBlock x:Name="SetCustomHead" Text="自己加的文件夹" Style="{StaticResource SetName}" Margin="0,14,0,0"/>
-              <TextBlock x:Name="SetCustomNote" Style="{StaticResource SetNote}" Text="清理时删掉这些文件夹里的东西，文件夹本身保留。在「清理 C 盘」页单独列成一组，默认选「删除」，每次执行前照样要确认；定期自动清理不碰它们。个人文件夹、系统文件夹和软件的安装文件夹加不进来。"/>
-              <ItemsControl x:Name="SetCustomList" Margin="0,6,0,0">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate>
-                    <DockPanel Margin="0,4,0,0">
-                      <Button x:Name="SetListRemove" DockPanel.Dock="Right" Content="移除" Tag="{Binding}" Style="{StaticResource LinkButton}" FontSize="12.5" Margin="12,0,0,0"/>
-                      <TextBlock Text="{Binding}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding}"/>
-                    </DockPanel>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-              <TextBlock x:Name="SetCustomEmpty" Style="{StaticResource SetNote}" Text="还没有加。" Margin="0,6,0,0"/>
-              <Button x:Name="BtnSetCustomAdd" Content="添加文件夹…" Style="{StaticResource Small}" HorizontalAlignment="Left" Margin="0,8,0,0"/>
-              <TextBlock x:Name="SetExcludeHead" Text="排除的文件夹" Style="{StaticResource SetName}" Margin="0,20,0,0"/>
-              <TextBlock x:Name="SetExcludeNote" Style="{StaticResource SetNote}" Text="清理时一律不碰这些文件夹和里面的东西，估算大小时也不算。比如临时文件夹里某个你要留着的子文件夹。"/>
-              <ItemsControl x:Name="SetExcludeList" Margin="0,6,0,0">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate>
-                    <DockPanel Margin="0,4,0,0">
-                      <Button x:Name="SetListRemove" DockPanel.Dock="Right" Content="移除" Tag="{Binding}" Style="{StaticResource LinkButton}" FontSize="12.5" Margin="12,0,0,0"/>
-                      <TextBlock Text="{Binding}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding}"/>
-                    </DockPanel>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-              <TextBlock x:Name="SetExcludeEmpty" Style="{StaticResource SetNote}" Text="还没有排除。" Margin="0,6,0,0"/>
-              <Button x:Name="BtnSetExcludeAdd" Content="添加文件夹…" Style="{StaticResource Small}" HorizontalAlignment="Left" Margin="0,8,0,0"/>
-            </StackPanel>
-          </Border>
+    <!-- 设置：左边目录（常用、界面、清理和扫描），点哪项右边只显示那一项 -->
+    <Grid x:Name="PageSettings" Grid.Column="1" Grid.Row="0" Visibility="Collapsed" Margin="30,24,30,14">
+      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+      <Grid Grid.Row="0" Margin="0,0,0,16">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="*" MaxWidth="1130"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
+      <DockPanel>
+        <Button x:Name="BtnSetReset" DockPanel.Dock="Right" Content="恢复默认显示" VerticalAlignment="Top" Margin="16,4,0,0"
+                ToolTip="页面、按钮、列和说明全部恢复成默认显示。外观、语言和扫描设置不变"/>
+        <StackPanel>
+          <TextBlock Text="设置" Style="{StaticResource PageTitle}"/>
+          <TextBlock Style="{StaticResource PageSub}" Text="外观、语言，以及界面上显示哪些内容。用不上的页面、按钮和说明可以关掉，界面更清爽；随时可以回来打开，不会丢任何设置和记录。"/>
         </StackPanel>
-      </ScrollViewer>
+      </DockPanel>
+      </Grid>
+      <Grid Grid.Row="1">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="214"/><ColumnDefinition Width="*" MaxWidth="900"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
+        <Border Grid.Column="0" Style="{StaticResource Card}" Padding="8,0,8,10" Margin="0,0,16,0" VerticalAlignment="Top">
+          <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+            <StackPanel>
+                <TextBlock x:Name="SetHeadGeneral" Text="常用" Style="{StaticResource TreeHead}"/>
+                <RadioButton x:Name="SetNavMode" GroupName="setnav" Tag="Mode" Content="使用模式" Style="{StaticResource TreeItem}"/>
+                <RadioButton x:Name="SetNavLook" GroupName="setnav" Tag="Look" Content="外观和语言" Style="{StaticResource TreeItem}"/>
+                <TextBlock x:Name="SetHeadUi" Text="界面" Style="{StaticResource TreeHead}"/>
+                <RadioButton x:Name="SetNavDisplay" GroupName="setnav" Tag="Display" Content="界面上显示什么" Style="{StaticResource TreeItem}"/>
+                <RadioButton x:Name="SetNavMap" GroupName="setnav" Tag="Map" Content="空间地图" Style="{StaticResource TreeItem}"/>
+                <TextBlock x:Name="SetHeadClean" Text="清理和扫描" Style="{StaticResource TreeHead}"/>
+                <RadioButton x:Name="SetNavClean" GroupName="setnav" Tag="Clean" Content="清理列表" Style="{StaticResource TreeItem}"/>
+                <RadioButton x:Name="SetNavScan" GroupName="setnav" Tag="Scan" Content="扫描和查重" Style="{StaticResource TreeItem}"/>
+            </StackPanel>
+          </ScrollViewer>
+        </Border>
+        <ScrollViewer x:Name="SetScroll" Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+          <StackPanel Margin="0,0,6,14">
+            <Border x:Name="SetCardMode" Style="{StaticResource Card}" Padding="24,20" Margin="0" Visibility="Collapsed">
+              <StackPanel>
+                <TextBlock Text="使用模式" Style="{StaticResource CardHead}"/>
+                <TextBlock Style="{StaticResource SetNote}" Text="按你的需要决定界面上有多少东西。换模式不会丢任何设置和记录，随时可以换回来。"/>
+                <Border Style="{StaticResource SegBox}" HorizontalAlignment="Left" Margin="0,12,0,0">
+                  <StackPanel Orientation="Horizontal">
+                    <RadioButton x:Name="SetModeBasic" GroupName="mode" Content="普通用户" Style="{StaticResource Seg}"/>
+                    <RadioButton x:Name="SetModePro" GroupName="mode" Content="工程师" Style="{StaticResource Seg}"/>
+                    <RadioButton x:Name="SetModeExpert" GroupName="mode" Content="开发者和 IT" Style="{StaticResource Seg}"/>
+                  </StackPanel>
+                </Border>
+                <TextBlock x:Name="SetModeNote" Style="{StaticResource SetNote}" Margin="0,10,0,0"/>
+              </StackPanel>
+            </Border>
+
+            <Border x:Name="SetCardLook" Style="{StaticResource Card}" Padding="24,20" Margin="0" Visibility="Collapsed">
+              <StackPanel>
+                <TextBlock Text="外观和语言" Style="{StaticResource CardHead}"/>
+                <DockPanel Margin="0,14,0,0">
+                  <Border DockPanel.Dock="Right" Style="{StaticResource SegBox}" VerticalAlignment="Center" Margin="20,0,0,0">
+                    <StackPanel Orientation="Horizontal">
+                      <RadioButton x:Name="SetThemeLight" GroupName="settheme" Content="浅色" Style="{StaticResource Seg}"/>
+                      <RadioButton x:Name="SetThemeDark" GroupName="settheme" Content="深色" Style="{StaticResource Seg}"/>
+                      <RadioButton x:Name="SetThemeSystem" GroupName="settheme" Content="跟随系统" Style="{StaticResource Seg}"/>
+                    </StackPanel>
+                  </Border>
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="外观" Style="{StaticResource SetName}"/>
+                    <TextBlock Style="{StaticResource SetNote}" Text="跟随系统会照 Windows 设置里「选择应用模式」来。换了以后本工具会关闭，再自动打开。"/>
+                  </StackPanel>
+                </DockPanel>
+                <DockPanel Margin="0,16,0,0">
+                  <Border DockPanel.Dock="Right" Style="{StaticResource SegBox}" VerticalAlignment="Center" Margin="20,0,0,0">
+                    <StackPanel Orientation="Horizontal">
+                      <RadioButton x:Name="SetLangZh" GroupName="setlang" Style="{StaticResource Seg}"/>
+                      <RadioButton x:Name="SetLangEn" GroupName="setlang" Style="{StaticResource Seg}"/>
+                    </StackPanel>
+                  </Border>
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="界面语言" Style="{StaticResource SetName}"/>
+                    <TextBlock Style="{StaticResource SetNote}" Text="换了以后本工具会关闭，再用新的语言打开。"/>
+                  </StackPanel>
+                </DockPanel>
+              </StackPanel>
+            </Border>
+
+            <Border x:Name="SetCardDisplay" Style="{StaticResource Card}" Padding="24,20" Margin="0" Visibility="Collapsed">
+              <StackPanel>
+                <TextBlock Text="界面上显示什么" Style="{StaticResource CardHead}"/>
+                <TextBlock Text="左侧显示的页面" Style="{StaticResource SetName}" Margin="0,14,0,0"/>
+                <TextBlock Style="{StaticResource SetNote}" Text="「清理 C 盘」「空间地图」「帮助」和「设置」一直显示。关掉的页面只是不在左侧列出，里面的设置、搬家记录和自动提醒都照旧。"/>
+                <WrapPanel Margin="0,2,0,0">
+                  <CheckBox x:Name="SetPageDup" Content="重复文件" Width="170" Margin="0,10,0,0"/>
+                  <CheckBox x:Name="SetPageSave" Content="省空间" Width="170" Margin="0,10,0,0"/>
+                  <CheckBox x:Name="SetPageApps" Content="软件管理" Width="170" Margin="0,10,0,0"/>
+                  <CheckBox x:Name="SetPageHealth" Content="系统健康" Width="170" Margin="0,10,0,0"/>
+                  <CheckBox x:Name="SetPageMoves" Content="搬家管理" Width="170" Margin="0,10,0,0"/>
+                  <CheckBox x:Name="SetPageAuto" Content="自动提醒" Width="170" Margin="0,10,0,0"/>
+                  <CheckBox x:Name="SetPageLog" Content="操作日志" Width="170" Margin="0,10,0,0"/>
+                </WrapPanel>
+                <TextBlock Text="左下角的按钮" Style="{StaticResource SetName}" Margin="0,18,0,0"/>
+                <TextBlock Style="{StaticResource SetNote}" Text="外观和语言也可以在这一页上面改；「使用反馈」和「运行记录」也在「帮助」页里。"/>
+                <WrapPanel Margin="0,2,0,0">
+                  <CheckBox x:Name="SetLinkTheme" Content="外观" Width="170" Margin="0,10,0,0"/>
+                  <CheckBox x:Name="SetLinkLang" Content="切换语言" Width="170" Margin="0,10,0,0"/>
+                  <CheckBox x:Name="SetLinkFeedback" Content="使用反馈" Width="170" Margin="0,10,0,0"/>
+                  <CheckBox x:Name="SetLinkLog" Content="运行记录" Width="170" Margin="0,10,0,0"/>
+                </WrapPanel>
+                <DockPanel Margin="0,18,0,0">
+                  <CheckBox x:Name="SetPageSub" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                  <StackPanel>
+                    <TextBlock Text="页面标题下的说明" Style="{StaticResource SetName}"/>
+                    <TextBlock Style="{StaticResource SetNote}" Text="每一页标题下面那行灰色的说明文字。用熟了可以关掉，列表能多显示几行。"/>
+                  </StackPanel>
+                </DockPanel>
+              </StackPanel>
+            </Border>
+
+            <Border x:Name="SetCardMap" Style="{StaticResource Card}" Padding="24,20" Margin="0" Visibility="Collapsed">
+              <StackPanel>
+                <TextBlock Text="空间地图" Style="{StaticResource CardHead}"/>
+                <DockPanel Margin="0,14,0,0">
+                  <CheckBox x:Name="SetMapCheck" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                  <StackPanel>
+                    <TextBlock Text="项目复选框" Style="{StaticResource SetName}"/>
+                    <TextBlock Style="{StaticResource SetNote}" Text="每一行前面显示一个复选框（和资源管理器「查看」里的「项目复选框」一样）：只有点方框才选中或取消，单击行的其他地方不会选中，按 Esc 全部取消。关掉就照 Windows 列表原来的做法：单击选中一行，按住 Ctrl、Shift 多选。开不开都可以按住鼠标（左键或右键）上下拖，一次选中连着的几行。"/>
+                  </StackPanel>
+                </DockPanel>
+                <DockPanel Margin="0,16,0,0">
+                  <CheckBox x:Name="SetMapBar" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                  <StackPanel>
+                    <TextBlock Text="占比条" Style="{StaticResource SetName}"/>
+                    <TextBlock Style="{StaticResource SetNote}" Text="名字右边的蓝色横条，一眼看出谁大。"/>
+                  </StackPanel>
+                </DockPanel>
+                <DockPanel Margin="0,16,0,0">
+                  <CheckBox x:Name="SetMapPct" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                  <StackPanel>
+                    <TextBlock Text="百分比" Style="{StaticResource SetName}"/>
+                    <TextBlock Style="{StaticResource SetNote}" Text="占这一层的百分之几。"/>
+                  </StackPanel>
+                </DockPanel>
+                <DockPanel Margin="0,16,0,0">
+                  <CheckBox x:Name="SetMapMeta" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                  <StackPanel>
+                    <TextBlock Text="名字下面的详细信息" Style="{StaticResource SetName}"/>
+                    <TextBlock Style="{StaticResource SetNote}" Text="文件个数、最近修改时间、比上次扫描变了多少、链接指向哪里。"/>
+                  </StackPanel>
+                </DockPanel>
+                <DockPanel Margin="0,16,0,0">
+                  <CheckBox x:Name="SetMapDisk" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                  <StackPanel>
+                    <TextBlock Text="实际占用和硬链接" Style="{StaticResource SetName}"/>
+                    <TextBlock Style="{StaticResource SetNote}" Text="快速扫描时在名字下面注明：压缩、稀疏和只在云端（OneDrive 等）的文件实际占的盘比文件大小小；WinSxS 这类文件夹里很多文件和系统其他位置是同一份（硬链接），删了也不腾空间。"/>
+                  </StackPanel>
+                </DockPanel>
+                <DockPanel Margin="0,16,0,0">
+                  <CheckBox x:Name="SetMapHealth" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                  <StackPanel>
+                    <TextBlock Text="磁盘健康卡片" Style="{StaticResource SetName}"/>
+                    <TextBlock Style="{StaticResource SetNote}" Text="页面上方每块盘一张卡片：用了多少、健康状态，固态硬盘还有温度、磨损和通电时间。只读，不改任何东西。"/>
+                  </StackPanel>
+                </DockPanel>
+                <DockPanel Margin="0,16,0,0">
+                  <CheckBox x:Name="SetMapFastBtn" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                  <StackPanel>
+                    <TextBlock Text="右上角的「快速扫描」开关" Style="{StaticResource SetName}"/>
+                    <TextBlock Style="{StaticResource SetNote}" Text="关掉只是不在空间地图上显示这个开关；快速扫描本身在下面「扫描和查重」里开关。"/>
+                  </StackPanel>
+                </DockPanel>
+              </StackPanel>
+            </Border>
+
+            <Border x:Name="SetCardScan" Style="{StaticResource Card}" Padding="24,20" Margin="0" Visibility="Collapsed">
+              <StackPanel>
+                <TextBlock Text="扫描和查重" Style="{StaticResource CardHead}"/>
+                <DockPanel Margin="0,14,0,0">
+                  <CheckBox x:Name="SetFast" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                  <StackPanel>
+                    <TextBlock Text="快速扫描" Style="{StaticResource SetName}"/>
+                    <TextBlock Style="{StaticResource SetNote}" Text="直接读取 NTFS 的文件表（MFT），比逐个文件夹查看快得多，还能看出实际占用和硬链接。少数安全软件对直接读盘会提示，可以关掉，改为逐个文件夹扫描。清理、搬家、软件管理统计大小时也按这个设置。"/>
+                  </StackPanel>
+                </DockPanel>
+                <DockPanel Margin="0,16,0,0">
+                  <CheckBox x:Name="SetLowIo" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                  <StackPanel>
+                    <TextBlock Text="查重复文件时让着其他程序" Style="{StaticResource SetName}"/>
+                    <TextBlock Style="{StaticResource SetNote}" Text="读文件时用 Windows 的后台模式，磁盘和内存都排在其他程序后面：不拖慢正在用的程序，也不把它们缓存在内存里的数据挤掉。电脑空闲时速度基本不受影响，同时在做别的事时查得慢一些。"/>
+                  </StackPanel>
+                </DockPanel>
+              </StackPanel>
+            </Border>
+
+            <Border x:Name="SetCleanCard" Style="{StaticResource Card}" Padding="24,20" Margin="0" Visibility="Collapsed">
+              <StackPanel>
+                <TextBlock Text="清理列表" Style="{StaticResource CardHead}"/>
+                <DockPanel x:Name="SetRecycleRow" Margin="0,14,0,0">
+                  <CheckBox x:Name="SetRecycle" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                  <StackPanel>
+                    <TextBlock Text="删除时先放进回收站" Style="{StaticResource SetName}"/>
+                    <TextBlock Style="{StaticResource SetNote}" Text="手动清理删掉的文件先放进回收站，删错了可以从回收站恢复。慢一些，回收站会变大（清空回收站才真正腾出空间）；放不进回收站的（网络位置、U 盘、比回收站还大）不删。定期自动清理不受这个影响，照样直接删。"/>
+                  </StackPanel>
+                </DockPanel>
+                <TextBlock x:Name="SetCustomHead" Text="自己加的文件夹" Style="{StaticResource SetName}" Margin="0,14,0,0"/>
+                <TextBlock x:Name="SetCustomNote" Style="{StaticResource SetNote}" Text="清理时删掉这些文件夹里的东西，文件夹本身保留。在「清理 C 盘」页单独列成一组，默认选「删除」，每次执行前照样要确认；定期自动清理不碰它们。个人文件夹、系统文件夹和软件的安装文件夹加不进来。"/>
+                <ItemsControl x:Name="SetCustomList" Margin="0,6,0,0">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <DockPanel Margin="0,4,0,0">
+                        <Button x:Name="SetListRemove" DockPanel.Dock="Right" Content="移除" Tag="{Binding}" Style="{StaticResource LinkButton}" FontSize="12.5" Margin="12,0,0,0"/>
+                        <TextBlock Text="{Binding}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding}"/>
+                      </DockPanel>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock x:Name="SetCustomEmpty" Style="{StaticResource SetNote}" Text="还没有加。" Margin="0,6,0,0"/>
+                <Button x:Name="BtnSetCustomAdd" Content="添加文件夹…" Style="{StaticResource Small}" HorizontalAlignment="Left" Margin="0,8,0,0"/>
+                <TextBlock x:Name="SetExcludeHead" Text="排除的文件夹" Style="{StaticResource SetName}" Margin="0,20,0,0"/>
+                <TextBlock x:Name="SetExcludeNote" Style="{StaticResource SetNote}" Text="清理时一律不碰这些文件夹和里面的东西，估算大小时也不算。比如临时文件夹里某个你要留着的子文件夹。"/>
+                <ItemsControl x:Name="SetExcludeList" Margin="0,6,0,0">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <DockPanel Margin="0,4,0,0">
+                        <Button x:Name="SetListRemove" DockPanel.Dock="Right" Content="移除" Tag="{Binding}" Style="{StaticResource LinkButton}" FontSize="12.5" Margin="12,0,0,0"/>
+                        <TextBlock Text="{Binding}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding}"/>
+                      </DockPanel>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock x:Name="SetExcludeEmpty" Style="{StaticResource SetNote}" Text="还没有排除。" Margin="0,6,0,0"/>
+                <Button x:Name="BtnSetExcludeAdd" Content="添加文件夹…" Style="{StaticResource Small}" HorizontalAlignment="Left" Margin="0,8,0,0"/>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+      </Grid>
     </Grid>
 
     <!-- ==================== 帮助：使用说明、安全风险提示、使用反馈 ==================== -->
@@ -3525,6 +3675,10 @@
                 </StackPanel>
                 <DockPanel Margin="0,26,0,0"><TextBlock DockPanel.Dock="Left" Text="浏览" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
                 <StackPanel Margin="0,10,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="后退、前进和路径"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>左上角的后退、前进按钮（也可以用鼠标侧键、Alt+← 和 Alt+→）在看过的文件夹之间来回；Backspace 回到上一级。路径上的每一层都能点，点哪一层回到哪一层。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="往里点"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>双击文件夹进入下一层，点「上一级」返回。每一行的蓝色条表示它在这一层里有多大。</Run></TextBlock>
                   <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>一层里东西很多时（比如 WinSxS 有上万个），只列最大的 500 项，其余合成最后一行；点「打开位置」可以在资源管理器里看全部。</Run></TextBlock></DockPanel>
@@ -3539,7 +3693,16 @@
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="方块图"/>
-                  <TextBlock Style="{StaticResource HelpBody}"><Run>把这一层的文件夹和文件画成方块，方块越大占的空间越多，一眼看出谁最大。单击选中，双击文件夹往里点。</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>把这一层的文件夹和文件画成方块，方块越大占的空间越多，一眼看出谁最大。单击选中，双击文件夹往里点。颜色按文件夹装的是哪一类东西（系统、软件数据、文档、照片视频音乐、代码、同步盘、游戏），缓存和临时文件带斜线，表示删了能腾出来；下面有图例。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="值得一看"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>扫完整块盘后，概览下面列出名字一看就是缓存、依赖包（node_modules 等）、构建产物、Python 虚拟环境、临时文件的大文件夹（300 MB 以上），点一下跳过去，看清楚再决定。只是按名字认的。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="待删清单"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>在不同文件夹里挑要删的，先「加入待删清单」（右键菜单里也有），不马上删；下面一直写着清单里一共多大、这块盘现在空闲多少、删完大约剩多少。放进一个文件夹时，清单里它里面的项目合进它。看过清单再「删除清单里的…」，和平时删除一样先确认、能选放进回收站；删完写明这块盘实际多出了多少。</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>要删的文件夹是 git 仓库时，确认对话框里会提醒：没提交、没推送的改动删了就找不回来。</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="找文件"/>
@@ -3646,6 +3809,7 @@
                 <StackPanel Margin="0,14,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="软件列表"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>列出装过的所有软件（包括应用商店里的），按占用空间从大到小排。可以只看装在 C 盘的，或者按名字搜索。表头可以点「名称」「发行商」「安装日期」「大小」排序，再点一下反过来；开机启动、计划任务、右键菜单可以按名称、状态排。</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">一次处理几个</Run><Run>：勾选行前面的方框，或按住鼠标左键在行上上下拖，拖过的都勾上；Shift 点方框勾上一段，表头的方框全选。勾了以后下面出现按钮：软件「卸载选中的」依次打开各自的卸载程序，一个走完、窗口关掉后再打开下一个，可以随时停下；应用商店的直接卸载。开机启动、计划任务、右键菜单「禁用选中的」「启用选中的」；残留文件夹「移到回收站」。都先列出来确认一次。</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="卸载"/>
@@ -3677,7 +3841,7 @@
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="残留文件夹"/>
-                  <TextBlock Style="{StaticResource HelpBody}"><Run>找已卸载软件可能留下的文件夹：名字对不上任何已装软件、没有程序在用、一个月没动过、至少 1 MB。只是猜测，先点「打开位置」看一眼再决定；移到回收站，能恢复。</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>找已卸载软件可能留下的文件夹：名字对不上任何已装软件、没有程序在用、一个月没动过、至少 1 MB。只是猜测，先点「打开位置」看一眼再决定；移到回收站，能恢复。可以勾选几个一起移到回收站。</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="检查新版本"/>
@@ -3714,6 +3878,7 @@
                   <TextBlock Style="{StaticResource HelpBody}"><Run>标题旁一排选项卡：硬件、开机用时、蓝屏和崩溃、常见问题修复、活动监控、Windows 事件。点哪一项只显示哪一项，各自上下滚动，不用把整页拉到底。下次打开停在上次看的那一项。</Run></TextBlock>
                   <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>「蓝屏和崩溃」里再分三个小选项卡：诊断结论、每次蓝屏、相关事件和驱动，小选项卡上写着有几条。</Run></TextBlock></DockPanel>
                   <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>「常见问题修复」左边是问题列表，右边只显示选中的那个问题的修法；活动监控的表格占满这一页，表格自己滚动。</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>打开本工具几秒后，没有别的操作在做时，就在后台把这些先读好，点进来不用等；读过十分钟再打开会在后台刷新一遍。中途插上或拔掉硬盘，硬件卡片、空间地图的盘和搬家目标会自动跟着变。</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="硬件"/>
@@ -3777,7 +3942,7 @@
                 <DockPanel Margin="0,16,0,0"><TextBlock DockPanel.Dock="Left" Text="可以搬的" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
                 <StackPanel Margin="0,10,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="批量搬走"/>
-                  <TextBlock Style="{StaticResource HelpBody}"><Run>自动列出 C 盘上还能搬走的东西，分成聊天记录、装在 C 盘的软件和其他文件夹三组，每项都标着大小。勾选后在右下角选好目标盘，点「搬到其他盘」。</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>自动列出 C 盘上还能搬走的东西，分成聊天记录、装在 C 盘的软件和其他文件夹三组，每项都标着大小。左边目录可以一次只看一组（还有「不适合搬的软件」和「已经搬走的」）。勾选后在右下角选好目标盘，点「搬到其他盘」。</Run></TextBlock>
                   <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>开始前会列出全部项目，要先关掉的软件也会告诉你。</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
@@ -3888,6 +4053,10 @@
               </Expander.Header>
               <StackPanel>
                 <StackPanel Margin="0,14,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="目录"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>左边按「常用」「界面」「清理和扫描」分好类，点哪一项右边只显示那一项。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="使用模式"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>三种，按你的需要决定界面上有多少东西。第一次打开时会问一句，之后在「设置」最上面随时换，换了不丢任何设置和记录。左下角版本号下面写着当前模式，点一下就到设置。</Run></TextBlock>
                   <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">普通用户</Run><Run>：清理 C 盘、省空间、空间地图、软件管理、系统健康（硬件、蓝屏和崩溃、常见问题修复）、帮助。清理列表里只有常见的缓存和临时文件，删了软件会自动重建；有代价的项目仍然默认跳过。</Run></TextBlock></DockPanel>

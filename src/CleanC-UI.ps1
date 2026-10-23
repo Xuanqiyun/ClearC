@@ -6,7 +6,7 @@
 param()
 
 $ErrorActionPreference = 'SilentlyContinue'
-$script:AppVersion = '3.3'
+$script:AppVersion = '3.4'
 $script:AppBuildStamp = ''   # 构建 exe 时由 build 脚本填上构建时间（UTC）：写进诊断信息和运行记录，反馈问题时好对上是哪一次构建的
 $script:startClock = [Diagnostics.Stopwatch]::StartNew()   # 记下启动各阶段用了多久，写进运行记录
 
@@ -2324,6 +2324,21 @@ public static class DiskMap {
         return all;
     }
     // 一个文件夹里最大的几个子文件夹（不改动原来的顺序）
+    // 值得一看：名字是这些的文件夹（缓存、依赖包、构建产物……），至少 minSize，从大到小；找到一个就不再往它里面找
+    public static List<DmNode> Named(DmNode root, string[] names, long minSize, int max) {
+        HashSet<string> set = new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
+        List<DmNode> hits = new List<DmNode>();
+        Stack<DmNode> st = new Stack<DmNode>(); st.Push(root);
+        while (st.Count > 0) {
+            DmNode d = st.Pop();
+            if (d.IsLink) continue;
+            if (!object.ReferenceEquals(d, root) && set.Contains(d.Name)) { hits.Add(d); continue; }
+            foreach (DmNode k in d.Kids) if (k.Size >= minSize) st.Push(k);
+        }
+        hits.Sort((a, b) => b.Size.CompareTo(a.Size));
+        if (hits.Count > max) hits.RemoveRange(max, hits.Count - max);
+        return hits;
+    }
     public static List<DmNode> TopKids(DmNode n, int max) {
         List<DmNode> k = new List<DmNode>(n.Kids);
         k.Sort((a, b) => b.Size.CompareTo(a.Size));
@@ -2972,7 +2987,7 @@ public class DumpRow {
     public string File { get; set; }
     string _fg; public string SuspectBrush { get { return Theme.F(_fg); } set { _fg = value; } }
 }
-public class NoteRow { public string Head { get; set; } public string Body { get; set; } public string Path { get; set; } public bool HasPath { get; set; } }
+public class NoteRow { public string Head { get; set; } public string Sub { get; set; } public string Body { get; set; } public string Path { get; set; } public bool HasPath { get; set; } }
 // 诊断结论和「常见问题修复」：按钮的 Tag 是修复步骤的编号
 public class FixBtn { public string Id { get; set; } public string Name { get; set; } public string Tip { get; set; } public bool Enabled { get; set; } }
 public class VerdictRow {
@@ -3012,7 +3027,9 @@ public static class L10n {
 }
 
 // ==================== 各页面列表的一行 ====================
-public class MapRow {
+public class MapRow : INotifyPropertyChanged {
+    private bool _mk; public bool Marked { get { return _mk; } set { if (_mk != value) { _mk = value; PropertyChangedEventHandler h = PropertyChanged; if (h != null) h(this, new PropertyChangedEventArgs("Marked")); } } }
+    public event PropertyChangedEventHandler PropertyChanged;
     public string Name { get; set; }
     public string Path { get; set; }
     public string SizeText { get; set; }
@@ -3050,6 +3067,9 @@ public class AppRow : INotifyPropertyChanged {
     public bool OnC { get; set; }
     public bool LocReg { get; set; }
     public bool CanMove { get; set; }
+    // 勾选了要一起处理（一次卸载多个）
+    private bool _pick; public bool Picked { get { return _pick; } set { if (_pick != value) { _pick = value; PickDirty = true; Raise("Picked"); } } }
+    public static volatile bool PickDirty;
     // winget 查到的新版本（空 = 没有或还没查）
     private string _upg = ""; public string Upgrade { get { return _upg; } set { _upg = value; Raise("Upgrade"); Raise("HasUpgrade"); } }
     public string UpgradeId { get; set; }
@@ -3067,6 +3087,8 @@ public class StartRow : INotifyPropertyChanged {
     public string Key1 { get; set; }        // startup: StartupApproved 的键   task: 任务路径   shellex: CLSID
     public string Key2 { get; set; }        // startup: 值名   task: 任务名
     public bool Ours { get; set; }          // 本工具自己建的任务
+    // 勾选了要一起处理（一次禁用、启用多个，或者一起移到回收站）
+    private bool _pick; public bool Picked { get { return _pick; } set { if (_pick != value) { _pick = value; AppRow.PickDirty = true; Raise("Picked"); } } }
     private bool _on = true;
     public bool Enabled { get { return _on; } set { _on = value; Raise("Enabled"); Raise("StatusText"); Raise("StatusBrush"); Raise("ToggleText"); } }
     public string Size { get; set; }
@@ -6705,6 +6727,95 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+{0} 项所在的文件夹已经在待删清单里，不用再单独放	The folders holding {0} of these are already on the delete list
+{0} 现在空闲 {1}，删完约 {2}	{0} has {1} free now, about {2} after
+待删清单：{0} 项，共 {1}。	Delete list: {0} items, {1}. 
+（放进回收站的，清空回收站后才腾出来）	 (items sent to the Recycle Bin free their space once it is emptied)
+待删清单（{0} 项）	Delete list ({0} items)
+要去掉某一项：在列表里选中它，右键「从待删清单去掉」。	To take an item off, select it in the list and right-click "Remove from delete list".
+清空清单	Clear list
+关闭清单	Close
+删除清单里的…	Delete the list…
+看看清单	View list
+依赖包，要用时会重新下载	Packages; downloaded again when needed
+构建产物，重新编译会再生成	Build output; created again on the next build
+Python 虚拟环境，删了要重新建	Python virtual environment; has to be recreated
+临时文件和崩溃转储	Temporary files and crash dumps
+旧系统，删了就不能退回去	Previous Windows; you can no longer go back after deleting it
+安卓开发工具的数据	Android development tool data
+缓存，删了会自动重建	Cache; rebuilt automatically
+系统	System
+软件和软件数据	Apps and app data
+文档和桌面	Documents and desktop
+照片、视频、音乐	Photos, videos, music
+代码和开发	Code and development
+同步盘	Synced folders
+游戏	Games
+缓存和临时文件	Caches and temporary files
+其他文件夹	Other folders
+（带斜线：删了能腾出来）	 (hatched: space you can get back)
+从待删清单去掉	Remove from delete list
+加入待删清单	Add to delete list
+\n\n注意：其中 {0} 个是 git 仓库（{1}）。没提交、没推送到远程的改动删了就找不回来，先确认都推送过。	\n\nNote: {0} of them are git repositories ({1}). Changes that were never committed or pushed are gone for good once deleted; make sure everything has been pushed.
+正在后台刷新，下面先显示上次读到的…	Refreshing in the background; showing the last reading meanwhile…
+已选 {0} 个软件，合计约 {1}	{0} apps selected, about {1} in total
+已选 {0} 个文件夹，共 {1}	{0} folders selected, {1} in total
+已选 {0} 项：{1} 项启用中，{2} 项已禁用	{0} selected: {1} enabled, {2} disabled
+会依次打开 {0} 个软件自带的卸载程序：一个走完、窗口关掉后，自动打开下一个。每个都按它自己的提示操作，可以随时停下。	The uninstallers of {0} apps open one after another: when one finishes and its window closes, the next one opens. Follow each one's own steps; you can stop at any time.
+应用商店的 {0} 个直接卸载。	{0} Microsoft Store apps are uninstalled directly.
+另有 {0} 个没有登记卸载方法，跳过：{1}	{0} more have no registered way to uninstall and are skipped: {1}
+卸载会删除这些软件，它们保存在软件里的数据可能一起被删掉。	Uninstalling removes these apps, and data they keep may be removed with them.
+卸载选中的 {0} 个软件？	Uninstall the {0} selected apps?
+批量卸载	Batch uninstall
+卸载 {0} 个应用商店软件	Uninstall {0} Store apps
+{0}：打不开卸载程序（{1}）	{0}: the uninstaller could not be opened ({1})
+正在卸载第 {0} / {1} 个：{2}。按卸载程序的提示操作；它的窗口关掉后，自动打开下一个。	Uninstalling {0} of {1}: {2}. Follow the uninstaller's steps; when its window closes, the next one opens.
+处理了 {0} 个软件。	{0} apps handled.
+中途停下了，后面的没有打开。	Stopped part way; the rest were not opened.
+没成的：	Not done:
+卸载程序常会留下设置和缓存：可以到「残留文件夹」里看看。列表已经刷新。	Uninstallers often leave settings and caches behind; have a look under "Leftovers". The list has been refreshed.
+批量卸载走完了	Batch uninstall finished
+这些项目会重新生效：开机启动项下次开机时启动，计划任务到时间照常运行，右键菜单扩展对新打开的资源管理器窗口生效。	These take effect again: startup items start at the next sign-in, scheduled tasks run on time, and context menu extensions show in newly opened File Explorer windows.
+这些项目会停用：开机时不再自动启动、计划任务到时间不再运行、右键菜单里不再出现。程序本身都不删，随时可以在这里重新启用。	These are switched off: they no longer start with Windows, scheduled tasks no longer run, and they leave the context menu. Nothing is deleted, and you can enable them here again at any time.
+启用选中的 {0} 项？	Enable the {0} selected items?
+禁用选中的 {0} 项？	Disable the {0} selected items?
+{0} 项没启用成	{0} items could not be enabled
+{0} 项没禁用成	{0} items could not be disabled
+启用了 {0} 项	Enabled {0} items
+禁用了 {0} 项	Disabled {0} items
+把选中的 {0} 个文件夹移到回收站？	Move the {0} selected folders to the Recycle Bin?
+共 {0}。这些只是猜测：名字对不上任何已装软件、没有程序在用、一个月没动过。拿不准的先点「打开位置」看一眼。移到回收站后还能恢复。	{0} in total. These are guesses: the names match no installed app, no program is using them, and nothing changed for a month. If unsure, click "Open location" and look first. They can be restored from the Recycle Bin.
+我看过了，这些是已卸载软件留下的，删除不会给我带来损失。	I have looked: these were left behind by uninstalled apps, and deleting them causes me no loss.
+把 {0} 个残留文件夹移到回收站	Move {0} leftover folders to the Recycle Bin
+{0} 多出 {1}	{0} gained {1}
+{0} 个文件夹已移到回收站。清空回收站后才真正腾出空间。	{0} folders moved to the Recycle Bin. The space is freed once the Recycle Bin is emptied.
+空闲时在后台读取系统健康	Reading system health in the background while idle
+接上了新的磁盘：{0}	New drive connected: {0}
+磁盘拔掉了：{0}	Drive removed: {0}
+已经在待删清单里	On the delete list
+卸载选中的…	Uninstall selected…
+取消选择	Clear selection
+启用选中的	Enable selected
+禁用选中的	Disable selected
+打开下一个	Open next
+移到回收站…	Move to Recycle Bin…
+不再打开后面的卸载程序；已经打开的那个照常走完	Do not open the remaining uninstallers; the one already open finishes as usual
+先放进清单，不马上删：可以接着到别的文件夹里挑，下面一直显示删完以后还剩多少空间，看过清单再一起删	Put it on a list instead of deleting now: keep picking in other folders while the free space after deletion stays in view, then review the list and delete together
+前进（鼠标侧键、Alt+→）	Forward (mouse side button, Alt+→)
+后退到刚才看的文件夹（鼠标侧键、Alt+←）	Back to the previous folder (mouse side button, Alt+←)
+回到上一级文件夹（Backspace）	Up one folder (Backspace)
+这个卸载程序已经走完了但没自动接上时，点这里打开下一个	If this uninstaller has finished but the next one did not open, click here
+勾上这里列出的全部；再点一下全部取消	Tick everything listed here; click again to untick all
+不适合搬的软件	Apps not suited to moving
+值得一看	Worth a look
+其他可搬的文件夹	Other movable folders
+常用	General
+待删	Marked
+清理和扫描	Cleanup and scanning
+界面	Interface
+聊天记录	Chat history
+装在 C 盘的软件	Apps on C:
+这块盘上可能用不上、删了能腾出不少空间的大文件夹：缓存、依赖包（node_modules 等）、构建产物、虚拟环境、临时文件。只是按名字认的，点一下跳过去，看清楚再决定	Large folders on this drive you may not need that would free a lot of space: caches, packages (node_modules and the like), build output, virtual environments, temporary files. They are recognized by name only; click one to go there and look before deciding
 扫描到 {0} 项，分成 {1} 类：{2}。点下面的选项卡切换类别，点「名称」「大小」排序，右边的下拉框可以只看某一种操作。每一项都可以单独选「删除」「搬走」或「跳过」；「执行所选操作」会处理所有类别。双击一行打开它所在的文件夹，右键可以复制路径。	Found {0} items in {1} groups: {2}. Use the tabs below to switch groups, click "Name" or "Size" to sort, and use the drop-down on the right to show only one action. Each item can be set to "Delete", "Move" or "Skip" on its own; "Run selected" handles every group. Double-click a row to open its folder; right-click to copy the path.
 全部操作	All actions
 只看「{0}」	Only "{0}"
@@ -9372,6 +9483,10 @@ $script:helpEnXaml = @'
                 </StackPanel>
                 <DockPanel Margin="0,26,0,0"><TextBlock DockPanel.Dock="Left" Text="Browsing" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
                 <StackPanel Margin="0,10,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Back, forward and the path"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>The back and forward buttons at the top left (or the mouse side buttons, Alt+← and Alt+→) move between the folders you have looked at; Backspace goes up one level. Every level of the path can be clicked to go back to it.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Drill down"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>Double-click a folder to open the next level, and click "Up one level" to go back. The blue bar on each row shows how large it is within the current level.</Run></TextBlock>
                   <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>When a level holds a lot (WinSxS has tens of thousands of items), only the 500 largest are listed and the rest are combined into the last row; "Open location" shows everything in File Explorer.</Run></TextBlock></DockPanel>
@@ -9386,7 +9501,16 @@ $script:helpEnXaml = @'
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Treemap"/>
-                  <TextBlock Style="{StaticResource HelpBody}"><Run>Draws the folders and files of the current level as blocks; the bigger the block, the more space it takes, so the largest ones stand out at a glance. Click to select; double-click a folder to open it.</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Draws the folders and files of the current level as blocks; the bigger the block, the more space it takes, so the largest ones stand out at a glance. Click to select; double-click a folder to open it. The colour says what a folder holds (system, app data, documents, photos and videos, code, synced folders, games); caches and temporary files are hatched, meaning the space can be had back. A legend sits underneath.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Worth a look"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>After scanning a whole drive, the overview lists large folders (300 MB or more) whose names say they are caches, packages (node_modules and the like), build output, Python virtual environments or temporary files. Click one to go there and look before deciding. They are recognized by name only.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Delete list"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Pick what to delete in different folders and "Add to delete list" (also in the right-click menu) instead of deleting right away; a bar underneath keeps showing how big the list is, how much the drive has free now and roughly how much after. Adding a folder absorbs the items inside it that were already listed. Review the list, then "Delete the list…": it asks first as usual and can use the Recycle Bin, and afterwards says how much space the drive actually gained.</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>When a folder to delete is a git repository, the confirmation warns that changes never committed or pushed are gone for good.</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Find files"/>
@@ -9493,6 +9617,7 @@ $script:helpEnXaml = @'
                 <StackPanel Margin="0,14,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="App list"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>Lists all installed apps (including Microsoft Store apps), sorted by size from largest to smallest. You can show only apps installed on C:, or search by name. Click "Name", "Publisher", "Installed" or "Size" in the header to sort, and again to reverse; startup items, scheduled tasks and context menu entries sort by name or status.</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Several at once</Run><Run>: tick the box in front of a row, or hold the left mouse button and drag over rows to tick them all; Shift-click a box to tick a run, and the box in the header ticks everything. Buttons then appear underneath. For apps, "Uninstall selected" opens each uninstaller in turn: when one finishes and its window closes, the next one opens, and you can stop at any time; Store apps are uninstalled directly. Startup items, scheduled tasks and context menu entries get "Disable selected" and "Enable selected"; leftovers get "Move to Recycle Bin". Each lists the items and asks once first.</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Uninstall"/>
@@ -9524,7 +9649,7 @@ $script:helpEnXaml = @'
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Leftovers"/>
-                  <TextBlock Style="{StaticResource HelpBody}"><Run>Finds folders that uninstalled apps may have left behind: the name matches no installed app, no program is using them, nothing changed for a month, and they are at least 1 MB. It is only a guess, so click "Open location" first; they go to the Recycle Bin and can be restored.</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Finds folders that uninstalled apps may have left behind: the name matches no installed app, no program is using them, nothing changed for a month, and they are at least 1 MB. It is only a guess, so click "Open location" first; they go to the Recycle Bin and can be restored. Tick several to move them to the Recycle Bin together.</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Check for updates"/>
@@ -9561,6 +9686,7 @@ $script:helpEnXaml = @'
                   <TextBlock Style="{StaticResource HelpBody}"><Run>A row of tabs next to the title: Hardware, Boot time, Blue screens and crashes, Common fixes, Activity monitor, Windows events. Click one to show only that section, each with its own scroll bar, so you never scroll through the whole page. The page reopens on the tab you looked at last.</Run></TextBlock>
                   <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>"Blue screens and crashes" has three smaller tabs: Diagnosis, Each crash, and Events and drivers, each showing how many entries it has.</Run></TextBlock></DockPanel>
                   <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>"Common fixes" lists the problems on the left and shows the fixes for the selected one on the right; the activity monitor table fills the page and scrolls on its own.</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>A few seconds after ClearC opens, while nothing else is running, all this is read in the background, so the page is ready when you click it; after ten minutes it is refreshed in the background. Plug in or remove a drive and the hardware cards, the space map drives and the move targets follow.</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Hardware"/>
@@ -9624,7 +9750,7 @@ $script:helpEnXaml = @'
                 <DockPanel Margin="0,16,0,0"><TextBlock DockPanel.Dock="Left" Text="Can be moved" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
                 <StackPanel Margin="0,10,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Move several at once"/>
-                  <TextBlock Style="{StaticResource HelpBody}"><Run>Automatically lists what can still be moved off C:, in three groups (chat histories, apps installed on C:, and other folders), each with its size. Tick the items, choose the target drive at the bottom right and click "Move to another drive".</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>Automatically lists what can still be moved off C:, in three groups (chat histories, apps installed on C:, and other folders), each with its size. The list on the left shows one group at a time (plus "Apps not suited to moving" and "Moved"). Tick the items, choose the target drive at the bottom right and click "Move to another drive".</Run></TextBlock>
                   <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Before starting, every item is listed, along with any apps that need to be closed first.</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
@@ -9735,6 +9861,10 @@ $script:helpEnXaml = @'
               </Expander.Header>
               <StackPanel>
                 <StackPanel Margin="0,14,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Contents"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>The list on the left is grouped into General, Interface, and Cleanup and scanning; click an item to show only that part on the right.</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="Mode"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>Three modes decide how much the window shows. ClearC asks once on first start; after that, change it at the top of Settings at any time. Switching never loses settings or records. The current mode is written under the version number at the bottom left; click it to go to Settings.</Run></TextBlock>
                   <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Home user</Run><Run>: Clean C:, Save space, Space map, Apps, System health (hardware, blue screens and crashes, common fixes) and Help. The cleanup list only has common caches and temporary files that apps rebuild; items with a cost are still skipped by default.</Run></TextBlock></DockPanel>
@@ -10440,24 +10570,29 @@ if ($script:mode -match '(?i)/autoclean') {
       </Setter>
     </Style>
     <!-- ===== 页面左侧的目录（省空间、常见问题修复）：一级标题下面一项一项，点哪项右边显示哪项 ===== -->
+    <!-- 一级标题：黑色加粗，不缩进 -->
     <Style x:Key="TreeHead" TargetType="TextBlock">
-      <Setter Property="FontSize" Value="11.5"/>
+      <Setter Property="FontSize" Value="13"/>
       <Setter Property="FontWeight" Value="SemiBold"/>
-      <Setter Property="Foreground" Value="#86868B"/>
-      <Setter Property="Margin" Value="10,16,0,5"/>
-    </Style>
-    <Style x:Key="TreeItem" TargetType="RadioButton">
       <Setter Property="Foreground" Value="#1D1D1F"/>
+      <Setter Property="Margin" Value="10,16,0,6"/>
+    </Style>
+    <!-- 二级菜单：缩进，左边一条细的竖线把同一组连起来，看得出属于哪个一级标题 -->
+    <Style x:Key="TreeItem" TargetType="RadioButton">
+      <Setter Property="Foreground" Value="#3A3A3C"/>
       <Setter Property="FontSize" Value="13"/>
       <Setter Property="Cursor" Value="Hand"/>
       <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-      <Setter Property="Margin" Value="0,0,0,2"/>
+      <Setter Property="Margin" Value="0,0,0,1"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="RadioButton">
-            <Border x:Name="Bd" CornerRadius="7" Padding="10,7" Background="Transparent">
-              <ContentPresenter VerticalAlignment="Center"/>
-            </Border>
+            <Grid Background="Transparent">
+              <Rectangle Width="1" Fill="#D9D9DE" HorizontalAlignment="Left" Margin="15,0,0,0"/>
+              <Border x:Name="Bd" CornerRadius="7" Padding="12,6,10,6" Margin="22,0,0,0" Background="Transparent">
+                <ContentPresenter VerticalAlignment="Center"/>
+              </Border>
+            </Grid>
             <ControlTemplate.Triggers>
               <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="#E8E8ED"/></Trigger>
               <Trigger Property="IsChecked" Value="True">
@@ -10470,8 +10605,47 @@ if ($script:mode -match '(?i)/autoclean') {
         </Setter.Value>
       </Setter>
     </Style>
+    <!-- 能点的一级菜单（搬家管理的「可以搬的」「已经搬走的」）：黑色加粗，不缩进 -->
+    <Style x:Key="TreeTop" TargetType="RadioButton">
+      <Setter Property="Foreground" Value="#1D1D1F"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Margin" Value="0,10,0,2"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="RadioButton">
+            <Border x:Name="Bd" CornerRadius="7" Padding="10,7" Background="Transparent">
+              <ContentPresenter VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="#E8E8ED"/></Trigger>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="#E3EEFF"/>
+                <Setter Property="Foreground" Value="#0A5BC4"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <!-- 选项卡、目录上的数字和状态：小圆角标签，和名字分开 -->
+    <Style x:Key="TabBadge" TargetType="Border">
+      <Setter Property="Background" Value="#DEDEE4"/>
+      <Setter Property="CornerRadius" Value="8"/>
+      <Setter Property="Padding" Value="6,0,6,1"/>
+      <Setter Property="Margin" Value="7,0,0,0"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style x:Key="TabBadgeText" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="11.5"/>
+      <Setter Property="FontWeight" Value="Normal"/>
+      <Setter Property="Foreground" Value="#6E6E73"/>
+    </Style>
     <Style x:Key="NavItem" TargetType="ListBoxItem">
       <Setter Property="Foreground" Value="#1D1D1F"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
       <Setter Property="Cursor" Value="Hand"/>
       <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
       <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
@@ -10526,6 +10700,10 @@ if ($script:mode -match '(?i)/autoclean') {
       </Setter>
     </Style>
 
+    <!-- 侧边栏分组标题下面的项：比标题缩进一点 -->
+    <Style x:Key="NavSub" TargetType="RadioButton" BasedOn="{StaticResource Nav}">
+      <Setter Property="Margin" Value="10,0,0,3"/>
+    </Style>
     <!-- ===== 分段控件（单选） ===== -->
     <Style x:Key="Seg" TargetType="RadioButton">
       <Setter Property="Foreground" Value="#1D1D1F"/>
@@ -10535,10 +10713,18 @@ if ($script:mode -match '(?i)/autoclean') {
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="RadioButton">
-            <Border x:Name="Bd" CornerRadius="6" Padding="12,4,12,5" Background="Transparent">
-              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-            </Border>
+            <Grid>
+              <!-- 和前一项之间的细竖线：第一项（Uid=first）、选中的、鼠标在上面的不画 -->
+              <Rectangle x:Name="Sep" Width="1" Fill="#C9C9CF" HorizontalAlignment="Left" Margin="0,6"/>
+              <Border x:Name="Bd" CornerRadius="6" Padding="12,4,12,5" Margin="1,0,0,0" Background="Transparent">
+                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+              </Border>
+            </Grid>
             <ControlTemplate.Triggers>
+              <Trigger Property="Uid" Value="first"><Setter TargetName="Sep" Property="Visibility" Value="Hidden"/></Trigger>
+              <Trigger Property="Uid" Value="nosep"><Setter TargetName="Sep" Property="Visibility" Value="Hidden"/></Trigger>
+              <Trigger Property="IsChecked" Value="True"><Setter TargetName="Sep" Property="Visibility" Value="Hidden"/></Trigger>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Sep" Property="Visibility" Value="Hidden"/></Trigger>
               <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="#DEDEE4"/></Trigger>
               <Trigger Property="IsChecked" Value="True">
                 <Setter TargetName="Bd" Property="Background" Value="#FEFEFE"/>
@@ -11100,8 +11286,8 @@ if ($script:mode -match '(?i)/autoclean') {
     <Style x:Key="NavHead" TargetType="TextBlock">
       <Setter Property="FontSize" Value="11.5"/>
       <Setter Property="FontWeight" Value="SemiBold"/>
-      <Setter Property="Foreground" Value="#86868B"/>
-      <Setter Property="Margin" Value="11,12,0,5"/>
+      <Setter Property="Foreground" Value="#6E6E73"/>
+      <Setter Property="Margin" Value="4,14,0,5"/>
     </Style>
     <!-- ===== 开关（勾选框的另一种样子） ===== -->
     <Style x:Key="Switch" TargetType="CheckBox">
@@ -11162,6 +11348,22 @@ if ($script:mode -match '(?i)/autoclean') {
       <Setter Property="TextWrapping" Value="Wrap"/>
       <Setter Property="LineHeight" Value="21"/>
     </Style>
+    <!-- 系统健康里的一条记录（事件、拖慢开机的程序、驱动）：第一行加粗，详细说明在下面一行，右边是次数和时间，行与行之间一条细线 -->
+    <DataTemplate x:Key="NoteRowTpl">
+      <Border BorderBrush="#EFEFF4" BorderThickness="0,0,0,1" Padding="0,10,0,10">
+        <DockPanel>
+          <TextBlock DockPanel.Dock="Right" Text="{Binding Body}" Style="{StaticResource Caption}" Margin="18,1,0,0" VerticalAlignment="Top"/>
+          <StackPanel>
+            <TextBlock Text="{Binding Head}" FontWeight="SemiBold" TextWrapping="Wrap" LineHeight="20"/>
+            <TextBlock x:Name="Sub" Text="{Binding Sub}" Style="{StaticResource Caption}" TextWrapping="Wrap" LineHeight="19" Margin="0,3,0,0" ToolTip="{Binding Path}"/>
+          </StackPanel>
+        </DockPanel>
+      </Border>
+      <DataTemplate.Triggers>
+        <DataTrigger Binding="{Binding Sub}" Value="{x:Null}"><Setter TargetName="Sub" Property="Visibility" Value="Collapsed"/></DataTrigger>
+        <DataTrigger Binding="{Binding Sub}" Value=""><Setter TargetName="Sub" Property="Visibility" Value="Collapsed"/></DataTrigger>
+      </DataTemplate.Triggers>
+    </DataTemplate>
     <!-- 空间地图的一行：图标、名字、占比条、大小、百分比 -->
     <DataTemplate x:Key="CandRowTpl">
       <Grid Margin="14,11,14,11">
@@ -11205,6 +11407,9 @@ if ($script:mode -match '(?i)/autoclean') {
           <DockPanel>
             <TextBlock x:Name="Lk" DockPanel.Dock="Right" Text="&#xE72E;" FontFamily="{StaticResource Icons}" FontSize="11" Foreground="#86868B"
                        Margin="8,0,0,0" VerticalAlignment="Center" Visibility="Collapsed" ToolTip="{Binding LockTip}"/>
+            <Border x:Name="Mk" DockPanel.Dock="Right" Background="#FDEBEC" CornerRadius="6" Padding="6,0,6,1" Margin="8,0,0,0" VerticalAlignment="Center" Visibility="Collapsed" ToolTip="已经在待删清单里">
+              <TextBlock Text="待删" FontSize="11" Foreground="#C0101C"/>
+            </Border>
             <TextBlock Text="{Binding Name}" FontSize="13.5" TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}"/>
           </DockPanel>
           <TextBlock Text="{Binding Meta}" FontSize="11.5" Foreground="#86868B" TextTrimming="CharacterEllipsis" Margin="0,1,0,0" Visibility="{DynamicResource MapMetaVis}" ToolTip="{Binding Meta}"/>
@@ -11217,6 +11422,7 @@ if ($script:mode -match '(?i)/autoclean') {
       </Grid>
       <DataTemplate.Triggers>
         <DataTrigger Binding="{Binding Locked}" Value="True"><Setter TargetName="Lk" Property="Visibility" Value="Visible"/></DataTrigger>
+        <DataTrigger Binding="{Binding Marked}" Value="True"><Setter TargetName="Mk" Property="Visibility" Value="Visible"/></DataTrigger>
       </DataTemplate.Triggers>
     </DataTemplate>
   </Window.Resources>
@@ -11280,18 +11486,18 @@ if ($script:mode -match '(?i)/autoclean') {
         <!-- 窗口矮的时候（比如笔记本 150% 缩放）放不下全部页面：这一栏可以上下滚动，「设置」不会被挤掉 -->
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
         <StackPanel>
-          <TextBlock Text="清理" Style="{StaticResource NavHead}" Margin="11,0,0,5"/>
-          <RadioButton x:Name="NavClean" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xEDA2;" Content="清理 C 盘" IsChecked="True"/>
-          <RadioButton x:Name="NavDup" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE8C8;" Content="重复文件"/>
-          <RadioButton x:Name="NavSave" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE7B8;" Content="省空间"/>
+          <TextBlock Text="清理" Style="{StaticResource NavHead}" Margin="4,0,0,5"/>
+          <RadioButton x:Name="NavClean" GroupName="nav" Style="{StaticResource NavSub}" Tag="&#xEDA2;" Content="清理 C 盘" IsChecked="True"/>
+          <RadioButton x:Name="NavDup" GroupName="nav" Style="{StaticResource NavSub}" Tag="&#xE8C8;" Content="重复文件"/>
+          <RadioButton x:Name="NavSave" GroupName="nav" Style="{StaticResource NavSub}" Tag="&#xE7B8;" Content="省空间"/>
           <TextBlock Text="分析" Style="{StaticResource NavHead}"/>
-          <RadioButton x:Name="NavMap" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE9D9;" Content="空间地图"/>
-          <RadioButton x:Name="NavApps" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE71D;" Content="软件管理"/>
-          <RadioButton x:Name="NavHealth" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE95E;" Content="系统健康"/>
+          <RadioButton x:Name="NavMap" GroupName="nav" Style="{StaticResource NavSub}" Tag="&#xE9D9;" Content="空间地图"/>
+          <RadioButton x:Name="NavApps" GroupName="nav" Style="{StaticResource NavSub}" Tag="&#xE71D;" Content="软件管理"/>
+          <RadioButton x:Name="NavHealth" GroupName="nav" Style="{StaticResource NavSub}" Tag="&#xE95E;" Content="系统健康"/>
           <TextBlock x:Name="NavHeadManage" Text="管理" Style="{StaticResource NavHead}"/>
-          <RadioButton x:Name="NavMoves" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE8AB;" Content="搬家管理"/>
-          <RadioButton x:Name="NavAuto" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE823;" Content="自动提醒"/>
-          <RadioButton x:Name="NavLog" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE81C;" Content="操作日志"/>
+          <RadioButton x:Name="NavMoves" GroupName="nav" Style="{StaticResource NavSub}" Tag="&#xE8AB;" Content="搬家管理"/>
+          <RadioButton x:Name="NavAuto" GroupName="nav" Style="{StaticResource NavSub}" Tag="&#xE823;" Content="自动提醒"/>
+          <RadioButton x:Name="NavLog" GroupName="nav" Style="{StaticResource NavSub}" Tag="&#xE81C;" Content="操作日志"/>
           <RadioButton x:Name="NavHelp" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE897;" Content="帮助" Margin="0,12,0,3"/>
           <RadioButton x:Name="NavSettings" GroupName="nav" Style="{StaticResource Nav}" Tag="&#xE713;" Content="设置"/>
         </StackPanel>
@@ -11486,16 +11692,16 @@ if ($script:mode -match '(?i)/autoclean') {
             <TextBlock x:Name="FilterSummary" DockPanel.Dock="Right" Visibility="Collapsed"/>
             <WrapPanel>
               <RadioButton x:Name="DTabRoots" GroupName="dtab" Style="{StaticResource SubTab}" IsChecked="True">
-                <StackPanel Orientation="Horizontal"><TextBlock Text="查找位置"/><TextBlock x:Name="DTabRootsVal" Margin="8,0,0,0" Foreground="#86868B" FontWeight="Normal" MaxWidth="230" TextTrimming="CharacterEllipsis"/></StackPanel>
+                <StackPanel Orientation="Horizontal"><TextBlock Text="查找位置"/><Border Style="{StaticResource TabBadge}" Background="#EFEFF4" Margin="8,0,0,0"><TextBlock x:Name="DTabRootsVal" Style="{StaticResource TabBadgeText}" MaxWidth="230" TextTrimming="CharacterEllipsis"/></Border></StackPanel>
               </RadioButton>
               <RadioButton x:Name="DTabType" GroupName="dtab" Style="{StaticResource SubTab}">
-                <StackPanel Orientation="Horizontal"><TextBlock Text="文件类型"/><TextBlock x:Name="DTabTypeVal" Margin="8,0,0,0" Foreground="#86868B" FontWeight="Normal" MaxWidth="230" TextTrimming="CharacterEllipsis"/></StackPanel>
+                <StackPanel Orientation="Horizontal"><TextBlock Text="文件类型"/><Border Style="{StaticResource TabBadge}" Background="#EFEFF4" Margin="8,0,0,0"><TextBlock x:Name="DTabTypeVal" Style="{StaticResource TabBadgeText}" MaxWidth="230" TextTrimming="CharacterEllipsis"/></Border></StackPanel>
               </RadioButton>
               <RadioButton x:Name="DTabSize" GroupName="dtab" Style="{StaticResource SubTab}">
-                <StackPanel Orientation="Horizontal"><TextBlock Text="文件大小"/><TextBlock x:Name="DTabSizeVal" Margin="8,0,0,0" Foreground="#86868B" FontWeight="Normal" MaxWidth="230" TextTrimming="CharacterEllipsis"/></StackPanel>
+                <StackPanel Orientation="Horizontal"><TextBlock Text="文件大小"/><Border Style="{StaticResource TabBadge}" Background="#EFEFF4" Margin="8,0,0,0"><TextBlock x:Name="DTabSizeVal" Style="{StaticResource TabBadgeText}" MaxWidth="230" TextTrimming="CharacterEllipsis"/></Border></StackPanel>
               </RadioButton>
               <RadioButton x:Name="DTabMode" GroupName="dtab" Style="{StaticResource SubTab}">
-                <StackPanel Orientation="Horizontal"><TextBlock Text="怎样算重复"/><TextBlock x:Name="DTabModeVal" Margin="8,0,0,0" Foreground="#86868B" FontWeight="Normal" MaxWidth="230" TextTrimming="CharacterEllipsis"/></StackPanel>
+                <StackPanel Orientation="Horizontal"><TextBlock Text="怎样算重复"/><Border Style="{StaticResource TabBadge}" Background="#EFEFF4" Margin="8,0,0,0"><TextBlock x:Name="DTabModeVal" Style="{StaticResource TabBadgeText}" MaxWidth="230" TextTrimming="CharacterEllipsis"/></Border></StackPanel>
               </RadioButton>
             </WrapPanel>
           </DockPanel>
@@ -11772,13 +11978,23 @@ if ($script:mode -match '(?i)/autoclean') {
                 ToolTip="把这块盘的空间情况存成一个网页报告：方块图、最大的文件夹和文件、各类文件占多少、和上次比的变化。在浏览器里按 Ctrl+P 可以存成 PDF"/>
         <!-- 左边是「上一级」和路径；地方不够时说明文字末尾省略，「空间明细」靠右一直看得见，不会被右边的按钮挡住 -->
         <DockPanel VerticalAlignment="Center" Margin="0,0,12,0">
-          <Button x:Name="BtnMapUp" DockPanel.Dock="Left" Style="{StaticResource Small}" Margin="0,0,10,0" IsEnabled="False" ToolTip="回到上一级文件夹" VerticalAlignment="Center">
-            <StackPanel Orientation="Horizontal">
-              <TextBlock Text="&#xE72B;" FontFamily="{StaticResource Icons}" FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0"/>
-              <TextBlock Text="上一级" VerticalAlignment="Center"/>
-            </StackPanel>
-          </Button>
+          <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
+            <Button x:Name="BtnMapBack" Style="{StaticResource Small}" Padding="8,3" Margin="0,0,4,0" IsEnabled="False" ToolTip="后退到刚才看的文件夹（鼠标侧键、Alt+←）">
+              <TextBlock Text="&#xE72B;" FontFamily="{StaticResource Icons}" FontSize="11" VerticalAlignment="Center"/>
+            </Button>
+            <Button x:Name="BtnMapFwd" Style="{StaticResource Small}" Padding="8,3" Margin="0,0,8,0" IsEnabled="False" ToolTip="前进（鼠标侧键、Alt+→）">
+              <TextBlock Text="&#xE72A;" FontFamily="{StaticResource Icons}" FontSize="11" VerticalAlignment="Center"/>
+            </Button>
+            <Button x:Name="BtnMapUp" Style="{StaticResource Small}" IsEnabled="False" ToolTip="回到上一级文件夹（Backspace）" VerticalAlignment="Center">
+              <StackPanel Orientation="Horizontal">
+                <TextBlock Text="&#xE74A;" FontFamily="{StaticResource Icons}" FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <TextBlock Text="上一级" VerticalAlignment="Center"/>
+              </StackPanel>
+            </Button>
+          </StackPanel>
           <StackPanel VerticalAlignment="Center">
+            <!-- 路径上的每一层都能点，点哪一层回到哪一层 -->
+            <StackPanel x:Name="MapCrumbs" Orientation="Horizontal" Visibility="Collapsed" ClipToBounds="True"/>
             <TextBlock x:Name="MapPath" Text="还没有扫描" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" MaxWidth="560" HorizontalAlignment="Left"/>
             <DockPanel>
               <Button x:Name="BtnMapAcct" DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="空间明细" FontSize="12" Padding="10,0,2,0" VerticalAlignment="Center" Visibility="Collapsed"
@@ -11888,9 +12104,19 @@ if ($script:mode -match '(?i)/autoclean') {
                 <Border Grid.Column="4" Background="#9B6FD6" CornerRadius="0,5,5,0"/>
               </Grid>
               <WrapPanel x:Name="MapOvLegend" Margin="0,8,0,0"/>
+              <!-- 值得一看：可能用不上、删了能腾出不少空间的大文件夹（缓存、依赖包、构建产物、虚拟环境、临时文件），点一下跳过去看 -->
+              <DockPanel x:Name="MapWorthBox" Margin="0,10,0,0" Visibility="Collapsed">
+                <TextBlock DockPanel.Dock="Left" Text="值得一看" FontWeight="SemiBold" VerticalAlignment="Top" Margin="0,4,12,0"
+                           ToolTip="这块盘上可能用不上、删了能腾出不少空间的大文件夹：缓存、依赖包（node_modules 等）、构建产物、虚拟环境、临时文件。只是按名字认的，点一下跳过去，看清楚再决定"/>
+                <WrapPanel x:Name="MapWorth"/>
+              </DockPanel>
             </StackPanel>
           </Border>
-          <Canvas x:Name="MapTree" Grid.Row="1" Margin="10,4,10,8" ClipToBounds="True" Background="White" Visibility="Collapsed"/>
+          <DockPanel x:Name="MapTreeBox" Grid.Row="1" Visibility="Collapsed">
+            <!-- 颜色是这个文件夹装的是哪一类东西；带斜线的是能腾出来的（缓存、依赖包、临时文件） -->
+            <WrapPanel x:Name="MapTreeLegend" DockPanel.Dock="Bottom" Margin="12,0,12,6"/>
+            <Canvas x:Name="MapTree" Margin="10,4,10,6" ClipToBounds="True" Background="White"/>
+          </DockPanel>
           <DockPanel Grid.Row="2">
           <!-- 表头：点「名称」「修改时间」「大小」排序，点第三下回到按大小排 -->
           <Border x:Name="MapHeadBox" DockPanel.Dock="Top" Style="{StaticResource HeadBar}" Margin="6,0,6,2" Visibility="Collapsed">
@@ -11920,6 +12146,7 @@ if ($script:mode -match '(?i)/autoclean') {
                 <MenuItem x:Name="MmCopy" Header="复制路径" Style="{StaticResource MenuRow}"/>
                 <Separator Style="{StaticResource MenuSep}"/>
                 <MenuItem x:Name="MmCompress" Header="压缩（不删文件）" Style="{StaticResource MenuRow}"/>
+                <MenuItem x:Name="MmMark" Header="加入待删清单" Style="{StaticResource MenuRow}"/>
                 <MenuItem x:Name="MmDelete" Header="删除…" Style="{StaticResource MenuRow}"/>
               </ContextMenu>
             </ListView.ContextMenu>
@@ -11949,17 +12176,32 @@ if ($script:mode -match '(?i)/autoclean') {
           </StackPanel>
         </Grid>
       </Border>
-      <DockPanel Grid.Row="5" Margin="0,14,0,0">
+      <StackPanel Grid.Row="5">
+      <!-- 待删清单：在不同文件夹里挑的都放在这里，一直看得见删完以后这块盘还剩多少；看过清单再一起删 -->
+      <Border x:Name="MapMarkBar" Background="#FFF4E5" BorderBrush="#F3D9A8" BorderThickness="1" CornerRadius="10" Padding="14,8" Margin="0,12,0,0" Visibility="Collapsed">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+            <Button x:Name="BtnMarkClear" Content="清空清单" Style="{StaticResource Small}" Margin="0,0,8,0"/>
+            <Button x:Name="BtnMarkShow" Content="看看清单" Style="{StaticResource Small}" Margin="0,0,8,0"/>
+            <Button x:Name="BtnMarkDelete" Content="删除清单里的…" Style="{StaticResource Danger}" Padding="14,4"/>
+          </StackPanel>
+          <TextBlock x:Name="MapMarkText" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,12,0"/>
+        </DockPanel>
+      </Border>
+      <DockPanel Margin="0,14,0,0">
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
           <Button x:Name="BtnMapOpen" Content="打开位置" Margin="0,0,8,0" IsEnabled="False"/>
           <Button x:Name="BtnMapCompress" Content="压缩（不删文件）" Margin="0,0,8,0" IsEnabled="False"
                   ToolTip="用 NTFS 压缩这个文件夹：文件照常打开、照常修改，只是占的空间变小。适合不常用的资料、旧项目"/>
+          <Button x:Name="BtnMapMark" Content="加入待删清单" Margin="0,0,8,0" IsEnabled="False"
+                  ToolTip="先放进清单，不马上删：可以接着到别的文件夹里挑，下面一直显示删完以后还剩多少空间，看过清单再一起删"/>
           <Button x:Name="BtnMapDelete" Content="删除…" Style="{StaticResource Danger}" Padding="18,6" IsEnabled="False"/>
         </StackPanel>
         <CheckBox x:Name="MapAll" DockPanel.Dock="Left" Content="全选" Visibility="{DynamicResource MapCkVis}" VerticalAlignment="Center" Margin="18,0,12,0" ToolTip="选中这一层列出的全部项目；再点一下全部取消"/>
         <TextBlock x:Name="MapSel" VerticalAlignment="Center" TextWrapping="Wrap" Foreground="#6E6E73" Margin="2,0,16,0"
                    Text="选中一行可以打开位置、压缩或删除；勾选前面的方框，或按住 Ctrl、Shift，可以选多项一起删；按住鼠标（左键或右键）上下拖可以一次选中连着的几行。系统文件夹、软件安装文件夹、C 盘个人文件夹和搬家后的数据带小锁，不能在这里删。"/>
       </DockPanel>
+      </StackPanel>
     </Grid>
 
     <!-- ==================== 省空间（不删文件） ==================== -->
@@ -12214,8 +12456,8 @@ if ($script:mode -match '(?i)/autoclean') {
       <TextBlock Grid.Row="1" x:Name="HealthNote" Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap" Text="正在读取…"/>
       <Grid Grid.Row="2" Margin="0,12,0,0">
         <ScrollViewer x:Name="HealthViewHw" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
-          <StackPanel MaxWidth="980" HorizontalAlignment="Left" Margin="0,0,6,14">
-          <!-- 硬件：每一项一张小卡片 -->
+          <StackPanel Margin="0,0,6,14">
+          <!-- 硬件：每一项一张小卡片；卡片宽度跟着窗口变，窗口拉宽（最大化）时一排放更多张，不在右边留一大块空白 -->
           <Border x:Name="HealthCardHw" Style="{StaticResource Card}" Padding="24,20">
             <StackPanel>
               <TextBlock Text="硬件" Style="{StaticResource CardHead}"/>
@@ -12223,7 +12465,7 @@ if ($script:mode -match '(?i)/autoclean') {
                 <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                   <DataTemplate>
-                    <Border Width="290" Margin="0,0,12,12" Padding="0" Background="#F7F7F9" CornerRadius="10" ToolTip="{Binding Tip}">
+                    <Border Width="{DynamicResource HcCardW}" Margin="0,0,12,12" Padding="0" Background="#F7F7F9" CornerRadius="10" ToolTip="{Binding Tip}">
                       <DockPanel>
                         <Border DockPanel.Dock="Left" Width="5" Background="{Binding Stripe}" CornerRadius="10,0,0,10"/>
                         <StackPanel Margin="14,10,14,12">
@@ -12260,22 +12502,13 @@ if ($script:mode -match '(?i)/autoclean') {
           </StackPanel>
         </ScrollViewer>
         <ScrollViewer x:Name="HealthViewBoot" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
-          <StackPanel MaxWidth="980" HorizontalAlignment="Left" Margin="0,0,6,14">
+          <StackPanel MaxWidth="1280" HorizontalAlignment="Left" Margin="0,0,6,14">
           <!-- 开机 -->
           <Border x:Name="HealthCardBoot" Style="{StaticResource Card}" Padding="24,20">
             <StackPanel>
               <TextBlock Text="开机用时" Style="{StaticResource CardHead}"/>
               <TextBlock x:Name="HealthBootText" Style="{StaticResource Body}" Margin="0,8,0,0" TextWrapping="Wrap" Text=""/>
-              <ItemsControl x:Name="HealthSlow" Margin="0,8,0,0">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate>
-                    <DockPanel Margin="0,4,0,0">
-                      <TextBlock DockPanel.Dock="Right" Text="{Binding Body}" Style="{StaticResource Caption}" Margin="12,0,0,0" VerticalAlignment="Center"/>
-                      <TextBlock Text="{Binding Head}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}" VerticalAlignment="Center"/>
-                    </DockPanel>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
+              <ItemsControl x:Name="HealthSlow" Margin="0,6,0,0" ItemTemplate="{StaticResource NoteRowTpl}"/>
               <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap" Text="数据来自 Windows 自己的「诊断-性能」日志（事件 100 和 101）。拖慢开机的程序可以到「软件管理 → 开机启动」里关掉。"/>
             </StackPanel>
           </Border>
@@ -12284,13 +12517,17 @@ if ($script:mode -match '(?i)/autoclean') {
         </ScrollViewer>
         <!-- 蓝屏和崩溃：再分三个小选项卡（诊断结论 / 蓝屏记录 / 相关事件和驱动），各自滚动，不用一路滚到底 -->
         <Grid x:Name="HealthViewCrash" Visibility="Collapsed">
-          <Grid.ColumnDefinitions><ColumnDefinition Width="*" MaxWidth="980"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
+          <Grid.ColumnDefinitions><ColumnDefinition Width="*" MaxWidth="1280"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
           <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
           <Border Grid.Row="0" BorderBrush="#E5E5EA" BorderThickness="0,0,0,1" Margin="0,0,6,12">
             <StackPanel Orientation="Horizontal">
               <RadioButton x:Name="CTabVerdict" GroupName="ctab" Content="诊断结论" IsChecked="True" Style="{StaticResource SubTab}"/>
-              <RadioButton x:Name="CTabDumps" GroupName="ctab" Content="每次蓝屏" Style="{StaticResource SubTab}"/>
-              <RadioButton x:Name="CTabEvents" GroupName="ctab" Content="相关事件和驱动" Style="{StaticResource SubTab}"/>
+              <RadioButton x:Name="CTabDumps" GroupName="ctab" Style="{StaticResource SubTab}">
+                <StackPanel Orientation="Horizontal"><TextBlock Text="每次蓝屏"/><Border x:Name="CTabDumpsB" Style="{StaticResource TabBadge}" Visibility="Collapsed"><TextBlock x:Name="CTabDumpsN" Style="{StaticResource TabBadgeText}"/></Border></StackPanel>
+              </RadioButton>
+              <RadioButton x:Name="CTabEvents" GroupName="ctab" Style="{StaticResource SubTab}">
+                <StackPanel Orientation="Horizontal"><TextBlock Text="相关事件和驱动"/><Border x:Name="CTabEventsB" Style="{StaticResource TabBadge}" Visibility="Collapsed"><TextBlock x:Name="CTabEventsN" Style="{StaticResource TabBadgeText}"/></Border></StackPanel>
+              </RadioButton>
             </StackPanel>
           </Border>
           <ScrollViewer x:Name="CrashViewVerdict" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
@@ -12381,27 +12618,9 @@ if ($script:mode -match '(?i)/autoclean') {
           <Border x:Name="HealthCardCrashEv" Style="{StaticResource Card}" Padding="24,20">
             <StackPanel>
               <TextBlock x:Name="HealthEventsHead" Text="最近 30 天的相关事件" Style="{StaticResource CardHead}"/>
-              <ItemsControl x:Name="HealthEvents">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate>
-                    <DockPanel Margin="0,5,0,0">
-                      <TextBlock DockPanel.Dock="Right" Text="{Binding Body}" Style="{StaticResource Caption}" Margin="12,0,0,0" VerticalAlignment="Top"/>
-                      <TextBlock Text="{Binding Head}" TextWrapping="Wrap" ToolTip="{Binding Path}"/>
-                    </DockPanel>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
+              <ItemsControl x:Name="HealthEvents" Margin="0,6,0,0" ItemTemplate="{StaticResource NoteRowTpl}"/>
               <TextBlock x:Name="HealthDriversHead" Text="最近 30 天装的驱动" Style="{StaticResource CardHead}" Margin="0,20,0,0"/>
-              <ItemsControl x:Name="HealthDrivers">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate>
-                    <DockPanel Margin="0,4,0,0">
-                      <TextBlock DockPanel.Dock="Right" Text="{Binding Body}" Style="{StaticResource Caption}" Margin="12,0,0,0" VerticalAlignment="Center"/>
-                      <TextBlock Text="{Binding Head}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}"/>
-                    </DockPanel>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
+              <ItemsControl x:Name="HealthDrivers" Margin="0,6,0,0" ItemTemplate="{StaticResource NoteRowTpl}"/>
               <TextBlock Style="{StaticResource Caption}" Margin="0,12,0,0" TextWrapping="Wrap" Text="意外关机、硬件错误（WHEA）、磁盘和文件系统错误按来源归并；蓝屏时间和最近装的驱动对得上的，优先怀疑那个驱动。"/>
             </StackPanel>
           </Border>
@@ -12410,7 +12629,7 @@ if ($script:mode -match '(?i)/autoclean') {
         </Grid>
         <!-- 常见问题修复：左边选问题，右边只显示这个问题的修法 -->
         <Grid x:Name="HealthViewFix" Visibility="Collapsed" Margin="0,0,6,10">
-          <Grid.ColumnDefinitions><ColumnDefinition Width="*" MaxWidth="980"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
+          <Grid.ColumnDefinitions><ColumnDefinition Width="*" MaxWidth="1280"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
           <Border x:Name="HealthCardFix" Style="{StaticResource Card}" Padding="0">
             <DockPanel>
               <StackPanel DockPanel.Dock="Top" Margin="24,18,24,0">
@@ -12432,7 +12651,7 @@ if ($script:mode -match '(?i)/autoclean') {
                 <Border Grid.Column="0" BorderBrush="#E5E5EA" BorderThickness="0,1,1,1">
                   <ListBox x:Name="FixGroups" Background="Transparent" BorderThickness="0" Padding="10,8" ItemContainerStyle="{StaticResource NavItem}"
                            ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                    <ListBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Title}" TextWrapping="Wrap"/></DataTemplate></ListBox.ItemTemplate>
+                    <ListBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Title}" TextWrapping="Wrap" FontWeight="SemiBold"/></DataTemplate></ListBox.ItemTemplate>
                   </ListBox>
                 </Border>
                 <Border Grid.Column="1" BorderBrush="#E5E5EA" BorderThickness="0,1,0,1">
@@ -12441,19 +12660,19 @@ if ($script:mode -match '(?i)/autoclean') {
                       <ContentControl.ContentTemplate>
                         <DataTemplate>
                           <StackPanel Grid.IsSharedSizeScope="True">
-                            <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap"/>
-                            <TextBlock Text="{Binding Desc}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,6"/>
+                            <TextBlock Text="{Binding Title}" FontSize="16" TextWrapping="Wrap"/>
+                            <TextBlock Text="{Binding Desc}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,8"/>
                             <ItemsControl ItemsSource="{Binding Steps}">
                               <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                  <Grid Margin="0,6,0,0">
+                                  <Grid Margin="0,8,0,0">
                                     <Grid.ColumnDefinitions>
                                       <ColumnDefinition Width="Auto" SharedSizeGroup="FixBtn"/>
                                       <ColumnDefinition Width="Auto" SharedSizeGroup="FixTag"/>
                                       <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
                                     <Button Grid.Column="0" Content="{Binding Name}" Tag="{Binding Id}" IsEnabled="{Binding Enabled}" ToolTip="{Binding Desc}" Style="{StaticResource Small}" HorizontalAlignment="Stretch" VerticalAlignment="Top"/>
-                                    <Border Grid.Column="1" Background="{Binding TagBg}" CornerRadius="6" Padding="7,2" Margin="10,3,0,0" VerticalAlignment="Top"><TextBlock Text="{Binding Tag}" FontSize="11.5" FontWeight="SemiBold" Foreground="{Binding TagFg}" HorizontalAlignment="Center"/></Border>
+                                    <Border Grid.Column="1" Background="{Binding TagBg}" CornerRadius="6" Padding="7,2" Margin="10,3,0,0" VerticalAlignment="Top"><TextBlock Text="{Binding Tag}" FontSize="11.5" Foreground="{Binding TagFg}" HorizontalAlignment="Center"/></Border>
                                     <TextBlock Grid.Column="2" Text="{Binding Desc}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="10,4,0,0"/>
                                   </Grid>
                                 </DataTemplate>
@@ -12472,7 +12691,7 @@ if ($script:mode -match '(?i)/autoclean') {
 
         <!-- 活动监控：表格占满这一页，表格自己滚动；点列名（CPU、内存、写入速度……）按那一列从高到低排 -->
         <Grid x:Name="HealthViewMon" Visibility="Collapsed" Margin="0,0,6,10">
-          <Grid.ColumnDefinitions><ColumnDefinition Width="*" MaxWidth="980"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
+          <Grid.ColumnDefinitions><ColumnDefinition Width="*" MaxWidth="1280"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
           <Border x:Name="HealthCardMon" Style="{StaticResource Card}" Padding="24,18,24,14">
             <DockPanel>
               <DockPanel DockPanel.Dock="Top">
@@ -12506,22 +12725,13 @@ if ($script:mode -match '(?i)/autoclean') {
           </Border>
         </Grid>
         <ScrollViewer x:Name="HealthViewEvents" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
-          <StackPanel MaxWidth="980" HorizontalAlignment="Left" Margin="0,0,6,14">
+          <StackPanel MaxWidth="1280" HorizontalAlignment="Left" Margin="0,0,6,14">
           <!-- Windows 事件 -->
           <Border x:Name="HealthCardEvents" Style="{StaticResource Card}" Padding="24,20">
             <StackPanel>
               <TextBlock Text="Windows 事件：最近 7 天的严重错误" Style="{StaticResource CardHead}"/>
               <TextBlock x:Name="HealthWinText" Style="{StaticResource Body}" Margin="0,8,0,0" TextWrapping="Wrap" Text=""/>
-              <ItemsControl x:Name="HealthErrors" Margin="0,8,0,0">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate>
-                    <DockPanel Margin="0,5,0,0">
-                      <TextBlock DockPanel.Dock="Right" Text="{Binding Body}" Style="{StaticResource Caption}" Margin="12,0,0,0" VerticalAlignment="Top"/>
-                      <TextBlock Text="{Binding Head}" TextWrapping="Wrap" ToolTip="{Binding Path}"/>
-                    </DockPanel>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
+              <ItemsControl x:Name="HealthErrors" Margin="0,6,0,0" ItemTemplate="{StaticResource NoteRowTpl}"/>
               <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap" Text="系统日志里「严重」和「错误」两级，按来源归并。很多错误是无害的（比如某个服务启动慢了一次）；同一个来源反复出现、时间又和故障对得上的才值得查。详细内容在 Windows 的「事件查看器」里。"/>
             </StackPanel>
           </Border>
@@ -12569,13 +12779,22 @@ if ($script:mode -match '(?i)/autoclean') {
           <TextBox x:Name="AppsSearch" MaxWidth="320" HorizontalAlignment="Left" MinWidth="200" ToolTip="按名字或发行商搜索"/>
         </DockPanel>
       </DockPanel>
-      <Border Grid.Row="2" x:Name="AppsLeftBox" Background="#FFF8EC" BorderBrush="#F3D9A8" BorderThickness="1" CornerRadius="10" Padding="16,10" Margin="0,0,0,10" Visibility="Collapsed">
+      <StackPanel Grid.Row="2">
+      <Border x:Name="AppsBatchBox" Background="#E3EEFF" BorderBrush="#B9D3F7" BorderThickness="1" CornerRadius="10" Padding="16,10" Margin="0,0,0,10" Visibility="Collapsed">
+        <DockPanel>
+          <Button x:Name="BtnBatchStop" DockPanel.Dock="Right" Content="停止" Style="{StaticResource Small}" Margin="8,0,0,0" ToolTip="不再打开后面的卸载程序；已经打开的那个照常走完"/>
+          <Button x:Name="BtnBatchNext" DockPanel.Dock="Right" Content="打开下一个" Style="{StaticResource Small}" ToolTip="这个卸载程序已经走完了但没自动接上时，点这里打开下一个"/>
+          <TextBlock x:Name="AppsBatchText" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,12,0"/>
+        </DockPanel>
+      </Border>
+      <Border x:Name="AppsLeftBox" Background="#FFF8EC" BorderBrush="#F3D9A8" BorderThickness="1" CornerRadius="10" Padding="16,10" Margin="0,0,0,10" Visibility="Collapsed">
         <DockPanel>
           <Button x:Name="BtnAppsLeftClose" DockPanel.Dock="Right" Content="不用了" Style="{StaticResource Small}" Margin="8,0,0,0"/>
           <Button x:Name="BtnAppsLeft" DockPanel.Dock="Right" Content="检查残留" Style="{StaticResource Small}"/>
           <TextBlock x:Name="AppsLeftText" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,12,0"/>
         </DockPanel>
       </Border>
+      </StackPanel>
       <Border Grid.Row="3" Style="{StaticResource Card}" Padding="0,2,0,6">
         <DockPanel Grid.IsSharedSizeScope="True">
         <!-- 表头：点列名排序（软件：名称、发行商、安装日期、大小；开机启动等：名称、状态） -->
@@ -12583,30 +12802,47 @@ if ($script:mode -match '(?i)/autoclean') {
           <Grid>
             <Grid x:Name="AppsHead" Margin="12,0,10,0">
               <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="30"/>
                 <ColumnDefinition Width="40"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="100"/>
                 <ColumnDefinition Width="Auto" SharedSizeGroup="AppAct"/>
               </Grid.ColumnDefinitions>
-              <StackPanel Grid.Column="1" Orientation="Horizontal">
+              <CheckBox x:Name="AppsPickAll" Grid.Column="0" VerticalAlignment="Center" ToolTip="勾上这里列出的全部；再点一下全部取消"/>
+              <StackPanel Grid.Column="2" Orientation="Horizontal">
                 <Button Tag="name" Content="名称" Style="{StaticResource ColHead}"/>
                 <TextBlock Text="·" Foreground="#C7C7CC" Margin="7,0" VerticalAlignment="Center"/>
                 <Button Tag="pub" Content="发行商" Style="{StaticResource ColHead}"/>
                 <TextBlock Text="·" Foreground="#C7C7CC" Margin="7,0" VerticalAlignment="Center"/>
                 <Button Tag="date" Content="安装日期" Style="{StaticResource ColHead}"/>
               </StackPanel>
-              <Button Grid.Column="2" Tag="size" Content="大小" Style="{StaticResource ColHead}" HorizontalAlignment="Right" Margin="0,0,14,0"/>
+              <Button Grid.Column="3" Tag="size" Content="大小" Style="{StaticResource ColHead}" HorizontalAlignment="Right" Margin="0,0,14,0"/>
             </Grid>
             <Grid x:Name="StartHead" Margin="12,0,10,0" Visibility="Collapsed">
               <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="30"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="80"/>
                 <ColumnDefinition Width="Auto" SharedSizeGroup="StartAct"/>
               </Grid.ColumnDefinitions>
-              <Button Grid.Column="0" Tag="name" Content="名称" Style="{StaticResource ColHead}"/>
-              <Button Grid.Column="1" Tag="status" Content="状态" Style="{StaticResource ColHead}"/>
+              <CheckBox x:Name="StartPickAll" Grid.Column="0" VerticalAlignment="Center" ToolTip="勾上这里列出的全部；再点一下全部取消"/>
+              <Button Grid.Column="1" Tag="name" Content="名称" Style="{StaticResource ColHead}"/>
+              <Button Grid.Column="2" Tag="status" Content="状态" Style="{StaticResource ColHead}"/>
             </Grid>
           </Grid>
+        </Border>
+        <!-- 勾选了几项时出现：一次卸载 / 禁用 / 启用 / 移到回收站 -->
+        <Border x:Name="AppsPickBar" DockPanel.Dock="Bottom" BorderBrush="#E5E5EA" BorderThickness="0,1,0,0" Padding="18,10,14,6" Visibility="Collapsed">
+          <DockPanel>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+              <Button x:Name="BtnPickClear" Content="取消选择" Style="{StaticResource Small}" Margin="0,0,8,0"/>
+              <Button x:Name="BtnPickEnable" Content="启用选中的" Style="{StaticResource Small}" Margin="0,0,8,0"/>
+              <Button x:Name="BtnPickDisable" Content="禁用选中的" Style="{StaticResource Small}" Margin="0,0,8,0"/>
+              <Button x:Name="BtnPickRecycle" Content="移到回收站…" Style="{StaticResource Danger}" Padding="14,4"/>
+              <Button x:Name="BtnPickUninstall" Content="卸载选中的…" Style="{StaticResource Danger}" Padding="14,4"/>
+            </StackPanel>
+            <TextBlock x:Name="AppsPickText" VerticalAlignment="Center" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+          </DockPanel>
         </Border>
         <Grid>
           <ListView x:Name="AppsList" Background="Transparent" BorderThickness="0" ItemContainerStyle="{StaticResource SelRow}"
@@ -12615,20 +12851,22 @@ if ($script:mode -match '(?i)/autoclean') {
               <DataTemplate>
                 <Grid Margin="12,8,10,8">
                   <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="30"/>
                     <ColumnDefinition Width="40"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="100"/>
                     <ColumnDefinition Width="Auto" SharedSizeGroup="AppAct"/>
                   </Grid.ColumnDefinitions>
-                  <Border Width="30" Height="30" CornerRadius="8" Background="#EFEFF4" HorizontalAlignment="Left" VerticalAlignment="Center">
+                  <CheckBox Grid.Column="0" IsChecked="{Binding Picked, Mode=TwoWay}" VerticalAlignment="Center" Focusable="False" Cursor="Hand"/>
+                  <Border Grid.Column="1" Width="30" Height="30" CornerRadius="8" Background="#EFEFF4" HorizontalAlignment="Left" VerticalAlignment="Center">
                     <TextBlock Text="{Binding Icon}" FontWeight="SemiBold" Foreground="#6E6E73" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                   </Border>
-                  <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
+                  <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="0,0,12,0">
                     <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
                     <TextBlock Text="{Binding Meta}" FontSize="11.5" Foreground="#86868B" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
                   </StackPanel>
-                  <TextBlock Grid.Column="2" Text="{Binding SizeText}" FontWeight="SemiBold" TextAlignment="Right" VerticalAlignment="Center" Margin="0,0,14,0"/>
-                  <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                  <TextBlock Grid.Column="3" Text="{Binding SizeText}" FontWeight="SemiBold" TextAlignment="Right" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                  <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button x:Name="AppUpgrade" Content="升级" Tag="{Binding}" Style="{StaticResource Small}" Foreground="#0066CC" Margin="0,0,6,0" Visibility="Collapsed"
                             ToolTip="在终端窗口里用 winget 升级这个软件，过程和提示都看得见"/>
                     <Button x:Name="AppOpen" Content="打开位置" Tag="{Binding}" Style="{StaticResource Small}" Margin="0,0,6,0"/>
@@ -12651,24 +12889,26 @@ if ($script:mode -match '(?i)/autoclean') {
               <DataTemplate>
                 <Grid Margin="12,8,10,8">
                   <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="30"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="80"/>
                     <ColumnDefinition Width="Auto" SharedSizeGroup="StartAct"/>
                   </Grid.ColumnDefinitions>
-                  <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+                  <CheckBox x:Name="Pk" Grid.Column="0" IsChecked="{Binding Picked, Mode=TwoWay}" VerticalAlignment="Center" Focusable="False" Cursor="Hand"/>
+                  <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
                     <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
                     <TextBlock Text="{Binding Meta}" FontSize="11.5" Foreground="#86868B" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
                     <TextBlock Text="{Binding Detail}" FontSize="11.5" Foreground="#86868B" TextTrimming="CharacterEllipsis" Margin="0,1,0,0" ToolTip="{Binding Detail}"/>
                   </StackPanel>
-                  <TextBlock Grid.Column="1" Text="{Binding StatusText}" Foreground="{Binding StatusBrush}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,14,0"/>
-                  <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                  <TextBlock Grid.Column="2" Text="{Binding StatusText}" Foreground="{Binding StatusBrush}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                  <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button x:Name="StartOpen" Content="打开位置" Tag="{Binding}" Style="{StaticResource Small}" Margin="0,0,6,0"/>
                     <Button x:Name="StartToggle" Content="{Binding ToggleText}" Tag="{Binding}" Style="{StaticResource Small}" MinWidth="64"/>
                   </StackPanel>
                 </Grid>
                 <DataTemplate.Triggers>
                   <DataTrigger Binding="{Binding Open}" Value=""><Setter TargetName="StartOpen" Property="Visibility" Value="Collapsed"/></DataTrigger>
-                  <DataTrigger Binding="{Binding Ours}" Value="True"><Setter TargetName="StartToggle" Property="IsEnabled" Value="False"/><Setter TargetName="StartToggle" Property="ToolTip" Value="本工具自己的任务，请在「自动提醒」页开关"/></DataTrigger>
+                  <DataTrigger Binding="{Binding Ours}" Value="True"><Setter TargetName="StartToggle" Property="IsEnabled" Value="False"/><Setter TargetName="StartToggle" Property="ToolTip" Value="本工具自己的任务，请在「自动提醒」页开关"/><Setter TargetName="Pk" Property="Visibility" Value="Hidden"/></DataTrigger>
                 </DataTemplate.Triggers>
               </DataTemplate>
             </ListView.ItemTemplate>
@@ -12698,16 +12938,33 @@ if ($script:mode -match '(?i)/autoclean') {
           <TextBlock Style="{StaticResource PageSub}" Text="把 C 盘上的聊天记录、软件和其他大文件夹搬到其他盘，原位置留一个链接，软件照常使用。搬走的也在这里：看链接是否正常、搬回 C 盘、修复断掉的链接。"/>
         </StackPanel>
       </DockPanel>
-      <DockPanel Grid.Row="1" Margin="0,0,0,12">
-        <Border DockPanel.Dock="Right" Style="{StaticResource SegBox}" VerticalAlignment="Center" Margin="16,0,0,0">
-          <StackPanel Orientation="Horizontal">
-            <RadioButton x:Name="MovesTabCand" GroupName="movestab" Content="可以搬的" IsChecked="True" Style="{StaticResource Seg}"/>
-            <RadioButton x:Name="MovesTabDone" GroupName="movestab" Content="已经搬走的" Style="{StaticResource Seg}"/>
+      <TextBlock Grid.Row="1" x:Name="MovesInfo" FontWeight="SemiBold" Margin="2,0,0,12" TextWrapping="Wrap"/>
+      <!-- 左边目录：「可以搬的」下面按聊天记录、软件、其他文件夹、不适合搬的分开看；「已经搬走的」单独一项 -->
+      <Grid Grid.Row="2">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="214"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+        <Border Grid.Column="0" Style="{StaticResource Card}" Padding="8,0,8,10" Margin="0,0,16,0" VerticalAlignment="Top">
+          <StackPanel>
+            <RadioButton x:Name="MovesTabCand" GroupName="movestab" Style="{StaticResource TreeTop}" IsChecked="True">
+              <DockPanel><Border x:Name="MovesTabCandB" DockPanel.Dock="Right" Style="{StaticResource TabBadge}" Visibility="Collapsed"><TextBlock x:Name="MovesTabCandN" Style="{StaticResource TabBadgeText}"/></Border><TextBlock Text="可以搬的" TextTrimming="CharacterEllipsis"/></DockPanel>
+            </RadioButton>
+            <RadioButton x:Name="MNavChat" GroupName="movestab" Tag="chat" Style="{StaticResource TreeItem}">
+              <DockPanel><Border x:Name="MNavChatB" DockPanel.Dock="Right" Style="{StaticResource TabBadge}" Visibility="Collapsed"><TextBlock x:Name="MNavChatN" Style="{StaticResource TabBadgeText}"/></Border><TextBlock Text="聊天记录" TextTrimming="CharacterEllipsis"/></DockPanel>
+            </RadioButton>
+            <RadioButton x:Name="MNavApp" GroupName="movestab" Tag="app" Style="{StaticResource TreeItem}">
+              <DockPanel><Border x:Name="MNavAppB" DockPanel.Dock="Right" Style="{StaticResource TabBadge}" Visibility="Collapsed"><TextBlock x:Name="MNavAppN" Style="{StaticResource TabBadgeText}"/></Border><TextBlock Text="装在 C 盘的软件" TextTrimming="CharacterEllipsis"/></DockPanel>
+            </RadioButton>
+            <RadioButton x:Name="MNavOther" GroupName="movestab" Tag="other" Style="{StaticResource TreeItem}">
+              <DockPanel><Border x:Name="MNavOtherB" DockPanel.Dock="Right" Style="{StaticResource TabBadge}" Visibility="Collapsed"><TextBlock x:Name="MNavOtherN" Style="{StaticResource TabBadgeText}"/></Border><TextBlock Text="其他可搬的文件夹" TextTrimming="CharacterEllipsis"/></DockPanel>
+            </RadioButton>
+            <RadioButton x:Name="MNavBlocked" GroupName="movestab" Tag="blocked" Style="{StaticResource TreeItem}">
+              <DockPanel><Border x:Name="MNavBlockedB" DockPanel.Dock="Right" Style="{StaticResource TabBadge}" Visibility="Collapsed"><TextBlock x:Name="MNavBlockedN" Style="{StaticResource TabBadgeText}"/></Border><TextBlock Text="不适合搬的软件" TextTrimming="CharacterEllipsis"/></DockPanel>
+            </RadioButton>
+            <RadioButton x:Name="MovesTabDone" GroupName="movestab" Style="{StaticResource TreeTop}">
+              <DockPanel><Border x:Name="MovesTabDoneB" DockPanel.Dock="Right" Style="{StaticResource TabBadge}" Visibility="Collapsed"><TextBlock x:Name="MovesTabDoneN" Style="{StaticResource TabBadgeText}"/></Border><TextBlock Text="已经搬走的" TextTrimming="CharacterEllipsis"/></DockPanel>
+            </RadioButton>
           </StackPanel>
         </Border>
-        <TextBlock x:Name="MovesInfo" FontWeight="SemiBold" Margin="2,0,0,0" TextWrapping="Wrap" VerticalAlignment="Center"/>
-      </DockPanel>
-      <Grid Grid.Row="2" Grid.IsSharedSizeScope="True">
+      <Grid Grid.Column="1" Grid.IsSharedSizeScope="True">
         <!-- 可以搬的：按聊天记录、软件、其他文件夹分组，勾选后一起搬；表头排序在每一组里面排 -->
         <DockPanel x:Name="CandBox">
         <Grid x:Name="CandHead" DockPanel.Dock="Top" Margin="15,0,15,6">
@@ -12790,6 +13047,7 @@ if ($script:mode -match '(?i)/autoclean') {
         </DockPanel>
         </Border>
       </Grid>
+      </Grid>
       <DockPanel x:Name="CandStore" Grid.Row="3" Margin="2,10,0,0" Visibility="Collapsed">
         <Button x:Name="BtnCandStore" DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="打开 Windows 设置" VerticalAlignment="Center" Margin="12,0,0,0"/>
         <TextBlock x:Name="CandStoreText" Style="{StaticResource Caption}" TextWrapping="Wrap"/>
@@ -12817,13 +13075,13 @@ if ($script:mode -match '(?i)/autoclean') {
         <Border Style="{StaticResource SegBox}" VerticalAlignment="Center" Margin="0,2,0,4">
           <StackPanel Orientation="Horizontal">
               <RadioButton x:Name="ATabRemind" GroupName="atab" Style="{StaticResource Seg}" IsChecked="True">
-                <StackPanel Orientation="Horizontal"><TextBlock Text="空间提醒"/><TextBlock x:Name="ATabRemindState" Margin="7,0,0,0" Foreground="#86868B" FontWeight="Normal"/></StackPanel>
+                <StackPanel Orientation="Horizontal"><TextBlock Text="空间提醒"/><Border x:Name="ATabRemindB" Style="{StaticResource TabBadge}"><TextBlock x:Name="ATabRemindState" Style="{StaticResource TabBadgeText}"/></Border></StackPanel>
               </RadioButton>
               <RadioButton x:Name="ATabClean" GroupName="atab" Style="{StaticResource Seg}">
-                <StackPanel Orientation="Horizontal"><TextBlock Text="定期自动清理"/><TextBlock x:Name="ATabCleanState" Margin="7,0,0,0" Foreground="#86868B" FontWeight="Normal"/></StackPanel>
+                <StackPanel Orientation="Horizontal"><TextBlock Text="定期自动清理"/><Border x:Name="ATabCleanB" Style="{StaticResource TabBadge}"><TextBlock x:Name="ATabCleanState" Style="{StaticResource TabBadgeText}"/></Border></StackPanel>
               </RadioButton>
               <RadioButton x:Name="ATabHist" GroupName="atab" Style="{StaticResource Seg}">
-                <StackPanel Orientation="Horizontal"><TextBlock Text="空间变化"/><TextBlock x:Name="ATabHistState" Margin="7,0,0,0" Foreground="#86868B" FontWeight="Normal"/></StackPanel>
+                <StackPanel Orientation="Horizontal"><TextBlock Text="空间变化"/><Border x:Name="ATabHistB" Style="{StaticResource TabBadge}"><TextBlock x:Name="ATabHistState" Style="{StaticResource TabBadgeText}"/></Border></StackPanel>
               </RadioButton>
           </StackPanel>
         </Border>
@@ -13003,213 +13261,235 @@ if ($script:mode -match '(?i)/autoclean') {
     </Grid>
 
     <!-- ==================== 设置：外观、语言、显示哪些内容 ==================== -->
-    <Grid x:Name="PageSettings" Grid.Column="1" Grid.Row="0" Visibility="Collapsed">
-      <ScrollViewer x:Name="SetScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
-        <StackPanel Margin="30,24,30,28" MaxWidth="900" HorizontalAlignment="Left">
-          <DockPanel>
-            <Button x:Name="BtnSetReset" DockPanel.Dock="Right" Content="恢复默认显示" VerticalAlignment="Top" Margin="16,4,0,0"
-                    ToolTip="页面、按钮、列和说明全部恢复成默认显示。外观、语言和扫描设置不变"/>
-            <StackPanel>
-              <TextBlock Text="设置" Style="{StaticResource PageTitle}"/>
-              <TextBlock Style="{StaticResource PageSub}" Text="外观、语言，以及界面上显示哪些内容。用不上的页面、按钮和说明可以关掉，界面更清爽；随时可以回来打开，不会丢任何设置和记录。"/>
-            </StackPanel>
-          </DockPanel>
-
-          <Border x:Name="SetCardMode" Style="{StaticResource Card}" Padding="24,20" Margin="0,20,0,0">
-            <StackPanel>
-              <TextBlock Text="使用模式" Style="{StaticResource CardHead}"/>
-              <TextBlock Style="{StaticResource SetNote}" Text="按你的需要决定界面上有多少东西。换模式不会丢任何设置和记录，随时可以换回来。"/>
-              <Border Style="{StaticResource SegBox}" HorizontalAlignment="Left" Margin="0,12,0,0">
-                <StackPanel Orientation="Horizontal">
-                  <RadioButton x:Name="SetModeBasic" GroupName="mode" Content="普通用户" Style="{StaticResource Seg}"/>
-                  <RadioButton x:Name="SetModePro" GroupName="mode" Content="工程师" Style="{StaticResource Seg}"/>
-                  <RadioButton x:Name="SetModeExpert" GroupName="mode" Content="开发者和 IT" Style="{StaticResource Seg}"/>
-                </StackPanel>
-              </Border>
-              <TextBlock x:Name="SetModeNote" Style="{StaticResource SetNote}" Margin="0,10,0,0"/>
-            </StackPanel>
-          </Border>
-
-          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
-            <StackPanel>
-              <TextBlock Text="外观和语言" Style="{StaticResource CardHead}"/>
-              <DockPanel Margin="0,14,0,0">
-                <Border DockPanel.Dock="Right" Style="{StaticResource SegBox}" VerticalAlignment="Center" Margin="20,0,0,0">
-                  <StackPanel Orientation="Horizontal">
-                    <RadioButton x:Name="SetThemeLight" GroupName="settheme" Content="浅色" Style="{StaticResource Seg}"/>
-                    <RadioButton x:Name="SetThemeDark" GroupName="settheme" Content="深色" Style="{StaticResource Seg}"/>
-                    <RadioButton x:Name="SetThemeSystem" GroupName="settheme" Content="跟随系统" Style="{StaticResource Seg}"/>
-                  </StackPanel>
-                </Border>
-                <StackPanel VerticalAlignment="Center">
-                  <TextBlock Text="外观" Style="{StaticResource SetName}"/>
-                  <TextBlock Style="{StaticResource SetNote}" Text="跟随系统会照 Windows 设置里「选择应用模式」来。换了以后本工具会关闭，再自动打开。"/>
-                </StackPanel>
-              </DockPanel>
-              <DockPanel Margin="0,16,0,0">
-                <Border DockPanel.Dock="Right" Style="{StaticResource SegBox}" VerticalAlignment="Center" Margin="20,0,0,0">
-                  <StackPanel Orientation="Horizontal">
-                    <RadioButton x:Name="SetLangZh" GroupName="setlang" Style="{StaticResource Seg}"/>
-                    <RadioButton x:Name="SetLangEn" GroupName="setlang" Style="{StaticResource Seg}"/>
-                  </StackPanel>
-                </Border>
-                <StackPanel VerticalAlignment="Center">
-                  <TextBlock Text="界面语言" Style="{StaticResource SetName}"/>
-                  <TextBlock Style="{StaticResource SetNote}" Text="换了以后本工具会关闭，再用新的语言打开。"/>
-                </StackPanel>
-              </DockPanel>
-            </StackPanel>
-          </Border>
-
-          <Border x:Name="SetCardDisplay" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
-            <StackPanel>
-              <TextBlock Text="界面上显示什么" Style="{StaticResource CardHead}"/>
-              <TextBlock Text="左侧显示的页面" Style="{StaticResource SetName}" Margin="0,14,0,0"/>
-              <TextBlock Style="{StaticResource SetNote}" Text="「清理 C 盘」「空间地图」「帮助」和「设置」一直显示。关掉的页面只是不在左侧列出，里面的设置、搬家记录和自动提醒都照旧。"/>
-              <WrapPanel Margin="0,2,0,0">
-                <CheckBox x:Name="SetPageDup" Content="重复文件" Width="170" Margin="0,10,0,0"/>
-                <CheckBox x:Name="SetPageSave" Content="省空间" Width="170" Margin="0,10,0,0"/>
-                <CheckBox x:Name="SetPageApps" Content="软件管理" Width="170" Margin="0,10,0,0"/>
-                <CheckBox x:Name="SetPageHealth" Content="系统健康" Width="170" Margin="0,10,0,0"/>
-                <CheckBox x:Name="SetPageMoves" Content="搬家管理" Width="170" Margin="0,10,0,0"/>
-                <CheckBox x:Name="SetPageAuto" Content="自动提醒" Width="170" Margin="0,10,0,0"/>
-                <CheckBox x:Name="SetPageLog" Content="操作日志" Width="170" Margin="0,10,0,0"/>
-              </WrapPanel>
-              <TextBlock Text="左下角的按钮" Style="{StaticResource SetName}" Margin="0,18,0,0"/>
-              <TextBlock Style="{StaticResource SetNote}" Text="外观和语言也可以在这一页上面改；「使用反馈」和「运行记录」也在「帮助」页里。"/>
-              <WrapPanel Margin="0,2,0,0">
-                <CheckBox x:Name="SetLinkTheme" Content="外观" Width="170" Margin="0,10,0,0"/>
-                <CheckBox x:Name="SetLinkLang" Content="切换语言" Width="170" Margin="0,10,0,0"/>
-                <CheckBox x:Name="SetLinkFeedback" Content="使用反馈" Width="170" Margin="0,10,0,0"/>
-                <CheckBox x:Name="SetLinkLog" Content="运行记录" Width="170" Margin="0,10,0,0"/>
-              </WrapPanel>
-              <DockPanel Margin="0,18,0,0">
-                <CheckBox x:Name="SetPageSub" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
-                <StackPanel>
-                  <TextBlock Text="页面标题下的说明" Style="{StaticResource SetName}"/>
-                  <TextBlock Style="{StaticResource SetNote}" Text="每一页标题下面那行灰色的说明文字。用熟了可以关掉，列表能多显示几行。"/>
-                </StackPanel>
-              </DockPanel>
-            </StackPanel>
-          </Border>
-
-          <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
-            <StackPanel>
-              <TextBlock Text="空间地图" Style="{StaticResource CardHead}"/>
-              <DockPanel Margin="0,14,0,0">
-                <CheckBox x:Name="SetMapCheck" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
-                <StackPanel>
-                  <TextBlock Text="项目复选框" Style="{StaticResource SetName}"/>
-                  <TextBlock Style="{StaticResource SetNote}" Text="每一行前面显示一个复选框（和资源管理器「查看」里的「项目复选框」一样）：只有点方框才选中或取消，单击行的其他地方不会选中，按 Esc 全部取消。关掉就照 Windows 列表原来的做法：单击选中一行，按住 Ctrl、Shift 多选。开不开都可以按住鼠标（左键或右键）上下拖，一次选中连着的几行。"/>
-                </StackPanel>
-              </DockPanel>
-              <DockPanel Margin="0,16,0,0">
-                <CheckBox x:Name="SetMapBar" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
-                <StackPanel>
-                  <TextBlock Text="占比条" Style="{StaticResource SetName}"/>
-                  <TextBlock Style="{StaticResource SetNote}" Text="名字右边的蓝色横条，一眼看出谁大。"/>
-                </StackPanel>
-              </DockPanel>
-              <DockPanel Margin="0,16,0,0">
-                <CheckBox x:Name="SetMapPct" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
-                <StackPanel>
-                  <TextBlock Text="百分比" Style="{StaticResource SetName}"/>
-                  <TextBlock Style="{StaticResource SetNote}" Text="占这一层的百分之几。"/>
-                </StackPanel>
-              </DockPanel>
-              <DockPanel Margin="0,16,0,0">
-                <CheckBox x:Name="SetMapMeta" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
-                <StackPanel>
-                  <TextBlock Text="名字下面的详细信息" Style="{StaticResource SetName}"/>
-                  <TextBlock Style="{StaticResource SetNote}" Text="文件个数、最近修改时间、比上次扫描变了多少、链接指向哪里。"/>
-                </StackPanel>
-              </DockPanel>
-              <DockPanel Margin="0,16,0,0">
-                <CheckBox x:Name="SetMapDisk" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
-                <StackPanel>
-                  <TextBlock Text="实际占用和硬链接" Style="{StaticResource SetName}"/>
-                  <TextBlock Style="{StaticResource SetNote}" Text="快速扫描时在名字下面注明：压缩、稀疏和只在云端（OneDrive 等）的文件实际占的盘比文件大小小；WinSxS 这类文件夹里很多文件和系统其他位置是同一份（硬链接），删了也不腾空间。"/>
-                </StackPanel>
-              </DockPanel>
-              <DockPanel Margin="0,16,0,0">
-                <CheckBox x:Name="SetMapHealth" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
-                <StackPanel>
-                  <TextBlock Text="磁盘健康卡片" Style="{StaticResource SetName}"/>
-                  <TextBlock Style="{StaticResource SetNote}" Text="页面上方每块盘一张卡片：用了多少、健康状态，固态硬盘还有温度、磨损和通电时间。只读，不改任何东西。"/>
-                </StackPanel>
-              </DockPanel>
-              <DockPanel Margin="0,16,0,0">
-                <CheckBox x:Name="SetMapFastBtn" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
-                <StackPanel>
-                  <TextBlock Text="右上角的「快速扫描」开关" Style="{StaticResource SetName}"/>
-                  <TextBlock Style="{StaticResource SetNote}" Text="关掉只是不在空间地图上显示这个开关；快速扫描本身在下面「扫描和查重」里开关。"/>
-                </StackPanel>
-              </DockPanel>
-            </StackPanel>
-          </Border>
-
-          <Border x:Name="SetCardScan" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
-            <StackPanel>
-              <TextBlock Text="扫描和查重" Style="{StaticResource CardHead}"/>
-              <DockPanel Margin="0,14,0,0">
-                <CheckBox x:Name="SetFast" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
-                <StackPanel>
-                  <TextBlock Text="快速扫描" Style="{StaticResource SetName}"/>
-                  <TextBlock Style="{StaticResource SetNote}" Text="直接读取 NTFS 的文件表（MFT），比逐个文件夹查看快得多，还能看出实际占用和硬链接。少数安全软件对直接读盘会提示，可以关掉，改为逐个文件夹扫描。清理、搬家、软件管理统计大小时也按这个设置。"/>
-                </StackPanel>
-              </DockPanel>
-              <DockPanel Margin="0,16,0,0">
-                <CheckBox x:Name="SetLowIo" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
-                <StackPanel>
-                  <TextBlock Text="查重复文件时让着其他程序" Style="{StaticResource SetName}"/>
-                  <TextBlock Style="{StaticResource SetNote}" Text="读文件时用 Windows 的后台模式，磁盘和内存都排在其他程序后面：不拖慢正在用的程序，也不把它们缓存在内存里的数据挤掉。电脑空闲时速度基本不受影响，同时在做别的事时查得慢一些。"/>
-                </StackPanel>
-              </DockPanel>
-            </StackPanel>
-          </Border>
-
-          <Border x:Name="SetCleanCard" Style="{StaticResource Card}" Padding="24,20" Margin="0,14,0,0">
-            <StackPanel>
-              <TextBlock Text="清理列表" Style="{StaticResource CardHead}"/>
-              <DockPanel x:Name="SetRecycleRow" Margin="0,14,0,0">
-                <CheckBox x:Name="SetRecycle" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
-                <StackPanel>
-                  <TextBlock Text="删除时先放进回收站" Style="{StaticResource SetName}"/>
-                  <TextBlock Style="{StaticResource SetNote}" Text="手动清理删掉的文件先放进回收站，删错了可以从回收站恢复。慢一些，回收站会变大（清空回收站才真正腾出空间）；放不进回收站的（网络位置、U 盘、比回收站还大）不删。定期自动清理不受这个影响，照样直接删。"/>
-                </StackPanel>
-              </DockPanel>
-              <TextBlock x:Name="SetCustomHead" Text="自己加的文件夹" Style="{StaticResource SetName}" Margin="0,14,0,0"/>
-              <TextBlock x:Name="SetCustomNote" Style="{StaticResource SetNote}" Text="清理时删掉这些文件夹里的东西，文件夹本身保留。在「清理 C 盘」页单独列成一组，默认选「删除」，每次执行前照样要确认；定期自动清理不碰它们。个人文件夹、系统文件夹和软件的安装文件夹加不进来。"/>
-              <ItemsControl x:Name="SetCustomList" Margin="0,6,0,0">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate>
-                    <DockPanel Margin="0,4,0,0">
-                      <Button x:Name="SetListRemove" DockPanel.Dock="Right" Content="移除" Tag="{Binding}" Style="{StaticResource LinkButton}" FontSize="12.5" Margin="12,0,0,0"/>
-                      <TextBlock Text="{Binding}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding}"/>
-                    </DockPanel>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-              <TextBlock x:Name="SetCustomEmpty" Style="{StaticResource SetNote}" Text="还没有加。" Margin="0,6,0,0"/>
-              <Button x:Name="BtnSetCustomAdd" Content="添加文件夹…" Style="{StaticResource Small}" HorizontalAlignment="Left" Margin="0,8,0,0"/>
-              <TextBlock x:Name="SetExcludeHead" Text="排除的文件夹" Style="{StaticResource SetName}" Margin="0,20,0,0"/>
-              <TextBlock x:Name="SetExcludeNote" Style="{StaticResource SetNote}" Text="清理时一律不碰这些文件夹和里面的东西，估算大小时也不算。比如临时文件夹里某个你要留着的子文件夹。"/>
-              <ItemsControl x:Name="SetExcludeList" Margin="0,6,0,0">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate>
-                    <DockPanel Margin="0,4,0,0">
-                      <Button x:Name="SetListRemove" DockPanel.Dock="Right" Content="移除" Tag="{Binding}" Style="{StaticResource LinkButton}" FontSize="12.5" Margin="12,0,0,0"/>
-                      <TextBlock Text="{Binding}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding}"/>
-                    </DockPanel>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-              <TextBlock x:Name="SetExcludeEmpty" Style="{StaticResource SetNote}" Text="还没有排除。" Margin="0,6,0,0"/>
-              <Button x:Name="BtnSetExcludeAdd" Content="添加文件夹…" Style="{StaticResource Small}" HorizontalAlignment="Left" Margin="0,8,0,0"/>
-            </StackPanel>
-          </Border>
+    <!-- 设置：左边目录（常用、界面、清理和扫描），点哪项右边只显示那一项 -->
+    <Grid x:Name="PageSettings" Grid.Column="1" Grid.Row="0" Visibility="Collapsed" Margin="30,24,30,14">
+      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+      <Grid Grid.Row="0" Margin="0,0,0,16">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="*" MaxWidth="1130"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
+      <DockPanel>
+        <Button x:Name="BtnSetReset" DockPanel.Dock="Right" Content="恢复默认显示" VerticalAlignment="Top" Margin="16,4,0,0"
+                ToolTip="页面、按钮、列和说明全部恢复成默认显示。外观、语言和扫描设置不变"/>
+        <StackPanel>
+          <TextBlock Text="设置" Style="{StaticResource PageTitle}"/>
+          <TextBlock Style="{StaticResource PageSub}" Text="外观、语言，以及界面上显示哪些内容。用不上的页面、按钮和说明可以关掉，界面更清爽；随时可以回来打开，不会丢任何设置和记录。"/>
         </StackPanel>
-      </ScrollViewer>
+      </DockPanel>
+      </Grid>
+      <Grid Grid.Row="1">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="214"/><ColumnDefinition Width="*" MaxWidth="900"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
+        <Border Grid.Column="0" Style="{StaticResource Card}" Padding="8,0,8,10" Margin="0,0,16,0" VerticalAlignment="Top">
+          <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+            <StackPanel>
+                <TextBlock x:Name="SetHeadGeneral" Text="常用" Style="{StaticResource TreeHead}"/>
+                <RadioButton x:Name="SetNavMode" GroupName="setnav" Tag="Mode" Content="使用模式" Style="{StaticResource TreeItem}"/>
+                <RadioButton x:Name="SetNavLook" GroupName="setnav" Tag="Look" Content="外观和语言" Style="{StaticResource TreeItem}"/>
+                <TextBlock x:Name="SetHeadUi" Text="界面" Style="{StaticResource TreeHead}"/>
+                <RadioButton x:Name="SetNavDisplay" GroupName="setnav" Tag="Display" Content="界面上显示什么" Style="{StaticResource TreeItem}"/>
+                <RadioButton x:Name="SetNavMap" GroupName="setnav" Tag="Map" Content="空间地图" Style="{StaticResource TreeItem}"/>
+                <TextBlock x:Name="SetHeadClean" Text="清理和扫描" Style="{StaticResource TreeHead}"/>
+                <RadioButton x:Name="SetNavClean" GroupName="setnav" Tag="Clean" Content="清理列表" Style="{StaticResource TreeItem}"/>
+                <RadioButton x:Name="SetNavScan" GroupName="setnav" Tag="Scan" Content="扫描和查重" Style="{StaticResource TreeItem}"/>
+            </StackPanel>
+          </ScrollViewer>
+        </Border>
+        <ScrollViewer x:Name="SetScroll" Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+          <StackPanel Margin="0,0,6,14">
+            <Border x:Name="SetCardMode" Style="{StaticResource Card}" Padding="24,20" Margin="0" Visibility="Collapsed">
+              <StackPanel>
+                <TextBlock Text="使用模式" Style="{StaticResource CardHead}"/>
+                <TextBlock Style="{StaticResource SetNote}" Text="按你的需要决定界面上有多少东西。换模式不会丢任何设置和记录，随时可以换回来。"/>
+                <Border Style="{StaticResource SegBox}" HorizontalAlignment="Left" Margin="0,12,0,0">
+                  <StackPanel Orientation="Horizontal">
+                    <RadioButton x:Name="SetModeBasic" GroupName="mode" Content="普通用户" Style="{StaticResource Seg}"/>
+                    <RadioButton x:Name="SetModePro" GroupName="mode" Content="工程师" Style="{StaticResource Seg}"/>
+                    <RadioButton x:Name="SetModeExpert" GroupName="mode" Content="开发者和 IT" Style="{StaticResource Seg}"/>
+                  </StackPanel>
+                </Border>
+                <TextBlock x:Name="SetModeNote" Style="{StaticResource SetNote}" Margin="0,10,0,0"/>
+              </StackPanel>
+            </Border>
+
+            <Border x:Name="SetCardLook" Style="{StaticResource Card}" Padding="24,20" Margin="0" Visibility="Collapsed">
+              <StackPanel>
+                <TextBlock Text="外观和语言" Style="{StaticResource CardHead}"/>
+                <DockPanel Margin="0,14,0,0">
+                  <Border DockPanel.Dock="Right" Style="{StaticResource SegBox}" VerticalAlignment="Center" Margin="20,0,0,0">
+                    <StackPanel Orientation="Horizontal">
+                      <RadioButton x:Name="SetThemeLight" GroupName="settheme" Content="浅色" Style="{StaticResource Seg}"/>
+                      <RadioButton x:Name="SetThemeDark" GroupName="settheme" Content="深色" Style="{StaticResource Seg}"/>
+                      <RadioButton x:Name="SetThemeSystem" GroupName="settheme" Content="跟随系统" Style="{StaticResource Seg}"/>
+                    </StackPanel>
+                  </Border>
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="外观" Style="{StaticResource SetName}"/>
+                    <TextBlock Style="{StaticResource SetNote}" Text="跟随系统会照 Windows 设置里「选择应用模式」来。换了以后本工具会关闭，再自动打开。"/>
+                  </StackPanel>
+                </DockPanel>
+                <DockPanel Margin="0,16,0,0">
+                  <Border DockPanel.Dock="Right" Style="{StaticResource SegBox}" VerticalAlignment="Center" Margin="20,0,0,0">
+                    <StackPanel Orientation="Horizontal">
+                      <RadioButton x:Name="SetLangZh" GroupName="setlang" Style="{StaticResource Seg}"/>
+                      <RadioButton x:Name="SetLangEn" GroupName="setlang" Style="{StaticResource Seg}"/>
+                    </StackPanel>
+                  </Border>
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="界面语言" Style="{StaticResource SetName}"/>
+                    <TextBlock Style="{StaticResource SetNote}" Text="换了以后本工具会关闭，再用新的语言打开。"/>
+                  </StackPanel>
+                </DockPanel>
+              </StackPanel>
+            </Border>
+
+            <Border x:Name="SetCardDisplay" Style="{StaticResource Card}" Padding="24,20" Margin="0" Visibility="Collapsed">
+              <StackPanel>
+                <TextBlock Text="界面上显示什么" Style="{StaticResource CardHead}"/>
+                <TextBlock Text="左侧显示的页面" Style="{StaticResource SetName}" Margin="0,14,0,0"/>
+                <TextBlock Style="{StaticResource SetNote}" Text="「清理 C 盘」「空间地图」「帮助」和「设置」一直显示。关掉的页面只是不在左侧列出，里面的设置、搬家记录和自动提醒都照旧。"/>
+                <WrapPanel Margin="0,2,0,0">
+                  <CheckBox x:Name="SetPageDup" Content="重复文件" Width="170" Margin="0,10,0,0"/>
+                  <CheckBox x:Name="SetPageSave" Content="省空间" Width="170" Margin="0,10,0,0"/>
+                  <CheckBox x:Name="SetPageApps" Content="软件管理" Width="170" Margin="0,10,0,0"/>
+                  <CheckBox x:Name="SetPageHealth" Content="系统健康" Width="170" Margin="0,10,0,0"/>
+                  <CheckBox x:Name="SetPageMoves" Content="搬家管理" Width="170" Margin="0,10,0,0"/>
+                  <CheckBox x:Name="SetPageAuto" Content="自动提醒" Width="170" Margin="0,10,0,0"/>
+                  <CheckBox x:Name="SetPageLog" Content="操作日志" Width="170" Margin="0,10,0,0"/>
+                </WrapPanel>
+                <TextBlock Text="左下角的按钮" Style="{StaticResource SetName}" Margin="0,18,0,0"/>
+                <TextBlock Style="{StaticResource SetNote}" Text="外观和语言也可以在这一页上面改；「使用反馈」和「运行记录」也在「帮助」页里。"/>
+                <WrapPanel Margin="0,2,0,0">
+                  <CheckBox x:Name="SetLinkTheme" Content="外观" Width="170" Margin="0,10,0,0"/>
+                  <CheckBox x:Name="SetLinkLang" Content="切换语言" Width="170" Margin="0,10,0,0"/>
+                  <CheckBox x:Name="SetLinkFeedback" Content="使用反馈" Width="170" Margin="0,10,0,0"/>
+                  <CheckBox x:Name="SetLinkLog" Content="运行记录" Width="170" Margin="0,10,0,0"/>
+                </WrapPanel>
+                <DockPanel Margin="0,18,0,0">
+                  <CheckBox x:Name="SetPageSub" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                  <StackPanel>
+                    <TextBlock Text="页面标题下的说明" Style="{StaticResource SetName}"/>
+                    <TextBlock Style="{StaticResource SetNote}" Text="每一页标题下面那行灰色的说明文字。用熟了可以关掉，列表能多显示几行。"/>
+                  </StackPanel>
+                </DockPanel>
+              </StackPanel>
+            </Border>
+
+            <Border x:Name="SetCardMap" Style="{StaticResource Card}" Padding="24,20" Margin="0" Visibility="Collapsed">
+              <StackPanel>
+                <TextBlock Text="空间地图" Style="{StaticResource CardHead}"/>
+                <DockPanel Margin="0,14,0,0">
+                  <CheckBox x:Name="SetMapCheck" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                  <StackPanel>
+                    <TextBlock Text="项目复选框" Style="{StaticResource SetName}"/>
+                    <TextBlock Style="{StaticResource SetNote}" Text="每一行前面显示一个复选框（和资源管理器「查看」里的「项目复选框」一样）：只有点方框才选中或取消，单击行的其他地方不会选中，按 Esc 全部取消。关掉就照 Windows 列表原来的做法：单击选中一行，按住 Ctrl、Shift 多选。开不开都可以按住鼠标（左键或右键）上下拖，一次选中连着的几行。"/>
+                  </StackPanel>
+                </DockPanel>
+                <DockPanel Margin="0,16,0,0">
+                  <CheckBox x:Name="SetMapBar" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                  <StackPanel>
+                    <TextBlock Text="占比条" Style="{StaticResource SetName}"/>
+                    <TextBlock Style="{StaticResource SetNote}" Text="名字右边的蓝色横条，一眼看出谁大。"/>
+                  </StackPanel>
+                </DockPanel>
+                <DockPanel Margin="0,16,0,0">
+                  <CheckBox x:Name="SetMapPct" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                  <StackPanel>
+                    <TextBlock Text="百分比" Style="{StaticResource SetName}"/>
+                    <TextBlock Style="{StaticResource SetNote}" Text="占这一层的百分之几。"/>
+                  </StackPanel>
+                </DockPanel>
+                <DockPanel Margin="0,16,0,0">
+                  <CheckBox x:Name="SetMapMeta" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                  <StackPanel>
+                    <TextBlock Text="名字下面的详细信息" Style="{StaticResource SetName}"/>
+                    <TextBlock Style="{StaticResource SetNote}" Text="文件个数、最近修改时间、比上次扫描变了多少、链接指向哪里。"/>
+                  </StackPanel>
+                </DockPanel>
+                <DockPanel Margin="0,16,0,0">
+                  <CheckBox x:Name="SetMapDisk" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                  <StackPanel>
+                    <TextBlock Text="实际占用和硬链接" Style="{StaticResource SetName}"/>
+                    <TextBlock Style="{StaticResource SetNote}" Text="快速扫描时在名字下面注明：压缩、稀疏和只在云端（OneDrive 等）的文件实际占的盘比文件大小小；WinSxS 这类文件夹里很多文件和系统其他位置是同一份（硬链接），删了也不腾空间。"/>
+                  </StackPanel>
+                </DockPanel>
+                <DockPanel Margin="0,16,0,0">
+                  <CheckBox x:Name="SetMapHealth" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                  <StackPanel>
+                    <TextBlock Text="磁盘健康卡片" Style="{StaticResource SetName}"/>
+                    <TextBlock Style="{StaticResource SetNote}" Text="页面上方每块盘一张卡片：用了多少、健康状态，固态硬盘还有温度、磨损和通电时间。只读，不改任何东西。"/>
+                  </StackPanel>
+                </DockPanel>
+                <DockPanel Margin="0,16,0,0">
+                  <CheckBox x:Name="SetMapFastBtn" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                  <StackPanel>
+                    <TextBlock Text="右上角的「快速扫描」开关" Style="{StaticResource SetName}"/>
+                    <TextBlock Style="{StaticResource SetNote}" Text="关掉只是不在空间地图上显示这个开关；快速扫描本身在下面「扫描和查重」里开关。"/>
+                  </StackPanel>
+                </DockPanel>
+              </StackPanel>
+            </Border>
+
+            <Border x:Name="SetCardScan" Style="{StaticResource Card}" Padding="24,20" Margin="0" Visibility="Collapsed">
+              <StackPanel>
+                <TextBlock Text="扫描和查重" Style="{StaticResource CardHead}"/>
+                <DockPanel Margin="0,14,0,0">
+                  <CheckBox x:Name="SetFast" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                  <StackPanel>
+                    <TextBlock Text="快速扫描" Style="{StaticResource SetName}"/>
+                    <TextBlock Style="{StaticResource SetNote}" Text="直接读取 NTFS 的文件表（MFT），比逐个文件夹查看快得多，还能看出实际占用和硬链接。少数安全软件对直接读盘会提示，可以关掉，改为逐个文件夹扫描。清理、搬家、软件管理统计大小时也按这个设置。"/>
+                  </StackPanel>
+                </DockPanel>
+                <DockPanel Margin="0,16,0,0">
+                  <CheckBox x:Name="SetLowIo" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                  <StackPanel>
+                    <TextBlock Text="查重复文件时让着其他程序" Style="{StaticResource SetName}"/>
+                    <TextBlock Style="{StaticResource SetNote}" Text="读文件时用 Windows 的后台模式，磁盘和内存都排在其他程序后面：不拖慢正在用的程序，也不把它们缓存在内存里的数据挤掉。电脑空闲时速度基本不受影响，同时在做别的事时查得慢一些。"/>
+                  </StackPanel>
+                </DockPanel>
+              </StackPanel>
+            </Border>
+
+            <Border x:Name="SetCleanCard" Style="{StaticResource Card}" Padding="24,20" Margin="0" Visibility="Collapsed">
+              <StackPanel>
+                <TextBlock Text="清理列表" Style="{StaticResource CardHead}"/>
+                <DockPanel x:Name="SetRecycleRow" Margin="0,14,0,0">
+                  <CheckBox x:Name="SetRecycle" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                  <StackPanel>
+                    <TextBlock Text="删除时先放进回收站" Style="{StaticResource SetName}"/>
+                    <TextBlock Style="{StaticResource SetNote}" Text="手动清理删掉的文件先放进回收站，删错了可以从回收站恢复。慢一些，回收站会变大（清空回收站才真正腾出空间）；放不进回收站的（网络位置、U 盘、比回收站还大）不删。定期自动清理不受这个影响，照样直接删。"/>
+                  </StackPanel>
+                </DockPanel>
+                <TextBlock x:Name="SetCustomHead" Text="自己加的文件夹" Style="{StaticResource SetName}" Margin="0,14,0,0"/>
+                <TextBlock x:Name="SetCustomNote" Style="{StaticResource SetNote}" Text="清理时删掉这些文件夹里的东西，文件夹本身保留。在「清理 C 盘」页单独列成一组，默认选「删除」，每次执行前照样要确认；定期自动清理不碰它们。个人文件夹、系统文件夹和软件的安装文件夹加不进来。"/>
+                <ItemsControl x:Name="SetCustomList" Margin="0,6,0,0">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <DockPanel Margin="0,4,0,0">
+                        <Button x:Name="SetListRemove" DockPanel.Dock="Right" Content="移除" Tag="{Binding}" Style="{StaticResource LinkButton}" FontSize="12.5" Margin="12,0,0,0"/>
+                        <TextBlock Text="{Binding}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding}"/>
+                      </DockPanel>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock x:Name="SetCustomEmpty" Style="{StaticResource SetNote}" Text="还没有加。" Margin="0,6,0,0"/>
+                <Button x:Name="BtnSetCustomAdd" Content="添加文件夹…" Style="{StaticResource Small}" HorizontalAlignment="Left" Margin="0,8,0,0"/>
+                <TextBlock x:Name="SetExcludeHead" Text="排除的文件夹" Style="{StaticResource SetName}" Margin="0,20,0,0"/>
+                <TextBlock x:Name="SetExcludeNote" Style="{StaticResource SetNote}" Text="清理时一律不碰这些文件夹和里面的东西，估算大小时也不算。比如临时文件夹里某个你要留着的子文件夹。"/>
+                <ItemsControl x:Name="SetExcludeList" Margin="0,6,0,0">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <DockPanel Margin="0,4,0,0">
+                        <Button x:Name="SetListRemove" DockPanel.Dock="Right" Content="移除" Tag="{Binding}" Style="{StaticResource LinkButton}" FontSize="12.5" Margin="12,0,0,0"/>
+                        <TextBlock Text="{Binding}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding}"/>
+                      </DockPanel>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock x:Name="SetExcludeEmpty" Style="{StaticResource SetNote}" Text="还没有排除。" Margin="0,6,0,0"/>
+                <Button x:Name="BtnSetExcludeAdd" Content="添加文件夹…" Style="{StaticResource Small}" HorizontalAlignment="Left" Margin="0,8,0,0"/>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+      </Grid>
     </Grid>
 
     <!-- ==================== 帮助：使用说明、安全风险提示、使用反馈 ==================== -->
@@ -13615,6 +13895,10 @@ if ($script:mode -match '(?i)/autoclean') {
                 </StackPanel>
                 <DockPanel Margin="0,26,0,0"><TextBlock DockPanel.Dock="Left" Text="浏览" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
                 <StackPanel Margin="0,10,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="后退、前进和路径"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>左上角的后退、前进按钮（也可以用鼠标侧键、Alt+← 和 Alt+→）在看过的文件夹之间来回；Backspace 回到上一级。路径上的每一层都能点，点哪一层回到哪一层。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="往里点"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>双击文件夹进入下一层，点「上一级」返回。每一行的蓝色条表示它在这一层里有多大。</Run></TextBlock>
                   <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>一层里东西很多时（比如 WinSxS 有上万个），只列最大的 500 项，其余合成最后一行；点「打开位置」可以在资源管理器里看全部。</Run></TextBlock></DockPanel>
@@ -13629,7 +13913,16 @@ if ($script:mode -match '(?i)/autoclean') {
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="方块图"/>
-                  <TextBlock Style="{StaticResource HelpBody}"><Run>把这一层的文件夹和文件画成方块，方块越大占的空间越多，一眼看出谁最大。单击选中，双击文件夹往里点。</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>把这一层的文件夹和文件画成方块，方块越大占的空间越多，一眼看出谁最大。单击选中，双击文件夹往里点。颜色按文件夹装的是哪一类东西（系统、软件数据、文档、照片视频音乐、代码、同步盘、游戏），缓存和临时文件带斜线，表示删了能腾出来；下面有图例。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="值得一看"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>扫完整块盘后，概览下面列出名字一看就是缓存、依赖包（node_modules 等）、构建产物、Python 虚拟环境、临时文件的大文件夹（300 MB 以上），点一下跳过去，看清楚再决定。只是按名字认的。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="待删清单"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>在不同文件夹里挑要删的，先「加入待删清单」（右键菜单里也有），不马上删；下面一直写着清单里一共多大、这块盘现在空闲多少、删完大约剩多少。放进一个文件夹时，清单里它里面的项目合进它。看过清单再「删除清单里的…」，和平时删除一样先确认、能选放进回收站；删完写明这块盘实际多出了多少。</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>要删的文件夹是 git 仓库时，确认对话框里会提醒：没提交、没推送的改动删了就找不回来。</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="找文件"/>
@@ -13736,6 +14029,7 @@ if ($script:mode -match '(?i)/autoclean') {
                 <StackPanel Margin="0,14,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="软件列表"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>列出装过的所有软件（包括应用商店里的），按占用空间从大到小排。可以只看装在 C 盘的，或者按名字搜索。表头可以点「名称」「发行商」「安装日期」「大小」排序，再点一下反过来；开机启动、计划任务、右键菜单可以按名称、状态排。</Run></TextBlock>
+                  <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">一次处理几个</Run><Run>：勾选行前面的方框，或按住鼠标左键在行上上下拖，拖过的都勾上；Shift 点方框勾上一段，表头的方框全选。勾了以后下面出现按钮：软件「卸载选中的」依次打开各自的卸载程序，一个走完、窗口关掉后再打开下一个，可以随时停下；应用商店的直接卸载。开机启动、计划任务、右键菜单「禁用选中的」「启用选中的」；残留文件夹「移到回收站」。都先列出来确认一次。</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="卸载"/>
@@ -13767,7 +14061,7 @@ if ($script:mode -match '(?i)/autoclean') {
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="残留文件夹"/>
-                  <TextBlock Style="{StaticResource HelpBody}"><Run>找已卸载软件可能留下的文件夹：名字对不上任何已装软件、没有程序在用、一个月没动过、至少 1 MB。只是猜测，先点「打开位置」看一眼再决定；移到回收站，能恢复。</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>找已卸载软件可能留下的文件夹：名字对不上任何已装软件、没有程序在用、一个月没动过、至少 1 MB。只是猜测，先点「打开位置」看一眼再决定；移到回收站，能恢复。可以勾选几个一起移到回收站。</Run></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="检查新版本"/>
@@ -13804,6 +14098,7 @@ if ($script:mode -match '(?i)/autoclean') {
                   <TextBlock Style="{StaticResource HelpBody}"><Run>标题旁一排选项卡：硬件、开机用时、蓝屏和崩溃、常见问题修复、活动监控、Windows 事件。点哪一项只显示哪一项，各自上下滚动，不用把整页拉到底。下次打开停在上次看的那一项。</Run></TextBlock>
                   <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>「蓝屏和崩溃」里再分三个小选项卡：诊断结论、每次蓝屏、相关事件和驱动，小选项卡上写着有几条。</Run></TextBlock></DockPanel>
                   <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>「常见问题修复」左边是问题列表，右边只显示选中的那个问题的修法；活动监控的表格占满这一页，表格自己滚动。</Run></TextBlock></DockPanel>
+                  <DockPanel Margin="0,3,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>打开本工具几秒后，没有别的操作在做时，就在后台把这些先读好，点进来不用等；读过十分钟再打开会在后台刷新一遍。中途插上或拔掉硬盘，硬件卡片、空间地图的盘和搬家目标会自动跟着变。</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="硬件"/>
@@ -13867,7 +14162,7 @@ if ($script:mode -match '(?i)/autoclean') {
                 <DockPanel Margin="0,16,0,0"><TextBlock DockPanel.Dock="Left" Text="可以搬的" Style="{StaticResource HelpGroup}" Margin="0,0,10,0"/><Border Height="1" Background="#EDEDF0" VerticalAlignment="Center"/></DockPanel>
                 <StackPanel Margin="0,10,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="批量搬走"/>
-                  <TextBlock Style="{StaticResource HelpBody}"><Run>自动列出 C 盘上还能搬走的东西，分成聊天记录、装在 C 盘的软件和其他文件夹三组，每项都标着大小。勾选后在右下角选好目标盘，点「搬到其他盘」。</Run></TextBlock>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>自动列出 C 盘上还能搬走的东西，分成聊天记录、装在 C 盘的软件和其他文件夹三组，每项都标着大小。左边目录可以一次只看一组（还有「不适合搬的软件」和「已经搬走的」）。勾选后在右下角选好目标盘，点「搬到其他盘」。</Run></TextBlock>
                   <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>开始前会列出全部项目，要先关掉的软件也会告诉你。</Run></TextBlock></DockPanel>
                 </StackPanel>
                 <StackPanel Margin="0,16,0,0">
@@ -13978,6 +14273,10 @@ if ($script:mode -match '(?i)/autoclean') {
               </Expander.Header>
               <StackPanel>
                 <StackPanel Margin="0,14,0,0">
+                  <TextBlock Style="{StaticResource HelpLead}" Text="目录"/>
+                  <TextBlock Style="{StaticResource HelpBody}"><Run>左边按「常用」「界面」「清理和扫描」分好类，点哪一项右边只显示那一项。</Run></TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
                   <TextBlock Style="{StaticResource HelpLead}" Text="使用模式"/>
                   <TextBlock Style="{StaticResource HelpBody}"><Run>三种，按你的需要决定界面上有多少东西。第一次打开时会问一句，之后在「设置」最上面随时换，换了不丢任何设置和记录。左下角版本号下面写着当前模式，点一下就到设置。</Run></TextBlock>
                   <DockPanel Margin="0,5,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="16" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#86868B"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">普通用户</Run><Run>：清理 C 盘、省空间、空间地图、软件管理、系统健康（硬件、蓝屏和崩溃、常见问题修复）、帮助。清理列表里只有常见的缓存和临时文件，删了软件会自动重建；有代价的项目仍然默认跳过。</Run></TextBlock></DockPanel>
@@ -14315,12 +14614,12 @@ foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageM
                'BtnAppsUpdates','AppsViewApps','AppsViewStartup','AppsViewTasks','AppsViewMenu','AppsViewLeft','AppsViewBox','AppsFilterBox','StartList','MapHealthBox','MapHealth','MapHealthNote','SetMapHealth',
                'MapViewTypes','MapViewRecent','MapOwner','MapSort','MapGrowBar','MapGrowBase','MapRecentBar','MapRecentDays','BtnMapRecent','MapGrid','MapOverview','MapOvPct','MapOvTitle','MapOvUsed','MapOvBar','MapOvLegend',
                'NavHealth','PageHealth','HTabHw','HTabBoot','HTabCrash','HTabFix','HTabMon','HTabEvents','HealthViewHw','HealthViewBoot','HealthViewCrash','HealthViewFix','HealthViewMon','HealthViewEvents',
-               'HealthCardVerdict','BtnCopyReport','BtnDiagPack','HealthVerdicts','HealthCardFix','FixRecBox','FixRecHead','FixRec','FixGroups','FixDetail','FixDetailScroll','CTabVerdict','CTabDumps','CTabEvents','CrashViewVerdict','CrashViewDumps','CrashViewEvents','BtnHealthRefresh','HealthNote','HealthCardHw','HealthCards','HealthCardBoot','HealthBootText','HealthSlow','HealthCardCrash','BtnSfcCheck','BtnSfcRepair','HealthCrashText','HealthDumps','HealthEventsHead','HealthEvents','HealthDriversHead','HealthDrivers',
+               'HealthCardVerdict','BtnCopyReport','BtnDiagPack','HealthVerdicts','HealthCardFix','FixRecBox','FixRecHead','FixRec','FixGroups','FixDetail','FixDetailScroll','CTabVerdict','CTabDumps','CTabEvents','CTabDumpsB','CTabDumpsN','CTabEventsB','CTabEventsN','CrashViewVerdict','CrashViewDumps','CrashViewEvents','BtnHealthRefresh','HealthNote','HealthCardHw','HealthCards','HealthCardBoot','HealthBootText','HealthSlow','HealthCardCrash','BtnSfcCheck','BtnSfcRepair','HealthCrashText','HealthDumps','HealthEventsHead','HealthEvents','HealthDriversHead','HealthDrivers',
                'HealthCardMon','BtnMonStart','BtnMonStop','HealthMonText','MonList','HealthCardEvents','HealthWinText','HealthErrors','SetPageHealth',
                'SaveCardCos','SaveCardPf','SaveCardHib','SaveCardRp','SaveCardFc','SaveCardOd','SaveCardRs','SaveCardCs','SaveCardDump','SaveCardTmp','SaveCardVd','SaveCardMerge','SetCardMode','SetCardDisplay','SetCardScan','SetModeBasic','SetModePro','SetModeExpert','SetModeNote','ModeTag','AutoJunkRow','FbCopyDiag','FbSelfTest','FbCheckUpdate','MapViewBox',
                'BtnOdFree','SaveOdState','BtnRsOn','BtnRsOff','SaveRsState','BtnCsAnalyze','BtnCsClean','SaveCsState','BtnDumpSmall','BtnDumpAuto','SaveDumpState','SaveTmpState','SaveTmpDrive','BtnTmpMove','BtnTmpAuto','BtnCleanCustom','AutoJunkGB','AutoCleanWhen','SetCleanCard','SetRecycle','SetRecycleRow','SetCustomHead','SetCustomNote','SetExcludeHead','SetExcludeNote','SetCustomList','SetCustomEmpty','BtnSetCustomAdd','SetExcludeList','SetExcludeEmpty','BtnSetExcludeAdd',
                'BtnMovesRefresh','MovesInfo','MovesList','EmptyMoves','EmptyMovesText',
-               'AutoRemindOn','AutoRemindGB','AutoRemindNote','AutoCleanOn','AutoCleanNote','HistInfo','HistChart','HistLast','HistFirst','ATabRemind','ATabClean','ATabHist','ATabRemindState','ATabCleanState','ATabHistState','AutoViewRemind','AutoViewClean','AutoViewHist',
+               'AutoRemindOn','AutoRemindGB','AutoRemindNote','AutoCleanOn','AutoCleanNote','HistInfo','HistChart','HistLast','HistFirst','ATabRemind','ATabClean','ATabHist','ATabRemindState','ATabCleanState','ATabHistState','ATabRemindB','ATabCleanB','ATabHistB','AutoViewRemind','AutoViewClean','AutoViewHist',
                'BtnLogOpenDir','BtnLogRefresh','LogKeep','LogKeepNote','LogCats','LogRange','LogSearch','LogCount','LogList','EmptyLog','EmptyLogText',
                'BtnLang','BtnLangText','BtnTheme','BtnThemeText','NavHelp','PageHelp','HelpScroll','HelpSections','HelpFaq','BtnHelpExpand','FeedbackCard','RiskCard','BtnFeedback','BtnGitHub','BtnIssue','BtnCopyDiag','BtnOpenLog','CopyHint','BtnSelfTest','BtnCheckUpdate','MapFast','MapChat',
                'NavClean','NavDup','PageClean','PageDup','AppVer','BtnLog','BtnLogText','BtnLogHide','LogPanel','Dim',
@@ -14334,9 +14633,9 @@ foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageM
                'Overlay','OvTitle','OvTime','OvBar','OvStep','OvWhat','OvChecklist','OvDetail','OvSubBar','OvPlanBox','OvPlanScroll','OvPlan','OvHide','OvClose','OvNote',
                'BtnKeepNew','BtnKeepOld','BtnPickC','BtnPickNone','DupSummary',
                'CleanScroll','CleanMore','CleanMoreText','CleanOverview','CleanOverviewText','CleanHost','CleanBar','CleanBarSlot','CleanListCard','CleanFilterEmpty','CleanTabs','CleanTabInfo','CleanTabNote','CleanHead','CleanOpFilter',
-               'OvCancel','OpCancel','MovesTabCand','MovesTabDone','CandList','EmptyCand','EmptyCandText','MovesCard','CandStore','BtnCandStore','CandStoreText','CandBar','MovesDest','BtnCandMove','BtnCandAll','BtnCandNone','CandSel','MapViewTree','BtnMapReport','MapTree','BtnMapExport','MapFilter','MapMinSize','MapAge','MapType','MapName','MapUnder',
-               'MapAll','BtnMapAcct','MapMenu','MmEnter','MmOpen','MmCopy','MmCompress','MmDelete','NavHeadManage','NavSettings','PageSettings','SetScroll','BtnSetReset',
-               'AppsHeadBox','AppsHead','StartHead','CandBox','CandHead','MovesHeadBox','MovesHead','MapHeadBox','MapHead','SetThemeLight','SetThemeDark','SetThemeSystem','SetLangZh','SetLangEn','SetPageDup','SetPageSave','SetPageApps','SetPageMoves','SetPageAuto','SetPageLog',
+               'OvCancel','OpCancel','MovesTabCand','MovesTabDone','MNavChat','MNavApp','MNavOther','MNavBlocked','MovesTabCandB','MNavChatB','MNavAppB','MNavOtherB','MNavBlockedB','MovesTabDoneB','MovesTabCandN','MNavChatN','MNavAppN','MNavOtherN','MNavBlockedN','MovesTabDoneN','CandList','EmptyCand','EmptyCandText','MovesCard','CandStore','BtnCandStore','CandStoreText','CandBar','MovesDest','BtnCandMove','BtnCandAll','BtnCandNone','CandSel','MapViewTree','BtnMapReport','MapTree','BtnMapExport','MapFilter','MapMinSize','MapAge','MapType','MapName','MapUnder',
+               'MapAll','BtnMapAcct','MapMenu','MmEnter','MmOpen','MmCopy','MmCompress','MmDelete','MmMark','BtnMapBack','BtnMapFwd','MapCrumbs','MapWorthBox','MapWorth','MapTreeBox','MapTreeLegend','MapMarkBar','MapMarkText','BtnMarkClear','BtnMarkShow','BtnMarkDelete','BtnMapMark','NavHeadManage','NavSettings','PageSettings','SetScroll','BtnSetReset','SetCardLook','SetCardMap','SetNavMode','SetNavLook','SetNavDisplay','SetNavMap','SetNavClean','SetNavScan','SetHeadGeneral','SetHeadUi','SetHeadClean',
+               'AppsHeadBox','AppsHead','StartHead','AppsPickAll','StartPickAll','AppsPickBar','AppsPickText','BtnPickClear','BtnPickEnable','BtnPickDisable','BtnPickRecycle','BtnPickUninstall','AppsBatchBox','AppsBatchText','BtnBatchStop','BtnBatchNext','CandBox','CandHead','MovesHeadBox','MovesHead','MapHeadBox','MapHead','SetThemeLight','SetThemeDark','SetThemeSystem','SetLangZh','SetLangEn','SetPageDup','SetPageSave','SetPageApps','SetPageMoves','SetPageAuto','SetPageLog',
                'SetLinkTheme','SetLinkLang','SetLinkFeedback','SetLinkLog','SetPageSub','SetMapCheck','SetMapBar','SetMapPct','SetMapMeta','SetMapDisk','SetMapFastBtn','SetFast','SetLowIo',
                'SaveRpState','BtnRestoreOpen') { $ctl[$n] = $win.FindName($n) }
 # 右键菜单不在窗口的元素树里：万一按名字找不到，就从菜单里一个个取
@@ -14508,7 +14807,10 @@ function Show-Page([string]$key) {
         'map'   { if (-not $script:pageLoaded.map) { $script:pageLoaded.map = $true; Fill-MapDrives; Start-DiskHealth } }
         'save'  { if (-not $script:pageLoaded.save) { $script:pageLoaded.save = $true; Load-Save } }
         'apps'  { if (-not $script:pageLoaded.apps -and -not $script:worker) { $script:pageLoaded.apps = $true; Load-Apps } }
-        'health' { if (-not $script:pageLoaded.health) { $script:pageLoaded.health = $true; Load-Health } }
+        'health' {
+            if (-not $script:pageLoaded.health) { $script:pageLoaded.health = $true; Load-Health }
+            elseif ($script:healthData -and $script:healthData.At -is [DateTime] -and ((Get-Date) - $script:healthData.At).TotalMinutes -gt 10 -and -not $script:bg['health']) { Load-Health }
+        }
         'moves' { if (-not $script:candScanned) { $script:candPending = $true }; if (-not $script:worker) { Load-Moves } }
         'auto'  { Load-Auto }
         'log'   { Load-Log }
@@ -14777,7 +15079,9 @@ function Show-Overlay {
 }
 
 # 开始一项操作：重置进度面板，开始计时，弹出进度卡片
+$script:opHideAt = $null
 function Start-Op([string]$title, [switch]$NoCard) {
+    $script:opHideAt = $null
     $sync.P = [hashtable]::Synchronized(@{ Steps = 0; Step = 0; StepName = ''; SubKind = 'none'; SubDone = [double]0; SubTotal = [double]0;
                                           SubStart = (Get-Date); FreeC0 = [double]0; DestDrive = ''; DestFree0 = [double]0; Detail = ''; MoveItem = $false; CanCancel = $true })
     $sync.Cancel = $false; $sync.WasCancelled = $false; $script:cancelUi = ''
@@ -14821,6 +15125,8 @@ function End-Op([string]$result, [switch]$KeepCard, [string]$headline = '', $rep
         $script:cardShowsResult = $false
     }
     $script:op = $null
+    # 做完以后底部的进度条留几秒让人看清结果，然后自己收起来，把地方还给页面（中途取消或要看清单的照旧留着）
+    if (-not $KeepCard -and -not $cx) { $script:opHideAt = (Get-Date).AddSeconds(6) } else { $script:opHideAt = $null }
 }
 
 # ---------- 中途取消 ----------
@@ -15243,8 +15549,10 @@ function Update-CleanTabs {
         $rb.GroupName = 'cleantab'; $rb.Style = $seg; $rb.Tag = $g
         $sp = New-Object System.Windows.Controls.StackPanel; $sp.Orientation = 'Horizontal'
         $t1 = New-Object System.Windows.Controls.TextBlock; $t1.Text = $g
-        $t2 = New-Object System.Windows.Controls.TextBlock; $t2.Text = [string]$cnt[$g]; $t2.Margin = New-Object System.Windows.Thickness 6, 0, 0, 0; $t2.Foreground = New-Brush '#86868B'
-        [void]$sp.Children.Add($t1); [void]$sp.Children.Add($t2); $rb.Content = $sp
+        $t2 = New-Object System.Windows.Controls.TextBlock; $t2.Text = [string]$cnt[$g]; $t2.Style = $win.FindResource('TabBadgeText')
+        $bd = New-Object System.Windows.Controls.Border; $bd.Style = $win.FindResource('TabBadge'); $bd.Child = $t2
+        [void]$sp.Children.Add($t1); [void]$sp.Children.Add($bd); $rb.Content = $sp
+        if ($ctl.CleanTabs.Children.Count -eq 0) { $rb.Uid = 'first' }
         if ($note[$g]) { $rb.ToolTip = $note[$g] }
         $rb.IsChecked = ($g -eq $script:cleanTab)
         $rb.Add_Checked({ Select-CleanTab ([string]$this.Tag) })
@@ -15383,7 +15691,7 @@ if (-not (Stopping)) { $sync.Sizes = $sizes }
 }
 
 $ctl.BtnScan.Add_Click({ UI-Log (T "开始扫描..."); Do-Scan })
-$ctl.BtnCleanCustom.Add_Click({ Show-Page 'settings'; $ctl.SetScroll.UpdateLayout(); $ctl.SetCleanCard.BringIntoView() })
+$ctl.BtnCleanCustom.Add_Click({ Show-Page 'settings'; Select-SetSection 'Clean'; $ctl.SetScroll.ScrollToTop() })
 
 $ctl.BtnHogs.Add_Click({
     Show-Page 'map'
@@ -16532,6 +16840,7 @@ function New-MapRow($name, $path, [double]$size, [double]$max, [double]$parent, 
     if (-not $why -and $path -and (Test-ChatPath $path)) { $why = (T '聊天记录里的文件只能查看和打开位置；要腾地方，到「搬家管理」把整个聊天记录搬到其他盘') }
     if ($kind -eq 'type' -or $kind -eq 'recent') { $why = (T '这一行是统计，不是文件；双击查看') }
     $r.Locked = [bool]$why; $r.LockTip = $why
+    if ($path -and $script:mapMarks -and $script:mapMarks.Contains((Get-MarkKey $r))) { $r.Marked = $true }
     return $r
 }
 # 路径在不在某个聊天软件的聊天记录文件夹里（这些只看不删，要腾地方就整体搬家）
@@ -16580,6 +16889,11 @@ function Restore-MapKeep($keep) {
 function Show-MapLevel($node) {
     if (-not $node) { return }
     $keep = Get-MapKeep ('dirs|' + $node.FullPath())
+    # 换了文件夹：记下刚才在哪，好「后退」；后退、前进自己不记
+    if ($script:mapCur -and -not [object]::ReferenceEquals($script:mapCur, $node) -and -not $script:mapNavQuiet) {
+        $script:mapBack.Add($script:mapCur); if ($script:mapBack.Count -gt 50) { $script:mapBack.RemoveAt(0) }
+        $script:mapFwd.Clear()
+    }
     $script:mapCur = $node
     $dn = Get-Flag 'MapDisk'
     $hasDisk = $dn -and $script:mapRoot -and $script:mapRoot.HasDisk
@@ -16644,10 +16958,12 @@ function Show-MapLevel($node) {
     $ctl.MapList.ItemsSource = $rows
     Restore-MapKeep $keep
     $ctl.MapPath.Text = $path
+    Show-MapCrumbs $node
     $ctl.MapInfo.Text = (T "这一层共 {0}，{1:N0} 个文件{2}") -f (Fmt $node.Size), $node.Files, $(if ($script:mapScanAt) { (T " · 扫描于 {0:HH:mm}（{1}）") -f $script:mapScanAt, $script:mapHow } else { '' })
     if ($script:mapView -eq 'tree') { $ctl.MapInfo.Text += (T ' · 点方块就是选中下面列表里的那一行，列表里选中的方块会描边；双击进入') }
     $ctl.BtnMapAcct.Visibility = if ($script:mapRoot -and $script:mapRoot.HasDisk -and (Get-Mode) -ge 2) { 'Visible' } else { 'Collapsed' }
     $ctl.BtnMapUp.IsEnabled = ($null -ne $node.Parent)
+    $ctl.BtnMapBack.IsEnabled = $script:mapBack.Count -gt 0; $ctl.BtnMapFwd.IsEnabled = $script:mapFwd.Count -gt 0
     $ctl.EmptyMap.Visibility = if ($rows.Count -gt 0) { 'Collapsed' } else { 'Visible' }
     if ($rows.Count -eq 0) { $ctl.EmptyMapText.Text = (T '这个文件夹是空的') }
     $ctl.BtnMapExport.IsEnabled = ($rows.Count -gt 0)
@@ -16655,6 +16971,152 @@ function Show-MapLevel($node) {
     if ($script:mapView -eq 'tree') { Draw-MapTree }
     Show-MapOverview
     Update-MapSel
+}
+# ---------- 后退 / 前进 / 上一级，路径上的每一层都能点（参考 disktree） ----------
+$script:mapBack = New-Object System.Collections.Generic.List[object]; $script:mapFwd = New-Object System.Collections.Generic.List[object]; $script:mapNavQuiet = $false
+function Reset-MapHistory { $script:mapBack.Clear(); $script:mapFwd.Clear(); $ctl.BtnMapBack.IsEnabled = $false; $ctl.BtnMapFwd.IsEnabled = $false }
+function Move-MapHistory([int]$dir) {
+    $from = if ($dir -lt 0) { $script:mapBack } else { $script:mapFwd }
+    $to = if ($dir -lt 0) { $script:mapFwd } else { $script:mapBack }
+    if ($from.Count -eq 0 -or -not $script:mapCur) { return }
+    $n = $from[$from.Count - 1]; $from.RemoveAt($from.Count - 1)
+    $to.Add($script:mapCur)
+    if ($script:mapView -ne 'dirs' -and $script:mapView -ne 'tree') { $ctl.MapViewDirs.IsChecked = $true }
+    $script:mapNavQuiet = $true
+    try { Show-MapLevel $n } finally { $script:mapNavQuiet = $false }
+}
+function Go-MapUp { if ($script:mapCur -and $script:mapCur.Parent) { Show-MapLevel $script:mapCur.Parent } }
+$ctl.BtnMapBack.Add_Click({ Move-MapHistory -1 })
+$ctl.BtnMapFwd.Add_Click({ Move-MapHistory 1 })
+# 鼠标的后退、前进侧键；Alt+← / Alt+→；Backspace 上一级（在输入框里打字时不管）
+$ctl.PageMap.Add_PreviewMouseDown({
+    param($s, $e)
+    if ($e.ChangedButton -eq [System.Windows.Input.MouseButton]::XButton1) { Move-MapHistory -1; $e.Handled = $true }
+    elseif ($e.ChangedButton -eq [System.Windows.Input.MouseButton]::XButton2) { Move-MapHistory 1; $e.Handled = $true }
+})
+$ctl.PageMap.Add_PreviewKeyDown({
+    param($s, $e)
+    if ([System.Windows.Input.Keyboard]::FocusedElement -is [System.Windows.Controls.TextBox]) { return }
+    $alt = ([System.Windows.Input.Keyboard]::Modifiers -band [System.Windows.Input.ModifierKeys]::Alt) -ne 0
+    $k = if ($e.Key -eq [System.Windows.Input.Key]::System) { $e.SystemKey } else { $e.Key }
+    if ($alt -and $k -eq [System.Windows.Input.Key]::Left) { Move-MapHistory -1; $e.Handled = $true }
+    elseif ($alt -and $k -eq [System.Windows.Input.Key]::Right) { Move-MapHistory 1; $e.Handled = $true }
+    elseif (-not $alt -and $k -eq [System.Windows.Input.Key]::Back -and ($script:mapView -eq 'dirs' -or $script:mapView -eq 'tree')) { Go-MapUp; $e.Handled = $true }
+})
+# 路径：每一层一个按钮，最多显示最后 6 层（前面的用「…」代替，点「…」回到再上一层）
+function Show-MapCrumbs($node) {
+    $cr = $ctl.MapCrumbs; $cr.Children.Clear()
+    $chain = New-Object System.Collections.Generic.List[object]
+    for ($n = $node; $n; $n = $n.Parent) { $chain.Insert(0, $n) }
+    $start = [math]::Max(0, $chain.Count - 6)
+    $link = $win.FindResource('LinkButton')
+    $add = {
+        param([string]$text, $target, [bool]$last)
+        if ($cr.Children.Count -gt 0) { $sep = New-Object System.Windows.Controls.TextBlock; $sep.Text = '›'; $sep.Foreground = New-Brush '#86868B'; $sep.Margin = New-Object System.Windows.Thickness 5, 0, 5, 0; $sep.VerticalAlignment = 'Center'; [void]$cr.Children.Add($sep) }
+        if ($last) { $t = New-Object System.Windows.Controls.TextBlock; $t.Text = $text; $t.FontWeight = 'SemiBold'; $t.VerticalAlignment = 'Center'; $t.TextTrimming = 'CharacterEllipsis'; $t.MaxWidth = 260; [void]$cr.Children.Add($t); return }
+        $b = New-Object System.Windows.Controls.Button; $b.Style = $link; $b.Content = $text; $b.Tag = $target; $b.VerticalAlignment = 'Center'; $b.ToolTip = $target.FullPath()
+        $b.Add_Click({ $script:mapCrumbHit = $this.Tag; if ($script:mapView -ne 'dirs' -and $script:mapView -ne 'tree') { $ctl.MapViewDirs.IsChecked = $true }; Show-MapLevel $this.Tag })
+        [void]$cr.Children.Add($b)
+    }
+    if ($start -gt 0) { & $add '…' $chain[$start - 1] $false }
+    for ($i = $start; $i -lt $chain.Count; $i++) {
+        $n = $chain[$i]; $nm = [string]$n.Name; if ($i -eq 0) { $nm = $nm.TrimEnd('\') }
+        & $add $nm $n ($i -eq $chain.Count - 1)
+    }
+    $cr.Visibility = 'Visible'; $ctl.MapPath.Visibility = 'Collapsed'
+}
+# ---------- 待删清单：在不同文件夹里挑要删的，先放进清单，一直看得见删完以后还剩多少，看过清单再一起删（参考 disktree） ----------
+# 放进一个文件夹时，清单里它里面的项目合进它；已经在清单里的文件夹里面的东西不再单独放
+$script:mapMarks = [ordered]@{}
+function Get-MarkKey($r) { ([string]$r.Path).TrimEnd('\').ToLowerInvariant() }
+function Add-MapMarks($rows) {
+    $added = 0; $inside = 0
+    foreach ($r in @($rows)) {
+        if (-not $r -or $r.Locked -or $r.IsSummary -or -not $r.Path -or $r.Size -le 0 -or ($r.Kind -ne 'dir' -and $r.Kind -ne 'file')) { continue }
+        $k = Get-MarkKey $r
+        if ($script:mapMarks.Contains($k)) { continue }
+        $up = $false; foreach ($m in @($script:mapMarks.Keys)) { if ($k.StartsWith($m + '\')) { $up = $true; break } }
+        if ($up) { $inside++; continue }
+        foreach ($m in @($script:mapMarks.Keys)) { if ($m.StartsWith($k + '\')) { $script:mapMarks[$m].Marked = $false; $script:mapMarks.Remove($m) } }
+        $script:mapMarks[$k] = $r; $r.Marked = $true; $added++
+    }
+    Update-MapMarks
+    if ($inside -gt 0) { $ctl.MapSel.Text = (T "{0} 项所在的文件夹已经在待删清单里，不用再单独放") -f $inside }
+    return $added
+}
+function Remove-MapMarks($rows) {
+    foreach ($r in @($rows)) { if (-not $r -or -not $r.Path) { continue }; $k = Get-MarkKey $r; if ($script:mapMarks.Contains($k)) { $script:mapMarks[$k].Marked = $false; $script:mapMarks.Remove($k) }; $r.Marked = $false }
+    Update-MapMarks
+}
+function Clear-MapMarks { foreach ($m in @($script:mapMarks.Values)) { $m.Marked = $false }; $script:mapMarks.Clear(); Update-MapMarks }
+# 清单里的东西删掉能腾出多少：知道实际占用的按实际占用算
+function Get-MarkBytes($r) { if ($r.Disk -ge 0 -and $script:mapRoot -and $script:mapRoot.HasDisk) { [double]$r.Disk } else { [double]$r.Size } }
+function Update-MapMarks {
+    $n = $script:mapMarks.Count
+    $ctl.MapMarkBar.Visibility = if ($n -gt 0) { 'Visible' } else { 'Collapsed' }
+    if ($n -eq 0) { return }
+    $tot = [double]0; $byDrive = @{}
+    foreach ($r in @($script:mapMarks.Values)) { $b = Get-MarkBytes $r; $tot += $b; $d = ([string]$r.Path).Substring(0, 2).ToUpperInvariant(); $byDrive[$d] = [double]$byDrive[$d] + $b }
+    $parts = @(foreach ($d in @($byDrive.Keys | Sort-Object)) { $free = DriveFree ($d + '\'); (T "{0} 现在空闲 {1}，删完约 {2}") -f $d, (Fmt $free), (Fmt ($free + $byDrive[$d])) })
+    $ctl.MapMarkText.Text = ((T "待删清单：{0} 项，共 {1}。") -f $n, (Fmt $tot)) + ($parts -join (T '；')) + (T '（放进回收站的，清空回收站后才腾出来）')
+    $ctl.BtnMarkDelete.IsEnabled = -not $script:worker
+}
+function Show-MapMarks {
+    if ($script:mapMarks.Count -eq 0) { return }
+    $items = @(@($script:mapMarks.Values) | Sort-Object { -(Get-MarkBytes $_) } | Select-Object -First 60 | ForEach-Object { (T "{0}（{1}）") -f $_.Path, (Fmt (Get-MarkBytes $_)) })
+    if ($script:mapMarks.Count -gt 60) { $items += ((T "……另有 {0} 项") -f ($script:mapMarks.Count - 60)) }
+    $ans = Show-Sheet -Title ((T "待删清单（{0} 项）") -f $script:mapMarks.Count) -Text ($ctl.MapMarkText.Text + "`n`n" + (T '要去掉某一项：在列表里选中它，右键「从待删清单去掉」。')) -Items $items -Buttons @((T '关闭清单'), (T '清空清单'), (T '删除清单里的…')) -Primary (T '关闭清单') -Cancel (T '关闭清单')
+    if ($ans -eq (T '清空清单')) { Clear-MapMarks } elseif ($ans -eq (T '删除清单里的…')) { Start-MapDelete @($script:mapMarks.Values) }
+}
+$ctl.BtnMarkShow.Add_Click({ Show-MapMarks })
+$ctl.BtnMarkClear.Add_Click({ Clear-MapMarks })
+$ctl.BtnMarkDelete.Add_Click({ if ($script:mapMarks.Count -gt 0) { Start-MapDelete @($script:mapMarks.Values) } })
+$ctl.BtnMapMark.Add_Click({ $sel = @($ctl.MapList.SelectedItems); if (@($sel | Where-Object { -not $_.Marked }).Count -eq 0) { Remove-MapMarks $sel } else { [void](Add-MapMarks $sel) }; Update-MapSel })
+$ctl.MmMark.Add_Click({ $rows = @($script:menuRows); if (@($rows | Where-Object { -not $_.Marked }).Count -eq 0) { Remove-MapMarks $rows } else { [void](Add-MapMarks $rows) }; Update-MapSel })
+# ---------- 值得一看：名字一看就是缓存、依赖包、构建产物、虚拟环境、临时文件的大文件夹 ----------
+$script:worthNames = @('node_modules', '.next', '.nuxt', '.parcel-cache', '.turbo', '.cache', 'cache', 'caches', 'cache2', 'Code Cache', 'GPUCache', 'ShaderCache', 'DXCache', 'GLCache',
+    '_cacache', 'npm-cache', '.gradle', '.nuget', '.m2', '.venv', 'venv', 'target', 'obj', '__pycache__', 'Temp', 'tmp', 'CrashDumps', 'DerivedData', '.android', 'Windows.old')
+function Get-WorthKind([string]$name) {
+    switch -regex ($name) {
+        '^(node_modules|\.nuget|\.m2|_cacache|npm-cache|\.gradle)$' { return (T '依赖包，要用时会重新下载') }
+        '^(target|obj|\.next|\.nuxt|\.parcel-cache|\.turbo|DerivedData|__pycache__)$' { return (T '构建产物，重新编译会再生成') }
+        '^(\.venv|venv)$' { return (T 'Python 虚拟环境，删了要重新建') }
+        '^(Temp|tmp|CrashDumps)$' { return (T '临时文件和崩溃转储') }
+        '^Windows\.old$' { return (T '旧系统，删了就不能退回去') }
+        '^\.android$' { return (T '安卓开发工具的数据') }
+        default { return (T '缓存，删了会自动重建') }
+    }
+}
+function Show-MapWorth {
+    $ctl.MapWorth.Children.Clear()
+    $r = $script:mapRoot
+    if (-not $r) { $ctl.MapWorthBox.Visibility = 'Collapsed'; return }
+    $hits = @(); try { $hits = @([DiskMap]::Named($r, [string[]]$script:worthNames, [long]300MB, 40)) } catch {}
+    $shown = 0
+    foreach ($h in $hits) {
+        if ($shown -ge 6) { break }
+        $p = $h.FullPath()
+        if (Get-DeleteBlock $p) { continue }
+        if (Test-ChatPath $p) { continue }
+        $par = Split-Path $p -Parent
+        # target 要旁边有 Cargo.toml（Rust），obj 要旁边有工程文件（.NET）才算构建产物
+        if ($h.Name -ieq 'target' -and -not (Test-Path -LiteralPath (Join-Path $par 'Cargo.toml'))) { continue }
+        if ($h.Name -ieq 'obj' -and -not @(Get-ChildItem -LiteralPath $par -File -Filter '*.*proj' -ErrorAction SilentlyContinue).Count) { continue }
+        $b = New-Object System.Windows.Controls.Button; $b.Style = $win.FindResource('Small'); $b.Margin = New-Object System.Windows.Thickness 0, 0, 8, 6; $b.Tag = $h
+        $sp = New-Object System.Windows.Controls.StackPanel; $sp.Orientation = 'Horizontal'
+        $t1 = New-Object System.Windows.Controls.TextBlock; $t1.Text = (Split-Path $par -Leaf) + '\' + $h.Name
+        $t2 = New-Object System.Windows.Controls.TextBlock; $t2.Text = Fmt $(if ($r.HasDisk) { [double]$h.Disk } else { [double]$h.Size }); $t2.FontWeight = 'SemiBold'; $t2.Margin = New-Object System.Windows.Thickness 8, 0, 0, 0
+        [void]$sp.Children.Add($t1); [void]$sp.Children.Add($t2); $b.Content = $sp
+        $b.ToolTip = "{0}`n{1}" -f $p, (Get-WorthKind $h.Name)
+        $b.Add_Click({
+            $n = $this.Tag
+            if ($script:mapView -ne 'dirs' -and $script:mapView -ne 'tree') { $ctl.MapViewDirs.IsChecked = $true }
+            Show-MapLevel $n.Parent
+            foreach ($x in @($ctl.MapList.Items)) { if ([object]::ReferenceEquals($x.Node, $n)) { $ctl.MapList.SelectedItem = $x; try { $ctl.MapList.ScrollIntoView($x) } catch {}; break } }
+        })
+        [void]$ctl.MapWorth.Children.Add($b); $shown++
+    }
+    $ctl.MapWorthBox.Visibility = if ($shown -gt 0) { 'Visible' } else { 'Collapsed' }
 }
 # 概览：这块盘用了多少，系统与软件、个人文件、缓存各占多少。只有扫的是整块盘时才有
 $script:ovCache = @{}
@@ -16699,6 +17161,7 @@ function Show-MapOverview {
         [void]$sp.Children.Add($dot); [void]$sp.Children.Add($tb); [void]$ctl.MapOvLegend.Children.Add($sp)
     }
     $ctl.MapOverview.ToolTip = (T '系统与软件：Windows、Program Files、ProgramData 等；个人文件：Users；可清理的缓存：清理页「安全清理」里的那些目录（估算）；其他：页面文件、休眠文件、文件表等不在上面几类里的。剩余空间按 Windows 报告的算。')
+    if ($script:worthKey -ne $key) { $script:worthKey = $key; Show-MapWorth }
     $ctl.MapOverview.Visibility = 'Visible'
 }
 
@@ -16745,6 +17208,40 @@ function Get-TreeItems($rows) {
     return @{ Show = $show; Sizes = [double[]]$sizes; Rest = $rest; RestN = $restN }
 }
 $script:treeColors = @('#2F6FDB', '#3B82F6', '#4C8DF6', '#2563EB', '#5A9BF0', '#3576E6')
+# 方块的颜色是这个文件夹装的是哪一类东西（参考 disktree）：按名字认，认不出的用蓝色；能腾出来的（缓存、依赖包、临时文件）再加斜线
+$script:treeKinds = [ordered]@{
+    system = @((T '系统'), '#5A6B8C'); apps = @((T '软件和软件数据'), '#4F7FC4'); docs = @((T '文档和桌面'), '#8C6BC2'); media = @((T '照片、视频、音乐'), '#C07A3A')
+    dev = @((T '代码和开发'), '#3E8E7E'); sync = @((T '同步盘'), '#3796C7'); games = @((T '游戏'), '#B05A8A'); cache = @((T '缓存和临时文件'), '#C9A227'); other = @((T '其他文件夹'), '#3B82F6'); file = @((T '文件'), '#8E99AD')
+}
+function Get-TreeKind($row) {
+    if (-not $row.IsDir) { return 'file' }
+    $n = ([string]$row.Name).ToLowerInvariant(); $p = ([string]$row.Path).ToLowerInvariant()
+    if ($n -match '^(windows|program files|program files \(x86\)|programdata|\$winreagent|recovery|system volume information|perflogs|windows\.old|\$recycle\.bin|msocache|intel|amd|nvidia)$') { return $(if ($n -in 'windows.old', '$recycle.bin') { 'cache' } else { 'system' }) }
+    if ($script:worthNames -contains $row.Name -or $n -match '^(temp|tmp|inetcache|crashdumps|logs?|\$recycle\.bin)$' -or $n -match 'cache') { return 'cache' }
+    if ($n -match '^(onedrive|onedrive - .*|dropbox|icloud ?drive|google drive|baidunetdisk.*|baidunetdiskdownload|坚果云|nutstore.*)$') { return 'sync' }
+    if ($n -match '^(steam|steamapps|steamlibrary|epic games|wegame|games|riot games|battle\.net|origin games|ea games|ubisoft.*|genshin impact.*|xboxgames)$') { return 'games' }
+    if ($n -match '^(pictures|videos|music|photos|camera roll|dcim|movies|图片|视频|音乐|照片)$') { return 'media' }
+    if ($n -match '^(documents|desktop|downloads|文档|桌面|下载)$') { return 'docs' }
+    if ($n -match '^(\.git|src|source|sources|repos|projects|code|workspace|workspaces|github|gitlab|dev|\.vscode|\.cargo|\.rustup|\.conda|anaconda3|miniconda3|\.docker|docker)$') { return 'dev' }
+    if ($n -eq 'appdata' -or $p -match '\\appdata(\\|$)' -or $n -match '^(local|roaming|locallow)$') { return 'apps' }
+    return 'other'
+}
+$script:hatchCache = @{}
+function Get-TreeBrush([string]$hex, [bool]$hatch) {
+    $key = $hex + '|' + $hatch
+    if ($script:hatchCache.ContainsKey($key)) { return $script:hatchCache[$key] }
+    $base = Brush $hex 'b'
+    if (-not $hatch) { $script:hatchCache[$key] = $base; return $base }
+    $dg = New-Object System.Windows.Media.DrawingGroup
+    [void]$dg.Children.Add((New-Object System.Windows.Media.GeometryDrawing $base, $null, (New-Object System.Windows.Media.RectangleGeometry (New-Object System.Windows.Rect 0, 0, 8, 8))))
+    $pen = New-Object System.Windows.Media.Pen ((New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color]::FromArgb(90, 255, 255, 255)))), 1.6
+    foreach ($ln in @(@(0, 8, 8, 0), @(-2, 2, 2, -2), @(6, 10, 10, 6))) { [void]$dg.Children.Add((New-Object System.Windows.Media.GeometryDrawing $null, $pen, (New-Object System.Windows.Media.LineGeometry (New-Object System.Windows.Point $ln[0], $ln[1]), (New-Object System.Windows.Point $ln[2], $ln[3])))) }
+    $db = New-Object System.Windows.Media.DrawingBrush $dg
+    $db.TileMode = 'Tile'; $db.Viewport = New-Object System.Windows.Rect 0, 0, 8, 8; $db.ViewportUnits = 'Absolute'; $db.Viewbox = New-Object System.Windows.Rect 0, 0, 8, 8; $db.ViewboxUnits = 'Absolute'
+    $db.Freeze()
+    $script:hatchCache[$key] = $db
+    return $db
+}
 $script:treeSel = $null
 function Draw-MapTree {
     $cv = $ctl.MapTree
@@ -16756,6 +17253,7 @@ function Draw-MapTree {
     $order = @(0..($ti.Sizes.Count - 1) | Sort-Object { $ti.Sizes[$_] } -Descending)
     $rects = Get-TreeRects ([double[]]@($order | ForEach-Object { $ti.Sizes[$_] })) 0 0 $w $h
     $clear = Brush '#00000000'
+    $kindsUsed = @{}
     for ($q = 0; $q -lt $order.Count; $q++) {
         $i = $order[$q]
         $rc = $rects[$q]; if (-not $rc) { continue }
@@ -16766,8 +17264,12 @@ function Draw-MapTree {
         $b.CornerRadius = New-Object System.Windows.CornerRadius 3
         $b.BorderThickness = New-Object System.Windows.Thickness 2
         $b.BorderBrush = $clear
-        $bg = if (-not $row) { '#C7CCD6' } elseif ($row.IsDir) { $script:treeColors[$i % $script:treeColors.Count] } else { '#8E99AD' }
-        $b.Background = Brush $bg 'b'
+        if (-not $row) { $b.Background = Brush '#C7CCD6' 'b' }
+        else {
+            $kd = Get-TreeKind $row; $kindsUsed[$kd] = $true
+            $hex = if ($kd -eq 'other') { $script:treeColors[$i % $script:treeColors.Count] } else { $script:treeKinds[$kd][1] }
+            $b.Background = Get-TreeBrush $hex ($kd -eq 'cache')
+        }
         $b.Tag = $row
         $b.ToolTip = if ($row) { "{0}`n{1}  ·  {2}`n{3}" -f $row.Name, $row.SizeText, $row.Pct, $row.Path } else { (T "其他 {0} 项，共 {1}") -f $ti.RestN, (Fmt $ti.Rest) }
         if ($b.Width -ge 46 -and $b.Height -ge 20) {
@@ -16800,6 +17302,16 @@ function Draw-MapTree {
             })
         }
         [void]$cv.Children.Add($b)
+    }
+    # 图例：这一层出现了哪几类
+    $lg = $ctl.MapTreeLegend; $lg.Children.Clear()
+    foreach ($k in $script:treeKinds.Keys) {
+        if (-not $kindsUsed.ContainsKey($k)) { continue }
+        $sp = New-Object System.Windows.Controls.StackPanel; $sp.Orientation = 'Horizontal'; $sp.Margin = New-Object System.Windows.Thickness 0, 2, 16, 2
+        $sw = New-Object System.Windows.Controls.Border; $sw.Width = 12; $sw.Height = 12; $sw.CornerRadius = New-Object System.Windows.CornerRadius 3; $sw.Margin = New-Object System.Windows.Thickness 0, 0, 6, 0; $sw.VerticalAlignment = 'Center'
+        $sw.Background = Get-TreeBrush $script:treeKinds[$k][1] ($k -eq 'cache')
+        $tb = New-Object System.Windows.Controls.TextBlock; $tb.Text = $script:treeKinds[$k][0] + $(if ($k -eq 'cache') { (T '（带斜线：删了能腾出来）') } else { '' }); $tb.FontSize = 12; $tb.Foreground = Brush '#6E6E73'; $tb.VerticalAlignment = 'Center'
+        [void]$sp.Children.Add($sw); [void]$sp.Children.Add($tb); [void]$lg.Children.Add($sp)
     }
     Sync-TreeSel
 }
@@ -16959,7 +17471,8 @@ function Set-MapView([string]$v) {
     $ctl.MapGrowBar.Visibility = if ($grow) { 'Visible' } else { 'Collapsed' }
     $ctl.MapRecentBar.Visibility = if ($v -eq 'recent') { 'Visible' } else { 'Collapsed' }
     $ctl.MapGrow.Visibility = if ($grow) { 'Visible' } else { 'Collapsed' }
-    $ctl.MapTree.Visibility = if ($tree) { 'Visible' } else { 'Collapsed' }
+    $ctl.MapTreeBox.Visibility = if ($tree) { 'Visible' } else { 'Collapsed' }
+    if ($v -ne 'dirs' -and -not $tree) { $ctl.MapCrumbs.Visibility = 'Collapsed'; $ctl.MapPath.Visibility = 'Visible' }
     # 方块图和列表一起显示：上面方块图，下面列表，点哪边另一边都跟着
     $ctl.MapGrid.RowDefinitions[1].Height = if ($tree) { New-Object System.Windows.GridLength 3, ([System.Windows.GridUnitType]::Star) } else { New-Object System.Windows.GridLength 0 }
     $ctl.MapGrid.RowDefinitions[2].Height = if ($tree) { New-Object System.Windows.GridLength 2, ([System.Windows.GridUnitType]::Star) } else { New-Object System.Windows.GridLength 1, ([System.Windows.GridUnitType]::Star) }
@@ -17065,7 +17578,7 @@ $sync.RecentNote = $note
 }
 $ctl.BtnMapRecent.Add_Click({ Start-MapRecent })
 $ctl.MapRecentDays.Add_SelectionChanged({ if ($script:mapView -eq 'recent' -and $script:mapRoot -and -not $script:worker) { Start-MapRecent } })
-$ctl.BtnMapUp.Add_Click({ if ($script:mapCur -and $script:mapCur.Parent) { Show-MapLevel $script:mapCur.Parent } })
+$ctl.BtnMapUp.Add_Click({ Go-MapUp })
 # 空间明细：已用空间都花在哪，为什么和按文件大小相加对不上（快速扫描读了文件表才有）
 function Show-SpaceAcct {
     $r = $script:mapRoot
@@ -17130,6 +17643,8 @@ function Update-MapSel {
     $ctl.BtnMapOpen.IsEnabled = [bool]$r -and -not $busy
     $ctl.BtnMapDelete.IsEnabled = ($del.Count -gt 0) -and -not $busy
     $ctl.BtnMapCompress.IsEnabled = [bool]$r -and $r.IsDir -and -not $busy -and -not (Get-CompressBlock $r.Path)
+    $ctl.BtnMapMark.IsEnabled = ($del.Count -gt 0)
+    $ctl.BtnMapMark.Content = if ($del.Count -gt 0 -and @($del | Where-Object { -not $_.Marked }).Count -eq 0) { (T '从待删清单去掉') } else { (T '加入待删清单') }
     if ($sel.Count -eq 0) {
         $ctl.MapSel.Text = if (Test-CheckMode) { (T '勾选行前面的方框来选中，可以勾一项或多项，再打开位置、压缩或删除；单击行的其他地方不会选中，双击文件夹往里点；按住鼠标上下拖可以一次勾上连着的几行。系统文件夹、软件安装文件夹、C 盘个人文件夹和搬家后的数据带小锁，不能在这里删。') }
                            else { (T '选中一行可以打开位置、压缩或删除；勾选前面的方框，或按住 Ctrl、Shift，可以选多项一起删；按住鼠标（左键或右键）上下拖可以一次选中连着的几行。系统文件夹、软件安装文件夹、C 盘个人文件夹和搬家后的数据带小锁，不能在这里删。') }
@@ -17171,6 +17686,9 @@ function Update-MapMenu {
     $nd = @($rows | Where-Object { -not $_.Locked -and $_.Size -gt 0 }).Count
     $ctl.MmDelete.IsEnabled = ($nd -gt 0) -and -not $busy
     $ctl.MmDelete.Header = if ($nd -gt 1) { (T "删除选中的 {0} 项…") -f $nd } else { (T '删除…') }
+    $mk = @($rows | Where-Object { -not $_.Locked -and $_.Size -gt 0 -and -not $_.IsSummary })
+    $ctl.MmMark.IsEnabled = $mk.Count -gt 0
+    $ctl.MmMark.Header = if ($mk.Count -gt 0 -and @($mk | Where-Object { -not $_.Marked }).Count -eq 0) { (T '从待删清单去掉') } else { (T '加入待删清单') }
     return $true
 }
 $ctl.MapList.Add_ContextMenuOpening({ param($s, $e) if (-not (Update-MapMenu)) { $e.Handled = $true } })
@@ -17745,6 +18263,9 @@ function Start-MapDelete($sel) {
         }
     }
     $how = (T "「移到回收站」可以恢复，但要清空回收站后才真正腾出空间；「永久删除」马上腾出空间，删了就找不回来。")
+    # 是 git 仓库的文件夹：里面没提交、没推送的改动删了就没了（参考 disktree）
+    $git = @($rows | Where-Object { $_.IsDir -and ((Test-Path -LiteralPath (Join-Path ([string]$_.Path) '.git')) -or $_.Name -ieq '.git') })
+    if ($git.Count -gt 0) { $real += ((T "`n`n注意：其中 {0} 个是 git 仓库（{1}）。没提交、没推送到远程的改动删了就找不回来，先确认都推送过。") -f $git.Count, ((@($git | Select-Object -First 3 | ForEach-Object { $_.Name })) -join (T '、'))) }
     $items = $null
     if ($rows.Count -eq 1) {
         $r = $rows[0]
@@ -17763,6 +18284,7 @@ function Start-MapDelete($sel) {
     if ($ans -ne (T '移到回收站') -and $ans -ne (T '永久删除')) { return }
     $sync.Mode = 'mapdel'; $sync.MapDel = $null
     $script:mapDelRows = $rows
+    $script:mapDelFree = @{}; foreach ($d in @($rows | ForEach-Object { ([string]$_.Path).Substring(0, 2).ToUpperInvariant() } | Select-Object -Unique)) { $script:mapDelFree[$d] = DriveFree ($d + '\') }
     Start-Op $(if ($rows.Count -eq 1) { (T "删除 {0}") -f $rows[0].Name } else { (T "删除 {0} 项") -f $rows.Count })
     UI-Busy $true
     Start-Worker @'
@@ -17856,7 +18378,7 @@ function Load-Moves {
     $script:moveRows = $col
     $ctl.MovesList.ItemsSource = $col
     $ctl.EmptyMoves.Visibility = if ($col.Count -gt 0) { 'Collapsed' } else { 'Visible' }
-    $ctl.MovesTabDone.Content = if ($col.Count -gt 0) { (T "已经搬走的（{0}）") -f $col.Count } else { (T '已经搬走的') }
+    Set-NavCount 'MovesTabDone' $col.Count
     Set-DoneInfo $(if ($col.Count -gt 0) { (T "共 {0} 个文件夹，正在统计大小…") -f $col.Count } else { (T '还没有搬过文件夹。') })
     if ($col.Count -gt 0 -and -not $script:worker) {
         $sync.Mode = 'movesize'
@@ -17892,7 +18414,23 @@ function Set-MovesTab([string]$t) {
     # 别处搬过、搬回过东西以后，切回来时重新看一遍
     if ($c -and -not $script:candScanned -and -not $script:worker -and $ctl.PageMoves.Visibility -eq 'Visible') { Start-CandScan }
 }
-$ctl.MovesTabCand.Add_Checked({ Set-MovesTab 'cand' })
+# 目录上的数字
+function Set-NavCount([string]$name, [int]$n) {
+    $ctl[$name + 'N'].Text = [string]$n
+    $ctl[$name + 'B'].Visibility = if ($n -gt 0) { 'Visible' } else { 'Collapsed' }
+}
+# 「可以搬的」下面一次只看一类：聊天记录、装在 C 盘的软件、其他可搬的文件夹、不适合搬的软件（空 = 全部）
+$script:candGroup = ''
+function Set-CandGroup([string]$g) {
+    $script:candGroup = $g
+    $cfg = $script:sortCfg['CandList']
+    if ($cfg) { $cfg.Filter = if ($g) { [Predicate[object]]{ param($o) [string]$o.Group -eq $script:candGroup } } else { $null } }
+    Apply-ListSort 'CandList'
+    $ctl.BtnCandAll.IsEnabled = ($g -ne 'other' -and $g -ne 'blocked')
+    if ($script:movesTab -ne 'cand') { Set-MovesTab 'cand' }
+}
+$ctl.MovesTabCand.Add_Checked({ Set-CandGroup '' })
+foreach ($n in 'MNavChat', 'MNavApp', 'MNavOther', 'MNavBlocked') { $ctl[$n].Add_Checked({ Set-CandGroup ([string]$this.Tag) }) }
 $ctl.MovesTabDone.Add_Checked({ Set-MovesTab 'done' })
 
 function Start-CandScan {
@@ -17902,7 +18440,7 @@ function Start-CandScan {
     $ctl.EmptyCandText.Text = (T '正在看 C 盘上还有什么能搬…')
     if ($script:movesTab -eq 'cand') { $ctl.EmptyCand.Visibility = 'Visible' }
     Set-CandInfo (T '正在看 C 盘上还有什么能搬，统计大小要一会儿…')
-    $ctl.MovesTabCand.Content = (T '可以搬的')
+    foreach ($k in 'MovesTabCand', 'MNavChat', 'MNavApp', 'MNavOther', 'MNavBlocked') { Set-NavCount $k 0 }
     $sync.Mode = 'movescan'; $sync.CandResult = $null; $sync.CandStore = $null
     Start-Op (T '看看 C 盘上还有什么能搬') -NoCard
     UI-Busy $true
@@ -18027,10 +18565,16 @@ function Update-CandInfo {
     if ($nOther) { $parts += ((T "其他文件夹 {0} 项") -f $nOther) }
     if ($rows.Count -gt 0) {
         Set-CandInfo ((T "C 盘上还能搬走约 {0}：{1}。勾选后点右下角「搬到其他盘」。") -f (Fmt $tot), ($parts -join (T '、')))
-        $ctl.MovesTabCand.Content = (T "可以搬的（{0}）") -f $rows.Count
     } else {
         Set-CandInfo (T 'C 盘上没找到还能搬的东西。')
-        $ctl.MovesTabCand.Content = (T '可以搬的')
+    }
+    Set-NavCount 'MovesTabCand' $rows.Count
+    $all = @(); if ($script:candRows) { $all = @($script:candRows) }
+    foreach ($p in @(@('MNavChat', 'chat'), @('MNavApp', 'app'), @('MNavOther', 'other'), @('MNavBlocked', 'blocked'))) {
+        $c = @($all | Where-Object { $_.Group -eq $p[1] }).Count
+        Set-NavCount $p[0] $c
+        # 这一类没有东西就不列（正在看的那一类除外）
+        $ctl[$p[0]].Visibility = if ($c -gt 0 -or $script:candGroup -eq $p[1]) { 'Visible' } else { 'Collapsed' }
     }
     $has = $script:candRows -and $script:candRows.Count -gt 0
     $ctl.EmptyCandText.Text = (T 'C 盘上没找到还能搬的东西：聊天记录和软件要么已经搬走，要么不在 C 盘。')
@@ -18043,7 +18587,8 @@ function Update-CandSel {
     $ctl.CandSel.Text = if ($sel.Count -gt 0) { (T "已选 {0} 项，约 {1}。") -f $sel.Count, (Fmt $tot) } else { (T '勾选要搬的项目。') }
     $ctl.BtnCandMove.IsEnabled = ($sel.Count -gt 0) -and -not $script:worker -and [bool](Get-Dest)
 }
-$ctl.BtnCandAll.Add_Click({ if ($script:candRows) { foreach ($r in $script:candRows) { if ($r.CanMove -and $r.Group -ne 'other') { $r.Checked = $true } } }; Update-CandSel })
+# 全选：聊天记录和软件（正在看其中一类时只选这一类）；「其他可搬的文件夹」要看清说明自己勾
+$ctl.BtnCandAll.Add_Click({ if ($script:candRows) { foreach ($r in $script:candRows) { if ($r.CanMove -and $r.Group -ne 'other' -and (-not $script:candGroup -or $r.Group -eq $script:candGroup)) { $r.Checked = $true } } }; Update-CandSel })
 $ctl.BtnCandNone.Add_Click({ if ($script:candRows) { foreach ($r in $script:candRows) { $r.Checked = $false } }; Update-CandSel })
 $ctl.BtnCandStore.Add_Click({ try { Start-Process 'ms-settings:appsfeatures' } catch {} })
 $ctl.CandList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent, [System.Windows.RoutedEventHandler]{
@@ -18212,7 +18757,7 @@ $res = @{}; Invoke-MoveBack $arg.Rec $res; $sync.MoveRes = $res
 # ------------------------------------------------------------
 $script:healthData = $null
 function Load-Health {
-    $ctl.HealthNote.Text = (T '正在读取硬件、事件日志和转储文件，要十几秒…')
+    $ctl.HealthNote.Text = if ($script:healthData) { (T '正在后台刷新，下面先显示上次读到的…') } else { (T '正在读取硬件、事件日志和转储文件，要十几秒…') }
     $ctl.BtnHealthRefresh.IsEnabled = $false
     $ok = Start-BgEngine 'health' 'Get-HealthAll' $null {
         param($r, $err)
@@ -18231,6 +18776,22 @@ $script:hcGreen = @('#1D7A35', '#E5F4E9'); $script:hcAmber = @('#995700', '#FFF1
 function New-Chip([string]$text, $tier) { $c = New-Object HealthChip; $c.Text = $text; $c.Fg = $tier[0]; $c.Bg = $tier[1]; return $c }
 function New-HealthCard([string]$title, [string]$sub, $tier) { $c = New-Object HealthCard; $c.Title = $title; $c.Sub = $sub; $c.Stripe = $tier[0]; $c.BarBrush = $tier[0]; return $c }
 function Tier-Worst($a, $b) { $rank = @{ ($script:hcGrey[0]) = 0; ($script:hcGreen[0]) = 1; ($script:hcBlue[0]) = 1; ($script:hcAmber[0]) = 2; ($script:hcRed[0]) = 3 }; if ($rank[$b[0]] -gt $rank[$a[0]]) { $b } else { $a } }
+# 硬件卡片的宽度跟着这一页的宽度走：每张至少 270，一排能放几张放几张，正好排满（最大化时右边不留空白，也不用往下拉很长）
+$win.Resources['HcCardW'] = [double]290
+$ctl.HealthCards.Add_SizeChanged({
+    param($s, $e)
+    $w = [double]$s.ActualWidth; if ($w -lt 100) { return }
+    $cols = [math]::Max(1, [math]::Floor(($w + 1) / (270 + 12)))
+    $cw = [math]::Floor($w / $cols) - 12
+    if ([math]::Abs([double]$win.Resources['HcCardW'] - $cw) -ge 1) { $win.Resources['HcCardW'] = [double]$cw }
+})
+# 事件的说明文字：一行一行合起来，太长的截到 300 字（完整的在鼠标提示里）
+function Shorten-Note([string]$t) {
+    if (-not $t) { return '' }
+    $t = ($t -replace '\s*[\r\n]+\s*', ' ').Trim()
+    if ($t.Length -gt 300) { $t = $t.Substring(0, 300) + '…' }
+    return $t
+}
 function Show-Health($r) {
     $ctl.HealthNote.Text = (T "读取于 {0:HH:mm}，用了 {1:N0} 秒。读取只看不改；修复的按钮点了会先说明要改什么。") -f $r.At, $r.Secs
     $bad = @($r.Verdicts | Where-Object { $_.Level -eq 'red' })
@@ -18332,7 +18893,7 @@ function Show-Health($r) {
         $ctl.HealthBootText.Text = (T "最近一次开机（{0:yyyy-MM-dd HH:mm}）用了 {1:N0} 秒：到桌面 {2:N0} 秒，桌面出来后开机程序又忙了 {3:N0} 秒才安静下来。") -f $bt.At, ($bt.BootMs / 1000), ($bt.MainMs / 1000), ($bt.PostMs / 1000)
         if ($bt.History.Count -ge 3) { $avg = ($bt.History | ForEach-Object { $_.BootMs } | Measure-Object -Average).Average; $ctl.HealthBootText.Text += (T "最近 {0} 次平均 {1:N0} 秒。") -f $bt.History.Count, ($avg / 1000) }
         if ($bt.BootMs -gt 120000) { $ctl.HealthBootText.Text += (T '超过两分钟算慢的。') }
-        foreach ($s in @($bt.Slow)) { $n = New-Object NoteRow; $n.Head = $s.Name; $n.Path = $s.Path; $n.Body = (T "拖慢 {0:N0} 秒，{1} 次") -f ($s.DegradeMs / 1000), $s.Times; $slow.Add($n) }
+        foreach ($s in @($bt.Slow)) { $n = New-Object NoteRow; $n.Head = $s.Name; $n.Sub = [string]$s.Path; $n.Path = $s.Path; $n.Body = (T "拖慢 {0:N0} 秒，{1} 次") -f ($s.DegradeMs / 1000), $s.Times; $slow.Add($n) }
         if ($slow.Count -eq 0) { $ctl.HealthBootText.Text += (T '最近 30 天 Windows 没有点名拖慢开机的程序。') }
     } else { $ctl.HealthBootText.Text = $bt.Why }
     $ctl.HealthSlow.ItemsSource = $slow
@@ -18362,20 +18923,20 @@ function Show-Health($r) {
     $ctl.HealthCrashText.Text = if ($dumps.Count -gt 0) { (T "{0} 里有 {1} 个转储文件（最近的 10 个）。") -f $cr.DumpDir, $dumps.Count } else { (T "没有转储文件：最近没有蓝屏，或者蓝屏时没来得及写出转储。") }
     if ($cr.MemoryDmp) { $ctl.HealthCrashText.Text += (T "另有完整转储 MEMORY.DMP（{0}，{1:yyyy-MM-dd}），在「省空间」里可以改成只存小转储。") -f (Fmt $cr.MemoryDmp.Size), $cr.MemoryDmp.Time }
     $evs = New-Object 'System.Collections.ObjectModel.ObservableCollection[NoteRow]'
-    foreach ($x in @($cr.Events)) { $n = New-Object NoteRow; $n.Head = ("{0}（{1}）" -f $x.What, $x.Source); $n.Path = $x.Sample; $n.Body = (T "{0} 次，最近 {1:MM-dd HH:mm}") -f $x.Count, $x.Last; $evs.Add($n) }
+    foreach ($x in @($cr.Events)) { $n = New-Object NoteRow; $n.Head = ("{0}（{1}）" -f $x.What, $x.Source); $n.Sub = Shorten-Note ([string]$x.Sample); $n.Path = $x.Sample; $n.Body = (T "{0} 次，最近 {1:MM-dd HH:mm}") -f $x.Count, $x.Last; $evs.Add($n) }
     if ($evs.Count -eq 0) { $n = New-Object NoteRow; $n.Head = (T '没有意外关机、硬件错误和磁盘错误的记录'); $evs.Add($n) }
     $ctl.HealthEvents.ItemsSource = $evs
     $drs = New-Object 'System.Collections.ObjectModel.ObservableCollection[NoteRow]'
-    foreach ($x in @($cr.Drivers | Select-Object -First 12)) { $n = New-Object NoteRow; $n.Head = ("{0} {1} {2}" -f $x.Provider, $x.Name, $x.Version).Trim(); $n.Path = $x.Device; $n.Body = '{0:MM-dd HH:mm}' -f $x.When; $drs.Add($n) }
+    foreach ($x in @($cr.Drivers | Select-Object -First 12)) { $n = New-Object NoteRow; $n.Head = ("{0} {1} {2}" -f $x.Provider, $x.Name, $x.Version).Trim(); $n.Sub = [string]$x.Device; $n.Path = $x.Device; $n.Body = '{0:MM-dd HH:mm}' -f $x.When; $drs.Add($n) }
     if ($drs.Count -eq 0) { $n = New-Object NoteRow; $n.Head = (T '最近 30 天没有装过驱动'); $drs.Add($n) }
     $ctl.HealthDrivers.ItemsSource = $drs
     # 小选项卡上写明有几条，不点进去也知道
-    $ctl.CTabDumps.Content = (T '每次蓝屏') + $(if ($dumps.Count -gt 0) { '  ' + $dumps.Count } else { '' })
+    $ctl.CTabDumpsN.Text = [string]$dumps.Count; $ctl.CTabDumpsB.Visibility = if ($dumps.Count -gt 0) { 'Visible' } else { 'Collapsed' }
     $nEv = @($cr.Events).Count + @($cr.Drivers).Count
-    $ctl.CTabEvents.Content = (T '相关事件和驱动') + $(if ($nEv -gt 0) { '  ' + $nEv } else { '' })
+    $ctl.CTabEventsN.Text = [string]$nEv; $ctl.CTabEventsB.Visibility = if ($nEv -gt 0) { 'Visible' } else { 'Collapsed' }
     # Windows 事件
     $errs = New-Object 'System.Collections.ObjectModel.ObservableCollection[NoteRow]'
-    foreach ($x in @($w.Errors)) { $n = New-Object NoteRow; $n.Head = ("{0}：{1}" -f $x.Source, $x.Sample); $n.Path = $x.Sample; $n.Body = (T "{0} 次，最近 {1:MM-dd HH:mm}") -f $x.Count, $x.Last; $errs.Add($n) }
+    foreach ($x in @($w.Errors)) { $n = New-Object NoteRow; $n.Head = [string]$x.Source; $n.Sub = Shorten-Note ([string]$x.Sample); $n.Path = $x.Sample; $n.Body = (T "{0} 次，最近 {1:MM-dd HH:mm}") -f $x.Count, $x.Last; $errs.Add($n) }
     $ctl.HealthErrors.ItemsSource = $errs
     $ctl.HealthWinText.Text = if ($w.ErrorCount -gt 0) { (T "最近 7 天系统日志里有 {0} 条严重或错误事件，来源最多的几个：") -f $w.ErrorCount } else { (T '最近 7 天系统日志里没有严重或错误事件。') }
 }
@@ -19113,6 +19674,7 @@ function Filter-Apps {
     $ctl.AppsInfo.Text = (T "{0} 个软件，合计约 {1}") -f $col.Count, (Fmt $tot)
     $ctl.EmptyApps.Visibility = if ($col.Count -gt 0) { 'Collapsed' } else { 'Visible' }
     if ($col.Count -eq 0) { $ctl.EmptyAppsText.Text = (T '没有符合条件的软件') }
+    Update-PickBar
 }
 foreach ($c in @($ctl.AppsAll, $ctl.AppsC, $ctl.AppsStore)) { $c.Add_Checked({ Filter-Apps }) }
 $ctl.AppsSearch.Add_TextChanged({ Filter-Apps })
@@ -19304,15 +19866,19 @@ $ctl.BtnAppsLeft.Add_Click({
     $ans = Show-Sheet -Kind danger -Title ((T "「{0}」留下了 {1} 个文件夹") -f $r.Name, $left.Count) -Text (T '这些文件夹以软件名命名，多半是卸载后剩下的设置和缓存。会移到回收站，需要的话还能恢复。') -Items $items `
         -Confirm (T '我已确认这些是已卸载软件留下的，删除不会给我带来损失。') -Buttons @((T '先不删'), (T '移到回收站')) -Primary (T '移到回收站') -Cancel (T '先不删')
     if ($ans -ne (T '移到回收站')) { return }
-    $sync.Mode = 'leftdel'; $sync.LeftRes = $null
+    $sync.Mode = 'leftdel'; $sync.LeftRes = $null; $script:leftBatch = $false
     Start-Op ((T "清理「{0}」的残留") -f $r.Name); UI-Busy $true
-    Start-Worker @'
+    Start-Worker $script:leftDelCode @{ Items = $left; Name = $r.Name }
+})
+# 残留文件夹移到回收站（「检查残留」和「残留文件夹」里一次选几个都用这一段）：删前再查一遍，链接不跟进，放不进回收站的不删
+$script:leftDelCode = @'
 $n = 0; $i = 0
 foreach ($x in $arg.Items) {
     if (Stopping) { break }
     $i++
     SetP @{ Steps = $arg.Items.Count; Step = $i; StepName = $x.Path; SubKind = 'none' }
     if (Get-DeleteBlock $x.Path -Leftover) { continue }
+    if (IsLink $x.Path) { Log ((T "  没删（是链接）：{0}") -f $x.Path); continue }
     $why = Test-RecycleOk $x.Path ([double]$x.Bytes)
     if ($why) { OpLog '删除' ((T "软件残留：没删（{0}）") -f $why) $x.Path ''; Log ((T "  没删（{0}）：{1}") -f $why, $x.Path); continue }
     [void][FsTools]::Recycle($x.Path, [long]$sync.Hwnd)
@@ -19321,8 +19887,7 @@ foreach ($x in $arg.Items) {
     OpLog '删除' ((T "软件残留：移到回收站（{0}）") -f $arg.Name) $x.Path $(if ($ok) { GB $x.Bytes } else { (T '没删掉，可能被占用') })
 }
 $sync.LeftRes = @{ Count = $n; Name = $arg.Name }
-'@ @{ Items = $left; Name = $r.Name }
-})
+'@
 
 # ---------- 开机启动 / 计划任务 / 右键菜单：同一个列表，按视图换内容 ----------
 $script:startRows = @{}   # kind -> List[StartRow]
@@ -19358,6 +19923,7 @@ function Filter-StartRows {
     }
     $ctl.EmptyApps.Visibility = if ($col.Count -gt 0) { 'Collapsed' } else { 'Visible' }
     if ($col.Count -eq 0) { $ctl.EmptyAppsText.Text = switch ($v) { 'startup' { (T '没有开机启动项') } 'task' { (T '没有第三方的计划任务') } 'leftover' { (T '没找到像是残留的文件夹') } default { (T '没有第三方的右键菜单扩展') } } }
+    Update-PickBar
 }
 function Load-StartRows([string]$kind) {
     if ($script:worker) { return }
@@ -19431,18 +19997,22 @@ function Build-StartRows([string]$kind, $list) {
     $script:startRows[$kind] = $sorted
     if ($script:appsView -eq $kind) { Filter-StartRows }
 }
-function Set-StartRow($r, [bool]$on) {
+function Set-StartRow($r, [bool]$on, [switch]$Quiet) {
     try {
         switch ($r.Kind) {
             'startup' { Set-StartupEnabled $r.Key1 $r.Key2 $on }
             'task'    { if ($on) { Enable-ScheduledTask -TaskPath $r.Key1 -TaskName $r.Key2 -ErrorAction Stop | Out-Null } else { Disable-ScheduledTask -TaskPath $r.Key1 -TaskName $r.Key2 -ErrorAction Stop | Out-Null } }
             default   { Set-ContextMenuEnabled $r.Key1 $on }
         }
-    } catch { Show-Sheet -Kind warn -Title $(if ($on) { (T '没启用成') } else { (T '没禁用成') }) -Text $_.Exception.Message | Out-Null; return }
+    } catch {
+        if ($Quiet) { return ((T "{0}：{1}") -f $r.Name, $_.Exception.Message) }
+        Show-Sheet -Kind warn -Title $(if ($on) { (T '没启用成') } else { (T '没禁用成') }) -Text $_.Exception.Message | Out-Null; return
+    }
     $r.Enabled = $on
     $what = switch ($r.Kind) { 'startup' { if ($on) { (T '启用开机启动项') } else { (T '禁用开机启动项') } } 'task' { if ($on) { (T '启用计划任务') } else { (T '禁用计划任务') } } default { if ($on) { (T '启用右键菜单扩展') } else { (T '禁用右键菜单扩展') } } }
     OpLog '系统设置' $what $r.Name $r.Detail
     UI-Log ((T "{0}：{1}") -f $what, $r.Name)
+    if ($Quiet) { return '' }
     if ($r.Kind -eq 'shellex') { $ctl.AppsInfo.Text = (T '右键菜单的改动对新打开的资源管理器窗口生效；还没生效的话注销再登录一次') }
     else { Filter-StartRows }
 }
@@ -19480,6 +20050,217 @@ $ctl.StartList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::Click
         Set-StartRow $r $false
     } else { Set-StartRow $r $true }
 })
+# ---------- 软件、开机启动、计划任务、右键菜单、残留文件夹：勾选几项一起处理 ----------
+# 点方框勾上或取消；Shift 点方框把上次点的那一行到这一行都勾上；按住左键在行上上下拖，拖过的行跟着按下的那一行变
+# （按下的那一行原来没勾，拖过的都勾上；原来勾着，拖过的都取消）。勾了以后下面出现一排按钮：一次卸载、禁用、启用、移到回收站
+$script:pickAnchor = -1; $script:pickSync = $false; $script:pdrag = $null
+function Get-PickList { if ($script:appsView -eq 'apps') { $ctl.AppsList } else { $ctl.StartList } }
+function Get-Picked { @(@((Get-PickList).Items) | Where-Object { $_.Picked }) }
+function Update-PickBar {
+    [AppRow]::PickDirty = $false
+    $v = $script:appsView
+    $items = @((Get-PickList).Items); $p = @($items | Where-Object { $_.Picked }); $n = $p.Count
+    $can = @($items | Where-Object { -not $_.Ours }).Count
+    $all = if ($v -eq 'apps') { $ctl.AppsPickAll } else { $ctl.StartPickAll }
+    $script:pickSync = $true
+    try { $all.IsChecked = if ($n -eq 0) { $false } elseif ($n -ge $can) { $true } else { $null }; $all.IsEnabled = $can -gt 0 } finally { $script:pickSync = $false }
+    $ctl.AppsPickBar.Visibility = if ($n -gt 0) { 'Visible' } else { 'Collapsed' }
+    if ($n -eq 0) { return }
+    $isStart = $v -in 'startup', 'task', 'shellex'
+    $ctl.BtnPickUninstall.Visibility = if ($v -eq 'apps') { 'Visible' } else { 'Collapsed' }
+    $ctl.BtnPickRecycle.Visibility = if ($v -eq 'leftover') { 'Visible' } else { 'Collapsed' }
+    $ctl.BtnPickDisable.Visibility = if ($isStart) { 'Visible' } else { 'Collapsed' }
+    $ctl.BtnPickEnable.Visibility = if ($isStart) { 'Visible' } else { 'Collapsed' }
+    if ($v -eq 'apps') { $b = [double]0; foreach ($r in $p) { if ($r.Size -gt 0) { $b += [double]$r.Size } }; $ctl.AppsPickText.Text = (T "已选 {0} 个软件，合计约 {1}") -f $n, (Fmt $b) }
+    elseif ($v -eq 'leftover') { $b = [double]0; foreach ($r in $p) { $b += [double]$r.Key2 }; $ctl.AppsPickText.Text = (T "已选 {0} 个文件夹，共 {1}") -f $n, (Fmt $b) }
+    else {
+        $on = @($p | Where-Object { $_.Enabled }).Count
+        $ctl.AppsPickText.Text = (T "已选 {0} 项：{1} 项启用中，{2} 项已禁用") -f $n, $on, ($n - $on)
+        $ctl.BtnPickDisable.IsEnabled = $on -gt 0; $ctl.BtnPickEnable.IsEnabled = ($n - $on) -gt 0
+    }
+}
+function Clear-Picks { foreach ($r in @((Get-PickList).Items)) { if ($r.Picked) { $r.Picked = $false } }; Update-PickBar }
+foreach ($cb in @($ctl.AppsPickAll, $ctl.StartPickAll)) {
+    $cb.Add_Click({ if ($script:pickSync) { return }; $on = [bool]$this.IsChecked; foreach ($r in @((Get-PickList).Items)) { if (-not $r.Ours -and $r.Picked -ne $on) { $r.Picked = $on } }; Update-PickBar })
+}
+$ctl.BtnPickClear.Add_Click({ Clear-Picks })
+function Get-PickRowIndex($lv, $el) {
+    $c = $null; try { $c = [System.Windows.Controls.ItemsControl]::ContainerFromElement($lv, $el) } catch {}
+    if (-not $c) { return -1 }
+    return $lv.ItemContainerGenerator.IndexFromContainer($c)
+}
+foreach ($lv in @($ctl.AppsList, $ctl.StartList)) {
+    # 点了行前面的方框：记下从哪一行接着用 Shift 勾
+    $lv.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent, [System.Windows.RoutedEventHandler]{
+        param($s, $e)
+        if ($e.OriginalSource -isnot [System.Windows.Controls.CheckBox]) { return }
+        $i = Get-PickRowIndex $s $e.OriginalSource
+        if ($i -lt 0) { return }
+        $shift = ([System.Windows.Input.Keyboard]::Modifiers -band [System.Windows.Input.ModifierKeys]::Shift) -ne 0
+        if ($shift -and $script:pickAnchor -ge 0 -and $script:pickAnchor -lt $s.Items.Count) {
+            $want = [bool]$s.Items[$i].Picked
+            for ($k = [math]::Min($i, $script:pickAnchor); $k -le [math]::Max($i, $script:pickAnchor); $k++) { $r = $s.Items[$k]; if (-not $r.Ours -and $r.Picked -ne $want) { $r.Picked = $want } }
+        }
+        $script:pickAnchor = $i
+        Update-PickBar
+    })
+    $lv.Add_PreviewMouseLeftButtonDown({
+        param($s, $e)
+        $script:pdrag = $null
+        $src = $e.OriginalSource
+        if ($src -isnot [System.Windows.DependencyObject]) { return }
+        try {
+            for ($v = $src; $v -and -not [object]::ReferenceEquals($v, $s); $v = [System.Windows.Media.VisualTreeHelper]::GetParent($v)) {
+                if ($v -is [System.Windows.Controls.Primitives.ButtonBase] -or $v -is [System.Windows.Controls.Primitives.ScrollBar]) { return }   # 按钮、方框、滚动条照常用
+                if ($v -is [System.Windows.Controls.ListViewItem]) { break }
+            }
+        } catch { return }
+        $i = Get-PickRowIndex $s $src
+        if ($i -lt 0 -or $s.Items[$i].Ours) { return }
+        $script:pdrag = @{ Lv = $s; Anchor = $i; Cur = $i; Moved = $false; Want = -not [bool]$s.Items[$i].Picked; Snap = $null }
+    })
+    $lv.Add_PreviewMouseMove({
+        param($s, $e)
+        $d = $script:pdrag
+        if (-not $d -or -not [object]::ReferenceEquals($d.Lv, $s)) { return }
+        if ($e.LeftButton -ne [System.Windows.Input.MouseButtonState]::Pressed) { $script:pdrag = $null; return }
+        $i = Get-RowAt $s ($e.GetPosition($s).Y)
+        if ($i -lt 0 -or $i -eq $d.Cur) { return }
+        if (-not $d.Moved) { $d.Moved = $true; $d.Snap = @(@($s.Items) | ForEach-Object { [bool]$_.Picked }) }
+        $a = [math]::Min($d.Anchor, $i); $b = [math]::Max($d.Anchor, $i); $k = 0
+        foreach ($r in @($s.Items)) {
+            if (-not $r.Ours) { $want = if ($k -ge $a -and $k -le $b) { $d.Want } else { $d.Snap[$k] }; if ($r.Picked -ne $want) { $r.Picked = $want } }
+            $k++
+        }
+        $d.Cur = $i; $script:pickAnchor = $i
+        Update-PickBar
+    })
+    $lv.Add_PreviewMouseLeftButtonUp({ $script:pdrag = $null })
+}
+# 一次卸载几个：应用商店的直接卸载；其余的依次打开各自的卸载程序，关掉一个再打开下一个（不加静默参数，每一步都看得见）
+$script:uq = $null
+$script:uqTimer = New-Object System.Windows.Threading.DispatcherTimer
+$script:uqTimer.Interval = [TimeSpan]::FromMilliseconds(800)
+$script:uqTimer.Add_Tick({ Step-UninstQueue })
+function Start-BatchUninstall {
+    $rows = @(Get-Picked | Where-Object { $_ -is [AppRow] })
+    if ($rows.Count -eq 0) { return }
+    if ($script:worker -or $script:uq) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return }
+    $store = @($rows | Where-Object { $_.Kind -eq 'store' -and $_.PackageName })
+    $win32 = @($rows | Where-Object { $_.Kind -ne 'store' -and $_.Uninstall })
+    $none = @($rows | Where-Object { -not ($_.Kind -eq 'store' -and $_.PackageName) -and -not ($_.Kind -ne 'store' -and $_.Uninstall) })
+    $items = @($rows | ForEach-Object { (T "{0}（{1}）") -f $_.Name, $_.SizeText })
+    $txt = ''
+    if ($win32.Count -gt 0) { $txt += (T "会依次打开 {0} 个软件自带的卸载程序：一个走完、窗口关掉后，自动打开下一个。每个都按它自己的提示操作，可以随时停下。") -f $win32.Count }
+    if ($store.Count -gt 0) { $txt += $(if ($txt) { "`n" } else { '' }) + ((T "应用商店的 {0} 个直接卸载。") -f $store.Count) }
+    if ($none.Count -gt 0) { $txt += "`n" + ((T "另有 {0} 个没有登记卸载方法，跳过：{1}") -f $none.Count, ((@($none | ForEach-Object { $_.Name })) -join (T '、'))) }
+    $txt += "`n`n" + (T '卸载会删除这些软件，它们保存在软件里的数据可能一起被删掉。')
+    if ((Show-Sheet -Kind warn -Title ((T "卸载选中的 {0} 个软件？") -f $rows.Count) -Text $txt -Items $items -Buttons @((T '取消'), (T '卸载')) -Primary (T '卸载') -Cancel (T '取消')) -ne (T '卸载')) { return }
+    $script:uq = @{ Win32 = $win32; I = -1; Proc = $null; At = (Get-Date); ExitAt = $null; Done = 0; Fail = (New-Object System.Collections.ArrayList); Stop = $false; Total = ($win32.Count + $store.Count) }
+    OpLog '卸载' (T '批量卸载') ((@($rows | ForEach-Object { $_.Name })) -join (T '、')) ((T "{0} 个") -f $rows.Count)
+    if ($store.Count -gt 0) {
+        $sync.Mode = 'uninstmany'; $sync.UninstMany = $null
+        Start-Op ((T "卸载 {0} 个应用商店软件") -f $store.Count); UI-Busy $true
+        Start-Worker @'
+$res = New-Object System.Collections.ArrayList; $i = 0
+foreach ($x in $arg.Items) {
+    if (Stopping) { break }
+    $i++
+    SetP @{ Steps = $arg.Items.Count; Step = $i; StepName = $x.Name; SubKind = 'none' }
+    $ok = $true; $msg = ''
+    try { Remove-AppxPackage -Package $x.Pkg -ErrorAction Stop } catch { $ok = $false; $msg = $_.Exception.Message }
+    OpLog '卸载' (T '卸载应用商店软件') $x.Name $(if ($ok) { ((T "约 {0}") -f $(GB $x.Size)) } else { (T '失败：') + $msg })
+    [void]$res.Add(@{ Name = $x.Name; Ok = $ok; Msg = $msg })
+}
+$sync.UninstMany = $res
+'@ @{ Items = @($store | ForEach-Object { @{ Pkg = $_.PackageName; Name = $_.Name; Size = [double]$_.Size } }) }
+    } else { Step-UninstQueue }
+}
+# 有的卸载程序把自己复制到临时文件夹再打开一次，原来那个马上退出：临时文件夹里在这之后开的程序还在，就当还没走完
+function Test-UninstChild($since) {
+    $tmp = [IO.Path]::GetTempPath().TrimEnd('\')
+    foreach ($p in @(Get-Process -ErrorAction SilentlyContinue)) {
+        try { if ($p.StartTime -ge $since -and $p.Path -and $p.Path.StartsWith($tmp, [StringComparison]::OrdinalIgnoreCase)) { return $true } } catch {}
+    }
+    return $false
+}
+function Step-UninstQueue([switch]$Next) {
+    $q = $script:uq
+    if (-not $q) { $script:uqTimer.Stop(); return }
+    if ($q.Proc -and -not $Next) {
+        $busy = $false
+        try { if (-not $q.Proc.HasExited) { $busy = $true } } catch {}
+        if (-not $busy -and (Test-UninstChild $q.At)) { $busy = $true }
+        if ($busy) { $q.ExitAt = $null; if (-not $script:uqTimer.IsEnabled) { $script:uqTimer.Start() }; return }
+        if (-not $q.ExitAt) { $q.ExitAt = Get-Date; return }
+        if (((Get-Date) - $q.ExitAt).TotalSeconds -lt 1.5) { return }   # 走完后停一下再开下一个，免得两个窗口叠在一起
+    }
+    $q.Proc = $null; $q.ExitAt = $null
+    if ($q.Stop -or ($q.I + 1) -ge $q.Win32.Count) { Finish-UninstQueue; return }
+    $q.I++
+    $r = $q.Win32[$q.I]
+    $pc = Split-Command $r.Uninstall
+    try {
+        if ($script:uiTest) { $script:uiFixRuns.Add('uninstall:' + $r.Name) }
+        elseif ($pc[1]) { $q.Proc = Start-Process -FilePath $pc[0] -ArgumentList $pc[1] -PassThru -ErrorAction Stop }
+        else { $q.Proc = Start-Process -FilePath $pc[0] -PassThru -ErrorAction Stop }
+        $q.At = Get-Date; $q.Done++
+        OpLog '卸载' (T '打开卸载程序') $r.Name $r.Uninstall
+    } catch { [void]$q.Fail.Add(((T "{0}：打不开卸载程序（{1}）") -f $r.Name, $_.Exception.Message)) }
+    $ctl.AppsBatchText.Text = (T "正在卸载第 {0} / {1} 个：{2}。按卸载程序的提示操作；它的窗口关掉后，自动打开下一个。") -f ($q.I + 1), $q.Win32.Count, $r.Name
+    $ctl.AppsBatchBox.Visibility = 'Visible'; $ctl.AppsLeftBox.Visibility = 'Collapsed'
+    if (-not $script:uqTimer.IsEnabled) { $script:uqTimer.Start() }
+}
+function Finish-UninstQueue {
+    $script:uqTimer.Stop()
+    $q = $script:uq; $script:uq = $null
+    $ctl.AppsBatchBox.Visibility = 'Collapsed'
+    if (-not $q) { return }
+    $msg = (T "处理了 {0} 个软件。") -f $q.Done
+    if ($q.Stop -and ($q.I + 1) -lt $q.Win32.Count) { $msg += (T '中途停下了，后面的没有打开。') }
+    if ($q.Fail.Count -gt 0) { $msg += "`n`n" + (T '没成的：') + "`n" + ((@($q.Fail)) -join "`n") }
+    $msg += "`n`n" + (T '卸载程序常会留下设置和缓存：可以到「残留文件夹」里看看。列表已经刷新。')
+    if ($script:uiTest) { $script:uiSheets.Add('batch-uninstall') } else { Show-Sheet -Kind done -Title (T '批量卸载走完了') -Text $msg | Out-Null }
+    Clear-Picks
+    if (-not $script:worker -and -not $script:uiTest) { Load-Apps }
+}
+$ctl.BtnPickUninstall.Add_Click({ Start-BatchUninstall })
+$ctl.BtnBatchNext.Add_Click({ if ($script:uq) { Step-UninstQueue -Next } })
+$ctl.BtnBatchStop.Add_Click({ if ($script:uq) { $script:uq.Stop = $true; Finish-UninstQueue } })
+# 一次禁用 / 启用几个开机启动项、计划任务、右键菜单扩展：先列出来确认一次
+function Start-BatchToggle([bool]$on) {
+    $rows = @(Get-Picked | Where-Object { $_ -is [StartRow] -and -not $_.Ours -and $_.Kind -ne 'leftover' -and [bool]$_.Enabled -ne $on })
+    if ($rows.Count -eq 0) { return }
+    $verb = if ($on) { (T '启用') } else { (T '禁用') }
+    $txt = if ($on) { (T '这些项目会重新生效：开机启动项下次开机时启动，计划任务到时间照常运行，右键菜单扩展对新打开的资源管理器窗口生效。') }
+           else { (T '这些项目会停用：开机时不再自动启动、计划任务到时间不再运行、右键菜单里不再出现。程序本身都不删，随时可以在这里重新启用。') }
+    $items = @($rows | ForEach-Object { $_.Name })
+    $title = if ($on) { (T "启用选中的 {0} 项？") -f $rows.Count } else { (T "禁用选中的 {0} 项？") -f $rows.Count }
+    if ((Show-Sheet -Title $title -Text $txt -Items $items -Buttons @((T '取消'), $verb) -Primary $verb -Cancel (T '取消')) -ne $verb) { return }
+    $errs = New-Object System.Collections.Generic.List[string]
+    foreach ($r in $rows) { $err = Set-StartRow $r $on -Quiet; if ($err) { $errs.Add([string]$err) } else { $r.Picked = $false } }
+    if (@($rows | Where-Object { $_.Kind -eq 'shellex' }).Count -gt 0) { $ctl.AppsInfo.Text = (T '右键菜单的改动对新打开的资源管理器窗口生效；还没生效的话注销再登录一次') }
+    Filter-StartRows; Update-PickBar
+    if ($errs.Count -gt 0) { Show-Sheet -Kind warn -Title $(if ($on) { (T "{0} 项没启用成") -f $errs.Count } else { (T "{0} 项没禁用成") -f $errs.Count }) -Text ($errs -join "`n") | Out-Null }
+    else { UI-Log $(if ($on) { (T "启用了 {0} 项") -f $rows.Count } else { (T "禁用了 {0} 项") -f $rows.Count }) }
+}
+$ctl.BtnPickDisable.Add_Click({ Start-BatchToggle $false })
+$ctl.BtnPickEnable.Add_Click({ Start-BatchToggle $true })
+# 一次把几个残留文件夹移到回收站
+function Start-BatchLeftover {
+    $rows = @(Get-Picked | Where-Object { $_ -is [StartRow] -and $_.Kind -eq 'leftover' })
+    if ($rows.Count -eq 0) { return }
+    if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return }
+    $tb = [double]0; foreach ($r in $rows) { $tb += [double]$r.Key2 }
+    $items = @($rows | ForEach-Object { (T "{0}（{1}）") -f $_.Detail, $_.Size })
+    $ans = Show-Sheet -Kind danger -Title ((T "把选中的 {0} 个文件夹移到回收站？") -f $rows.Count) -Text ((T "共 {0}。这些只是猜测：名字对不上任何已装软件、没有程序在用、一个月没动过。拿不准的先点「打开位置」看一眼。移到回收站后还能恢复。") -f (Fmt $tb)) -Items $items `
+        -Confirm (T '我看过了，这些是已卸载软件留下的，删除不会给我带来损失。') -Buttons @((T '先不删'), (T '移到回收站')) -Primary (T '移到回收站') -Cancel (T '先不删')
+    if ($ans -ne (T '移到回收站')) { return }
+    $sync.Mode = 'leftdel'; $sync.LeftRes = $null; $script:leftBatch = $true
+    Start-Op ((T "把 {0} 个残留文件夹移到回收站") -f $rows.Count); UI-Busy $true
+    Start-Worker $script:leftDelCode @{ Items = @($rows | ForEach-Object { @{ Path = [string]$_.Detail; Bytes = [double]$_.Key2 } }); Name = (T '残留文件夹') }
+}
+$ctl.BtnPickRecycle.Add_Click({ Start-BatchLeftover })
 # ---------- 检查新版本（winget）----------
 function Start-WingetCheck {
     if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return }
@@ -19626,6 +20407,12 @@ function Repair-AutoTasks {
 }
 function Remove-CleanTask([string]$name) { & "$env:SystemRoot\System32\schtasks.exe" /Delete /TN $name /F 2>$null | Out-Null }
 $script:autoSync = $false
+# 选项卡上的开关状态：开着是绿色的「已开启」，关着是灰色的「已关闭」
+function Set-TabState($badge, $text, [bool]$on) {
+    $text.Text = if ($on) { (T '已开启') } else { (T '已关闭') }
+    $badge.Background = if ($on) { New-Brush '#E5F4E9' 'b' } else { New-Brush '#DEDEE4' 'b' }
+    $text.Foreground = if ($on) { New-Brush '#1D7A35' } else { New-Brush '#6E6E73' }
+}
 function Load-Auto {
     $script:autoSync = $true
     $exe = [string]$env:CLEANC_SELF
@@ -19651,8 +20438,8 @@ function Load-Auto {
     $ctl.AutoCleanNote.Text += "`n" + $(if (Get-StorageSenseOn) { (T 'Windows 自带的「存储感知」现在是开着的：它也会定期清临时文件和回收站，和这里的自动清理不冲突，只是会各做一遍。') } else { (T 'Windows 自带的「存储感知」现在是关着的（在 Windows 设置 → 系统 → 存储里）。') })
     $script:autoSync = $false
     # 选项卡上写明开着还是关着，不点进去也知道
-    $ctl.ATabRemindState.Text = $(if ($r1) { (T '已开启') } else { (T '已关闭') })
-    $ctl.ATabCleanState.Text = $(if ($r2) { (T '已开启') } else { (T '已关闭') })
+    Set-TabState $ctl.ATabRemindB $ctl.ATabRemindState $r1
+    Set-TabState $ctl.ATabCleanB $ctl.ATabCleanState $r2
     Draw-History
 }
 # 自动提醒的三个选项卡
@@ -19689,6 +20476,7 @@ function Draw-History {
         $ctl.HistInfo.Text = (T "最近 {0} 天有记录：C 盘剩余从 {1} 变成 {2}（{3}{4}）。蓝色正常，橙色表示用掉了八成五以上，红色表示快满了。") -f $keys.Count, (Fmt $f.Free), (Fmt $l.Free), $(if ($d -ge 0) { (T '多了 ') } else { (T '少了 ') }), (Fmt ([math]::Abs($d)))
     } else { $ctl.HistInfo.Text = (T '还没有记录。每次打开本工具都会记一笔。'); $ctl.HistFirst.Text = ''; $ctl.HistLast.Text = '' }
     $ctl.ATabHistState.Text = $(if ($keys.Count -gt 0) { (T "{0} 天") -f $keys.Count } else { '' })
+    $ctl.ATabHistB.Visibility = if ($keys.Count -gt 0) { 'Visible' } else { 'Collapsed' }
 }
 $ctl.AutoRemindGB.Add_SelectionChanged({
     if ($script:autoSync) { return }
@@ -19962,6 +20750,34 @@ $script:pageLvl = @{ dup = 1; moves = 1; auto = 1; log = 1 }
 $script:linkLvl = @{ log = 2 }
 $script:appsUpdatesAllowed = $true
 function Get-ModeName([int]$m = (Get-Mode)) { switch ($m) { 0 { (T '普通用户') } 1 { (T '工程师') } default { (T '开发者和 IT') } } }
+# ---------- 设置：左边目录，点哪项右边只显示那一项（记住上次看的） ----------
+$script:setGroups = [ordered]@{ General = @('Mode', 'Look'); Ui = @('Display', 'Map'); Clean = @('Clean', 'Scan') }
+$script:setLvl = @{ Display = 1; Scan = 2 }
+$script:setCards = @{ Mode = 'SetCardMode'; Look = 'SetCardLook'; Display = 'SetCardDisplay'; Map = 'SetCardMap'; Clean = 'SetCleanCard'; Scan = 'SetCardScan' }
+$script:setSec = Get-Setting 'SetSection' 'Mode'
+function Update-SetNav {
+    $m = Get-Mode; $first = ''
+    foreach ($g in $script:setGroups.Keys) {
+        $any = $false
+        foreach ($k in $script:setGroups[$g]) {
+            $ok = $m -ge [int]$script:setLvl[$k]
+            $ctl['SetNav' + $k].Visibility = $(if ($ok) { 'Visible' } else { 'Collapsed' })
+            if ($ok) { $any = $true; if (-not $first) { $first = $k } }
+        }
+        $ctl['SetHead' + $g].Visibility = $(if ($any) { 'Visible' } else { 'Collapsed' })
+    }
+    $k = $script:setSec
+    if (-not $ctl['SetNav' + $k] -or $ctl['SetNav' + $k].Visibility -ne 'Visible') { $k = $first }
+    Select-SetSection $k
+}
+function Select-SetSection([string]$k) {
+    if (-not $script:setCards.ContainsKey($k)) { return }
+    $script:setSec = $k
+    foreach ($x in $script:setCards.Keys) { $ctl[$script:setCards[$x]].Visibility = $(if ($x -eq $k) { 'Visible' } else { 'Collapsed' }) }
+    $rb = $ctl['SetNav' + $k]; if (-not $rb.IsChecked) { $script:setNavQuiet = $true; try { $rb.IsChecked = $true } finally { $script:setNavQuiet = $false } }
+    $ctl.SetScroll.ScrollToTop()
+}
+foreach ($g in $script:setGroups.Keys) { foreach ($k in $script:setGroups[$g]) { $ctl['SetNav' + $k].Add_Checked({ if ($script:setNavQuiet) { return }; Select-SetSection ([string]$this.Tag); Set-Setting 'SetSection' $script:setSec }) } }
 function Apply-Mode {
     $m = Get-Mode
     $v = { param([int]$need) if ($m -ge $need) { [System.Windows.Visibility]::Visible } else { [System.Windows.Visibility]::Collapsed } }
@@ -19987,7 +20803,7 @@ function Apply-Mode {
     Select-HealthTab $script:healthTab
     Show-Fixes $(if ($script:healthData) { $script:healthData.Power } else { $null })
     $ctl.FbCopyDiag.Visibility = & $v 1; $ctl.FbSelfTest.Visibility = & $v 2
-    $ctl.SetCardDisplay.Visibility = & $v 1; $ctl.SetCardScan.Visibility = & $v 2
+    Update-SetNav
     foreach ($n in 'SetCustomList', 'SetCustomEmpty', 'BtnSetCustomAdd', 'SetExcludeList', 'SetExcludeEmpty', 'BtnSetExcludeAdd', 'SetCustomHead', 'SetCustomNote', 'SetExcludeHead', 'SetExcludeNote') { $ctl[$n].Visibility = & $v 2 }
     $ctl.ModeTag.Text = (Get-ModeName $m) + (T '模式')
     $ctl.SetModeNote.Text = switch ($m) {
@@ -20030,7 +20846,7 @@ function Flash-Card($el) {
     } catch {}
 }
 function Show-ModeCard {
-    Show-Page 'settings'; $ctl.SetScroll.ScrollToTop()
+    Show-Page 'settings'; Select-SetSection 'Mode'; $ctl.SetScroll.ScrollToTop()
     $ctl.SetCardMode.BringIntoView()
     Flash-Card $ctl.SetCardMode
 }
@@ -20674,6 +21490,120 @@ function Invoke-UiTest {
                 if (-not (Test-SortedBy @($ctl.LogList.Items) 'When' $true)) { throw 'log not back to newest first' }
             }
         }
+        & $step 'apps: tick several, uninstall one after another, disable or recycle several at once' {
+            # 假的软件列表：两个只有卸载命令的软件（自测里卸载程序不真的打开）
+            $fake = @(
+                @{ Name = 'ClearC UiTest A'; Publisher = 'Test'; Version = '1'; Location = ''; Uninstall = 'cmd.exe /c exit'; Kind = 'win32'; Package = ''; Size = 3MB; Measured = $true; Date = '20240101'; LocReg = $false },
+                @{ Name = 'ClearC UiTest B'; Publisher = 'Test'; Version = '1'; Location = ''; Uninstall = 'cmd.exe /c exit'; Kind = 'win32'; Package = ''; Size = 2MB; Measured = $true; Date = '20240102'; LocReg = $false },
+                @{ Name = 'ClearC UiTest C'; Publisher = 'Test'; Version = '1'; Location = ''; Uninstall = 'cmd.exe /c exit'; Kind = 'win32'; Package = ''; Size = 1MB; Measured = $true; Date = '20240103'; LocReg = $false })
+            $keepRows = $script:appRows
+            try {
+                $script:pageLoaded.apps = $true; Show-Page 'apps'; $ctl.AppsViewApps.IsChecked = $true
+                Build-AppRows $fake; $win.UpdateLayout()
+                $rows = @($ctl.AppsList.Items)
+                if ($rows.Count -ne 3) { throw ('{0} app rows' -f $rows.Count) }
+                $rows[0].Picked = $true; $rows[2].Picked = $true; Update-PickBar
+                if ($ctl.AppsPickBar.Visibility -ne 'Visible' -or $ctl.BtnPickUninstall.Visibility -ne 'Visible' -or $null -ne $ctl.AppsPickAll.IsChecked) { throw 'pick bar not shown for two ticked apps' }
+                $L.Add(('  apps picked: ' + $ctl.AppsPickText.Text))
+                # 全选、全部取消
+                $ctl.AppsPickAll.IsChecked = $true; & $click $ctl.AppsPickAll
+                if (@($rows | Where-Object { $_.Picked }).Count -ne 3) { throw 'select all did not tick every app' }
+                $ctl.AppsPickAll.IsChecked = $false; & $click $ctl.AppsPickAll
+                if (@($rows | Where-Object { $_.Picked }).Count -ne 0 -or $ctl.AppsPickBar.Visibility -ne 'Collapsed') { throw 'untick all left something ticked' }
+                # 卸载：先列出来确认（自测里当作取消），所以什么都不打开
+                $rows[0].Picked = $true; $rows[1].Picked = $true
+                $n0 = $script:uiSheets.Count; $script:uiFixRuns.Clear()
+                Start-BatchUninstall
+                if ($script:uiSheets.Count -ne $n0 + 1 -or $script:uq -or @($script:uiFixRuns | Where-Object { $_ -like 'uninstall:*' }).Count) { throw 'batch uninstall did not ask first, or started anyway' }
+                # 排队：一个走完才开下一个，走完收尾
+                $script:uq = @{ Win32 = @($rows[0], $rows[1]); I = -1; Proc = $null; At = (Get-Date); ExitAt = $null; Done = 0; Fail = (New-Object System.Collections.ArrayList); Stop = $false; Total = 2 }
+                Step-UninstQueue
+                if (@($script:uiFixRuns) -join '|' -ne ('uninstall:' + $rows[0].Name) -or $ctl.AppsBatchBox.Visibility -ne 'Visible') { throw ('first uninstaller: ' + (@($script:uiFixRuns) -join '|')) }
+                Step-UninstQueue; Step-UninstQueue
+                if (@($script:uiFixRuns) -join '|' -ne ('uninstall:' + $rows[0].Name + '|uninstall:' + $rows[1].Name) -or $script:uq -or $ctl.AppsBatchBox.Visibility -ne 'Collapsed') { throw ('queue order: ' + (@($script:uiFixRuns) -join '|')) }
+                if (@($rows | Where-Object { $_.Picked }).Count -ne 0) { throw 'ticks left after the batch' }
+            } finally { $script:uq = $null; $script:uqTimer.Stop(); $script:appRows = $keepRows; $ctl.AppsList.ItemsSource = $null; $ctl.AppsBatchBox.Visibility = 'Collapsed' }
+            # 开机启动：一次禁用几个也先确认
+            $ap = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run'
+            $sr = @(foreach ($i in 1..2) { $r = New-Object StartRow; $r.Kind = 'startup'; $r.Name = "ClearC UiTest $i"; $r.Key1 = $ap; $r.Key2 = "ClearC-UiTest-$i"; $r.Enabled = $true; $r.Open = ''; $r })
+            $script:startRows['startup'] = New-Object System.Collections.Generic.List[StartRow]; foreach ($r in $sr) { $script:startRows['startup'].Add($r) }
+            $ctl.AppsViewStartup.IsChecked = $true; $win.UpdateLayout()
+            foreach ($r in $sr) { $r.Picked = $true }; Update-PickBar
+            if ($ctl.BtnPickDisable.Visibility -ne 'Visible' -or -not $ctl.BtnPickDisable.IsEnabled -or $ctl.BtnPickEnable.IsEnabled) { throw 'disable / enable buttons wrong for two enabled items' }
+            $n0 = $script:uiSheets.Count; Start-BatchToggle $false
+            if ($script:uiSheets.Count -ne $n0 + 1 -or @($sr | Where-Object { -not $_.Enabled }).Count) { throw 'batch disable did not ask first, or changed something' }
+            # 残留文件夹：一次移到回收站几个，也先确认
+            $lr = @(foreach ($i in 1..2) { $r = New-Object StartRow; $r.Kind = 'leftover'; $r.Name = "leftover $i"; $r.Detail = (Join-Path ([IO.Path]::GetTempPath()) "clearc-uitest-left-$i"); $r.Key2 = '1048576'; $r.Size = '1 MB'; $r.Open = ''; $r })
+            $script:startRows['leftover'] = New-Object System.Collections.Generic.List[StartRow]; foreach ($r in $lr) { $script:startRows['leftover'].Add($r) }
+            $ctl.AppsViewLeft.IsChecked = $true; $win.UpdateLayout()
+            foreach ($r in $lr) { $r.Picked = $true }; Update-PickBar
+            if ($ctl.BtnPickRecycle.Visibility -ne 'Visible') { throw 'recycle button not shown for leftovers' }
+            $n0 = $script:uiSheets.Count; Start-BatchLeftover
+            if ($script:uiSheets.Count -ne $n0 + 1 -or $script:worker) { throw 'batch recycle did not ask first, or started anyway' }
+            $script:startRows.Clear(); $ctl.StartList.ItemsSource = $null; $ctl.AppsViewApps.IsChecked = $true; Update-PickBar
+        }
+        & $step 'settings and moves have a contents list; tree items are indented' {
+            Show-Page 'settings'
+            foreach ($g in $script:setGroups.Keys) { foreach ($k in $script:setGroups[$g]) {
+                if ($ctl['SetNav' + $k].Visibility -ne 'Visible') { continue }
+                $ctl['SetNav' + $k].IsChecked = $true
+                $shown = @(foreach ($x in $script:setCards.Keys) { if ($ctl[$script:setCards[$x]].Visibility -eq 'Visible') { $x } })
+                if ($shown.Count -ne 1 -or $shown[0] -ne $k) { throw ("settings nav ${k}: shows " + ($shown -join ',')) }
+            } }
+            & $snap $ctl.PageSettings 'settings-nav'
+            Show-ModeCard
+            if ($ctl.SetCardMode.Visibility -ne 'Visible' -or -not $ctl.SetNavMode.IsChecked) { throw 'mode tag did not open the mode section' }
+            # 不打开搬家管理页（一打开就会在后台统计），只点目录
+            $ctl.MNavApp.IsChecked = $true
+            if ($script:candGroup -ne 'app' -or $script:movesTab -ne 'cand') { throw 'moves nav did not pick the app group' }
+            if ($script:candRows) { if (@(@($ctl.CandList.Items) | Where-Object { $_.Group -ne 'app' }).Count) { throw 'other groups still listed' } }
+            $ctl.MovesTabDone.IsChecked = $true
+            if ($ctl.MovesCard.Visibility -ne 'Visible') { throw 'moved list not shown' }
+            $ctl.MovesTabCand.IsChecked = $true
+            if ($script:candGroup -ne '') { throw 'all candidates not back' }
+        }
+        & $step 'space map: back and forward, clickable path, delete list, worth a look, colours by kind' {
+            $d = Join-Path ([IO.Path]::GetTempPath()) ('clearc-uitest-map-' + [guid]::NewGuid().ToString('N').Substring(0, 6))
+            New-Item -ItemType Directory -Force -Path "$d\a\.git", "$d\b\node_modules\x" | Out-Null
+            [IO.File]::WriteAllText("$d\a\f1.bin", ('x' * 3000)); [IO.File]::WriteAllText("$d\b\node_modules\x\m.js", ('y' * 5000)); [IO.File]::WriteAllText("$d\b\keep.txt", 'z')
+            $keepRoot = $script:mapRoot; $keepCur = $script:mapCur
+            try {
+                $t2 = [DiskMap]::Scan($d, 2); [DiskMap]::Use($t2); $script:mapRoot = $t2; $script:mapCur = $t2; Reset-MapHistory
+                Show-Page 'map'; $ctl.MapViewDirs.IsChecked = $true; Show-MapLevel $t2; $win.UpdateLayout()
+                if ($ctl.MapCrumbs.Visibility -ne 'Visible' -or $ctl.MapCrumbs.Children.Count -lt 1) { throw 'no clickable path' }
+                $nb = [DiskMap]::Find($t2, "$d\b"); $nn = [DiskMap]::Find($t2, "$d\b\node_modules")
+                Show-MapLevel $nb; Show-MapLevel $nn
+                Move-MapHistory -1; if (-not [object]::ReferenceEquals($script:mapCur, $nb)) { throw 'back did not return to b' }
+                Move-MapHistory -1; if (-not [object]::ReferenceEquals($script:mapCur, $t2)) { throw 'back did not return to the top' }
+                Move-MapHistory 1; if (-not [object]::ReferenceEquals($script:mapCur, $nb) -or -not $ctl.BtnMapFwd.IsEnabled) { throw 'forward did not go to b' }
+                $cb = @($ctl.MapCrumbs.Children | Where-Object { $_ -is [System.Windows.Controls.Button] })[0]
+                & $click $cb; if (-not [object]::ReferenceEquals($script:mapCur, $t2)) { throw 'clicking the path did not go up' }
+                $hits = @([DiskMap]::Named($t2, [string[]]$script:worthNames, 1, 10))
+                if (-not @($hits | Where-Object { $_.Name -eq 'node_modules' }).Count) { throw 'worth-a-look did not find node_modules' }
+                # 待删清单：放进 a；再放 b 里面的 node_modules；再放 b，node_modules 合进 b
+                $ra = @($ctl.MapList.Items | Where-Object { $_.Name -eq 'a' })[0]
+                [void](Add-MapMarks @($ra))
+                if ($script:mapMarks.Count -ne 1 -or -not $ra.Marked -or $ctl.MapMarkBar.Visibility -ne 'Visible') { throw 'mark a failed' }
+                Show-MapLevel $nb; $rn = @($ctl.MapList.Items | Where-Object { $_.Name -eq 'node_modules' })[0]; [void](Add-MapMarks @($rn))
+                Show-MapLevel $t2; $rb = @($ctl.MapList.Items | Where-Object { $_.Name -eq 'b' })[0]; [void](Add-MapMarks @($rb))
+                if ($script:mapMarks.Count -ne 2 -or $script:mapMarks.Contains((Get-MarkKey $rn))) { throw ('marks: ' + (@($script:mapMarks.Keys) -join ', ')) }
+                if (-not @($ctl.MapList.Items | Where-Object { $_.Name -eq 'a' })[0].Marked) { throw 'marked row not flagged after coming back' }
+                $L.Add(('  delete list: ' + $ctl.MapMarkText.Text))
+                $n0 = $script:uiSheets.Count; Start-MapDelete @($script:mapMarks.Values)
+                if ($script:uiSheets.Count -ne $n0 + 1 -or $script:worker) { throw 'deleting the list did not ask first' }
+                if ($script:uiSheets[$script:uiSheets.Count - 1] -notmatch 'git') { throw 'no warning about the git checkout' }
+                Clear-MapMarks
+                if ($ctl.MapMarkBar.Visibility -ne 'Collapsed' -or $ra.Marked) { throw 'clear left marks' }
+                # 方块图：按类型上色，下面有图例
+                $ctl.MapViewTree.IsChecked = $true; $win.UpdateLayout(); Draw-MapTree
+                if ($ctl.MapTreeLegend.Children.Count -lt 1) { throw 'no treemap legend' }
+                $ctl.MapViewDirs.IsChecked = $true
+            } finally {
+                Clear-MapMarks; Reset-MapHistory
+                $script:mapRoot = $keepRoot; $script:mapCur = $keepCur; if ($keepRoot) { [DiskMap]::Use($keepRoot) }
+                Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        }
         & $step 'similar photos and keep rules' {
             if (-not ('PhotoHash' -as [type])) { throw 'PhotoHash did not compile' }
             # 放在临时文件夹里：本工具自己的文件夹（appDir）在重复文件里是删不得的，勾不上
@@ -21011,6 +21941,9 @@ $timer.Add_Tick({
     }
 
     if ([DupRow]::Dirty -and -not $script:worker) { [DupRow]::Dirty = $false; Update-DupSummary }
+    if ([AppRow]::PickDirty) { Update-PickBar }
+    if ($script:opHideAt -and (Get-Date) -ge $script:opHideAt) { $script:opHideAt = $null; if (-not $script:op -and -not $script:worker) { $ctl.OpPanel.Visibility = 'Collapsed' } }
+    Watch-Drives
     if ([CandRow]::Dirty) { [CandRow]::Dirty = $false; Update-CandSel }
     if ($sync.Status -and $script:candRows -and $sync.StatusVer -ne $script:candSeen) {
         $script:candSeen = $sync.StatusVer
@@ -21141,6 +22074,7 @@ $timer.Add_Tick({
                 [DiskMap]::Use($root)
                 $script:mapMethod = $mm
                 $script:mapRoot = $root; $script:mapCur = $root; $script:mapScanAt = Get-Date
+                Reset-MapHistory; $script:worthKey = $null
                 $script:movedTargets = $null
                 $script:prevSnap = $null
                 if (-not $stopped) { try { Update-Growth $root } catch { $script:growNote = (T '没能和上次比较') } } else { $script:growNote = (T '这次扫描中途停止了，不和上次比较') }
@@ -21167,6 +22101,11 @@ $timer.Add_Tick({
             $nOk = $okSet.Count; $fails = @(); if ($res) { $fails = @($res.Fail) }
             $one = (@($script:mapDelRows).Count -eq 1)
             $txt = if ($sync.WasCancelled) { (T "已中途取消，删除了 {0} 项") -f $nOk } elseif ($fails.Count -eq 0) { $(if ($one) { (T "已删除 {0}") -f @($script:mapDelRows)[0].Name } else { (T "已删除 {0} 项") -f $nOk }) } elseif ($nOk -eq 0) { (T '没有删掉') } else { (T "删除了 {0} 项，{1} 项没删掉") -f $nOk, $fails.Count }
+            # 实际多出来多少空间（删前删后各问一次 Windows）；删掉的从待删清单里拿掉
+            $gain = @(foreach ($d in @($script:mapDelFree.Keys)) { $g = (DriveFree ($d + '\')) - [double]$script:mapDelFree[$d]; if ($g -ge 10MB) { (T "{0} 多出 {1}") -f $d, (Fmt $g) } })
+            if ($gain.Count -gt 0) { $txt += (T '，') + ($gain -join (T '，')) }
+            foreach ($k in @($okSet.Keys)) { $kk = $k.TrimEnd(''); if ($script:mapMarks.Contains($kk)) { $script:mapMarks.Remove($kk) } }
+            Update-MapMarks
             End-Op $txt
             if ($nOk -gt 0) { if ($script:mapView -eq 'files') { Show-MapFiles } elseif ($script:mapView -ne 'grow') { Show-MapLevel $script:mapCur } }
             if ($fails.Count -gt 0) {
@@ -21319,13 +22258,29 @@ $timer.Add_Tick({
             if ($x -and -not $x.Ok) { $script:pendingDialog = @{ Title = (T '没卸载成'); Kind = 'warn'; Text = $x.Msg } }
             $script:runAfterApps = $true
         }
+        elseif ($sync.Mode -eq 'uninstmany') {
+            End-Op $(if ($sync.WasCancelled) { (T '已中途取消') } else { (T '完成') })
+            if ($script:uq) {
+                foreach ($u in @($sync.UninstMany)) { if ($u.Ok) { $script:uq.Done++ } else { [void]$script:uq.Fail.Add(((T "{0}：{1}") -f $u.Name, $u.Msg)) } }
+                if ($sync.WasCancelled) { $script:uq.Stop = $true }
+                Step-UninstQueue
+            }
+        }
         elseif ($sync.Mode -eq 'leftdel') {
             $x = $sync.LeftRes
             $cx = [bool]$sync.WasCancelled
             End-Op $(if ($cx) { (T '已中途取消') } else { (T '完成') })
             $ctl.AppsLeftBox.Visibility = 'Collapsed'; $script:leftApp = $null
-            if ($x) { $script:pendingDialog = @{ Title = $(if ($cx) { (T '已中途取消') } else { (T '残留已清理') }); Kind = 'done'; Text = ((T "「{0}」留下的 {1} 个文件夹已移到回收站。清空回收站后才真正腾出空间。") -f $x.Name, $x.Count) + $(if ($cx) { (T '剩下的没删。') } else { '' }) } }
-            $script:runAfterApps = $true
+            if ($script:leftBatch) {
+                # 从「残留文件夹」里一次选了几个：已经不在的从列表里拿掉
+                $script:leftBatch = $false
+                if ($script:startRows.ContainsKey('leftover')) { foreach ($lr in @($script:startRows['leftover'])) { if (-not (Test-Path -LiteralPath $lr.Detail)) { [void]$script:startRows['leftover'].Remove($lr) } } }
+                Filter-StartRows; Update-PickBar
+                if ($x) { $script:pendingDialog = @{ Title = $(if ($cx) { (T '已中途取消') } else { (T '残留已清理') }); Kind = 'done'; Text = ((T "{0} 个文件夹已移到回收站。清空回收站后才真正腾出空间。") -f $x.Count) + $(if ($cx) { (T '剩下的没删。') } else { '' }) } }
+            } else {
+                if ($x) { $script:pendingDialog = @{ Title = $(if ($cx) { (T '已中途取消') } else { (T '残留已清理') }); Kind = 'done'; Text = ((T "「{0}」留下的 {1} 个文件夹已移到回收站。清空回收站后才真正腾出空间。") -f $x.Name, $x.Count) + $(if ($cx) { (T '剩下的没删。') } else { '' }) } }
+                $script:runAfterApps = $true
+            }
         }
         elseif ($sync.Mode -eq 'movescan') {
             End-Op $(if ($sync.WasCancelled) { (T '已中途取消') } else { (T '完成') })
@@ -21472,6 +22427,54 @@ $ctl.AppVer.Text = ((T "版本 {0}") -f $script:AppVersion)
 Write-LogFile ((T "==== 腾挪 ClearC {0} 启动；Windows {1}；屏幕可用区域 {2:N0} x {3:N0}") -f $script:AppVersion, [Environment]::OSVersion.Version, $wa.Width, $wa.Height)
 if ($script:themeFail) { Write-LogFile ((T "深色界面没能打开，这次用浅色：{0}") -f $script:themeFail) }
 
+# ---------- 空闲时先把系统健康和盘的健康读好：点「系统健康」「空间地图」时不用干等 ----------
+# 打开后几秒、没有别的操作在做时在后台读（不占主工作线程，不弹进度条）；读过十分钟再打开那一页，在后台刷新一遍
+$script:prefetchStep = 0
+$script:prefetchTimer = New-Object System.Windows.Threading.DispatcherTimer
+$script:prefetchTimer.Interval = [TimeSpan]::FromSeconds(4)
+$script:prefetchTimer.Add_Tick({
+    if ($script:worker) { return }
+    $script:prefetchStep++
+    if ($script:prefetchStep -eq 1) {
+        if (-not $script:pageLoaded.health -and $ctl.NavHealth.Visibility -eq 'Visible') { $script:pageLoaded.health = $true; Load-Health; Write-LogFile (T '空闲时在后台读取系统健康') }
+        return
+    }
+    $this.Stop()
+    if (-not $script:pageLoaded.map -and $ctl.NavMap.Visibility -eq 'Visible') { $script:pageLoaded.map = $true; Fill-MapDrives; Start-DiskHealth }
+})
+# ---------- 插上、拔掉硬盘：自动刷新搬家目标、空间地图的盘、重复文件的查找位置、硬件卡片 ----------
+# 每两秒看一下盘符有没有变（只看盘符列表，不碰盘本身）；变了再等两秒多（新盘要一会儿才准备好）再刷新
+$script:driveSig = ([IO.Directory]::GetLogicalDrives() -join ','); $script:drivePend = $null; $script:driveTick = 0
+function Watch-Drives {
+    $script:driveTick++
+    if ($script:driveTick % 7 -ne 0) { return }
+    $sig = ''; try { $sig = ([IO.Directory]::GetLogicalDrives() -join ',') } catch { return }
+    if ($sig -eq $script:driveSig) { $script:drivePend = $null; return }
+    if (-not $script:drivePend) { $script:drivePend = Get-Date; return }
+    if (((Get-Date) - $script:drivePend).TotalSeconds -lt 2.5) { return }
+    $old = $script:driveSig; $script:driveSig = $sig; $script:drivePend = $null
+    Refresh-Drives $old $sig
+}
+function Refresh-Drives([string]$old, [string]$new) {
+    $o = @($old -split ',' | Where-Object { $_ }); $n = @($new -split ',' | Where-Object { $_ })
+    $add = @($n | Where-Object { $o -notcontains $_ }); $gone = @($o | Where-Object { $n -notcontains $_ })
+    if ($add.Count) { UI-Log ((T "接上了新的磁盘：{0}") -f ((@($add | ForEach-Object { $_.TrimEnd('\') })) -join ' ')) }
+    if ($gone.Count) { UI-Log ((T "磁盘拔掉了：{0}") -f ((@($gone | ForEach-Object { $_.TrimEnd('\') })) -join ' ')) }
+    try { Fill-DestChoices } catch {}
+    if ($script:pageLoaded.map) { try { Fill-MapDrives; Start-DiskHealth } catch {} }
+    # 重复文件：新接上的整块盘加进查找位置（不勾，要找自己勾上），拔掉的去掉
+    foreach ($d in $add) {
+        try {
+            $di = New-Object System.IO.DriveInfo $d
+            if ($di.DriveType -eq 'Fixed' -and $di.IsReady -and -not [FsTools]::IsSubst($di.Name)) { Add-Root $di.RootDirectory.FullName ((T "整个 {0} 盘") -f $di.Name.Substring(0, 1)) $false ((T "{0}  已用 {1}") -f $di.Name, (Fmt ($di.TotalSize - $di.TotalFreeSpace))) }
+        } catch {}
+    }
+    foreach ($d in $gone) { foreach ($rt in @($script:roots)) { if (([string]$rt.Path).TrimEnd('\') -ieq $d.TrimEnd('\')) { [void]$script:roots.Remove($rt) } } }
+    try { Update-FilterSummary } catch {}
+    if ($script:pageLoaded.save) { if ($ctl.PageSave.Visibility -eq 'Visible' -and -not $script:worker) { Load-Save } else { $script:pageLoaded.save = $false } }
+    if ($script:pageLoaded.health) { Load-Health }
+}
+
 # ---------- 各个列表的表头排序（点列名排序，再点一下反过来；记住每个列表上次怎么排的） ----------
 # 表格（GridView）：键是第几列；自己画表头的列表：键是表头按钮的 Tag
 Register-ListSort 'MonList' @{ '0' = @{ Prop = 'Name' }; '1' = @{ Prop = 'Cpu'; Num = $true }; '2' = @{ Prop = 'Ws'; Num = $true }; '3' = @{ Prop = 'Rate'; Num = $true }; '4' = @{ Prop = 'Since'; Num = $true }; '5' = @{ Prop = 'Total'; Num = $true } } -defProp 'Since'
@@ -21488,6 +22491,20 @@ Register-ListSort 'List' @{ name = @{ Prop = 'Name' }; size = @{ Prop = 'Bytes';
 foreach ($p in @(@('AppsList', 'AppsHead'), @('StartList', 'StartHead'), @('MovesList', 'MovesHead'), @('MapList', 'MapHead'), @('CandList', 'CandHead'))) { Register-HeadPad $ctl[$p[0]] $ctl[$p[1]] }
 $script:headOf = [ordered]@{ AppsList = $ctl.AppsHead; StartList = $ctl.StartHead; CandList = $ctl.CandHead; MovesList = $ctl.MovesHeadBox; MapList = $ctl.MapHeadBox }
 Update-HeadVis
+# 分段选项卡：每组第一项前面不画分隔线
+function Set-SegFirst($root) {
+    $seg = $win.FindResource('Seg')
+    $q = New-Object System.Collections.Queue; $q.Enqueue($root)
+    while ($q.Count -gt 0) {
+        $v = $q.Dequeue()
+        if ($v -is [System.Windows.Controls.Panel]) {
+            $first = $true
+            foreach ($c in $v.Children) { if ($c -is [System.Windows.Controls.RadioButton] -and $c.Style -and ([object]::ReferenceEquals($c.Style, $seg) -or [object]::ReferenceEquals($c.Style.BasedOn, $seg))) { if ($first) { $c.Uid = 'first'; $first = $false } elseif ($c.Uid -eq 'first') { $c.Uid = '' } } }
+        }
+        foreach ($c in [System.Windows.LogicalTreeHelper]::GetChildren($v)) { if ($c -is [System.Windows.DependencyObject]) { $q.Enqueue($c) } }
+    }
+}
+Set-SegFirst $win
 
 $script:statusColor = @{ wait = '#86868B'; run = '#0071E3'; ok = '#248A3D'; warn = '#B25000'; fail = '#D70015'; skip = '#86868B' }
 $script:pendingDialog = $null
@@ -21581,6 +22598,7 @@ $win.Add_ContentRendered({
     }
     if ($script:riskShown) { return }
     $script:riskShown = $true
+    $script:prefetchTimer.Start()
     if (Test-Path -LiteralPath $script:riskFile) { Show-HalfMoves; return }
     $ans = Show-Sheet -Kind warn -Title (T '使用前请先阅读安全风险提示') `
         -Text (T "本工具会按你的选择删除或搬移电脑上的文件。删除的文件可能无法恢复，存在资料丢失的风险。`n`n每次删除前，请确认这些资料确实不再需要、删除不会给你带来损失；重要资料请先备份。因使用本工具造成的资料丢失或其他损失，责任由使用者自行承担，开发者不承担责任。`n`n完整说明随时可以在左侧「帮助」里查看。") `

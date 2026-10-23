@@ -420,7 +420,7 @@ public class DumpRow {
     public string File { get; set; }
     string _fg; public string SuspectBrush { get { return Theme.F(_fg); } set { _fg = value; } }
 }
-public class NoteRow { public string Head { get; set; } public string Body { get; set; } public string Path { get; set; } public bool HasPath { get; set; } }
+public class NoteRow { public string Head { get; set; } public string Sub { get; set; } public string Body { get; set; } public string Path { get; set; } public bool HasPath { get; set; } }
 // 诊断结论和「常见问题修复」：按钮的 Tag 是修复步骤的编号
 public class FixBtn { public string Id { get; set; } public string Name { get; set; } public string Tip { get; set; } public bool Enabled { get; set; } }
 public class VerdictRow {

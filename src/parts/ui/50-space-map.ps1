@@ -192,6 +192,7 @@ function New-MapRow($name, $path, [double]$size, [double]$max, [double]$parent, 
     if (-not $why -and $path -and (Test-ChatPath $path)) { $why = (T '聊天记录里的文件只能查看和打开位置；要腾地方，到「搬家管理」把整个聊天记录搬到其他盘') }
     if ($kind -eq 'type' -or $kind -eq 'recent') { $why = (T '这一行是统计，不是文件；双击查看') }
     $r.Locked = [bool]$why; $r.LockTip = $why
+    if ($path -and $script:mapMarks -and $script:mapMarks.Contains((Get-MarkKey $r))) { $r.Marked = $true }
     return $r
 }
 # 路径在不在某个聊天软件的聊天记录文件夹里（这些只看不删，要腾地方就整体搬家）
@@ -240,6 +241,11 @@ function Restore-MapKeep($keep) {
 function Show-MapLevel($node) {
     if (-not $node) { return }
     $keep = Get-MapKeep ('dirs|' + $node.FullPath())
+    # 换了文件夹：记下刚才在哪，好「后退」；后退、前进自己不记
+    if ($script:mapCur -and -not [object]::ReferenceEquals($script:mapCur, $node) -and -not $script:mapNavQuiet) {
+        $script:mapBack.Add($script:mapCur); if ($script:mapBack.Count -gt 50) { $script:mapBack.RemoveAt(0) }
+        $script:mapFwd.Clear()
+    }
     $script:mapCur = $node
     $dn = Get-Flag 'MapDisk'
     $hasDisk = $dn -and $script:mapRoot -and $script:mapRoot.HasDisk
@@ -304,10 +310,12 @@ function Show-MapLevel($node) {
     $ctl.MapList.ItemsSource = $rows
     Restore-MapKeep $keep
     $ctl.MapPath.Text = $path
+    Show-MapCrumbs $node
     $ctl.MapInfo.Text = (T "这一层共 {0}，{1:N0} 个文件{2}") -f (Fmt $node.Size), $node.Files, $(if ($script:mapScanAt) { (T " · 扫描于 {0:HH:mm}（{1}）") -f $script:mapScanAt, $script:mapHow } else { '' })
     if ($script:mapView -eq 'tree') { $ctl.MapInfo.Text += (T ' · 点方块就是选中下面列表里的那一行，列表里选中的方块会描边；双击进入') }
     $ctl.BtnMapAcct.Visibility = if ($script:mapRoot -and $script:mapRoot.HasDisk -and (Get-Mode) -ge 2) { 'Visible' } else { 'Collapsed' }
     $ctl.BtnMapUp.IsEnabled = ($null -ne $node.Parent)
+    $ctl.BtnMapBack.IsEnabled = $script:mapBack.Count -gt 0; $ctl.BtnMapFwd.IsEnabled = $script:mapFwd.Count -gt 0
     $ctl.EmptyMap.Visibility = if ($rows.Count -gt 0) { 'Collapsed' } else { 'Visible' }
     if ($rows.Count -eq 0) { $ctl.EmptyMapText.Text = (T '这个文件夹是空的') }
     $ctl.BtnMapExport.IsEnabled = ($rows.Count -gt 0)
@@ -315,6 +323,152 @@ function Show-MapLevel($node) {
     if ($script:mapView -eq 'tree') { Draw-MapTree }
     Show-MapOverview
     Update-MapSel
+}
+# ---------- 后退 / 前进 / 上一级，路径上的每一层都能点（参考 disktree） ----------
+$script:mapBack = New-Object System.Collections.Generic.List[object]; $script:mapFwd = New-Object System.Collections.Generic.List[object]; $script:mapNavQuiet = $false
+function Reset-MapHistory { $script:mapBack.Clear(); $script:mapFwd.Clear(); $ctl.BtnMapBack.IsEnabled = $false; $ctl.BtnMapFwd.IsEnabled = $false }
+function Move-MapHistory([int]$dir) {
+    $from = if ($dir -lt 0) { $script:mapBack } else { $script:mapFwd }
+    $to = if ($dir -lt 0) { $script:mapFwd } else { $script:mapBack }
+    if ($from.Count -eq 0 -or -not $script:mapCur) { return }
+    $n = $from[$from.Count - 1]; $from.RemoveAt($from.Count - 1)
+    $to.Add($script:mapCur)
+    if ($script:mapView -ne 'dirs' -and $script:mapView -ne 'tree') { $ctl.MapViewDirs.IsChecked = $true }
+    $script:mapNavQuiet = $true
+    try { Show-MapLevel $n } finally { $script:mapNavQuiet = $false }
+}
+function Go-MapUp { if ($script:mapCur -and $script:mapCur.Parent) { Show-MapLevel $script:mapCur.Parent } }
+$ctl.BtnMapBack.Add_Click({ Move-MapHistory -1 })
+$ctl.BtnMapFwd.Add_Click({ Move-MapHistory 1 })
+# 鼠标的后退、前进侧键；Alt+← / Alt+→；Backspace 上一级（在输入框里打字时不管）
+$ctl.PageMap.Add_PreviewMouseDown({
+    param($s, $e)
+    if ($e.ChangedButton -eq [System.Windows.Input.MouseButton]::XButton1) { Move-MapHistory -1; $e.Handled = $true }
+    elseif ($e.ChangedButton -eq [System.Windows.Input.MouseButton]::XButton2) { Move-MapHistory 1; $e.Handled = $true }
+})
+$ctl.PageMap.Add_PreviewKeyDown({
+    param($s, $e)
+    if ([System.Windows.Input.Keyboard]::FocusedElement -is [System.Windows.Controls.TextBox]) { return }
+    $alt = ([System.Windows.Input.Keyboard]::Modifiers -band [System.Windows.Input.ModifierKeys]::Alt) -ne 0
+    $k = if ($e.Key -eq [System.Windows.Input.Key]::System) { $e.SystemKey } else { $e.Key }
+    if ($alt -and $k -eq [System.Windows.Input.Key]::Left) { Move-MapHistory -1; $e.Handled = $true }
+    elseif ($alt -and $k -eq [System.Windows.Input.Key]::Right) { Move-MapHistory 1; $e.Handled = $true }
+    elseif (-not $alt -and $k -eq [System.Windows.Input.Key]::Back -and ($script:mapView -eq 'dirs' -or $script:mapView -eq 'tree')) { Go-MapUp; $e.Handled = $true }
+})
+# 路径：每一层一个按钮，最多显示最后 6 层（前面的用「…」代替，点「…」回到再上一层）
+function Show-MapCrumbs($node) {
+    $cr = $ctl.MapCrumbs; $cr.Children.Clear()
+    $chain = New-Object System.Collections.Generic.List[object]
+    for ($n = $node; $n; $n = $n.Parent) { $chain.Insert(0, $n) }
+    $start = [math]::Max(0, $chain.Count - 6)
+    $link = $win.FindResource('LinkButton')
+    $add = {
+        param([string]$text, $target, [bool]$last)
+        if ($cr.Children.Count -gt 0) { $sep = New-Object System.Windows.Controls.TextBlock; $sep.Text = '›'; $sep.Foreground = New-Brush '#86868B'; $sep.Margin = New-Object System.Windows.Thickness 5, 0, 5, 0; $sep.VerticalAlignment = 'Center'; [void]$cr.Children.Add($sep) }
+        if ($last) { $t = New-Object System.Windows.Controls.TextBlock; $t.Text = $text; $t.FontWeight = 'SemiBold'; $t.VerticalAlignment = 'Center'; $t.TextTrimming = 'CharacterEllipsis'; $t.MaxWidth = 260; [void]$cr.Children.Add($t); return }
+        $b = New-Object System.Windows.Controls.Button; $b.Style = $link; $b.Content = $text; $b.Tag = $target; $b.VerticalAlignment = 'Center'; $b.ToolTip = $target.FullPath()
+        $b.Add_Click({ $script:mapCrumbHit = $this.Tag; if ($script:mapView -ne 'dirs' -and $script:mapView -ne 'tree') { $ctl.MapViewDirs.IsChecked = $true }; Show-MapLevel $this.Tag })
+        [void]$cr.Children.Add($b)
+    }
+    if ($start -gt 0) { & $add '…' $chain[$start - 1] $false }
+    for ($i = $start; $i -lt $chain.Count; $i++) {
+        $n = $chain[$i]; $nm = [string]$n.Name; if ($i -eq 0) { $nm = $nm.TrimEnd('\') }
+        & $add $nm $n ($i -eq $chain.Count - 1)
+    }
+    $cr.Visibility = 'Visible'; $ctl.MapPath.Visibility = 'Collapsed'
+}
+# ---------- 待删清单：在不同文件夹里挑要删的，先放进清单，一直看得见删完以后还剩多少，看过清单再一起删（参考 disktree） ----------
+# 放进一个文件夹时，清单里它里面的项目合进它；已经在清单里的文件夹里面的东西不再单独放
+$script:mapMarks = [ordered]@{}
+function Get-MarkKey($r) { ([string]$r.Path).TrimEnd('\').ToLowerInvariant() }
+function Add-MapMarks($rows) {
+    $added = 0; $inside = 0
+    foreach ($r in @($rows)) {
+        if (-not $r -or $r.Locked -or $r.IsSummary -or -not $r.Path -or $r.Size -le 0 -or ($r.Kind -ne 'dir' -and $r.Kind -ne 'file')) { continue }
+        $k = Get-MarkKey $r
+        if ($script:mapMarks.Contains($k)) { continue }
+        $up = $false; foreach ($m in @($script:mapMarks.Keys)) { if ($k.StartsWith($m + '\')) { $up = $true; break } }
+        if ($up) { $inside++; continue }
+        foreach ($m in @($script:mapMarks.Keys)) { if ($m.StartsWith($k + '\')) { $script:mapMarks[$m].Marked = $false; $script:mapMarks.Remove($m) } }
+        $script:mapMarks[$k] = $r; $r.Marked = $true; $added++
+    }
+    Update-MapMarks
+    if ($inside -gt 0) { $ctl.MapSel.Text = (T "{0} 项所在的文件夹已经在待删清单里，不用再单独放") -f $inside }
+    return $added
+}
+function Remove-MapMarks($rows) {
+    foreach ($r in @($rows)) { if (-not $r -or -not $r.Path) { continue }; $k = Get-MarkKey $r; if ($script:mapMarks.Contains($k)) { $script:mapMarks[$k].Marked = $false; $script:mapMarks.Remove($k) }; $r.Marked = $false }
+    Update-MapMarks
+}
+function Clear-MapMarks { foreach ($m in @($script:mapMarks.Values)) { $m.Marked = $false }; $script:mapMarks.Clear(); Update-MapMarks }
+# 清单里的东西删掉能腾出多少：知道实际占用的按实际占用算
+function Get-MarkBytes($r) { if ($r.Disk -ge 0 -and $script:mapRoot -and $script:mapRoot.HasDisk) { [double]$r.Disk } else { [double]$r.Size } }
+function Update-MapMarks {
+    $n = $script:mapMarks.Count
+    $ctl.MapMarkBar.Visibility = if ($n -gt 0) { 'Visible' } else { 'Collapsed' }
+    if ($n -eq 0) { return }
+    $tot = [double]0; $byDrive = @{}
+    foreach ($r in @($script:mapMarks.Values)) { $b = Get-MarkBytes $r; $tot += $b; $d = ([string]$r.Path).Substring(0, 2).ToUpperInvariant(); $byDrive[$d] = [double]$byDrive[$d] + $b }
+    $parts = @(foreach ($d in @($byDrive.Keys | Sort-Object)) { $free = DriveFree ($d + '\'); (T "{0} 现在空闲 {1}，删完约 {2}") -f $d, (Fmt $free), (Fmt ($free + $byDrive[$d])) })
+    $ctl.MapMarkText.Text = ((T "待删清单：{0} 项，共 {1}。") -f $n, (Fmt $tot)) + ($parts -join (T '；')) + (T '（放进回收站的，清空回收站后才腾出来）')
+    $ctl.BtnMarkDelete.IsEnabled = -not $script:worker
+}
+function Show-MapMarks {
+    if ($script:mapMarks.Count -eq 0) { return }
+    $items = @(@($script:mapMarks.Values) | Sort-Object { -(Get-MarkBytes $_) } | Select-Object -First 60 | ForEach-Object { (T "{0}（{1}）") -f $_.Path, (Fmt (Get-MarkBytes $_)) })
+    if ($script:mapMarks.Count -gt 60) { $items += ((T "……另有 {0} 项") -f ($script:mapMarks.Count - 60)) }
+    $ans = Show-Sheet -Title ((T "待删清单（{0} 项）") -f $script:mapMarks.Count) -Text ($ctl.MapMarkText.Text + "`n`n" + (T '要去掉某一项：在列表里选中它，右键「从待删清单去掉」。')) -Items $items -Buttons @((T '关闭清单'), (T '清空清单'), (T '删除清单里的…')) -Primary (T '关闭清单') -Cancel (T '关闭清单')
+    if ($ans -eq (T '清空清单')) { Clear-MapMarks } elseif ($ans -eq (T '删除清单里的…')) { Start-MapDelete @($script:mapMarks.Values) }
+}
+$ctl.BtnMarkShow.Add_Click({ Show-MapMarks })
+$ctl.BtnMarkClear.Add_Click({ Clear-MapMarks })
+$ctl.BtnMarkDelete.Add_Click({ if ($script:mapMarks.Count -gt 0) { Start-MapDelete @($script:mapMarks.Values) } })
+$ctl.BtnMapMark.Add_Click({ $sel = @($ctl.MapList.SelectedItems); if (@($sel | Where-Object { -not $_.Marked }).Count -eq 0) { Remove-MapMarks $sel } else { [void](Add-MapMarks $sel) }; Update-MapSel })
+$ctl.MmMark.Add_Click({ $rows = @($script:menuRows); if (@($rows | Where-Object { -not $_.Marked }).Count -eq 0) { Remove-MapMarks $rows } else { [void](Add-MapMarks $rows) }; Update-MapSel })
+# ---------- 值得一看：名字一看就是缓存、依赖包、构建产物、虚拟环境、临时文件的大文件夹 ----------
+$script:worthNames = @('node_modules', '.next', '.nuxt', '.parcel-cache', '.turbo', '.cache', 'cache', 'caches', 'cache2', 'Code Cache', 'GPUCache', 'ShaderCache', 'DXCache', 'GLCache',
+    '_cacache', 'npm-cache', '.gradle', '.nuget', '.m2', '.venv', 'venv', 'target', 'obj', '__pycache__', 'Temp', 'tmp', 'CrashDumps', 'DerivedData', '.android', 'Windows.old')
+function Get-WorthKind([string]$name) {
+    switch -regex ($name) {
+        '^(node_modules|\.nuget|\.m2|_cacache|npm-cache|\.gradle)$' { return (T '依赖包，要用时会重新下载') }
+        '^(target|obj|\.next|\.nuxt|\.parcel-cache|\.turbo|DerivedData|__pycache__)$' { return (T '构建产物，重新编译会再生成') }
+        '^(\.venv|venv)$' { return (T 'Python 虚拟环境，删了要重新建') }
+        '^(Temp|tmp|CrashDumps)$' { return (T '临时文件和崩溃转储') }
+        '^Windows\.old$' { return (T '旧系统，删了就不能退回去') }
+        '^\.android$' { return (T '安卓开发工具的数据') }
+        default { return (T '缓存，删了会自动重建') }
+    }
+}
+function Show-MapWorth {
+    $ctl.MapWorth.Children.Clear()
+    $r = $script:mapRoot
+    if (-not $r) { $ctl.MapWorthBox.Visibility = 'Collapsed'; return }
+    $hits = @(); try { $hits = @([DiskMap]::Named($r, [string[]]$script:worthNames, [long]300MB, 40)) } catch {}
+    $shown = 0
+    foreach ($h in $hits) {
+        if ($shown -ge 6) { break }
+        $p = $h.FullPath()
+        if (Get-DeleteBlock $p) { continue }
+        if (Test-ChatPath $p) { continue }
+        $par = Split-Path $p -Parent
+        # target 要旁边有 Cargo.toml（Rust），obj 要旁边有工程文件（.NET）才算构建产物
+        if ($h.Name -ieq 'target' -and -not (Test-Path -LiteralPath (Join-Path $par 'Cargo.toml'))) { continue }
+        if ($h.Name -ieq 'obj' -and -not @(Get-ChildItem -LiteralPath $par -File -Filter '*.*proj' -ErrorAction SilentlyContinue).Count) { continue }
+        $b = New-Object System.Windows.Controls.Button; $b.Style = $win.FindResource('Small'); $b.Margin = New-Object System.Windows.Thickness 0, 0, 8, 6; $b.Tag = $h
+        $sp = New-Object System.Windows.Controls.StackPanel; $sp.Orientation = 'Horizontal'
+        $t1 = New-Object System.Windows.Controls.TextBlock; $t1.Text = (Split-Path $par -Leaf) + '\' + $h.Name
+        $t2 = New-Object System.Windows.Controls.TextBlock; $t2.Text = Fmt $(if ($r.HasDisk) { [double]$h.Disk } else { [double]$h.Size }); $t2.FontWeight = 'SemiBold'; $t2.Margin = New-Object System.Windows.Thickness 8, 0, 0, 0
+        [void]$sp.Children.Add($t1); [void]$sp.Children.Add($t2); $b.Content = $sp
+        $b.ToolTip = "{0}`n{1}" -f $p, (Get-WorthKind $h.Name)
+        $b.Add_Click({
+            $n = $this.Tag
+            if ($script:mapView -ne 'dirs' -and $script:mapView -ne 'tree') { $ctl.MapViewDirs.IsChecked = $true }
+            Show-MapLevel $n.Parent
+            foreach ($x in @($ctl.MapList.Items)) { if ([object]::ReferenceEquals($x.Node, $n)) { $ctl.MapList.SelectedItem = $x; try { $ctl.MapList.ScrollIntoView($x) } catch {}; break } }
+        })
+        [void]$ctl.MapWorth.Children.Add($b); $shown++
+    }
+    $ctl.MapWorthBox.Visibility = if ($shown -gt 0) { 'Visible' } else { 'Collapsed' }
 }
 # 概览：这块盘用了多少，系统与软件、个人文件、缓存各占多少。只有扫的是整块盘时才有
 $script:ovCache = @{}
@@ -359,6 +513,7 @@ function Show-MapOverview {
         [void]$sp.Children.Add($dot); [void]$sp.Children.Add($tb); [void]$ctl.MapOvLegend.Children.Add($sp)
     }
     $ctl.MapOverview.ToolTip = (T '系统与软件：Windows、Program Files、ProgramData 等；个人文件：Users；可清理的缓存：清理页「安全清理」里的那些目录（估算）；其他：页面文件、休眠文件、文件表等不在上面几类里的。剩余空间按 Windows 报告的算。')
+    if ($script:worthKey -ne $key) { $script:worthKey = $key; Show-MapWorth }
     $ctl.MapOverview.Visibility = 'Visible'
 }
 
@@ -405,6 +560,40 @@ function Get-TreeItems($rows) {
     return @{ Show = $show; Sizes = [double[]]$sizes; Rest = $rest; RestN = $restN }
 }
 $script:treeColors = @('#2F6FDB', '#3B82F6', '#4C8DF6', '#2563EB', '#5A9BF0', '#3576E6')
+# 方块的颜色是这个文件夹装的是哪一类东西（参考 disktree）：按名字认，认不出的用蓝色；能腾出来的（缓存、依赖包、临时文件）再加斜线
+$script:treeKinds = [ordered]@{
+    system = @((T '系统'), '#5A6B8C'); apps = @((T '软件和软件数据'), '#4F7FC4'); docs = @((T '文档和桌面'), '#8C6BC2'); media = @((T '照片、视频、音乐'), '#C07A3A')
+    dev = @((T '代码和开发'), '#3E8E7E'); sync = @((T '同步盘'), '#3796C7'); games = @((T '游戏'), '#B05A8A'); cache = @((T '缓存和临时文件'), '#C9A227'); other = @((T '其他文件夹'), '#3B82F6'); file = @((T '文件'), '#8E99AD')
+}
+function Get-TreeKind($row) {
+    if (-not $row.IsDir) { return 'file' }
+    $n = ([string]$row.Name).ToLowerInvariant(); $p = ([string]$row.Path).ToLowerInvariant()
+    if ($n -match '^(windows|program files|program files \(x86\)|programdata|\$winreagent|recovery|system volume information|perflogs|windows\.old|\$recycle\.bin|msocache|intel|amd|nvidia)$') { return $(if ($n -in 'windows.old', '$recycle.bin') { 'cache' } else { 'system' }) }
+    if ($script:worthNames -contains $row.Name -or $n -match '^(temp|tmp|inetcache|crashdumps|logs?|\$recycle\.bin)$' -or $n -match 'cache') { return 'cache' }
+    if ($n -match '^(onedrive|onedrive - .*|dropbox|icloud ?drive|google drive|baidunetdisk.*|baidunetdiskdownload|坚果云|nutstore.*)$') { return 'sync' }
+    if ($n -match '^(steam|steamapps|steamlibrary|epic games|wegame|games|riot games|battle\.net|origin games|ea games|ubisoft.*|genshin impact.*|xboxgames)$') { return 'games' }
+    if ($n -match '^(pictures|videos|music|photos|camera roll|dcim|movies|图片|视频|音乐|照片)$') { return 'media' }
+    if ($n -match '^(documents|desktop|downloads|文档|桌面|下载)$') { return 'docs' }
+    if ($n -match '^(\.git|src|source|sources|repos|projects|code|workspace|workspaces|github|gitlab|dev|\.vscode|\.cargo|\.rustup|\.conda|anaconda3|miniconda3|\.docker|docker)$') { return 'dev' }
+    if ($n -eq 'appdata' -or $p -match '\\appdata(\\|$)' -or $n -match '^(local|roaming|locallow)$') { return 'apps' }
+    return 'other'
+}
+$script:hatchCache = @{}
+function Get-TreeBrush([string]$hex, [bool]$hatch) {
+    $key = $hex + '|' + $hatch
+    if ($script:hatchCache.ContainsKey($key)) { return $script:hatchCache[$key] }
+    $base = Brush $hex 'b'
+    if (-not $hatch) { $script:hatchCache[$key] = $base; return $base }
+    $dg = New-Object System.Windows.Media.DrawingGroup
+    [void]$dg.Children.Add((New-Object System.Windows.Media.GeometryDrawing $base, $null, (New-Object System.Windows.Media.RectangleGeometry (New-Object System.Windows.Rect 0, 0, 8, 8))))
+    $pen = New-Object System.Windows.Media.Pen ((New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color]::FromArgb(90, 255, 255, 255)))), 1.6
+    foreach ($ln in @(@(0, 8, 8, 0), @(-2, 2, 2, -2), @(6, 10, 10, 6))) { [void]$dg.Children.Add((New-Object System.Windows.Media.GeometryDrawing $null, $pen, (New-Object System.Windows.Media.LineGeometry (New-Object System.Windows.Point $ln[0], $ln[1]), (New-Object System.Windows.Point $ln[2], $ln[3])))) }
+    $db = New-Object System.Windows.Media.DrawingBrush $dg
+    $db.TileMode = 'Tile'; $db.Viewport = New-Object System.Windows.Rect 0, 0, 8, 8; $db.ViewportUnits = 'Absolute'; $db.Viewbox = New-Object System.Windows.Rect 0, 0, 8, 8; $db.ViewboxUnits = 'Absolute'
+    $db.Freeze()
+    $script:hatchCache[$key] = $db
+    return $db
+}
 $script:treeSel = $null
 function Draw-MapTree {
     $cv = $ctl.MapTree
@@ -416,6 +605,7 @@ function Draw-MapTree {
     $order = @(0..($ti.Sizes.Count - 1) | Sort-Object { $ti.Sizes[$_] } -Descending)
     $rects = Get-TreeRects ([double[]]@($order | ForEach-Object { $ti.Sizes[$_] })) 0 0 $w $h
     $clear = Brush '#00000000'
+    $kindsUsed = @{}
     for ($q = 0; $q -lt $order.Count; $q++) {
         $i = $order[$q]
         $rc = $rects[$q]; if (-not $rc) { continue }
@@ -426,8 +616,12 @@ function Draw-MapTree {
         $b.CornerRadius = New-Object System.Windows.CornerRadius 3
         $b.BorderThickness = New-Object System.Windows.Thickness 2
         $b.BorderBrush = $clear
-        $bg = if (-not $row) { '#C7CCD6' } elseif ($row.IsDir) { $script:treeColors[$i % $script:treeColors.Count] } else { '#8E99AD' }
-        $b.Background = Brush $bg 'b'
+        if (-not $row) { $b.Background = Brush '#C7CCD6' 'b' }
+        else {
+            $kd = Get-TreeKind $row; $kindsUsed[$kd] = $true
+            $hex = if ($kd -eq 'other') { $script:treeColors[$i % $script:treeColors.Count] } else { $script:treeKinds[$kd][1] }
+            $b.Background = Get-TreeBrush $hex ($kd -eq 'cache')
+        }
         $b.Tag = $row
         $b.ToolTip = if ($row) { "{0}`n{1}  ·  {2}`n{3}" -f $row.Name, $row.SizeText, $row.Pct, $row.Path } else { (T "其他 {0} 项，共 {1}") -f $ti.RestN, (Fmt $ti.Rest) }
         if ($b.Width -ge 46 -and $b.Height -ge 20) {
@@ -460,6 +654,16 @@ function Draw-MapTree {
             })
         }
         [void]$cv.Children.Add($b)
+    }
+    # 图例：这一层出现了哪几类
+    $lg = $ctl.MapTreeLegend; $lg.Children.Clear()
+    foreach ($k in $script:treeKinds.Keys) {
+        if (-not $kindsUsed.ContainsKey($k)) { continue }
+        $sp = New-Object System.Windows.Controls.StackPanel; $sp.Orientation = 'Horizontal'; $sp.Margin = New-Object System.Windows.Thickness 0, 2, 16, 2
+        $sw = New-Object System.Windows.Controls.Border; $sw.Width = 12; $sw.Height = 12; $sw.CornerRadius = New-Object System.Windows.CornerRadius 3; $sw.Margin = New-Object System.Windows.Thickness 0, 0, 6, 0; $sw.VerticalAlignment = 'Center'
+        $sw.Background = Get-TreeBrush $script:treeKinds[$k][1] ($k -eq 'cache')
+        $tb = New-Object System.Windows.Controls.TextBlock; $tb.Text = $script:treeKinds[$k][0] + $(if ($k -eq 'cache') { (T '（带斜线：删了能腾出来）') } else { '' }); $tb.FontSize = 12; $tb.Foreground = Brush '#6E6E73'; $tb.VerticalAlignment = 'Center'
+        [void]$sp.Children.Add($sw); [void]$sp.Children.Add($tb); [void]$lg.Children.Add($sp)
     }
     Sync-TreeSel
 }
@@ -619,7 +823,8 @@ function Set-MapView([string]$v) {
     $ctl.MapGrowBar.Visibility = if ($grow) { 'Visible' } else { 'Collapsed' }
     $ctl.MapRecentBar.Visibility = if ($v -eq 'recent') { 'Visible' } else { 'Collapsed' }
     $ctl.MapGrow.Visibility = if ($grow) { 'Visible' } else { 'Collapsed' }
-    $ctl.MapTree.Visibility = if ($tree) { 'Visible' } else { 'Collapsed' }
+    $ctl.MapTreeBox.Visibility = if ($tree) { 'Visible' } else { 'Collapsed' }
+    if ($v -ne 'dirs' -and -not $tree) { $ctl.MapCrumbs.Visibility = 'Collapsed'; $ctl.MapPath.Visibility = 'Visible' }
     # 方块图和列表一起显示：上面方块图，下面列表，点哪边另一边都跟着
     $ctl.MapGrid.RowDefinitions[1].Height = if ($tree) { New-Object System.Windows.GridLength 3, ([System.Windows.GridUnitType]::Star) } else { New-Object System.Windows.GridLength 0 }
     $ctl.MapGrid.RowDefinitions[2].Height = if ($tree) { New-Object System.Windows.GridLength 2, ([System.Windows.GridUnitType]::Star) } else { New-Object System.Windows.GridLength 1, ([System.Windows.GridUnitType]::Star) }
@@ -725,7 +930,7 @@ $sync.RecentNote = $note
 }
 $ctl.BtnMapRecent.Add_Click({ Start-MapRecent })
 $ctl.MapRecentDays.Add_SelectionChanged({ if ($script:mapView -eq 'recent' -and $script:mapRoot -and -not $script:worker) { Start-MapRecent } })
-$ctl.BtnMapUp.Add_Click({ if ($script:mapCur -and $script:mapCur.Parent) { Show-MapLevel $script:mapCur.Parent } })
+$ctl.BtnMapUp.Add_Click({ Go-MapUp })
 # 空间明细：已用空间都花在哪，为什么和按文件大小相加对不上（快速扫描读了文件表才有）
 function Show-SpaceAcct {
     $r = $script:mapRoot
@@ -790,6 +995,8 @@ function Update-MapSel {
     $ctl.BtnMapOpen.IsEnabled = [bool]$r -and -not $busy
     $ctl.BtnMapDelete.IsEnabled = ($del.Count -gt 0) -and -not $busy
     $ctl.BtnMapCompress.IsEnabled = [bool]$r -and $r.IsDir -and -not $busy -and -not (Get-CompressBlock $r.Path)
+    $ctl.BtnMapMark.IsEnabled = ($del.Count -gt 0)
+    $ctl.BtnMapMark.Content = if ($del.Count -gt 0 -and @($del | Where-Object { -not $_.Marked }).Count -eq 0) { (T '从待删清单去掉') } else { (T '加入待删清单') }
     if ($sel.Count -eq 0) {
         $ctl.MapSel.Text = if (Test-CheckMode) { (T '勾选行前面的方框来选中，可以勾一项或多项，再打开位置、压缩或删除；单击行的其他地方不会选中，双击文件夹往里点；按住鼠标上下拖可以一次勾上连着的几行。系统文件夹、软件安装文件夹、C 盘个人文件夹和搬家后的数据带小锁，不能在这里删。') }
                            else { (T '选中一行可以打开位置、压缩或删除；勾选前面的方框，或按住 Ctrl、Shift，可以选多项一起删；按住鼠标（左键或右键）上下拖可以一次选中连着的几行。系统文件夹、软件安装文件夹、C 盘个人文件夹和搬家后的数据带小锁，不能在这里删。') }
@@ -831,6 +1038,9 @@ function Update-MapMenu {
     $nd = @($rows | Where-Object { -not $_.Locked -and $_.Size -gt 0 }).Count
     $ctl.MmDelete.IsEnabled = ($nd -gt 0) -and -not $busy
     $ctl.MmDelete.Header = if ($nd -gt 1) { (T "删除选中的 {0} 项…") -f $nd } else { (T '删除…') }
+    $mk = @($rows | Where-Object { -not $_.Locked -and $_.Size -gt 0 -and -not $_.IsSummary })
+    $ctl.MmMark.IsEnabled = $mk.Count -gt 0
+    $ctl.MmMark.Header = if ($mk.Count -gt 0 -and @($mk | Where-Object { -not $_.Marked }).Count -eq 0) { (T '从待删清单去掉') } else { (T '加入待删清单') }
     return $true
 }
 $ctl.MapList.Add_ContextMenuOpening({ param($s, $e) if (-not (Update-MapMenu)) { $e.Handled = $true } })
@@ -1405,6 +1615,9 @@ function Start-MapDelete($sel) {
         }
     }
     $how = (T "「移到回收站」可以恢复，但要清空回收站后才真正腾出空间；「永久删除」马上腾出空间，删了就找不回来。")
+    # 是 git 仓库的文件夹：里面没提交、没推送的改动删了就没了（参考 disktree）
+    $git = @($rows | Where-Object { $_.IsDir -and ((Test-Path -LiteralPath (Join-Path ([string]$_.Path) '.git')) -or $_.Name -ieq '.git') })
+    if ($git.Count -gt 0) { $real += ((T "`n`n注意：其中 {0} 个是 git 仓库（{1}）。没提交、没推送到远程的改动删了就找不回来，先确认都推送过。") -f $git.Count, ((@($git | Select-Object -First 3 | ForEach-Object { $_.Name })) -join (T '、'))) }
     $items = $null
     if ($rows.Count -eq 1) {
         $r = $rows[0]
@@ -1423,6 +1636,7 @@ function Start-MapDelete($sel) {
     if ($ans -ne (T '移到回收站') -and $ans -ne (T '永久删除')) { return }
     $sync.Mode = 'mapdel'; $sync.MapDel = $null
     $script:mapDelRows = $rows
+    $script:mapDelFree = @{}; foreach ($d in @($rows | ForEach-Object { ([string]$_.Path).Substring(0, 2).ToUpperInvariant() } | Select-Object -Unique)) { $script:mapDelFree[$d] = DriveFree ($d + '\') }
     Start-Op $(if ($rows.Count -eq 1) { (T "删除 {0}") -f $rows[0].Name } else { (T "删除 {0} 项") -f $rows.Count })
     UI-Busy $true
     Start-Worker @'
