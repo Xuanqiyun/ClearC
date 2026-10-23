@@ -216,6 +216,66 @@ public sealed class FastHasher {
     }
 }
 
+// Windows Installer 登记的本地安装包（C:\Windows\Installer 里哪些 .msi / .msp 还有软件、补丁在用）：只要文件名。
+// 和原来 PowerShell 里一条一条问的结果一样（同样的注册表位置、同样的接口调用），只是在这里一次问完，快很多
+public static class InstallerRefs {
+    static string Leaf(string p) { if (string.IsNullOrEmpty(p)) return null; int i = Math.Max(p.LastIndexOf('\\'), p.LastIndexOf('/')); string s = i >= 0 ? p.Substring(i + 1) : p; return s.Length > 0 ? s : null; }
+    static void Add(List<string> outp, object v) { string s = Leaf(v as string); if (s != null) outp.Add(s); }
+    static void Each(Microsoft.Win32.RegistryKey root, string path, string sub, List<string> outp) {
+        Microsoft.Win32.RegistryKey k = null;
+        try {
+            k = root.OpenSubKey(path); if (k == null) return;
+            foreach (string n in k.GetSubKeyNames()) {
+                Microsoft.Win32.RegistryKey c = null;
+                try { c = k.OpenSubKey(sub == null ? n : n + "\\" + sub); if (c != null) Add(outp, c.GetValue("LocalPackage")); } catch { } finally { if (c != null) c.Close(); }
+            }
+        } catch { } finally { if (k != null) k.Close(); }
+    }
+    // 注册表：每个用户（UserData\<SID>）登记的产品、补丁，以及按机器、按用户登记的补丁
+    public static List<string> FromRegistry() {
+        List<string> outp = new List<string>();
+        Microsoft.Win32.RegistryKey ud = null;
+        try {
+            ud = Microsoft.Win32.Registry.LocalMachine.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Installer\\UserData");
+            if (ud != null) foreach (string sid in ud.GetSubKeyNames()) {
+                Each(ud, sid + "\\Products", "InstallProperties", outp);
+                Each(ud, sid + "\\Patches", null, outp);
+            }
+        } catch { } finally { if (ud != null) ud.Close(); }
+        Each(Microsoft.Win32.Registry.LocalMachine, "SOFTWARE\\Classes\\Installer\\Patches", null, outp);
+        Each(Microsoft.Win32.Registry.CurrentUser, "Software\\Microsoft\\Installer\\Patches", null, outp);
+        return outp;
+    }
+    static object Get(object o, string name, object[] args) { return o.GetType().InvokeMember(name, System.Reflection.BindingFlags.GetProperty, null, o, args); }
+    // Windows Installer 自己的接口：每个产品的 LocalPackage，和它的补丁（当前用户的全部上下文、所有用户的按用户安装）。接口读不了返回 null
+    public static List<string> FromInstaller() {
+        Type t = null; object inst = null;
+        try { t = Type.GetTypeFromProgID("WindowsInstaller.Installer"); if (t == null) return null; inst = Activator.CreateInstance(t); } catch { return null; }
+        List<string> outp = new List<string>();
+        try {
+            object products = Get(inst, "Products", null);
+            int n = Convert.ToInt32(Get(products, "Count", null));
+            for (int i = 0; i < n; i++) {
+                string code = null;
+                try { code = Get(products, "Item", new object[] { i }) as string; } catch { }
+                if (string.IsNullOrEmpty(code)) continue;
+                try { Add(outp, Get(inst, "ProductInfo", new object[] { code, "LocalPackage" })); } catch { }
+                foreach (object[] a in new object[][] { new object[] { code, "", 7, 15 }, new object[] { code, "s-1-1-0", 3, 15 } }) {
+                    try {
+                        object pts = Get(inst, "PatchesEx", a);
+                        int m = Convert.ToInt32(Get(pts, "Count", null));
+                        for (int j = 0; j < m; j++) {
+                            try { object pt = Get(pts, "Item", new object[] { j }); Add(outp, Get(pt, "PatchProperty", new object[] { "LocalPackage" })); } catch { }
+                        }
+                    } catch { }
+                }
+            }
+        } catch { return null; }
+        finally { try { Marshal.ReleaseComObject(inst); } catch { } }
+        return outp;
+    }
+}
+
 // 查重：
 // 1. 多线程列举文件，按（名字, 大小）分桶，只有桶里有 2 个以上才可能重复
 // 2. 只读头尾各 64 KB 算指纹，筛掉绝大多数
@@ -227,6 +287,7 @@ public static class DupFinder {
     public static volatile string Current = "";
     public static long FilesSeen, DirsSeen, CandidateFiles, BytesDone, BytesTotal, GroupsFound, FilesDone, FilesTotal;
     public static long VerifyDone, VerifyTotal;
+    public static long ListMs, QuickMs, DeepMs, QuickFiles, DeepFiles, QuickBytes, DeepBytes;   // 每一步用了多久、读了多少（日志里写，排查慢在哪）
     public static volatile bool Cancel;
     public static volatile bool UsedFastEnum;
 
@@ -527,6 +588,8 @@ public static class DupFinder {
     public static List<DupGroup> Find(string[] roots, long minSize, long maxSize, bool matchName, string[] onlyExt, bool exact, string[] driveThreads) {
         FilesSeen = 0; DirsSeen = 0; CandidateFiles = 0; BytesDone = 0; BytesTotal = 0;
         GroupsFound = 0; FilesDone = 0; FilesTotal = 0;
+        ListMs = 0; QuickMs = 0; DeepMs = 0; QuickFiles = 0; DeepFiles = 0; QuickBytes = 0; DeepBytes = 0;
+        Stopwatch phase = Stopwatch.StartNew();
         Phase = "list"; Current = "";
         progDirCache = new ConcurrentDictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
         Dictionary<string, int> threads = ParseThreads(driveThreads);
@@ -552,6 +615,7 @@ public static class DupFinder {
             t.IsBackground = true; t.Start(); ets.Add(t);
         }
         foreach (Thread t in ets) t.Join();
+        ListMs = phase.ElapsedMilliseconds;
         if (Cancel) return new List<DupGroup>();
 
         Dictionary<string, List<DupFile>> buckets = new Dictionary<string, List<DupFile>>();
@@ -574,7 +638,9 @@ public static class DupFinder {
         CandidateFiles = cands.Count;
         BytesDone = 0; BytesTotal = quickBytes; FilesDone = 0; FilesTotal = cands.Count;
         Phase = "quick";
+        phase.Restart(); QuickFiles = cands.Count; QuickBytes = quickBytes;
         RunPerVolume(cands, threads, HashHeadTail);
+        QuickMs = phase.ElapsedMilliseconds;
         if (Cancel) return new List<DupGroup>();
 
         Dictionary<string, List<DupFile>> b2 = GroupBy(cands, false);
@@ -593,7 +659,9 @@ public static class DupFinder {
         }
         BytesDone = 0; BytesTotal = deepBytes; FilesDone = 0; FilesTotal = deep.Count;
         Phase = "deep";
+        phase.Restart(); DeepFiles = deep.Count; DeepBytes = deepBytes;
         RunPerVolume(deep, threads, delegate (DupFile f, IoWorker w) { HashDeep(f, w, exact); });
+        DeepMs = phase.ElapsedMilliseconds;
         if (Cancel) return new List<DupGroup>();
 
         List<DupFile> survivors = new List<DupFile>();
@@ -3358,6 +3426,50 @@ function SetStatus($idx, [string]$text, [string]$kind) { if ($sync -and $sync.St
 # 用户点了「取消」后，后台只在安全的地方检查这个标记、停下来；返回 $true 时顺便记下「确实有没做完的」。
 # 换链接、删备份这类停在一半会出问题的步骤，执行期间把 CanCancel 设成 $false（界面上的取消按钮变灰），做完才停。
 function Stopping { if ($sync -and $sync.Cancel) { $sync.WasCancelled = $true; return $true }; return $false }
+# ---------- 几件互不相干、各自要等一会儿的事一起做 ----------
+# 每件在自己的后台里跑（各带一份引擎，读引擎只要零点几秒）。$jobs：键 → 一段代码。返回句柄，Wait-Parallel 等它们做完。
+# 只用来读东西、统计大小（不删、不改）；开不了后台就什么都不开，调用的地方照旧一件一件做
+function Start-Parallel($jobs, [int]$max = 4) {
+    $h = @{ Pool = $null; Run = @{} }
+    $src = if ($engineText) { $engineText } elseif ($engine) { $engine } else { '' }
+    if (-not $jobs -or $jobs.Count -eq 0 -or -not $src) { return $h }
+    try {
+        $pool = [runspacefactory]::CreateRunspacePool(1, [math]::Max(1, [math]::Min($max, $jobs.Count)))
+        $pool.ApartmentState = 'STA'; $pool.Open(); $h.Pool = $pool
+        foreach ($k in @($jobs.Keys)) {
+            $ps = [powershell]::Create(); $ps.RunspacePool = $pool
+            [void]$ps.AddScript("param(`$sync, `$engineText, `$code)`nInvoke-Expression `$engineText`n`$t0 = [Environment]::TickCount`n`$v = & ([scriptblock]::Create(`$code))`n@{ V = `$v; Ms = [Environment]::TickCount - `$t0 }").AddArgument($sync).AddArgument($src).AddArgument([string]$jobs[$k])
+            $h.Run[[string]$k] = @{ PS = $ps; AR = $ps.BeginInvoke() }
+        }
+    } catch {
+        Log ((T "  没能同时做几件事，改成一件一件做（{0}）") -f $_.Exception.Message)
+        foreach ($j in @($h.Run.Values)) { try { $j.PS.Dispose() } catch {} }
+        $h.Run = @{}; if ($h.Pool) { try { $h.Pool.Dispose() } catch {} }; $h.Pool = $null
+    }
+    return $h
+}
+# 等一起做的那几件做完：返回 键 → @{ V = 结果; Ms = 用了多少毫秒 }。出错的、没开成的不在里面（调用的地方自己再做一遍）。点了取消就停下不等
+function Wait-Parallel($h) {
+    $res = @{}
+    if (-not $h -or -not $h.Run) { return $res }
+    try {
+        foreach ($k in @($h.Run.Keys)) {
+            $j = $h.Run[$k]
+            while (-not $j.AR.AsyncWaitHandle.WaitOne(200)) { if (Stopping) { foreach ($x in @($h.Run.Values)) { try { $x.PS.Stop() } catch {} }; break } }
+            if (Stopping) { break }
+            try { $out = $j.PS.EndInvoke($j.AR); if ($out.Count -gt 0 -and $out[$out.Count - 1] -is [hashtable]) { $res[$k] = $out[$out.Count - 1] } } catch {}
+        }
+    } finally {
+        foreach ($j in @($h.Run.Values)) { try { $j.PS.Dispose() } catch {} }
+        if ($h.Pool) { try { $h.Pool.Close(); $h.Pool.Dispose() } catch {} }
+        $h.Run = @{}; $h.Pool = $null
+    }
+    return $res
+}
+# 记下后台里每一段用了多久（扫描为什么慢一看就知道；写进日志）
+function Start-Phases { $script:phSw = [Diagnostics.Stopwatch]::StartNew(); $script:phLast = [long]0; $script:phList = New-Object System.Collections.ArrayList }
+function Mark-Phase([string]$n) { if ($script:phSw) { $now = $script:phSw.ElapsedMilliseconds; [void]$script:phList.Add(@{ N = $n; Ms = $now - $script:phLast }); $script:phLast = $now } }
+function End-Phases { if ($script:phSw) { if ($sync) { $sync.PhaseTimes = $script:phList }; $script:phSw = $null } }
 function Set-CanCancel([bool]$b) { if ($sync -and $sync.P) { $sync.P.CanCancel = $b } }
 function Quote-Arg([string]$a) {
     if ($a -eq '') { return '""' }
@@ -3904,26 +4016,13 @@ function Get-InstallerOrphans {
     $files = @(Get-ChildItem -LiteralPath $dir -File -Force -ErrorAction SilentlyContinue | Where-Object { $_.Extension -match '^\.(msi|msp)$' })
     if ($files.Count -eq 0) { return @() }
     $used = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
-    foreach ($root in @('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\*\Products\*\InstallProperties', 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\*\Patches\*',
-                           'HKLM:\SOFTWARE\Classes\Installer\Patches\*', 'HKCU:\Software\Microsoft\Installer\Patches\*')) {
-        foreach ($p in @(Get-ItemProperty -Path $root -ErrorAction SilentlyContinue)) { $v = [string]$p.LocalPackage; if ($v) { [void]$used.Add((Split-Path $v -Leaf)) } }
-    }
+    # 注册表里每个产品、每个补丁登记的 LocalPackage，再用 Windows Installer 自己的接口问一遍（都在 InstallerRefs 里一次问完）
+    foreach ($v in @([InstallerRefs]::FromRegistry())) { if ($v) { [void]$used.Add([string]$v) } }
     $fromReg = $used.Count
     if ($fromReg -eq 0) { return @() }
-    try {
-        $inst = New-Object -ComObject WindowsInstaller.Installer
-        $t = $inst.GetType()
-        foreach ($code in @($t.InvokeMember('Products', 'GetProperty', $null, $inst, $null))) {
-            try { $lp = [string]$t.InvokeMember('ProductInfo', 'GetProperty', $null, $inst, @([string]$code, 'LocalPackage')); if ($lp) { [void]$used.Add((Split-Path $lp -Leaf)) } } catch {}
-            foreach ($args in @(@([string]$code, '', 7, 15), @([string]$code, 's-1-1-0', 3, 15))) {
-                try {
-                    foreach ($pt in @($t.InvokeMember('PatchesEx', 'GetProperty', $null, $inst, $args))) {
-                        try { $lp = [string]$pt.GetType().InvokeMember('PatchProperty', 'GetProperty', $null, $pt, @('LocalPackage')); if ($lp) { [void]$used.Add((Split-Path $lp -Leaf)) } } catch {}
-                    }
-                } catch {}
-            }
-        }
-    } catch { return @() }   # 接口读不了：只靠注册表可能漏掉还在用的安装包，宁可不判断
+    $viaApi = [InstallerRefs]::FromInstaller()
+    if ($null -eq $viaApi) { return @() }   # 接口读不了：只靠注册表可能漏掉还在用的安装包，宁可不判断
+    foreach ($v in @($viaApi)) { if ($v) { [void]$used.Add([string]$v) } }
     if ($used.Count -eq 0) { return @() }
     $out = @()
     $recent = (Get-Date).AddDays(-1)
@@ -4522,8 +4621,16 @@ function Get-ClockHealth {
 # 一次读完健康页要的全部（在后台线程里跑）
 function Get-HealthAll {
     $t0 = Get-Date
-    $r = @{ Cpu = (Get-CpuHealth); Mem = (Get-MemHealth); Battery = (Get-BatteryHealth); Gpu = @(Get-GpuHealth); Win = (Get-WinHealth); Boot = (Get-BootHealth); Crash = (Get-CrashHealth); Clock = (Get-ClockHealth); Power = (Get-PowerFixState); Sys = (Get-SysFacts); At = (Get-Date) }
-    $r.Disks = @(); foreach ($d in @(Get-FixedDriveLetters)) { try { $h = Get-DiskHealthInfo $d; $h.Drive = $d; $r.Disks += $h } catch {} }
+    # 各部分互不相干，同时读（每部分要等 WMI、性能计数器、事件日志一两秒，一个一个读要十几秒）；开不了后台就一个一个读
+    $parts = [ordered]@{ Crash = 'Get-CrashHealth'; Win = 'Get-WinHealth'; Cpu = 'Get-CpuHealth'; Boot = 'Get-BootHealth'; Gpu = ',@(Get-GpuHealth)'; Mem = 'Get-MemHealth'; Battery = 'Get-BatteryHealth'; Clock = 'Get-ClockHealth'; Sys = 'Get-SysFacts'
+        Disks = '$o = @(); foreach ($d in @(Get-FixedDriveLetters)) { try { $h = Get-DiskHealthInfo $d; $h.Drive = $d; $o += $h } catch {} }; ,$o' }
+    $got = Wait-Parallel (Start-Parallel $parts 6)
+    $r = @{ At = (Get-Date); Power = (Get-PowerFixState); PartMs = @{} }
+    foreach ($k in $parts.Keys) {
+        if ($got.ContainsKey($k)) { $r[$k] = $got[$k].V; $r.PartMs[$k] = $got[$k].Ms }
+        else { $t1 = [Environment]::TickCount; $r[$k] = & ([scriptblock]::Create($parts[$k])); $r.PartMs[$k] = [Environment]::TickCount - $t1 }
+    }
+    $r.Gpu = @($r.Gpu); $r.Disks = @($r.Disks)
     $r.Verdicts = @(Get-CrashVerdict $r)
     $r.Secs = ((Get-Date) - $t0).TotalSeconds
     return $r
@@ -5052,7 +5159,7 @@ function Get-Catalog {
         @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); N=(T '清空回收站');            Note=(T '回收站里是你以前删掉、但还能找回的文件。清空后就永远找不回了，请先打开回收站确认里面没有要的东西')
            Size={ $q = [FsTools]::RecycleBinBytes(); if ($q -ge 0) { [double]$q } else { try { $s = ((New-Object -ComObject Shell.Application).NameSpace(0xA).Items() | Measure-Object -Property Size -Sum).Sum; if ($s) { $s } else { 0 } } catch { 0 } } }
            Act ={ if ($script:recycledThisRun) { Log (T '  这一轮刚把文件放进回收站，不清空回收站（下次再清）') } else { Clear-RecycleBin -Force -ErrorAction SilentlyContinue } } }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Windows 传递优化缓存'); Note=(T 'Windows 更新的点对点分发缓存')
+        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Windows 传递优化缓存'); Note=(T 'Windows 更新的点对点分发缓存'); Bg=$true
            Size={ try { $s = (Get-DeliveryOptimizationStatus -ErrorAction Stop | Measure-Object -Property FileSize -Sum).Sum; if ($s) { $s } else { 0 } } catch { 0 } }
            Act ={ Delete-DeliveryOptimizationCache -Force -ErrorAction SilentlyContinue } }
 
@@ -5067,13 +5174,13 @@ function Get-Catalog {
         @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def=(T '跳过'); One=(T '执行'); N=(T '禁用 XTU 超频日志服务'); Lvl=2; Note=(T '外星人 Command Center 的 CPU 超频组件，会持续写几 GB 日志。不超频可禁用，AWCC 的风扇和性能档位不受影响')
            Size={ $s = Get-Service XTU3SERVICE -ErrorAction SilentlyContinue; if ($s -and $s.Status -eq 'Running') { -1 } else { 0 } }
            Act ={ Stop-Service XTU3SERVICE -Force -ErrorAction SilentlyContinue; Set-Service XTU3SERVICE -StartupType Disabled -ErrorAction SilentlyContinue } }
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T 'Windows Installer 孤儿安装包'); Lvl=2; Note=(T 'C:\Windows\Installer 里没有任何已装软件和补丁再引用的安装包（.msi / .msp），多半是软件升级、卸载后留下的。判断方法和 PatchCleaner 一样。删了以后，万一哪个软件修复或卸载时提示找不到安装包，重新下载安装一次即可')
+        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T 'Windows Installer 孤儿安装包'); Lvl=2; Bg=$true; Note=(T 'C:\Windows\Installer 里没有任何已装软件和补丁再引用的安装包（.msi / .msp），多半是软件升级、卸载后留下的。判断方法和 PatchCleaner 一样。删了以后，万一哪个软件修复或卸载时提示找不到安装包，重新下载安装一次即可')
            Size={ $s = [double]0; foreach ($f in (Get-InstallerOrphans)) { $s += $f.Length }; $s }
            Act ={ $n = 0; $b = [double]0; foreach ($f in (Get-InstallerOrphans)) { try { Remove-Item -LiteralPath $f.FullName -Force -ErrorAction Stop; $n++; $b += $f.Length } catch { Log ((T "  没删掉：{0}（{1}）") -f $f.FullName, $_.Exception.Message) } }; Log ((T "  Windows Installer 孤儿安装包：删了 {0} 个，{1}") -f $n, (GB $b)) } }
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T '驱动存储里的旧版驱动包'); Lvl=2; Note=(T '驱动更新后，旧版本的安装包还留在 C:\Windows\System32\DriverStore 里（和 Driver Store Explorer 的判断一样：同一个驱动、同一厂商有更新版本的那些）。用 pnputil 删除，正在使用的删不掉、启动必需的不碰。删了以后不能回滚到旧版驱动')
+        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T '驱动存储里的旧版驱动包'); Lvl=2; Bg=$true; Note=(T '驱动更新后，旧版本的安装包还留在 C:\Windows\System32\DriverStore 里（和 Driver Store Explorer 的判断一样：同一个驱动、同一厂商有更新版本的那些）。用 pnputil 删除，正在使用的删不掉、启动必需的不碰。删了以后不能回滚到旧版驱动')
            Size={ $s = [double]0; foreach ($d in (Get-OldDriverPackages)) { $s += $d.Bytes }; $s }
            Act ={ $n = 0; $b = [double]0; foreach ($d in (Get-OldDriverPackages)) { if (Stopping) { break }; $r = Remove-DriverPackage $d.Published; if ($r -eq '') { $n++; $b += $d.Bytes; Log ((T "  已删除旧版驱动包 {0}（{1} {2}）") -f $d.Published, $d.Provider, $d.Version) } else { Log ((T "  没删掉 {0}：{1}") -f $d.Published, $r) } }; Log ((T "  旧版驱动包：删了 {0} 个，{1}") -f $n, (GB $b)) } }
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T '开始菜单里失效的快捷方式'); Lvl=1; Note=(T '指向的程序已经不在了的快捷方式（只看开始菜单，不碰桌面）。目标在没插着的硬盘上的不算。不占什么空间，只是清爽')
+        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T '开始菜单里失效的快捷方式'); Lvl=1; Bg=$true; Note=(T '指向的程序已经不在了的快捷方式（只看开始菜单，不碰桌面）。目标在没插着的硬盘上的不算。不占什么空间，只是清爽')
            Size={ $s = [double]0; foreach ($f in (Get-BrokenShortcuts)) { $s += $f.Length }; $s }
            Act ={ $n = 0; foreach ($f in (Get-BrokenShortcuts)) { try { Remove-Item -LiteralPath $f.FullName -Force -ErrorAction Stop; $n++; OpLog '删除' (T '失效的快捷方式') $f.FullName '' } catch {} }; Log ((T "  删了 {0} 个失效的快捷方式") -f $n) } }
         @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T 'Windows 事件日志'); Lvl=2; Note=(T '系统、应用程序、安全等日志，排查问题的工程师会看。清空后就查不到以前的记录了，不确定就跳过')
@@ -6377,31 +6484,37 @@ function Get-ContextMenuItems {
     }
     $where = [ordered]@{ '*' = (T '文件'); 'AllFilesystemObjects' = (T '文件和文件夹'); 'Directory' = (T '文件夹'); 'Folder' = (T '文件夹'); 'Directory\Background' = (T '文件夹空白处'); 'Drive' = (T '磁盘') }
     $items = [ordered]@{}
-    foreach ($hive in @('HKLM:\SOFTWARE\Classes', 'HKCU:\Software\Classes')) {
+    $sysClsid = @{}   # 已经知道是系统自带的（不列），同一个在别的位置再出现时不用再查
+    # 直接用 .NET 读注册表（PowerShell 的注册表驱动器每次要好几毫秒，几百个键加起来要好几秒）；读的位置和以前一样
+    $rv = { param($root, [string]$path) $kk = $null; try { $kk = $root.OpenSubKey($path); if ($kk) { return [string]$kk.GetValue('') } } catch {} finally { if ($kk) { $kk.Close() } }; return '' }
+    $has = { param($root, [string]$path) $kk = $null; try { $kk = $root.OpenSubKey($path); return [bool]$kk } catch { return $false } finally { if ($kk) { $kk.Close() } } }
+    $hklm = [Microsoft.Win32.Registry]::LocalMachine; $hkcu = [Microsoft.Win32.Registry]::CurrentUser
+    foreach ($hv in @(@($hklm, 'SOFTWARE\Classes'), @($hkcu, 'Software\Classes'))) {
         foreach ($w in $where.Keys) {
-            $base = "$hive\$w\shellex\ContextMenuHandlers"
-            foreach ($k in @(Get-ChildItem -LiteralPath $base -ErrorAction SilentlyContinue)) {
-                $clsid = ''
-                try { $clsid = [string](Get-ItemProperty -LiteralPath $k.PSPath -ErrorAction Stop).'(default)' } catch {}
-                if (-not $clsid) { $clsid = $k.PSChildName }
+            $base = $null; $names = @()
+            try { $base = $hv[0].OpenSubKey($hv[1] + '\' + $w + '\shellex\ContextMenuHandlers'); if ($base) { $names = @($base.GetSubKeyNames()) } } catch {} finally { if ($base) { $base.Close() } }
+            foreach ($kn in $names) {
+                $clsid = & $rv $hv[0] ($hv[1] + '\' + $w + '\shellex\ContextMenuHandlers\' + $kn)
+                if (-not $clsid) { $clsid = $kn }
                 $clsid = $clsid.Trim()
                 if ($clsid -notmatch '^\{[0-9A-Fa-f-]{36}\}$') { continue }
                 $u = $clsid.ToUpperInvariant()
+                if ($sysClsid.ContainsKey($u)) { continue }
                 if (-not $items.Contains($u)) {
                     $name = ''; $dll = ''
-                    foreach ($c in @("HKLM:\SOFTWARE\Classes\CLSID\$clsid", "HKCU:\Software\Classes\CLSID\$clsid", "HKLM:\SOFTWARE\Classes\WOW6432Node\CLSID\$clsid")) {
-                        if (-not (Test-Path -LiteralPath $c)) { continue }
-                        if (-not $name) { try { $name = [string](Get-ItemProperty -LiteralPath $c -ErrorAction Stop).'(default)' } catch {} }
-                        if (-not $dll) { try { $dll = [string](Get-ItemProperty -LiteralPath "$c\InprocServer32" -ErrorAction Stop).'(default)' } catch {} }
+                    foreach ($c in @(@($hklm, "SOFTWARE\Classes\CLSID\$clsid"), @($hkcu, "Software\Classes\CLSID\$clsid"), @($hklm, "SOFTWARE\Classes\WOW6432Node\CLSID\$clsid"))) {
+                        if (-not (& $has $c[0] $c[1])) { continue }
+                        if (-not $name) { $name = & $rv $c[0] $c[1] }
+                        if (-not $dll) { $dll = & $rv $c[0] ($c[1] + '\InprocServer32') }
                     }
                     if ($dll) { $dll = [Environment]::ExpandEnvironmentVariables($dll).Trim('"') }
                     # 系统自带的（dll 在 Windows 文件夹里）不列
-                    if (-not $dll -or $dll.StartsWith($env:SystemRoot, [StringComparison]::OrdinalIgnoreCase)) { continue }
-                    if (-not $name) { $name = $k.PSChildName }
-                    $items[$u] = @{ Clsid = $clsid; Name = $name; Dll = $dll; Company = (Get-FileCompany $dll); Keys = @($k.PSChildName); Where = @($where[$w]); Enabled = -not $blocked.ContainsKey($u) }
+                    if (-not $dll -or $dll.StartsWith($env:SystemRoot, [StringComparison]::OrdinalIgnoreCase)) { $sysClsid[$u] = $true; continue }
+                    if (-not $name) { $name = $kn }
+                    $items[$u] = @{ Clsid = $clsid; Name = $name; Dll = $dll; Company = (Get-FileCompany $dll); Keys = @($kn); Where = @($where[$w]); Enabled = -not $blocked.ContainsKey($u) }
                 } else {
                     if ($items[$u].Where -notcontains $where[$w]) { $items[$u].Where += $where[$w] }
-                    if ($items[$u].Keys -notcontains $k.PSChildName) { $items[$u].Keys += $k.PSChildName }
+                    if ($items[$u].Keys -notcontains $kn) { $items[$u].Keys += $kn }
                 }
             }
         }
@@ -6780,6 +6893,9 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+  没能同时做几件事，改成一件一件做（{0}）	  Could not run these side by side, doing them one by one ({0})
+等系统回答安装包、驱动包这几项	Waiting for Windows to report installer and driver packages
+读取 {0} 盘的文件表：{1:N0} 个文件，用时 {2:N1} 秒	Read the file table of {0}: {1:N0} files in {2:N1} s
 ← 上一项：{0}	← Previous: {0}
 下一项：{0} →	Next: {0} →
 {0} 项所在的文件夹已经在待删清单里，不用再单独放	The folders holding {0} of these are already on the delete list
@@ -15510,6 +15626,7 @@ function Start-Worker([string]$code, $arg) {
     [DirStat]::Cancel = $false; [DupFinder]::Cancel = $false; [DiskMap]::Cancel = $false
     $rs = [runspacefactory]::CreateRunspace(); $rs.ApartmentState = 'STA'; $rs.ThreadOptions = 'ReuseThread'; $rs.Open()
     $rs.SessionStateProxy.SetVariable('sync', $sync)
+    $rs.SessionStateProxy.SetVariable('engineText', $engine)   # 后台里还要再开几个后台一起做事（Start-Parallel）时用
     $ps = [powershell]::Create(); $ps.Runspace = $rs
     $sync.WCall = [DateTime]::UtcNow; $sync.WEngine = $null; $sync.WReady = $null   # 后台开始用了多久（读引擎、查盘的线程数）：排查慢在哪
     $ps.AddScript("param(`$arg)`n" + $engine + "`n`$sync.WEngine = [DateTime]::UtcNow`nInit-DriveThreads`n`$sync.WReady = [DateTime]::UtcNow`n" + $code).AddArgument($arg) | Out-Null
@@ -15797,7 +15914,19 @@ $cat = Get-Catalog; $i = 1; $steps = $cat.Count + 1
 SetP @{ Steps = $steps; Step = 1; StepName = (T '读取 C 盘的文件表') }
 $t0 = $sw.ElapsedMilliseconds; $tree = Get-SysTree; [void]$times.Add(@{ N = 'MFT'; Ms = $sw.ElapsedMilliseconds - $t0 })
 $cat = @($cat | Where-Object { -not $_.Lvl -or [int]$_.Lvl -le [int]$arg.Mode }); $steps = $cat.Count + 1   # 这个模式下不列的不统计（换到更高的模式再扫描就有）
-foreach ($it in $cat) { if (Stopping) { break }; $i++; SetP @{ Steps = $steps; Step = $i; StepName = $it.N; SubKind = 'measure'; SubStart = (Get-Date); Detail = (T '统计大小') }; $t0 = $sw.ElapsedMilliseconds; $sizes[$it.Idx] = Measure-Item $it $tree; [void]$times.Add(@{ N = $it.N; Ms = $sw.ElapsedMilliseconds - $t0 }) }
+# 要问系统、要等几秒的那几项（安装包、驱动包、传递优化、快捷方式）另外开后台同时问，这边接着读文件表、统计别的
+$bg = @{}; foreach ($it in $cat) { if ($it.Bg -and $it.Size) { $bg[[string]$it.Idx] = $it.Size.ToString() } }
+$par = Start-Parallel $bg 4
+foreach ($it in $cat) { if (Stopping) { break }; if ($par.Run.ContainsKey([string]$it.Idx)) { continue }; $i++; SetP @{ Steps = $steps; Step = $i; StepName = $it.N; SubKind = 'measure'; SubStart = (Get-Date); Detail = (T '统计大小') }; $t0 = $sw.ElapsedMilliseconds; $sizes[$it.Idx] = Measure-Item $it $tree; [void]$times.Add(@{ N = $it.N; Ms = $sw.ElapsedMilliseconds - $t0 }) }
+if ($par.Run.Count -gt 0) {
+    SetP @{ Steps = $steps; Step = $steps; StepName = (T '等系统回答安装包、驱动包这几项'); SubKind = 'measure'; SubStart = (Get-Date); Detail = (T '统计大小') }
+    $t0 = $sw.ElapsedMilliseconds; $got = Wait-Parallel $par; [void]$times.Add(@{ N = 'wait for the parallel ones'; Ms = $sw.ElapsedMilliseconds - $t0 })
+    foreach ($it in $cat) {
+        $k = [string]$it.Idx; if (-not $bg.ContainsKey($k) -or (Stopping)) { continue }
+        if ($got.ContainsKey($k)) { $sizes[$it.Idx] = [double]$got[$k].V; [void]$times.Add(@{ N = $it.N + ' (alongside)'; Ms = [double]$got[$k].Ms }) }
+        else { $t0 = $sw.ElapsedMilliseconds; $sizes[$it.Idx] = Measure-Item $it $tree; [void]$times.Add(@{ N = $it.N; Ms = $sw.ElapsedMilliseconds - $t0 }) }
+    }
+}
 $sync.ScanTimes = $times; $sync.ScanMs = $sw.ElapsedMilliseconds; $sync.ScanWalks = $script:walkLog; $script:walkLog = $null; $script:linkMemo = $null
 if (-not (Stopping)) { $sync.Sizes = $sizes }
 '@ @{ Mode = (Get-Mode) }
@@ -18561,7 +18690,11 @@ function Start-CandScan {
     UI-Busy $true
     Start-Worker @'
 $out = New-Object System.Collections.ArrayList
+Start-Phases
+# 系统服务和驱动（WMI）、已装的软件、应用商店里的聊天软件：另外开后台同时读，这边先统计聊天记录这些
+$par = Start-Parallel ([ordered]@{ svc = 'Get-ServicePaths'; apps = 'Get-InstalledApps -NoStore'; store = 'Get-StoreChatApps' }) 3
 $cat = @(Get-Catalog | Where-Object { ($_.Kind -eq 'move' -or $_.Kind -eq 'flex') -and $_.Paths })
+Mark-Phase 'catalog'
 # 上次搬了一半的（目标盘上已经有副本），这次再搬只补差异
 $partial = @{}
 foreach ($root in (All-MoveRoots)) { foreach ($pr in (Read-MoveMapPairs $root)) { $partial[([string]$pr[0]).TrimEnd('\').ToLowerInvariant()] = $true } }
@@ -18569,6 +18702,7 @@ $catKeys = @()
 $steps = $cat.Count + 3; $step = 1
 SetP @{ Steps = $steps; Step = 1; StepName = (T '读取 C 盘的文件表') }
 $tree = Get-SysTree
+Mark-Phase 'MFT'
 foreach ($c in $cat) {
     if (Stopping) { break }
     $step++
@@ -18593,8 +18727,11 @@ foreach ($c in $cat) {
 if (-not $sync.WasCancelled) {
     $step++
     SetP @{ Step = $step; StepName = (T '读取装在 C 盘的软件'); SubKind = 'action'; SubStart = (Get-Date); Detail = (T '读取已安装的软件和系统服务') }
-    $apps = Get-InstalledApps -NoStore
-    $svc = Get-ServicePaths
+    Mark-Phase 'chat and other folders'
+    $got = Wait-Parallel $par
+    Mark-Phase 'wait for services, apps, Store'
+    $apps = if ($got.ContainsKey('apps')) { $got.apps.V } else { Get-InstalledApps -NoStore }
+    $svc = if ($got.ContainsKey('svc')) { $got.svc.V } else { Get-ServicePaths }
     $sd = $env:SystemDrive
     $onC = @($apps | Where-Object { $_.Location -and $_.Location.StartsWith("$sd\", [StringComparison]::OrdinalIgnoreCase) })
     $step++; $n = 0; $seenLoc = @{}
@@ -18618,8 +18755,10 @@ if (-not $sync.WasCancelled) {
         [void]$out.Add(@{ Type = 'app'; Idx = 0; Name = $a.Name; Location = $loc; Paths = @($loc); Bytes = $bytes; Publisher = $a.Publisher; Version = $a.Version
             Block = $why; Partial = $partial.ContainsKey($lk); Measured = $measured })
     }
-    if (-not $sync.WasCancelled) { $sync.CandStore = Get-StoreChatApps }
-}
+    Mark-Phase 'apps on C:'
+    if (-not $sync.WasCancelled) { $sync.CandStore = if ($got.ContainsKey('store')) { @($got.store.V) } else { Get-StoreChatApps } }
+} else { [void](Wait-Parallel $par) }
+End-Phases
 $sync.CandResult = $out
 '@ $null
 }
@@ -21302,7 +21441,26 @@ function Invoke-UiTest {
             $all = @(Get-ChildItem -LiteralPath (Join-Path $env:SystemRoot 'Installer') -File -Force -ErrorAction SilentlyContinue | Where-Object { $_.Extension -match '^\.(msi|msp)$' })
             $o = @(Get-InstallerOrphans)
             if ($all.Count -gt 0 -and $o.Count -ge $all.Count) { throw ("all {0} packages look orphaned; the references were not read" -f $all.Count) }
-            "{0} of {1} packages" -f $o.Count, $all.Count
+            # 一次问完的结果必须和原来在 PowerShell 里一条一条问的完全一样（同样的注册表位置、同样的接口调用）
+            $old = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+            foreach ($root in @('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\*\Products\*\InstallProperties', 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\*\Patches\*',
+                                   'HKLM:\SOFTWARE\Classes\Installer\Patches\*', 'HKCU:\Software\Microsoft\Installer\Patches\*')) {
+                foreach ($p in @(Get-ItemProperty -Path $root -ErrorAction SilentlyContinue)) { $v = [string]$p.LocalPackage; if ($v) { [void]$old.Add((Split-Path $v -Leaf)) } }
+            }
+            $nReg = $old.Count
+            $inst = New-Object -ComObject WindowsInstaller.Installer; $t = $inst.GetType()
+            foreach ($code in @($t.InvokeMember('Products', 'GetProperty', $null, $inst, $null))) {
+                try { $lp = [string]$t.InvokeMember('ProductInfo', 'GetProperty', $null, $inst, @([string]$code, 'LocalPackage')); if ($lp) { [void]$old.Add((Split-Path $lp -Leaf)) } } catch {}
+                foreach ($pa in @(@([string]$code, '', 7, 15), @([string]$code, 's-1-1-0', 3, 15))) {
+                    try { foreach ($pt in @($t.InvokeMember('PatchesEx', 'GetProperty', $null, $inst, $pa))) { try { $lp = [string]$pt.GetType().InvokeMember('PatchProperty', 'GetProperty', $null, $pt, @('LocalPackage')); if ($lp) { [void]$old.Add((Split-Path $lp -Leaf)) } } catch {} } } catch {}
+                }
+            }
+            $new = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+            $r1 = @([InstallerRefs]::FromRegistry()); foreach ($v in $r1) { [void]$new.Add($v) }
+            $nReg2 = $new.Count
+            foreach ($v in @([InstallerRefs]::FromInstaller())) { [void]$new.Add($v) }
+            if (-not $old.SetEquals($new) -or $nReg -ne $nReg2) { throw ("references differ: before {0} (registry {1}), now {2} (registry {3})" -f $old.Count, $nReg, $new.Count, $nReg2) }
+            "{0} of {1} packages; {2} references, the same as asking one by one" -f $o.Count, $all.Count, $new.Count
         }
         & $step 'save space: reserved storage, crash dump, temp folder, OneDrive' {
             Show-Page 'save'; $win.UpdateLayout()
@@ -22029,9 +22187,11 @@ function Invoke-UiTest {
                 $keepMode = Get-Setting 'Mode' 'basic'
                 $tm = {
                     param([string]$name, [scriptblock]$go, [int]$limit)
+                    $sync.PhaseTimes = $null
                     $t = [Diagnostics.Stopwatch]::StartNew(); & $go
                     $ok = & $waitUi { -not $script:worker } $limit
                     $L.Add(("timing {0}: {1:N1} s{2}" -f $name, ($t.ElapsedMilliseconds / 1000), $(if ($ok) { '' } else { ' (did not finish)' })))
+                    if ($sync.PhaseTimes) { $L.Add(('timing     ' + ((@($sync.PhaseTimes) | ForEach-Object { '{0} {1:N0} ms' -f $_.N, [double]$_.Ms }) -join '; '))) }
                 }
                 $wk = {
                     param([string]$label)
@@ -22062,11 +22222,13 @@ function Invoke-UiTest {
                     $th = [Diagnostics.Stopwatch]::StartNew(); Load-Health
                     $hok = & $waitUi { $ctl.BtnHealthRefresh.IsEnabled } 180000
                     $L.Add(("timing system health: {0:N1} s (reported {1}){2}" -f ($th.ElapsedMilliseconds / 1000), $(if ($script:healthData) { $script:healthData.Secs } else { '?' }), $(if ($hok) { '' } else { ' (did not finish)' })))
+                    if ($script:healthData -and $script:healthData.PartMs) { $pm = $script:healthData.PartMs; $L.Add(('timing     ' + ((@($pm.Keys) | Sort-Object { - [double]$pm[$_] } | ForEach-Object { '{0} {1:N0} ms' -f $_, [double]$pm[$_] }) -join '; '))) }
                     # 重复文件：在 Program Files 里找（只找不删）
                     [DupFinder]::Cancel = $false
                     $td = [Diagnostics.Stopwatch]::StartNew()
                     $dg = [DupFinder]::Find([string[]]@($env:ProgramFiles, ${env:ProgramFiles(x86)}), [long]1MB, [long]0, $false, $null, $false, [string[]]@('C:=4'))
                     $L.Add(("timing duplicates in Program Files (1 MB+): {0:N1} s, {1} groups" -f ($td.ElapsedMilliseconds / 1000), @($dg).Count))
+                    $L.Add(("timing     list {0:N1} s ({1:N0} files); quick {2:N1} s ({3:N0} files, {4}); deep {5:N1} s ({6:N0} files, {7})" -f ([DupFinder]::ListMs / 1000), [DupFinder]::FilesSeen, ([DupFinder]::QuickMs / 1000), [DupFinder]::QuickFiles, (Fmt ([double][DupFinder]::QuickBytes)), ([DupFinder]::DeepMs / 1000), [DupFinder]::DeepFiles, (Fmt ([double][DupFinder]::DeepBytes))))
                     $tw = [Diagnostics.Stopwatch]::StartNew(); $wb = [DirStat]::Measure("$env:SystemRoot\System32")
                     $L.Add(("timing walk System32: {0:N1} s, {1}" -f ($tw.ElapsedMilliseconds / 1000), (Fmt $wb)))
                 } finally { Set-Setting 'Mode' $keepMode }
