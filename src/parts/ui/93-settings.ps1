@@ -141,7 +141,13 @@ function Save-CleanList([string]$key, [string[]]$items) {
     Load-CleanLists
     # 清理列表变了：扫描结果作废，下次扫描按新的来
     $script:catalog = Get-Catalog
-    if ($script:rows -and -not $script:worker) { $ctl.Summary.Text = (T '清理列表改了，请重新扫描。') }
+    if ($script:rows -and -not $script:worker) {
+        # 旧的扫描结果作废：行号已经对不上新的清理列表了，留着点「执行」会删错
+        $script:rows = $null; $script:rowSig = @{}; $sync.Sizes = $null
+        $ctl.List.ItemsSource = $null; Update-CleanOverview; UI-Status
+        $ctl.EmptyClean.Visibility = 'Visible'; $ctl.EmptyCleanText.Text = (T '清理列表改了，请重新扫描。')
+        $ctl.Summary.Text = (T '清理列表改了，请重新扫描。')
+    }
 }
 function Add-CleanListFolder([bool]$exclude) {
     $dlg = New-Object System.Windows.Forms.FolderBrowserDialog

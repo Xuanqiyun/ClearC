@@ -177,9 +177,12 @@ function New-MapRow($name, $path, [double]$size, [double]$max, [double]$parent, 
 function Test-ChatPath([string]$path) {
     if ($null -eq $script:chatDirs) {
         $script:chatDirs = New-Object System.Collections.Generic.List[string]
+        foreach ($pat in @('*WhatsAppDesktop*', 'MSTeams*', 'FACEBOOK.317180B0BB486*', '*TelegramDesktop*', '*Signal*', '*LINE*')) {
+            foreach ($d in @(Get-ChildItem -LiteralPath (Join-Path $env:LOCALAPPDATA 'Packages') -Directory -Filter $pat -Force -ErrorAction SilentlyContinue)) { $script:chatDirs.Add($d.FullName.TrimEnd('\')) }
+        }
         foreach ($c in $catalog) {
             if (-not ([string]$c.G).StartsWith('聊天软件') -or -not $c.Paths) { continue }
-            foreach ($p in $c.Paths) { if ($p) { foreach ($it in @(Get-Item -Path $p -Force -ErrorAction SilentlyContinue)) { if ($it.PSIsContainer) { $script:chatDirs.Add($it.FullName.TrimEnd('\')) } } } }
+            foreach ($p in $c.Paths) { if ($p) { foreach ($it in @(Get-PathItems $p)) { if ($it.PSIsContainer) { $script:chatDirs.Add($it.FullName.TrimEnd('\')) } } } }
         }
     }
     $p = $path.TrimEnd('\')
@@ -493,7 +496,7 @@ function Get-MapChatNodes {
         $hit = $false
         foreach ($p in $c.Paths) {
             if (-not $p) { continue }
-            foreach ($it in @(Get-Item -Path $p -Force -ErrorAction SilentlyContinue)) {
+            foreach ($it in @(Get-PathItems $p)) {
                 if (-not $it.PSIsContainer) { continue }
                 $n = [DiskMap]::Find($script:mapRoot, $it.FullName)
                 if ($n -and -not $n.IsLink -and -not $out.Nodes.Contains($n)) { $out.Nodes.Add($n); $hit = $true }
@@ -1416,6 +1419,8 @@ foreach ($x in $arg.Items) {
     if ($why) { [void]$res.Fail.Add(((T "{0}：{1}") -f $p, $why)); continue }
     $msg = ''
     if ($arg.Recycle) {
+        $why = Test-RecycleOk $p $(if ($x.IsDir) { try { [double][FsTools]::OnDiskTree($p) } catch { [double]$x.Size } } else { [double]$x.Size })
+        if ($why) { [void]$res.Fail.Add(((T "{0}：{1}。要删的话选「永久删除」") -f $p, $why)); continue }
         $rc = [FsTools]::Recycle($p, [long]$sync.Hwnd)
         $ok = -not (Test-Path -LiteralPath $p)
         if (-not $ok) { $msg = ((T "没有删掉（代码 {0}，可能文件正被占用，或者在提示里选了取消）") -f $rc) }

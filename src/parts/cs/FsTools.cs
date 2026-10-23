@@ -105,6 +105,22 @@ public static class FsTools {
             return "";
         } catch (Exception ex) { return ex.Message; }
     }
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    static extern bool GetVolumePathNameW(string path, StringBuilder root, int len);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    static extern bool GetVolumeNameForVolumeMountPointW(string mountPoint, StringBuilder name, int len);
+    // 路径所在卷的 GUID（形如 {xxxxxxxx-...}）；读不到返回空
+    public static string VolumeGuid(string path) {
+        if (!Win) return "";
+        try {
+            StringBuilder root = new StringBuilder(1024);
+            if (!GetVolumePathNameW(path, root, root.Capacity)) return "";
+            StringBuilder vn = new StringBuilder(128);
+            if (!GetVolumeNameForVolumeMountPointW(root.ToString(), vn, vn.Capacity)) return "";
+            string s = vn.ToString(); int a = s.IndexOf('{'), b = s.IndexOf('}');
+            return (a >= 0 && b > a) ? s.Substring(a, b - a + 1) : "";
+        } catch { return ""; }
+    }
     // 一批文件、文件夹一起放进回收站（可恢复删除）。太大放不进回收站的由系统弹窗问，不会悄悄永久删除
     public static int RecycleMany(string[] paths) {
         if (paths == null || paths.Length == 0) return 0;

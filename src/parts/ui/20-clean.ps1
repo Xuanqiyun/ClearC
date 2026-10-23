@@ -42,6 +42,7 @@ function Update-CleanMore {
 }
 function Build-Rows($sizes) {
     $col = New-Object 'System.Collections.ObjectModel.ObservableCollection[RowItem]'
+    $script:rowSig = @{}
     $total = [double]0
     $seen = @{}
     $mode = Get-Mode
@@ -50,6 +51,7 @@ function Build-Rows($sizes) {
         if (-not $b) { continue }
         if ($it.Lvl -and [int]$it.Lvl -gt $mode) { continue }   # 这个模式下不列（换到更高的模式再扫描就有）
         $r = New-Object RowItem
+        $script:rowSig[$it.Idx] = Get-ItemSig $it
         $r.Idx = $it.Idx; $r.Group = $it.G; $r.Name = $it.N; $r.Note = $it.Note; $r.Actions = $it.Actions; $r.Action = $it.Def
         # 组名「安全清理（缓存、临时文件……）」拆成标题和说明两行显示
         $gt = T ([string]$it.G)
@@ -223,7 +225,7 @@ function Invoke-RunSelected([string]$title = (T '执行所选操作')) {
     foreach ($r in $script:rows) {
         if ($r.Action -ne (T '跳过')) {
             $b = if ($sync.Sizes) { [double]$sync.Sizes[$r.Idx] } else { 0 }
-            $plan += @{ Idx = $r.Idx; Action = $r.Action; Name = $r.Name; Bytes = [math]::Max([double]0, [double]$b) }
+            $plan += @{ Idx = $r.Idx; Action = $r.Action; Name = $r.Name; Bytes = [math]::Max([double]0, [double]$b); Sig = $(if ($script:rowSig) { [string]$script:rowSig[$r.Idx] } else { '' }) }
         }
     }
     if (-not $plan) { Show-Sheet -Title (T '没有选中任何操作') -Text (T '在列表里把要处理的项目选成「删除」或「搬到其他盘」，再点「执行所选操作」。') | Out-Null; return }
@@ -335,6 +337,13 @@ foreach ($p in $ordered) {
     if (Stopping) { break }
     $si++
     $it = $cat[$p.Idx]
+    # 这一行显示的和后台找到的不是同一项（扫描后改过清理列表）：不动它
+    if (-not $it -or -not $p.Sig -or (Get-ItemSig $it) -ne $p.Sig) {
+        $t = (T '列表在扫描后变了，没有处理，请重新扫描')
+        SetStatus $p.Idx $t 'skip'; Log ("  {0}：{1}" -f $p.Name, $t)
+        [void]$summary.Add(((T "{0} {1}：{2}") -f '·', $p.Name, $t)); $handled[$p.Idx] = $true
+        continue
+    }
     SetP @{ Steps = $ordered.Count; Step = $si; StepName = ("{0} {1}" -f $p.Action, $it.N); StepIdx = $p.Idx; StepNote = $it.Note; MoveItem = $false
             SubKind = 'none'; SubDone = [double]0; SubTotal = [double]$p.Bytes; SubStart = (Get-Date); Detail = '' }
     SetStatus $p.Idx (T '进行中…') 'run'
@@ -402,6 +411,7 @@ function Apply-OneClick {
     foreach ($r in $script:rows) {
         $it = $cat[$r.Idx]
         $want = if ($it.One) { $it.One } else { $it.Def }
+        if (([string]$it.G).StartsWith('需确认') -or $it.Custom) { $want = (T '跳过') }   # 有代价的和自己加的文件夹：一键清理一律不碰
         if ($r.Actions -contains $want) { $r.Action = $want }
     }
 }

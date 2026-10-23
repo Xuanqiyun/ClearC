@@ -2655,6 +2655,22 @@ public static class FsTools {
             return "";
         } catch (Exception ex) { return ex.Message; }
     }
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    static extern bool GetVolumePathNameW(string path, StringBuilder root, int len);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    static extern bool GetVolumeNameForVolumeMountPointW(string mountPoint, StringBuilder name, int len);
+    // 路径所在卷的 GUID（形如 {xxxxxxxx-...}）；读不到返回空
+    public static string VolumeGuid(string path) {
+        if (!Win) return "";
+        try {
+            StringBuilder root = new StringBuilder(1024);
+            if (!GetVolumePathNameW(path, root, root.Capacity)) return "";
+            StringBuilder vn = new StringBuilder(128);
+            if (!GetVolumeNameForVolumeMountPointW(root.ToString(), vn, vn.Capacity)) return "";
+            string s = vn.ToString(); int a = s.IndexOf('{'), b = s.IndexOf('}');
+            return (a >= 0 && b > a) ? s.Substring(a, b - a + 1) : "";
+        } catch { return ""; }
+    }
     // 一批文件、文件夹一起放进回收站（可恢复删除）。太大放不进回收站的由系统弹窗问，不会悄悄永久删除
     public static int RecycleMany(string[] paths) {
         if (paths == null || paths.Length == 0) return 0;
@@ -3218,7 +3234,7 @@ function Test-HasExcluded([string]$dir, $ex) {
 function Get-Size([string[]]$paths, [string]$filter, $tree = $null, $ex = $null) {
     $sum = [double]0
     foreach ($p in $paths) {
-        foreach ($it in (Get-Item -Path $p -Force -ErrorAction SilentlyContinue)) {
+        foreach ($it in (Get-PathItems $p)) {
             if ($ex -and (Test-Excluded $it.FullName $ex)) { continue }
             if ($it.PSIsContainer) {
                 if (IsLink $it.FullName) { continue }
@@ -3325,18 +3341,65 @@ function Remove-OneDir($d) {
     # rd 比 Remove-Item 快很多；rd /s 遇到里面的链接也只拆链接，不会跟进去
     & "$sys32\cmd.exe" /c rd /s /q "\\?\$($d.FullName)" 2>$null | Out-Null
 }
+# 「放进回收站」会不会真的进回收站。网络位置、U 盘、光盘没有回收站；组策略关了回收站；这块盘的回收站设成了
+# 「直接删除」；这一项比这块盘的回收站还大。这几种情况系统会改成永久删除，弹不弹提示要看调用方式（后台批量调用时不一定弹），
+# 所以先在这里判断：判断不行就不删，绝不让「放进回收站」悄悄变成永久删除。返回空表示可以
+function Get-RecycleVerdict([double]$bytes, [string]$driveType, [bool]$policyOff, [int]$nuke, [double]$maxMB, [double]$volBytes) {
+    if ($driveType -ne 'Fixed') { return (T '这个位置没有回收站（网络位置、U 盘或光盘），放进回收站会变成永久删除') }
+    if ($policyOff) { return (T '组策略关掉了回收站，放进回收站会变成永久删除') }
+    if ($nuke -eq 1) { return (T '这块盘的回收站设成了「不移到回收站，直接删除」') }
+    $cap = if ($maxMB -ge 0) { $maxMB * 1MB } elseif ($volBytes -gt 0) { $volBytes * 0.05 } else { [double]-1 }   # 没设过时 Windows 默认大约是盘的 5%
+    if ($cap -ge 0 -and $bytes -gt $cap * 0.9) { return ((T '比这块盘的回收站容量（{0}）还大，放进回收站会变成永久删除') -f (GB $cap)) }
+    return ''
+}
+$script:recycleInfo = @{}
+function Test-RecycleOk([string]$path, [double]$bytes) {
+    if (-not $path) { return (T '路径为空') }
+    $p = $path
+    if ($p.StartsWith('\\?\UNC\', [StringComparison]::OrdinalIgnoreCase) -or ($p.StartsWith('\\') -and -not $p.StartsWith('\\?\'))) { return (T '这个位置没有回收站（网络位置、U 盘或光盘），放进回收站会变成永久删除') }
+    if ($p.StartsWith('\\?\')) { $p = $p.Substring(4) }
+    if ($p.Length -lt 3 -or $p[1] -ne ':') { return (T '这个位置没有回收站（网络位置、U 盘或光盘），放进回收站会变成永久删除') }
+    $root = $p.Substring(0, 3); $k = $root.ToUpperInvariant()
+    if (-not $script:recycleInfo.ContainsKey($k)) {
+        $dt = 'Unknown'; $vb = [double]0
+        try { $di = New-Object System.IO.DriveInfo $root; $dt = [string]$di.DriveType; $vb = [double]$di.TotalSize } catch {}
+        $pol = $false
+        foreach ($h in 'HKCU:', 'HKLM:') { try { if ([int](Get-ItemProperty "$h\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" -ErrorAction Stop).NoRecycleFiles -eq 1) { $pol = $true } } catch {} }
+        $nuke = 0; $max = [double]-1
+        $g = [FsTools]::VolumeGuid($root)
+        if ($g) {
+            try {
+                $v = Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\BitBucket\Volume\$g" -ErrorAction Stop
+                if ($null -ne $v.NukeOnDelete) { $nuke = [int]$v.NukeOnDelete }
+                if ($null -ne $v.MaxCapacity) { $max = [double]$v.MaxCapacity }
+            } catch {}
+        }
+        $script:recycleInfo[$k] = @{ Type = $dt; Vol = $vb; Pol = $pol; Nuke = $nuke; Max = $max }
+    }
+    $x = $script:recycleInfo[$k]
+    return Get-RecycleVerdict $bytes $x.Type $x.Pol $x.Nuke $x.Max $x.Vol
+}
+function Get-ItemBytes($it) { if ($it.PSIsContainer) { try { [double][FsTools]::OnDiskTree($it.FullName) } catch { [double]0 } } else { [double]$it.Length } }
 # 可恢复删除（设置里打开）：手动清理时先放进回收站，而不是直接删掉；攒成一批交给系统，比一个个放快
 $script:recycleNow = $false
+$script:recycleRefused = 0
 $script:recycleBatch = $null
 function Recycle-Flush {
     if (-not $script:recycleBatch -or $script:recycleBatch.Count -eq 0) { return }
     $arr = $script:recycleBatch.ToArray(); $script:recycleBatch.Clear()
     $r = [FsTools]::RecycleMany($arr)
-    if ($r -ne 0) { Log ((T "  有 {0} 项没能放进回收站（错误 {1}）") -f $arr.Count, $r) }
+    $left = @($arr | Where-Object { Test-Path -LiteralPath $_ }).Count
+    if ($r -ne 0 -or $left -gt 0) { Log ((T "  有 {0} 项没能放进回收站（错误 {1}），这些没有删") -f $left, $r) }
 }
 function Remove-Path($it) {
     if ($script:autoMinAge -and $it.LastWriteTime -gt $script:autoMinAge) { return }
     if ($script:recycleNow) {
+        $why = Test-RecycleOk $it.FullName (Get-ItemBytes $it)
+        if ($why) {
+            $script:recycleRefused++
+            if ($script:recycleRefused -le 20) { Log ((T "  没删（{0}）：{1}") -f $why, $it.FullName) }
+            return
+        }
         if (-not $script:recycleBatch) { $script:recycleBatch = New-Object System.Collections.Generic.List[string] }
         $script:recycleBatch.Add($it.FullName)
         if ($script:recycleBatch.Count -ge 500) { Recycle-Flush }
@@ -3379,9 +3442,10 @@ function Remove-Contents2([string[]]$paths, [string]$filter, [bool]$wholeDir) {
     $skipEx = { param($x) Log ((T "  跳过（在设置里排除了）：{0}") -f $x); OpLog '删除' (T '跳过：在设置里排除了') $x '' }
     foreach ($p in $paths) {
         if (Stopping) { return }
-        foreach ($it in (Get-Item -Path $p -Force -ErrorAction SilentlyContinue)) {
+        foreach ($it in (Get-PathItems $p)) {
             if (Stopping) { return }
             if (Test-Personal $it.FullName) { Log ((T "  跳过（在个人文件夹里，不删）：{0}") -f $($it.FullName)); OpLog '删除' (T '跳过：在个人文件夹里，不删') $it.FullName ''; continue }
+            if ($it.PSIsContainer -and ($it.Attributes -band [IO.FileAttributes]::ReparsePoint)) { Log ((T "  跳过（是链接，不跟进去删）：{0}") -f $($it.FullName)); continue }
             if (Test-Excluded $it.FullName $ex) { & $skipEx $it.FullName; continue }
             if ($it.PSIsContainer) {
                 if ($wholeDir) { if (Test-HasExcluded $it.FullName $ex) { & $skipEx $it.FullName } else { Remove-Path $it } }
@@ -3442,7 +3506,7 @@ $script:cacheLib = @(
     '系统临时文件 | %SYSTEMROOT%\Temp | 系统和安装程序的临时文件'
     'Windows 更新下载缓存 | %SYSTEMROOT%\SoftwareDistribution\Download | 已装完的更新安装包，下次更新会重新下载需要的部分 | svc=wuauserv,bits careful'
     '系统升级残留目录 | %SYSTEMDRIVE%\$WINDOWS.~BT;%SYSTEMDRIVE%\$WINDOWS.~WS;%SYSTEMDRIVE%\$GetCurrent | 大版本升级留下的临时目录 | whole'
-    '磁盘检查残留 (found.000) | %SYSTEMDRIVE%\found.* | 磁盘检查（chkdsk）修复时从损坏的文件里抢救出来的碎片，一般都没用 | whole'
+    '磁盘检查残留 (found.000) | %SYSTEMDRIVE%\found.??? | 磁盘检查（chkdsk）修复时从损坏的文件里抢救出来的碎片，一般都没用；偶尔能从里面找回丢失的文件，删之前可以先打开看看 | whole confirm'
     '崩溃转储与错误报告 | %SYSTEMROOT%\Minidump;%SYSTEMROOT%\MEMORY.DMP;%SYSTEMROOT%\LiveKernelReports;%PROGRAMDATA%\Microsoft\Windows\WER;%LOCALAPPDATA%\Microsoft\Windows\WER;%LOCALAPPDATA%\CrashDumps | 蓝屏、驱动出错（显卡驱动重置等）和程序崩溃时留下的调试文件，只对排查问题的工程师有用'
     '系统组件日志 | %SYSTEMROOT%\Logs\CBS | Windows 更新的安装日志 | filter=*.log'
     'Windows 更新日志 | %SYSTEMROOT%\Logs\WindowsUpdate;%PROGRAMDATA%\USOShared\Logs | Windows 更新的跟踪日志（.etl）'
@@ -3499,6 +3563,13 @@ function Get-SteamPath {
     try { $p = [string](Get-ItemProperty 'HKCU:\Software\Valve\Steam' -EA SilentlyContinue).SteamPath; if ($p) { return $p.Replace('/', '\').TrimEnd('\') } } catch {}
     return ''
 }
+# 按路径拿到文件或文件夹。只有路径里有 * 或 ? 才当通配符；[ ] 和 ` 都当普通字符（PowerShell 默认把 [ ] 当字符集，
+# 用户名是 a[1] 时 C:\Users\a[1]\... 会匹配到 C:\Users\a1\...，也就是别的账户的文件）
+function Get-PathItems([string]$p) {
+    if (-not $p) { return @() }
+    if ($p.IndexOfAny([char[]]'*?') -lt 0) { return @(Get-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue) }
+    return @(Get-Item -Path ($p -replace '([\[\]`])', '`$1') -Force -ErrorAction SilentlyContinue)
+}
 function Expand-LibPath([string]$p) {
     $p = $p.Trim()
     if ($p.StartsWith('@chromium:')) {
@@ -3510,7 +3581,10 @@ function Expand-LibPath([string]$p) {
     }
     $i = $p.IndexOf('%STEAM%', [StringComparison]::OrdinalIgnoreCase)
     if ($i -ge 0) { $s = Get-SteamPath; if (-not $s) { return ,@() }; $p = $p.Substring(0, $i) + $s + $p.Substring($i + 7) }
-    return ,@([Environment]::ExpandEnvironmentVariables($p))
+    $x = [Environment]::ExpandEnvironmentVariables($p)
+    # R3 TEMP 被改到了不像临时文件夹的地方（比如 D:\Work）：不把它当临时文件夹清
+    if ($p -match '(?i)%TE?MP%' -and $x -notmatch '%' -and (Split-Path $x.TrimEnd('\') -Leaf) -notmatch '(?i)te?mp') { return ,@() }
+    return ,@($x)
 }
 function Get-CacheLibrary {
     $out = @()
@@ -4071,6 +4145,8 @@ function Compare-ProcSample($prev, $cur, $base, [int]$threads) {
     return $rows
 }
 
+# 一项的指纹：名字加全部路径。清理页的一行和后台按编号找到的那一项必须是同一个东西（清理列表改过后编号会挪位）
+function Get-ItemSig($it) { if (-not $it) { return '' }; return ('{0}|{1}' -f $it.N, (@($it.Paths) -join ';')) }
 # Kind: cache = 缓存类(删除/跳过)   action = 操作类(执行/跳过)   move = 只能搬(搬到其他盘/跳过)   flex = 可搬可删
 function Get-Catalog {
     $docs = [Environment]::GetFolderPath('MyDocuments')
@@ -4194,17 +4270,23 @@ $script:autoMinAge = $null
 function Invoke-Delete($it, $res, [switch]$Auto) {
     $f0 = FreeC
     $script:recycleNow = (-not $Auto) -and ((Get-Setting 'Recycle' '0') -eq '1') -and -not $it.Act
+    $script:recycleRefused = 0
     $script:autoMinAge = if ($Auto) { (Get-Date).AddDays(-1) } else { $null }   # 自动清理：一天内写过的临时文件可能还在用，不碰
     $kind = if ($it.Slow) { 'slow' } elseif ($it.Act) { 'action' } else { 'delete' }
     SetP @{ SubKind = $kind; SubStart = (Get-Date); FreeC0 = [double]$f0; Detail = $it.Note }
     if ($it.Svc) { $it.Svc | ForEach-Object { Stop-Service $_ -Force -ErrorAction SilentlyContinue } }
     if ($it.Act) { Set-CanCancel $false; try { & $it.Act } finally { Set-CanCancel $true } }
     else {
-        Remove-Contents $it.Paths $it.Filter ([bool]$it.Whole)
+        $paths = @($it.Paths)
+        if ($it.Custom) {
+            $paths = @($paths | Where-Object { $why = Get-DeleteBlock $_; if (-not $why -and (IsLink $_)) { $why = (T '是链接') }; if ($why) { Log ((T "  跳过（{0}）：{1}") -f $why, $_) }; -not $why })
+        }
+        Remove-Contents $paths $it.Filter ([bool]$it.Whole)
         if ($res -and $sync -and $sync.WasCancelled) { $res.Cancelled = $true }
     }
     if ($it.Svc) { $it.Svc | ForEach-Object { Start-Service $_ -ErrorAction SilentlyContinue } }
     if ($script:recycleNow) { $script:recycledThisRun = $true }
+    if ($script:recycleRefused -gt 20) { Log ((T "  另有 {0} 项因为放不进回收站没有删") -f ($script:recycleRefused - 20)) }
     $script:autoMinAge = $null
     $freed = [math]::Max([double]0, [double]((FreeC) - $f0))
     if ($res) { $res.Freed = $freed }
@@ -4223,7 +4305,7 @@ function Get-DeletePreview($items, [int]$limit = 20000) {
     foreach ($it in $items) {
         if ($it.Act -or -not $it.Paths) { continue }
         foreach ($p in $it.Paths) {
-            foreach ($x in @(Get-Item -Path $p -Force -ErrorAction SilentlyContinue)) {
+            foreach ($x in @(Get-PathItems $p)) {
                 if ($n -ge $limit) { break }
                 if ((Test-Personal $x.FullName) -or (Test-Excluded $x.FullName $ex)) { continue }
                 if ($x.PSIsContainer -and -not $it.Whole) {
@@ -4759,6 +4841,19 @@ function All-MoveRoots {
     foreach ($x in ((Get-Setting 'MoveRoots' '') -split '\|')) { if ($x -and (Test-Path -LiteralPath $x) -and ($r -notcontains $x)) { $r += $x } }
     return ,$r
 }
+# 搬回 C 盘以后，目标盘上的那份能不能删：只有本工具搬过去的（在 CDriveMoved 这类搬家目标文件夹里）、
+# 而且没有别的 C 盘位置还链接着它，才删。用户自己建的链接指向的文件夹（比如 E:\WeChat）一律留着
+function Test-OurMoveCopy([string]$src, [string]$dst) {
+    $d = $dst.TrimEnd('\', '/')
+    $sep = [IO.Path]::DirectorySeparatorChar
+    $under = $false
+    foreach ($r in (All-MoveRoots)) { $rr = ([string]$r).TrimEnd('\', '/'); if ($d.StartsWith($rr + $sep, [StringComparison]::OrdinalIgnoreCase)) { $under = $true; break } }
+    if (-not $under) { return $false }
+    foreach ($rec in (Get-MoveRecords)) {
+        if ([string]$rec.Src -ine $src -and ([string]$rec.Dst).TrimEnd('\', '/') -ieq $d -and (IsLink ([string]$rec.Src))) { return $false }
+    }
+    return $true
+}
 function Get-MoveRecords {
     $recs = New-Object System.Collections.ArrayList
     $seen = @{}
@@ -4867,10 +4962,15 @@ function Invoke-MoveBack($rec, $res) {
         foreach ($root in (All-MoveRoots)) { Remove-MoveMapEntry $root $src }
         $script:movedTargets = $null; SetP @{ MovePhase = 'done' }; return
     }
-    SetP @{ MovePhase = 'cleanup'; SubKind = 'action'; SubStart = (Get-Date); Detail = (T '删除目标盘上的那份') }
-    & "$sys32\cmd.exe" /c rd /s /q "\\?\$dst" 2>$null | Out-Null
-    if (Test-Path -LiteralPath $dst) { $res.Msg = ((T "已搬回，但目标盘上的旧副本没删干净：{0}") -f $dst) }
-    else { OpLog '删除' (T '搬回后删除目标盘上的旧副本') $dst (GB $bytes) }
+    if (-not (Test-OurMoveCopy $src $dst)) {
+        $res.Msg = ((T "已搬回 C 盘。{0} 不是本工具搬过去的（或者还有别的地方链接着它），没有删；确认不需要的话可以自己删") -f $dst)
+        OpLog '搬运' (T '搬回后保留目标盘上的文件夹') $dst $res.Msg
+    } else {
+        SetP @{ MovePhase = 'cleanup'; SubKind = 'action'; SubStart = (Get-Date); Detail = (T '删除目标盘上的那份') }
+        & "$sys32\cmd.exe" /c rd /s /q "\\?\$dst" 2>$null | Out-Null
+        if (Test-Path -LiteralPath $dst) { $res.Msg = ((T "已搬回，但目标盘上的旧副本没删干净：{0}") -f $dst) }
+        else { OpLog '删除' (T '搬回后删除目标盘上的旧副本') $dst (GB $bytes) }
+    }
     foreach ($root in (All-MoveRoots)) { Remove-MoveMapEntry $root $src }
     $script:movedTargets = $null
     $res.Ok = $true; $res.Bytes = $bytes
@@ -5108,7 +5208,9 @@ function Get-VDisks {
             Note = (T 'Docker 的镜像和容器都在里面。先在 Docker 里删掉不用的镜像（docker system prune），再压缩。换位置在 Docker Desktop 设置 → Resources → Disk image location') }) }
     }
     foreach ($vh in @(Get-ChildItem "$env:SystemDrive\ProgramData\Microsoft\Windows\Virtual Hard Disks" -Filter '*.vhd*' -File -ErrorAction SilentlyContinue)) {
-        [void]$out.Add(@{ Name = ((T "Hyper-V 虚拟磁盘：{0}") -f $($vh.Name)); Path = $vh.FullName; Kind = 'hyperv'; Compact = $true; Move = $false; Note = (T '压缩前要先关掉用它的虚拟机') })
+        $ck = Test-HasCheckpoint $vh.FullName
+        [void]$out.Add(@{ Name = ((T "Hyper-V 虚拟磁盘：{0}") -f $($vh.Name)); Path = $vh.FullName; Kind = 'hyperv'; Compact = (-not $ck); Move = $false
+            Note = $(if ($ck) { (T '这块磁盘有检查点（.avhdx），压缩它会让检查点失效，所以不能在这里压缩。先在 Hyper-V 里删除或合并检查点') } else { (T '压缩前要先关掉用它的虚拟机') }) })
     }
     foreach ($d in @(@("$env:USERPROFILE\.android\avd", (T '安卓模拟器（Android Studio）'), (T 'Android 模拟器的系统镜像和数据')),
                      @("$env:USERPROFILE\VirtualBox VMs", (T 'VirtualBox 虚拟机'), (T 'VirtualBox 的虚拟机和虚拟磁盘')),
@@ -5134,9 +5236,16 @@ function Invoke-WslMove([string]$distro, [string]$dest, $res) {
     if ($LASTEXITCODE -eq 0) { $res.Ok = $true }
     elseif ($o -match '(?i)--move|manage|unknown|无效|未知|不正确') { $res.Old = $true }
 }
+# 虚拟磁盘有没有检查点 / 差分盘挂在它下面（Hyper-V 把 名字_GUID.avhdx 放在同一个文件夹里）
+function Test-HasCheckpoint([string]$path) {
+    if ([IO.Path]::GetExtension($path) -match '(?i)^\.avhdx?$') { return $true }
+    $dir = Split-Path $path -Parent; $base = [IO.Path]::GetFileNameWithoutExtension($path)
+    return (@(Get-ChildItem -LiteralPath $dir -File -Force -ErrorAction SilentlyContinue | Where-Object { $_.Extension -match '(?i)^\.avhdx?$' -and $_.BaseName.StartsWith($base, [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0)
+}
 function Invoke-CompactVdisk([string]$path, [string]$kind, $res) {
     $res.Ok = $false
     $before = [double](Get-Item -LiteralPath $path -Force).Length
+    if (Test-HasCheckpoint $path) { $res.Before = $before; $res.After = $before; $res.Out = (T '这块磁盘有检查点（.avhdx），压缩它会让检查点失效，没有压缩'); return }
     if ($kind -eq 'wsl' -or $kind -eq 'docker') {
         SetP @{ Detail = (T '先关掉 WSL（wsl --shutdown），虚拟磁盘不在使用中才能压缩') }
         & "$sys32\wsl.exe" --shutdown 2>$null | Out-Null
@@ -5701,6 +5810,27 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+磁盘检查（chkdsk）修复时从损坏的文件里抢救出来的碎片，一般都没用；偶尔能从里面找回丢失的文件，删之前可以先打开看看	Fragments that a disk check (chkdsk) recovered from damaged files. Usually useless; occasionally a lost file can be recovered from them, so take a look before deleting
+已搬回 C 盘。{0} 不是本工具搬过去的（或者还有别的地方链接着它），没有删；确认不需要的话可以自己删	Moved back to C:. {0} was not moved there by ClearC (or another location still links to it), so it was not deleted; delete it yourself if you no longer need it
+搬回后保留目标盘上的文件夹	Kept the folder on the target drive after moving back
+  跳过（是链接，不跟进去删）：{0}	  skipped (it is a link; not followed): {0}
+是链接	it is a link
+  跳过（{0}）：{1}	  skipped ({0}): {1}
+这块磁盘有检查点（.avhdx），压缩它会让检查点失效，所以不能在这里压缩。先在 Hyper-V 里删除或合并检查点	This disk has checkpoints (.avhdx); compacting it would invalidate them, so it can't be compacted here. Delete or merge the checkpoints in Hyper-V first
+这块磁盘有检查点（.avhdx），压缩它会让检查点失效，没有压缩	This disk has checkpoints (.avhdx); compacting it would invalidate them, so it was not compacted
+没有删	Not deleted
+{0}\n\n{1}。这个文件夹只能放进回收站，所以没有删。	{0}\n\n{1}. This folder can only go to the Recycle Bin, so it was not deleted.
+这个位置没有回收站（网络位置、U 盘或光盘），放进回收站会变成永久删除	This location has no Recycle Bin (network location, USB stick or disc); "move to Recycle Bin" would delete permanently
+组策略关掉了回收站，放进回收站会变成永久删除	The Recycle Bin is turned off by policy; "move to Recycle Bin" would delete permanently
+这块盘的回收站设成了「不移到回收站，直接删除」	The Recycle Bin of this drive is set to "Don't move files to the Recycle Bin, remove files immediately"
+比这块盘的回收站容量（{0}）还大，放进回收站会变成永久删除	Larger than the Recycle Bin of this drive ({0}); "move to Recycle Bin" would delete permanently
+  有 {0} 项没能放进回收站（错误 {1}），这些没有删	  {0} items could not be moved to the Recycle Bin (error {1}); they were not deleted
+  没删（{0}）：{1}	  not deleted ({0}): {1}
+  另有 {0} 项因为放不进回收站没有删	  {0} more items were not deleted because they could not go to the Recycle Bin
+列表在扫描后变了，没有处理，请重新扫描	The list changed after the scan; not processed. Please scan again
+没有删：{0}	Not deleted: {0}
+{0}：{1}。要删的话选「永久删除」	{0}: {1}. To delete it, choose "Delete permanently"
+软件残留：没删（{0}）	App leftovers: not deleted ({0})
   C:\\Windows.old 本身是链接，不删	  C:\\Windows.old is itself a link; not deleted
   先拆掉了 Windows.old 里的 {0} 个链接（它们指向现在系统的文件夹，不能跟进去删）	  Removed {0} links inside Windows.old first (they point at folders of the current system and must not be followed)
   这一轮刚把文件放进回收站，不清空回收站（下次再清）	  Files were just moved to the Recycle Bin in this run, so it is not emptied (next time)
@@ -12973,6 +13103,7 @@ function Update-CleanMore {
 }
 function Build-Rows($sizes) {
     $col = New-Object 'System.Collections.ObjectModel.ObservableCollection[RowItem]'
+    $script:rowSig = @{}
     $total = [double]0
     $seen = @{}
     $mode = Get-Mode
@@ -12981,6 +13112,7 @@ function Build-Rows($sizes) {
         if (-not $b) { continue }
         if ($it.Lvl -and [int]$it.Lvl -gt $mode) { continue }   # 这个模式下不列（换到更高的模式再扫描就有）
         $r = New-Object RowItem
+        $script:rowSig[$it.Idx] = Get-ItemSig $it
         $r.Idx = $it.Idx; $r.Group = $it.G; $r.Name = $it.N; $r.Note = $it.Note; $r.Actions = $it.Actions; $r.Action = $it.Def
         # 组名「安全清理（缓存、临时文件……）」拆成标题和说明两行显示
         $gt = T ([string]$it.G)
@@ -13154,7 +13286,7 @@ function Invoke-RunSelected([string]$title = (T '执行所选操作')) {
     foreach ($r in $script:rows) {
         if ($r.Action -ne (T '跳过')) {
             $b = if ($sync.Sizes) { [double]$sync.Sizes[$r.Idx] } else { 0 }
-            $plan += @{ Idx = $r.Idx; Action = $r.Action; Name = $r.Name; Bytes = [math]::Max([double]0, [double]$b) }
+            $plan += @{ Idx = $r.Idx; Action = $r.Action; Name = $r.Name; Bytes = [math]::Max([double]0, [double]$b); Sig = $(if ($script:rowSig) { [string]$script:rowSig[$r.Idx] } else { '' }) }
         }
     }
     if (-not $plan) { Show-Sheet -Title (T '没有选中任何操作') -Text (T '在列表里把要处理的项目选成「删除」或「搬到其他盘」，再点「执行所选操作」。') | Out-Null; return }
@@ -13266,6 +13398,13 @@ foreach ($p in $ordered) {
     if (Stopping) { break }
     $si++
     $it = $cat[$p.Idx]
+    # 这一行显示的和后台找到的不是同一项（扫描后改过清理列表）：不动它
+    if (-not $it -or -not $p.Sig -or (Get-ItemSig $it) -ne $p.Sig) {
+        $t = (T '列表在扫描后变了，没有处理，请重新扫描')
+        SetStatus $p.Idx $t 'skip'; Log ("  {0}：{1}" -f $p.Name, $t)
+        [void]$summary.Add(((T "{0} {1}：{2}") -f '·', $p.Name, $t)); $handled[$p.Idx] = $true
+        continue
+    }
     SetP @{ Steps = $ordered.Count; Step = $si; StepName = ("{0} {1}" -f $p.Action, $it.N); StepIdx = $p.Idx; StepNote = $it.Note; MoveItem = $false
             SubKind = 'none'; SubDone = [double]0; SubTotal = [double]$p.Bytes; SubStart = (Get-Date); Detail = '' }
     SetStatus $p.Idx (T '进行中…') 'run'
@@ -13333,6 +13472,7 @@ function Apply-OneClick {
     foreach ($r in $script:rows) {
         $it = $cat[$r.Idx]
         $want = if ($it.One) { $it.One } else { $it.Def }
+        if (([string]$it.G).StartsWith('需确认') -or $it.Custom) { $want = (T '跳过') }   # 有代价的和自己加的文件夹：一键清理一律不碰
         if ($r.Actions -contains $want) { $r.Action = $want }
     }
 }
@@ -13910,6 +14050,8 @@ foreach ($p in $arg.Plan) {
     try {
         if ($fi.Attributes -band [IO.FileAttributes]::ReadOnly) { $fi.Attributes = $fi.Attributes -bxor [IO.FileAttributes]::ReadOnly }
         if ($arg.Recycle) {
+            $why = Test-RecycleOk $p.Path ([double]$p.Size)
+            if ($why) { throw ((T "没有删：{0}") -f $why) }
             $rc = [FsTools]::Recycle($p.Path, [long]$sync.Hwnd)
             if (Test-Path -LiteralPath $p.Path) { throw ((T "没能放进回收站（代码 {0}）：可能回收站放不下或被禁用，这个文件没有删") -f $rc) }
         } else {
@@ -14123,9 +14265,12 @@ function New-MapRow($name, $path, [double]$size, [double]$max, [double]$parent, 
 function Test-ChatPath([string]$path) {
     if ($null -eq $script:chatDirs) {
         $script:chatDirs = New-Object System.Collections.Generic.List[string]
+        foreach ($pat in @('*WhatsAppDesktop*', 'MSTeams*', 'FACEBOOK.317180B0BB486*', '*TelegramDesktop*', '*Signal*', '*LINE*')) {
+            foreach ($d in @(Get-ChildItem -LiteralPath (Join-Path $env:LOCALAPPDATA 'Packages') -Directory -Filter $pat -Force -ErrorAction SilentlyContinue)) { $script:chatDirs.Add($d.FullName.TrimEnd('\')) }
+        }
         foreach ($c in $catalog) {
             if (-not ([string]$c.G).StartsWith('聊天软件') -or -not $c.Paths) { continue }
-            foreach ($p in $c.Paths) { if ($p) { foreach ($it in @(Get-Item -Path $p -Force -ErrorAction SilentlyContinue)) { if ($it.PSIsContainer) { $script:chatDirs.Add($it.FullName.TrimEnd('\')) } } } }
+            foreach ($p in $c.Paths) { if ($p) { foreach ($it in @(Get-PathItems $p)) { if ($it.PSIsContainer) { $script:chatDirs.Add($it.FullName.TrimEnd('\')) } } } }
         }
     }
     $p = $path.TrimEnd('\')
@@ -14439,7 +14584,7 @@ function Get-MapChatNodes {
         $hit = $false
         foreach ($p in $c.Paths) {
             if (-not $p) { continue }
-            foreach ($it in @(Get-Item -Path $p -Force -ErrorAction SilentlyContinue)) {
+            foreach ($it in @(Get-PathItems $p)) {
                 if (-not $it.PSIsContainer) { continue }
                 $n = [DiskMap]::Find($script:mapRoot, $it.FullName)
                 if ($n -and -not $n.IsLink -and -not $out.Nodes.Contains($n)) { $out.Nodes.Add($n); $hit = $true }
@@ -15362,6 +15507,8 @@ foreach ($x in $arg.Items) {
     if ($why) { [void]$res.Fail.Add(((T "{0}：{1}") -f $p, $why)); continue }
     $msg = ''
     if ($arg.Recycle) {
+        $why = Test-RecycleOk $p $(if ($x.IsDir) { try { [double][FsTools]::OnDiskTree($p) } catch { [double]$x.Size } } else { [double]$x.Size })
+        if ($why) { [void]$res.Fail.Add(((T "{0}：{1}。要删的话选「永久删除」") -f $p, $why)); continue }
         $rc = [FsTools]::Recycle($p, [long]$sync.Hwnd)
         $ok = -not (Test-Path -LiteralPath $p)
         if (-not $ok) { $msg = ((T "没有删掉（代码 {0}，可能文件正被占用，或者在提示里选了取消）") -f $rc) }
@@ -16577,6 +16724,8 @@ foreach ($x in $arg.Items) {
     $i++
     SetP @{ Steps = $arg.Items.Count; Step = $i; StepName = $x.Path; SubKind = 'none' }
     if (Get-DeleteBlock $x.Path -Leftover) { continue }
+    $why = Test-RecycleOk $x.Path ([double]$x.Bytes)
+    if ($why) { OpLog '删除' ((T "软件残留：没删（{0}）") -f $why) $x.Path ''; Log ((T "  没删（{0}）：{1}") -f $why, $x.Path); continue }
     [void][FsTools]::Recycle($x.Path, [long]$sync.Hwnd)
     $ok = -not (Test-Path -LiteralPath $x.Path)
     if ($ok) { $n++ }
@@ -16722,6 +16871,8 @@ $ctl.StartList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::Click
             -Confirm (T '我看过了，这是已卸载软件留下的，删除不会给我带来损失。') -Buttons @((T '先不删'), (T '移到回收站')) -Primary (T '移到回收站') -Cancel (T '先不删')
         if ($ans -ne (T '移到回收站')) { return }
         if (Get-DeleteBlock $r.Detail -Leftover) { Show-Sheet -Kind warn -Title (T '不能删') -Text (Get-DeleteBlock $r.Detail -Leftover) | Out-Null; return }
+        $why = Test-RecycleOk $r.Detail ([double][FsTools]::OnDiskTree($r.Detail))
+        if ($why) { Show-Sheet -Kind warn -Title (T '没有删') -Text ((T "{0}`n`n{1}。这个文件夹只能放进回收站，所以没有删。") -f $r.Detail, $why) | Out-Null; return }
         [void][FsTools]::Recycle($r.Detail, [long]$sync.Hwnd)
         $gone = -not (Test-Path -LiteralPath $r.Detail)
         OpLog '删除' (T '残留文件夹：移到回收站') $r.Detail $(if ($gone) { $r.Size } else { (T '没删掉，可能被占用') })
@@ -17330,7 +17481,13 @@ function Save-CleanList([string]$key, [string[]]$items) {
     Load-CleanLists
     # 清理列表变了：扫描结果作废，下次扫描按新的来
     $script:catalog = Get-Catalog
-    if ($script:rows -and -not $script:worker) { $ctl.Summary.Text = (T '清理列表改了，请重新扫描。') }
+    if ($script:rows -and -not $script:worker) {
+        # 旧的扫描结果作废：行号已经对不上新的清理列表了，留着点「执行」会删错
+        $script:rows = $null; $script:rowSig = @{}; $sync.Sizes = $null
+        $ctl.List.ItemsSource = $null; Update-CleanOverview; UI-Status
+        $ctl.EmptyClean.Visibility = 'Visible'; $ctl.EmptyCleanText.Text = (T '清理列表改了，请重新扫描。')
+        $ctl.Summary.Text = (T '清理列表改了，请重新扫描。')
+    }
 }
 function Add-CleanListFolder([bool]$exclude) {
     $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
@@ -17526,6 +17683,29 @@ function Invoke-UiTest {
             Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue
             & $click $ctl.BtnCleanCustom; $win.UpdateLayout()
             if ($ctl.PageSettings.Visibility -ne 'Visible') { throw 'link did not open Settings' }
+        }
+        & $step 'editing the cleanup list voids the old scan; one-click skips risky items' {
+            $d1 = Join-Path $script:appDir 'uitest-c1'; $d2 = Join-Path $script:appDir 'uitest-c2'
+            New-Item -ItemType Directory -Force -Path $d1, $d2 | Out-Null
+            foreach ($d in $d1, $d2) { [IO.File]::WriteAllBytes((Join-Path $d 'x.tmp'), (New-Object byte[] 4096)) }
+            try {
+                Save-CleanList 'CustomClean' @($d1, $d2)
+                $sizes = @{}; foreach ($c in $catalog) { $sizes[$c.Idx] = [double]1MB }
+                $sync.Sizes = $sizes; Build-Rows $sizes
+                if (-not $script:rows -or $script:rows.Count -lt 3) { throw 'no rows' }
+                Apply-OneClick
+                $bad = @($script:rows | Where-Object { $_.Action -ne (T '跳过') -and (([string]$_.Group).StartsWith('需确认') -or ([string]$_.Group).StartsWith('自定义')) })
+                if ($bad.Count) { throw ("one-click picked: {0}" -f (($bad | ForEach-Object { $_.Name }) -join ', ')) }
+                if (@($script:rows | Where-Object { $_.Action -eq (T '删除') -and ([string]$_.Group).StartsWith('安全清理') }).Count -lt 3) { throw 'one-click picked no safe items' }
+                foreach ($r in $script:rows) { $it = @($catalog | Where-Object { $_.Idx -eq $r.Idx })[0]; if ((Get-ItemSig $it) -ne $script:rowSig[$r.Idx]) { throw ("fingerprint mismatch: {0}" -f $r.Name) } }
+                Save-CleanList 'CustomClean' @($d2)
+                if ($script:rows -or $sync.Sizes) { throw 'old scan rows still usable after the list changed' }
+                Invoke-RunSelected
+                if ($script:worker) { throw 'a run started without a fresh scan' }
+            } finally {
+                Save-CleanList 'CustomClean' @(); $sync.Sizes = $null; $script:rows = $null; $ctl.List.ItemsSource = $null
+                Remove-Item -LiteralPath $d1, $d2 -Recurse -Force -ErrorAction SilentlyContinue
+            }
         }
         & $step 'reminders: junk limit and cleanup day' {
             Show-Page 'auto'; $win.UpdateLayout()
