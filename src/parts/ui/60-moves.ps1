@@ -127,6 +127,7 @@ if (-not $sync.WasCancelled) {
     Mark-Phase 'chat and other folders'
     $got = Wait-Parallel $par
     Mark-Phase 'wait for services, apps, Store'
+    if ($script:phList) { foreach ($k in @($got.Keys)) { [void]$script:phList.Add(@{ N = "$k (alongside)"; Ms = [double]$got[$k].Ms }) } }
     $apps = if ($got.ContainsKey('apps')) { $got.apps.V } else { Get-InstalledApps -NoStore }
     $svc = if ($got.ContainsKey('svc')) { $got.svc.V } else { Get-ServicePaths }
     $sd = $env:SystemDrive
