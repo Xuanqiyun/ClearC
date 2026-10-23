@@ -187,6 +187,8 @@ $ctl.BtnDestBrowse.Add_Click({
     if ($path.Length -lt 2 -or $path.Substring(0, 2) -ieq $env:SystemDrive) { Show-Sheet -Kind warn -Title (T '请选 C 盘以外的位置') -Text (T '搬到 C 盘自己身上腾不出空间。') | Out-Null; return }
     if ((DriveTypeOf ($path.Substring(0, 2))) -ne 'Fixed') { Show-Sheet -Kind warn -Title (T '只能选本机硬盘') -Text (T '网络盘、网盘和 U 盘不能做链接目标，拔掉或断网后软件会找不到数据。') | Out-Null; return }
     if ($path.Length -le 2) { $path = $path.Substring(0, 2) + '\CDriveMoved' }   # 选了整个盘（E:\），就在盘下建 CDriveMoved
+    $risky = @(@(Get-CustomClean) + @($env:TEMP, $env:TMP, "$env:SystemRoot\Temp") | Where-Object { $_ } | ForEach-Object { [Environment]::ExpandEnvironmentVariables([string]$_).TrimEnd('\') })
+    foreach ($r in $risky) { if ($path -ieq $r -or $path.StartsWith($r + '\', [StringComparison]::OrdinalIgnoreCase)) { Show-Sheet -Kind warn -Title (T '这里不能放搬过去的数据') -Text ((T "{0} 在 {1} 里面。那是清理列表里的文件夹或临时文件夹，清理时会被清空，搬过去的数据会一起被删。请换一个位置。") -f $path, $r) | Out-Null; return } }
     $script:customDest = $path
     Fill-DestChoices $path
 })
@@ -261,7 +263,11 @@ function Invoke-RunSelected([string]$title = (T '执行所选操作')) {
         if ($careful.Count -gt 0) { $text += (T "`n其中 {0} 项是「谨慎清理」（{1}）：删了要重新下载或重新生成，第一次打开会慢一点。不想清的，在列表里改成「跳过」。") -f $careful.Count, (@($careful | ForEach-Object { $_.Name }) -join (T '、')) }
         $conf = @($dels | Where-Object { ([string]$cat0[$_.Idx].G).StartsWith('需确认') })
         if ($conf.Count -gt 0) { $text += (T "`n其中 {0} 项是「需确认」的高风险项目（{1}），请再看一遍说明。") -f $conf.Count, (@($conf | ForEach-Object { $_.Name }) -join (T '、')) }
-        if ((Get-Setting 'Recycle' '0') -eq '1') { $text += (T "`n按设置，这次删除的文件会先放进回收站，可以从回收站恢复。") }
+        if ((Get-Setting 'Recycle' '0') -eq '1') {
+            $text += (T "`n按设置，这次删除的文件会先放进回收站，可以从回收站恢复。")
+            $acts = @($dels | Where-Object { $cat0[$_.Idx].Act })
+            if ($acts.Count -gt 0) { $text += (T "`n但其中 {0} 项（{1}）由系统命令处理，不能放进回收站，会直接删除。") -f $acts.Count, (@($acts | ForEach-Object { $_.Name }) -join (T '、')) }
+        }
         $ack = (T '我已确认要删除的内容不再需要，删除不会给我带来损失；因删除造成的后果由我自己承担。')
     }
     $kind = if ($dels) { 'warn' } else { 'info' }

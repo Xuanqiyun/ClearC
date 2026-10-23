@@ -379,10 +379,17 @@ foreach ($b in @($ctl.BtnDumpSmall, $ctl.BtnDumpAuto)) {
 $ctl.BtnTmpMove.Add_Click({
     $d = [string]$ctl.SaveTmpDrive.SelectedItem.Tag
     if (-not $d) { return }
-    $p = "$d\Temp"
+    $p = "$d\CleanC-Temp"
+    if ((Test-Path -LiteralPath $p) -and -not (Test-Path -LiteralPath (Join-Path $p '.cleanc-temp')) -and @(Get-ChildItem -LiteralPath $p -Force -ErrorAction SilentlyContinue | Select-Object -First 1).Count -gt 0) {
+        Show-Sheet -Kind warn -Title (T '这个文件夹里已经有东西了') -Text ((T "{0} 已经存在，里面有文件，不是本工具建的。临时文件夹会被定期清空，为了不删到你的文件，不用它。换一块盘，或者把这个文件夹改个名字再试。") -f $p) | Out-Null; return
+    }
     $ans = Show-Sheet -Kind warn -Title ((T "把临时文件夹改到 {0}？") -f $p) -Text ((T "当前用户的 TEMP 和 TMP 会指向 {0}。以后新打开的程序把临时文件放在那里，注销再登录（或重启）后对所有程序生效。{1} 必须是一直插着的本机硬盘；个别安装程序对 C 盘以外的临时文件夹不兼容，遇到就点「恢复默认」。") -f $p, $d) -Buttons @((T '取消'), (T '改到这块盘')) -Primary (T '改到这块盘') -Cancel (T '取消')
     if ($ans -ne (T '改到这块盘')) { return }
-    try { New-Item -ItemType Directory -Path $p -Force | Out-Null; Set-UserTemp $p } catch { Show-Sheet -Kind warn -Title (T '没改成') -Text $_.Exception.Message | Out-Null; return }
+    try {
+        New-Item -ItemType Directory -Path $p -Force | Out-Null
+        $mk = Join-Path $p '.cleanc-temp'; [IO.File]::WriteAllText($mk, (T '腾挪 ClearC 建的临时文件夹：有这个文件，清理时才会把它当临时文件夹清。')); try { (Get-Item -LiteralPath $mk -Force).Attributes = 'Hidden' } catch {}
+        Set-UserTemp $p
+    } catch { Show-Sheet -Kind warn -Title (T '没改成') -Text $_.Exception.Message | Out-Null; return }
     OpLog '系统设置' (T '临时文件夹位置') $p ''
     Load-Save
 })

@@ -21,7 +21,9 @@ $T = Join-Path ([IO.Path]::GetTempPath()) ('clearc-safety-' + [guid]::NewGuid().
 New-Item -ItemType Directory -Force -Path $T | Out-Null
 $script:appDir = Join-Path $T 'appdir'; $script:settingsFile = Join-Path $script:appDir 'settings.txt'; $script:opLogDir = Join-Path $script:appDir 'log'
 $savedProfile = $env:USERPROFILE
-try {
+try { & {
+    # 测试里某条检查的表达式自己抛了异常，也算失败，不能悄悄跳过（trap 只管这一段，引擎加载不受影响）
+    trap { "FAIL error in the test script: $($_.Exception.Message) (line $($_.InvocationInfo.ScriptLineNumber))"; $script:fails++; continue }
     Init-DriveThreads
     # ============ 1. 个人文件夹里的东西不删 ============
     # 用一个假的用户目录：Desktop / Documents / Downloads 里放文件，照着清理的办法删，一个都不能少
@@ -196,8 +198,10 @@ try {
     # TEMP 被改到 D:\Work 这类地方：不当临时文件夹清
     if ([Environment]::ExpandEnvironmentVariables('%TEMP%') -ne '%TEMP%') {
         $savedTemp = $env:TEMP
-        try { $env:TEMP = Join-Path $T 'Work'; $w = @(Expand-LibPath '%TEMP%'); $env:TEMP = Join-Path $T 'Temp'; $t2 = @(Expand-LibPath '%TEMP%') } finally { $env:TEMP = $savedTemp }
-        Check 'a TEMP that points at a non-temp folder (like D:\Work) is not emptied' ($w.Count -eq 0 -and $t2.Count -eq 1)
+        # Expand-LibPath 用 ,@() 返回一组路径：直接赋值拿到的就是那一组（外面再包 @() 会多一层）
+        $mt = Join-Path $T 'Temp'; New-Item -ItemType Directory -Force -Path $mt | Out-Null; [IO.File]::WriteAllText((Join-Path $mt '.cleanc-temp'), 'x')   # 本工具建的临时文件夹有这个标记
+        try { $env:TEMP = Join-Path $T 'Work'; $w = Expand-LibPath '%TEMP%'; $env:TEMP = $mt; $t2 = Expand-LibPath '%TEMP%' } finally { $env:TEMP = $savedTemp }
+        Check ("a TEMP that points at a non-temp folder (like D:\Work) is not emptied ({0} / {1})" -f @($w).Count, @($t2).Count) (@($w).Count -eq 0 -and @($t2).Count -eq 1 -and ([string]@($t2)[0]) -like '*Temp')
     } else { "skip TEMP expansion test (no %VAR% expansion here)" }
     # 清理的路径本身是链接：不跟进去
     $lt = Join-Path $T 'lt-target'; New-Item -ItemType Directory -Force -Path $lt | Out-Null; [IO.File]::WriteAllText((Join-Path $lt 'p.txt'), 'keep')
@@ -242,6 +246,94 @@ try {
         $ppaths = @($pitems | ForEach-Object { $_.Path })
         Check ("similar photos: overlapping and linked roots list each photo once ({0})" -f $ppaths.Count) ($ppaths.Count -eq 2 -and @($ppaths | Select-Object -Unique).Count -eq 2)
     } else { Skip 'similar photo root dedup' }
+    # ============ 7e. 审计第三轮（独立审查找到的） ============
+    # 聊天数据：在里面的、把它包在里面的都不能删；重复文件里不管个人文件夹开关
+    $savedChat = $script:chatDataPaths
+    $script:chatDataPaths = @('C:\Users\me\AppData\Roaming\Tencent', 'D:\CDriveMoved\xwechat_files', 'C:\Users\me\AppData\Local\LINE\Data')
+    try {
+        Check 'chat data: inside a chat folder is blocked' ([bool](Test-ChatData 'C:\Users\me\AppData\Roaming\Tencent\WeChat\x.db'))
+        Check 'chat data: a folder that contains chat data is blocked (deleting Local\LINE)' ([bool](Test-ChatData 'C:\Users\me\AppData\Local\LINE'))
+        Check 'chat data: the moved copy on another drive is blocked' ([bool](Test-ChatData 'D:\CDriveMoved\xwechat_files\a.jpg'))
+        Check 'chat data: a sibling folder is not' (-not (Test-ChatData 'C:\Users\me\AppData\Roaming\TencentMeeting') -and -not (Test-ChatData 'C:\Users\me\AppData\Local\LINEUpdater'))
+        Check 'duplicates: chat data stays blocked even with the personal-folder switch off' ([bool](Get-DupBlock 'C:\Users\me\AppData\Roaming\Tencent\a.jpg' $true))
+        Check 'duplicates: an ordinary personal file is left to the switch' (-not (Get-DupBlock 'C:\Users\me\Pictures\a.jpg' $true))
+    } finally { $script:chatDataPaths = $savedChat }
+    Check 'Get-DeleteBlock ends with the chat-data check' ($engineText -match '(?s)\$chat = Test-ChatData \$full\s*\r?\n\s*if \(\$chat\) \{ return \$chat \}\s*\r?\n\s*return ''''\s*\r?\n\}')
+    Check 'duplicate delete, merge and archive workers all ask Get-DupBlock' (([regex]::Matches($src, '\$why = Get-DupBlock \$p\.Path \(Test-Personal \$p\.Path\)')).Count -eq 3)
+    Check 'duplicate rows that are blocked can never be ticked' ($src -match '\$r\.CanDelete = -not \$r\.Blocked -and -not \(\$protectOn -and \$r\.Protected\)' -and $src -match '\$r\.CanDelete = -not \$r\.Blocked -and -not \(\$on -and \$r\.Protected\)')
+    Check 'duplicates: the kept copy must be unchanged since the scan (delete and merge)' ($src -match 'KeepTicks\.ContainsKey' -and $src -match '\$p\.KeepMtime -and \$ki\.LastWriteTime\.Ticks -ne')
+    # 清理：路径经过一个链接（上级被搬走了）就不碰，也不算大小
+    $mvT = Join-Path $T 'moved-discord'; New-Item -ItemType Directory -Force -Path (Join-Path $mvT 'Cache') | Out-Null
+    [IO.File]::WriteAllText((Join-Path $mvT 'Cache/f_0001'), ('x' * 4000))
+    $apd = Join-Path $T 'roaming'; New-Item -ItemType Directory -Force -Path $apd | Out-Null
+    $dl = Join-Path $apd 'discord'
+    if ($win) { New-Item -ItemType Junction -Path $dl -Target $mvT | Out-Null } else { New-Item -ItemType SymbolicLink -Path $dl -Target $mvT | Out-Null }
+    $cachePath = Join-Path $dl 'Cache'
+    Check ("a cache path under a moved (linked) folder measures 0 ({0})" -f (Get-Size @($cachePath) '')) ((Get-Size @($cachePath) '') -eq 0)
+    Remove-Contents @($cachePath) '' $false
+    Check 'cleanup does not follow a moved parent folder: the moved cache is untouched' (Test-Path (Join-Path $mvT 'Cache/f_0001'))
+    Check 'the delete preview does not list it either' (@(Get-DeletePreview @(@{ N = 't'; Paths = @($cachePath) }) 100).Count -eq 0)
+    # 临时文件夹：只有 Windows 默认的、系统的、本工具建的（有标记）才当临时文件夹清
+    $defTemp = Join-Path $env:USERPROFILE (Join-Path 'AppData' (Join-Path 'Local' 'Temp'))
+    $userTemp = Join-Path $T 'Temp'; New-Item -ItemType Directory -Force -Path $userTemp | Out-Null
+    $okDefault = Test-TempOk $defTemp; $okUser = Test-TempOk $userTemp
+    [IO.File]::WriteAllText((Join-Path $userTemp '.cleanc-temp'), 'x'); $okMarked = Test-TempOk $userTemp
+    Check ("TEMP: the Windows default is cleaned, a D:\Temp of the user is not, a ClearC-made one is ({0}/{1}/{2})" -f $okDefault, $okUser, $okMarked) ($okDefault -and -not $okUser -and $okMarked)
+    Check 'moving the temp folder uses a dedicated CleanC-Temp with a marker and refuses an existing non-empty one' ($src -match '\$p = "\$d\\CleanC-Temp"' -and $src -match "Join-Path \`$p '\.cleanc-temp'" -and $src -match '这个文件夹里已经有东西了')
+    # cmd 会展开 %名字%：带 % 的路径不交给 cmd
+    Check 'paths with % or quotes are never handed to cmd' (-not (Test-CmdPathOk 'C:\x\%USERNAME%') -and -not (Test-CmdPathOk 'C:\x\a"b') -and (Test-CmdPathOk 'C:\x\cache'))
+    $rdLines = @($src -split "`r?`n" | Where-Object { $_ -match 'rd /s /q' -and $_ -notmatch '^\s*#' })
+    $rdGuarded = @($rdLines | Where-Object { $_ -match 'Test-CmdPathOk|IsDir\) \{ & ' })
+    Check ("every rd /s call is guarded against % paths ({0} of {1})" -f $rdGuarded.Count, $rdLines.Count) ($engineText -match '(?s)function Remove-OneDir\(\$d\) \{\s*\r?\n\s*if \(-not \(Test-CmdPathOk \$d\.FullName\)\)' -and $src -match 'if \(\$x\.IsDir -and -not \(Test-CmdPathOk \$p\)\)' -and ([regex]::Matches($engineText, 'Test-CmdPathOk \$(bak|dst|tmp)')).Count -ge 4)
+    # 不用会跟进链接的 Remove-Item -Recurse（界面自测删它自己建的临时文件夹除外）
+    $progLines = @(($engineText + "`n" + ($src -replace '(?s)function Invoke-UiTest.*', '')) -split "`r?`n" | Where-Object { $_ -notmatch '^\s*#' -and $_ -match 'Remove-Item\b.*-Recurse' })
+    Check ("no Remove-Item -Recurse in program code ({0})" -f ($progLines -join ' | ')) ($progLines.Count -eq 0)
+    # 搬家
+    Check 'a reused or dropped copy must have zero files that C: lacks (no 5% tolerance any more)' (([regex]::Matches($engineText, 'if \(\$extra -ne 0\) \{')).Count -eq 2 -and $engineText -notmatch 'Max\(20, \$(haveFiles|nf) \* 0\.05\)')
+    Check 'robocopy mismatches (exit bit 4) stop the move' ($engineText -match '\(\$rc\.Code -band 4\) -ne 0')
+    Check 'move-back refuses when the link on C: no longer points at the recorded copy' ($engineText -match '\$lt = LinkTarget \$src' -and $engineText -match '和记录里的')
+    Check 'deleting a leftover copy refuses when another link still uses it' ($engineText -match '(?s)function Invoke-DropCopy.*?Get-MoveRecords.*?IsLink \(\[string\]\$r\.Src\)')
+    Check 'repairing a broken link never picks a folder another link is using' ($engineText -match '(?s)\$taken = @\(Get-MovedTargets\).*?别的链接正指着它')
+    Check 'the move destination can not be inside a cleanup-list folder or a temp folder' ($src -match '这里不能放搬过去的数据')
+    # 中途停了的搬家：找得到
+    $hs = Join-Path $T 'halfsrc'; New-Item -ItemType Directory -Force -Path ($hs + '.moved_backup') | Out-Null
+    $hr = Join-Path $T 'HalfRoot'; New-Item -ItemType Directory -Force -Path $hr | Out-Null
+    Save-MoveMap $hr $hs (Join-Path $hr 'halfsrc')
+    Set-Setting 'MoveRoots' $hr
+    try { $half = @(Find-HalfMoves) } finally { Set-Setting 'MoveRoots' '' }
+    Check ("an interrupted move (folder left as *.moved_backup) is found at startup ({0})" -f $half.Count) (@($half | Where-Object { $_.Bak -like '*halfsrc.moved_backup' }).Count -eq 1 -and $src -match 'Show-HalfMoves; return')
+    # Windows.old、Installer、失效快捷方式、回收站说明
+    Check 'Windows.old: takeown skips symbolic links, icacls works on links themselves, links are removed again after taking ownership' ($engineText -match 'takeown\.exe" /F \$p /R /A /D Y /SKIPSL' -and $engineText -match 'icacls\.exe" \$p /grant Administrators:F /T /C /L /Q' -and $engineText -match '\$more = Remove-LinksInside \$p')
+    Check 'Installer orphans: nothing is judged when the Windows Installer query fails or the registry has no packages' ($engineText -match 'catch \{ return @\(\) \}   # 接口读不了' -and $engineText -match 'if \(\$fromReg -eq 0\) \{ return @\(\) \}')
+    Check 'broken shortcuts: a target inside a moved (linked) folder is not counted' ($engineText -match 'if \(Get-LinkedAncestor \$t\) \{ continue \}')
+    Check 'with the Recycle Bin on, the confirm text names the items that are deleted permanently' ($src -match '由系统命令处理，不能放进回收站，会直接删除')
+    # 自动清理：文件夹按里面最近一次写入算；SameFile 读不到时当成同一个；subst 盘不当查找位置
+    Check 'auto cleanup judges a folder by its newest file' ($engineText -match '\[FsTools\]::NewestWrite\(\$it\.FullName\)')
+    if ($win) {
+        $nw = Join-Path $T 'nw'; New-Item -ItemType Directory -Force -Path (Join-Path $nw 'old\deep'), (Join-Path $nw 'stale') | Out-Null
+        [IO.File]::WriteAllText((Join-Path $nw 'old\deep\fresh.tmp'), 'x'); [IO.File]::WriteAllText((Join-Path $nw 'stale\x.tmp'), 'x')
+        $past = (Get-Date).AddDays(-3)
+        foreach ($p in @((Join-Path $nw 'stale\x.tmp'), (Join-Path $nw 'stale'), (Join-Path $nw 'old\deep'), (Join-Path $nw 'old'))) { (Get-Item -LiteralPath $p -Force).LastWriteTime = $past }
+        $script:autoMinAge = (Get-Date).AddDays(-1)
+        try { Remove-Contents @($nw) '' $false } finally { $script:autoMinAge = $null }
+        Check 'auto cleanup keeps an old-looking folder with a fresh file deep inside, and removes a fully stale one' ((Test-Path (Join-Path $nw 'old\deep\fresh.tmp')) -and -not (Test-Path (Join-Path $nw 'stale')))
+        Check 'SameFile: a path that can not be read counts as the same file (so nothing is deleted)' ([FsTools]::SameFile($f1, (Join-Path $T 'no-such-file.bin')))
+        $lk = [IO.File]::Open($f2, 'Open', 'Read', 'None')
+        try { Check 'SameFile works on a file another program holds exclusively' (-not [FsTools]::SameFile($f1, $f2)) } finally { $lk.Close() }
+        $free = @(68..90 | ForEach-Object { [string][char]$_ + ':' } | Where-Object { -not (Test-Path ($_ + '\')) }) | Select-Object -Last 1
+        if ($free) {
+            & subst.exe $free $T 2>$null | Out-Null
+            try { Check ("subst drive {0} is recognized and not used as a duplicates root" -f $free) ([FsTools]::IsSubst($free) -and -not [FsTools]::IsSubst($env:SystemDrive)) } finally { & subst.exe $free /D 2>$null | Out-Null }
+        } else { Skip 'subst drive test (no free letter)' }
+        # 带 % 的文件夹：不交给 cmd，同一层同名的别的文件夹也不会被删
+        $pc = Join-Path $T 'pct'; [void][IO.Directory]::CreateDirectory((Join-Path $pc '%USERNAME%')); [void][IO.Directory]::CreateDirectory((Join-Path $pc $env:USERNAME))
+        [IO.File]::WriteAllText((Join-Path (Join-Path $pc $env:USERNAME) 'keep.txt'), 'keep')
+        Remove-OneDir (Get-Item -LiteralPath (Join-Path $pc '%USERNAME%') -Force)
+        Check 'a folder literally named %USERNAME% is not handed to cmd, and the folder named after the user survives' ((Test-Path -LiteralPath (Join-Path $pc '%USERNAME%')) -and (Test-Path -LiteralPath (Join-Path (Join-Path $pc $env:USERNAME) 'keep.txt')))
+    } else { Skip 'auto cleanup newest-write, SameFile fail-closed, subst drives, % paths' }
+    # OneDrive「仅在线」：OneDrive 自己的文件（云端类型的重解析点）要处理，真正的链接不碰
+    Check 'cloud reparse tags (OneDrive) are told apart from links' ([FsTools]::IsCloudTag([Convert]::ToUInt32('9000001A', 16)) -and [FsTools]::IsCloudTag([Convert]::ToUInt32('9000101A', 16)) -and -not [FsTools]::IsCloudTag([Convert]::ToUInt32('A0000003', 16)) -and -not [FsTools]::IsCloudTag([Convert]::ToUInt32('A000000C', 16)))
+    if ($win) { Check 'a junction reports the mount-point reparse tag, so OneDrive online-only leaves it alone' (([FsTools]::ReparseTag($dl) -eq [Convert]::ToUInt32('A0000003', 16))) }
     # ============ 8. 源码锁：改坏了就报 ============
     Check 'recycle bin: SHFileOperation asks when a file is too big instead of nuking it (ALLOWUNDO|NOCONFIRMATION|WANTNUKEWARNING)' (([regex]::Matches($dupCode, '0x40 \| 0x10 \| 0x4000')).Count -ge 2)
     Check 'restore points are never deleted (no vssadmin delete / Win32_ShadowCopy.Delete / Remove-ComputerRestorePoint)' ($src -notmatch '(?i)vssadmin\s+delete|Remove-ComputerRestorePoint|Disable-ComputerRestore|ShadowCopy[^\r\n]*\.Delete\(')
@@ -257,7 +349,7 @@ try {
     Check 'moves verify the copy before replacing the original (robocopy/compare step present)' ($engineText -match '(?i)robocopy' -and $engineText -match '(?i)Compare-Copy|Verify-Copy|核对|对不上')
     Check 'every delete path in the UI goes through a confirmation sheet with the risk acknowledgement' (([regex]::Matches($src, '因删除造成的后果由我自己承担')).Count -ge 2)
     Check 'auto cleanup task is registered from exactly one place (the Reminders page switch), never at startup' (([regex]::Matches($src, 'Register-CleanTask \$script:taskClean')).Count -eq 1 -and $src -notmatch 'Enable-AutoTask \$true[^\r\n]*#.*启动')
-} finally {
+} } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue
 }

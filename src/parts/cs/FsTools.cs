@@ -76,17 +76,75 @@ public static class FsTools {
     struct BY_HANDLE_FILE_INFORMATION { public uint FileAttributes; public long CreationTime, LastAccessTime, LastWriteTime; public uint VolumeSerialNumber, FileSizeHigh, FileSizeLow, NumberOfLinks, FileIndexHigh, FileIndexLow; }
     [DllImport("kernel32.dll", SetLastError = true)]
     static extern bool GetFileInformationByHandle(Microsoft.Win32.SafeHandles.SafeFileHandle h, out BY_HANDLE_FILE_INFORMATION info);
-    // 两个路径是不是同一个文件（同一块卷、同一个文件记录）：硬链接的两个名字、经过目录链接的两条路径都算同一个。读不到就当不是
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    static extern Microsoft.Win32.SafeHandles.SafeFileHandle CreateFileW(string name, uint access, uint share, IntPtr sa, uint disposition, uint flags, IntPtr template);
+    static bool FileId(string p, out BY_HANDLE_FILE_INFORMATION info) {
+        info = new BY_HANDLE_FILE_INFORMATION();
+        // 不要读写权限（只看属性），别的程序独占打开着也能看；BACKUP_SEMANTICS 让文件夹也能打开
+        using (Microsoft.Win32.SafeHandles.SafeFileHandle h = CreateFileW("\\\\?\\" + p, 0, 7, IntPtr.Zero, 3, 0x02000000, IntPtr.Zero)) {
+            if (h.IsInvalid) return false;
+            return GetFileInformationByHandle(h, out info);
+        }
+    }
+    // 两个路径是不是同一个文件（同一块卷、同一个文件记录）：硬链接的两个名字、经过目录链接的两条路径都算同一个。
+    // 读不到就当是同一个：调用的地方都是「是同一个就不删」，宁可不删
     public static bool SameFile(string a, string b) {
-        if (!Win) { try { return new FileInfo(a).FullName == new FileInfo(b).FullName; } catch { return false; } }
+        if (!Win) { try { return new FileInfo(a).FullName == new FileInfo(b).FullName; } catch { return true; } }
         try {
             BY_HANDLE_FILE_INFORMATION x, y;
-            using (FileStream fa = new FileStream(a, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
-            using (FileStream fb = new FileStream(b, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete)) {
-                if (!GetFileInformationByHandle(fa.SafeFileHandle, out x) || !GetFileInformationByHandle(fb.SafeFileHandle, out y)) return false;
-            }
+            if (!FileId(a, out x) || !FileId(b, out y)) return true;
             return x.VolumeSerialNumber == y.VolumeSerialNumber && x.FileIndexHigh == y.FileIndexHigh && x.FileIndexLow == y.FileIndexLow;
-        } catch { return false; }
+        } catch { return true; }
+    }
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    static extern uint QueryDosDeviceW(string device, StringBuilder target, int max);
+    // 盘符是不是用 subst 映射出来的（其实是另一块盘上的一个文件夹）：拿来查重复文件会把同一个文件当成两份
+    public static bool IsSubst(string drive) {
+        if (!Win || string.IsNullOrEmpty(drive)) return false;
+        try { StringBuilder sb = new StringBuilder(1024); if (QueryDosDeviceW(drive.Substring(0, 2), sb, sb.Capacity) == 0) return false; return sb.ToString().StartsWith("\\??\\"); } catch { return false; }
+    }
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    static extern uint GetLongPathNameW(string shortPath, StringBuilder longPath, int len);
+    // 8.3 短路径换成长路径（路径不存在就原样返回）
+    public static string LongPath(string p) {
+        if (!Win || string.IsNullOrEmpty(p)) return p;
+        try { StringBuilder sb = new StringBuilder(1024); uint n = GetLongPathNameW(p, sb, sb.Capacity); return (n > 0 && n < sb.Capacity) ? sb.ToString() : p; } catch { return p; }
+    }
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    struct WIN32_FIND_DATAW {
+        public uint dwFileAttributes; public uint ftC1, ftC2, ftA1, ftA2, ftW1, ftW2; public uint nFileSizeHigh, nFileSizeLow, dwReserved0, dwReserved1;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string cFileName;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 14)] public string cAlternateFileName;
+    }
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern IntPtr FindFirstFileW(string name, out WIN32_FIND_DATAW data);
+    [DllImport("kernel32.dll")] static extern bool FindClose(IntPtr h);
+    // 重解析点的类型（没有重解析点返回 0）：目录联接 0xA0000003、符号链接 0xA000000C、OneDrive 这类云端文件 0x9000xx1A
+    public static uint ReparseTag(string path) {
+        if (!Win || string.IsNullOrEmpty(path)) return 0;
+        WIN32_FIND_DATAW d;
+        IntPtr h = FindFirstFileW("\\\\?\\" + path, out d);
+        if (h == new IntPtr(-1)) return 0;
+        FindClose(h);
+        return (d.dwFileAttributes & 0x400) != 0 ? d.dwReserved0 : 0;
+    }
+    public static bool IsCloudTag(uint tag) { return (tag & 0xFFFF0FFF) == 0x9000001A; }
+    // 文件夹里（含子文件夹，不进链接）最近一次写入的时间；最多看 200000 项
+    public static DateTime NewestWrite(string dir) {
+        DateTime best = DateTime.MinValue; int n = 0;
+        Stack<string> st = new Stack<string>(); st.Push(dir);
+        while (st.Count > 0 && n < 200000) {
+            string d = st.Pop();
+            try {
+                DirectoryInfo di = new DirectoryInfo(d);
+                if (di.LastWriteTime > best) best = di.LastWriteTime;
+                foreach (FileSystemInfo x in di.EnumerateFileSystemInfos()) {
+                    n++;
+                    if (x.LastWriteTime > best) best = x.LastWriteTime;
+                    if ((x.Attributes & FileAttributes.Directory) != 0 && (x.Attributes & FileAttributes.ReparsePoint) == 0) st.Push(x.FullName);
+                }
+            } catch { }
+        }
+        return best;
     }
     public static string MergeHardLink(string keep, string dup) {
         try {

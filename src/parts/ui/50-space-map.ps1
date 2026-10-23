@@ -1425,6 +1425,7 @@ foreach ($x in $arg.Items) {
         $ok = -not (Test-Path -LiteralPath $p)
         if (-not $ok) { $msg = ((T "没有删掉（代码 {0}，可能文件正被占用，或者在提示里选了取消）") -f $rc) }
     } else {
+        if ($x.IsDir -and -not (Test-CmdPathOk $p)) { [void]$res.Fail.Add(((T "{0}：{1}") -f $p, (T '路径里有 % 或引号，为了不删错地方不交给系统命令'))); continue }
         if ($x.IsDir) { & "$sys32\cmd.exe" /c rd /s /q "\\?\$p" 2>$null | Out-Null } else { Remove-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue }
         $ok = -not (Test-Path -LiteralPath $p)
         if (-not $ok) { $msg = (T '没删干净，可能有文件正被占用') }

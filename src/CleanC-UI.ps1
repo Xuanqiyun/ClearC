@@ -103,6 +103,7 @@ public class DupRow : INotifyPropertyChanged {
     public bool HasRisk { get; set; }
     string _type; public string TypeBrush { get { return Theme.F(_type); } set { _type = value; } }
     public bool Protected { get; set; }          // 在 C 盘个人文件夹里
+    public bool Blocked { get; set; }            // 系统位置、软件文件夹、搬家后的数据、聊天记录：怎么都不能删（不受个人文件夹开关影响）
     private bool _can = true;
     public bool CanDelete {
         get { return _can; }
@@ -2626,17 +2627,75 @@ public static class FsTools {
     struct BY_HANDLE_FILE_INFORMATION { public uint FileAttributes; public long CreationTime, LastAccessTime, LastWriteTime; public uint VolumeSerialNumber, FileSizeHigh, FileSizeLow, NumberOfLinks, FileIndexHigh, FileIndexLow; }
     [DllImport("kernel32.dll", SetLastError = true)]
     static extern bool GetFileInformationByHandle(Microsoft.Win32.SafeHandles.SafeFileHandle h, out BY_HANDLE_FILE_INFORMATION info);
-    // 两个路径是不是同一个文件（同一块卷、同一个文件记录）：硬链接的两个名字、经过目录链接的两条路径都算同一个。读不到就当不是
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    static extern Microsoft.Win32.SafeHandles.SafeFileHandle CreateFileW(string name, uint access, uint share, IntPtr sa, uint disposition, uint flags, IntPtr template);
+    static bool FileId(string p, out BY_HANDLE_FILE_INFORMATION info) {
+        info = new BY_HANDLE_FILE_INFORMATION();
+        // 不要读写权限（只看属性），别的程序独占打开着也能看；BACKUP_SEMANTICS 让文件夹也能打开
+        using (Microsoft.Win32.SafeHandles.SafeFileHandle h = CreateFileW("\\\\?\\" + p, 0, 7, IntPtr.Zero, 3, 0x02000000, IntPtr.Zero)) {
+            if (h.IsInvalid) return false;
+            return GetFileInformationByHandle(h, out info);
+        }
+    }
+    // 两个路径是不是同一个文件（同一块卷、同一个文件记录）：硬链接的两个名字、经过目录链接的两条路径都算同一个。
+    // 读不到就当是同一个：调用的地方都是「是同一个就不删」，宁可不删
     public static bool SameFile(string a, string b) {
-        if (!Win) { try { return new FileInfo(a).FullName == new FileInfo(b).FullName; } catch { return false; } }
+        if (!Win) { try { return new FileInfo(a).FullName == new FileInfo(b).FullName; } catch { return true; } }
         try {
             BY_HANDLE_FILE_INFORMATION x, y;
-            using (FileStream fa = new FileStream(a, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
-            using (FileStream fb = new FileStream(b, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete)) {
-                if (!GetFileInformationByHandle(fa.SafeFileHandle, out x) || !GetFileInformationByHandle(fb.SafeFileHandle, out y)) return false;
-            }
+            if (!FileId(a, out x) || !FileId(b, out y)) return true;
             return x.VolumeSerialNumber == y.VolumeSerialNumber && x.FileIndexHigh == y.FileIndexHigh && x.FileIndexLow == y.FileIndexLow;
-        } catch { return false; }
+        } catch { return true; }
+    }
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    static extern uint QueryDosDeviceW(string device, StringBuilder target, int max);
+    // 盘符是不是用 subst 映射出来的（其实是另一块盘上的一个文件夹）：拿来查重复文件会把同一个文件当成两份
+    public static bool IsSubst(string drive) {
+        if (!Win || string.IsNullOrEmpty(drive)) return false;
+        try { StringBuilder sb = new StringBuilder(1024); if (QueryDosDeviceW(drive.Substring(0, 2), sb, sb.Capacity) == 0) return false; return sb.ToString().StartsWith("\\??\\"); } catch { return false; }
+    }
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    static extern uint GetLongPathNameW(string shortPath, StringBuilder longPath, int len);
+    // 8.3 短路径换成长路径（路径不存在就原样返回）
+    public static string LongPath(string p) {
+        if (!Win || string.IsNullOrEmpty(p)) return p;
+        try { StringBuilder sb = new StringBuilder(1024); uint n = GetLongPathNameW(p, sb, sb.Capacity); return (n > 0 && n < sb.Capacity) ? sb.ToString() : p; } catch { return p; }
+    }
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    struct WIN32_FIND_DATAW {
+        public uint dwFileAttributes; public uint ftC1, ftC2, ftA1, ftA2, ftW1, ftW2; public uint nFileSizeHigh, nFileSizeLow, dwReserved0, dwReserved1;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string cFileName;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 14)] public string cAlternateFileName;
+    }
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern IntPtr FindFirstFileW(string name, out WIN32_FIND_DATAW data);
+    [DllImport("kernel32.dll")] static extern bool FindClose(IntPtr h);
+    // 重解析点的类型（没有重解析点返回 0）：目录联接 0xA0000003、符号链接 0xA000000C、OneDrive 这类云端文件 0x9000xx1A
+    public static uint ReparseTag(string path) {
+        if (!Win || string.IsNullOrEmpty(path)) return 0;
+        WIN32_FIND_DATAW d;
+        IntPtr h = FindFirstFileW("\\\\?\\" + path, out d);
+        if (h == new IntPtr(-1)) return 0;
+        FindClose(h);
+        return (d.dwFileAttributes & 0x400) != 0 ? d.dwReserved0 : 0;
+    }
+    public static bool IsCloudTag(uint tag) { return (tag & 0xFFFF0FFF) == 0x9000001A; }
+    // 文件夹里（含子文件夹，不进链接）最近一次写入的时间；最多看 200000 项
+    public static DateTime NewestWrite(string dir) {
+        DateTime best = DateTime.MinValue; int n = 0;
+        Stack<string> st = new Stack<string>(); st.Push(dir);
+        while (st.Count > 0 && n < 200000) {
+            string d = st.Pop();
+            try {
+                DirectoryInfo di = new DirectoryInfo(d);
+                if (di.LastWriteTime > best) best = di.LastWriteTime;
+                foreach (FileSystemInfo x in di.EnumerateFileSystemInfos()) {
+                    n++;
+                    if (x.LastWriteTime > best) best = x.LastWriteTime;
+                    if ((x.Attributes & FileAttributes.Directory) != 0 && (x.Attributes & FileAttributes.ReparsePoint) == 0) st.Push(x.FullName);
+                }
+            } catch { }
+        }
+        return best;
     }
     public static string MergeHardLink(string keep, string dup) {
         try {
@@ -3236,6 +3295,7 @@ function Get-Size([string[]]$paths, [string]$filter, $tree = $null, $ex = $null)
     foreach ($p in $paths) {
         foreach ($it in (Get-PathItems $p)) {
             if ($ex -and (Test-Excluded $it.FullName $ex)) { continue }
+            if (Get-LinkedAncestor $it.FullName) { continue }   # 经过链接（上级被搬走了）：清理时不碰，也不算
             if ($it.PSIsContainer) {
                 if (IsLink $it.FullName) { continue }
                 if ($filter) {
@@ -3336,7 +3396,10 @@ function Test-Personal([string]$path) {
 }
 
 # 删一个文件夹。是链接（junction / 符号链接）就只拆链接本身，绝不进去删链接指向的数据
+# cmd 会把命令行里的 %名字%（比如 %USERNAME%）换成变量的值，路径里带 % 时删的就是另一个地方：这种路径不交给 cmd
+function Test-CmdPathOk([string]$p) { return -not ($p.Contains('%') -or $p.Contains('"')) }
 function Remove-OneDir($d) {
+    if (-not (Test-CmdPathOk $d.FullName)) { Log ((T "  跳过（路径里有 % 或引号，为了不删错地方不交给系统命令）：{0}") -f $d.FullName); return }
     if ([bool]($d.Attributes -band [IO.FileAttributes]::ReparsePoint)) { & "$sys32\cmd.exe" /c rmdir "$($d.FullName)" 2>$null | Out-Null; return }
     # rd 比 Remove-Item 快很多；rd /s 遇到里面的链接也只拆链接，不会跟进去
     & "$sys32\cmd.exe" /c rd /s /q "\\?\$($d.FullName)" 2>$null | Out-Null
@@ -3392,7 +3455,12 @@ function Recycle-Flush {
     if ($r -ne 0 -or $left -gt 0) { Log ((T "  有 {0} 项没能放进回收站（错误 {1}），这些没有删") -f $left, $r) }
 }
 function Remove-Path($it) {
-    if ($script:autoMinAge -and $it.LastWriteTime -gt $script:autoMinAge) { return }
+    if ($script:autoMinAge) {
+        # 文件夹的修改时间只看它自己这一层：里面深处正在写的文件不会让它变新，所以看整棵树里最近的一次
+        $w = $it.LastWriteTime
+        if ($it.PSIsContainer) { try { $nw = [FsTools]::NewestWrite($it.FullName); if ($nw -gt $w) { $w = $nw } } catch {} }
+        if ($w -gt $script:autoMinAge) { return }
+    }
     if ($script:recycleNow) {
         $why = Test-RecycleOk $it.FullName (Get-ItemBytes $it)
         if ($why) {
@@ -3419,7 +3487,7 @@ function Remove-LinksInside([string]$dir) {
         $subs = $null; try { $subs = [IO.Directory]::GetDirectories($d) } catch { continue }
         foreach ($s in $subs) {
             $a = $null; try { $a = [IO.File]::GetAttributes($s) } catch { continue }
-            if (($a -band [IO.FileAttributes]::ReparsePoint) -ne 0) { & "$sys32\cmd.exe" /c rmdir "\\?\$s" 2>$null | Out-Null; $n++ }
+            if (($a -band [IO.FileAttributes]::ReparsePoint) -ne 0) { if (Test-CmdPathOk $s) { & "$sys32\cmd.exe" /c rmdir "\\?\$s" 2>$null | Out-Null; $n++ } else { try { [IO.Directory]::Delete($s, $false); $n++ } catch {} } }
             else { $st.Push($s) }
         }
     }
@@ -3433,8 +3501,11 @@ function Remove-WindowsOld {
     if (IsLink $p) { Log (T '  C:\Windows.old 本身是链接，不删'); return }
     $links = Remove-LinksInside $p
     if ($links -gt 0) { Log ((T "  先拆掉了 Windows.old 里的 {0} 个链接（它们指向现在系统的文件夹，不能跟进去删）") -f $links) }
-    & "$env:SystemRoot\System32\takeown.exe" /F $p /R /A /D Y 2>$null | Out-Null
-    & "$env:SystemRoot\System32\icacls.exe" $p /grant Administrators:F /T /C /Q 2>$null | Out-Null
+    & "$env:SystemRoot\System32\takeown.exe" /F $p /R /A /D Y /SKIPSL 2>$null | Out-Null
+    $more = Remove-LinksInside $p
+    if ($more -gt 0) { Log ((T "  夺权后又拆掉了 {0} 个链接") -f $more) }
+    & "$env:SystemRoot\System32\icacls.exe" $p /grant Administrators:F /T /C /L /Q 2>$null | Out-Null
+    [void](Remove-LinksInside $p)
     Remove-OneDir (Get-Item -LiteralPath $p -Force)
 }
 function Remove-Contents2([string[]]$paths, [string]$filter, [bool]$wholeDir) {
@@ -3446,6 +3517,8 @@ function Remove-Contents2([string[]]$paths, [string]$filter, [bool]$wholeDir) {
             if (Stopping) { return }
             if (Test-Personal $it.FullName) { Log ((T "  跳过（在个人文件夹里，不删）：{0}") -f $($it.FullName)); OpLog '删除' (T '跳过：在个人文件夹里，不删') $it.FullName ''; continue }
             if ($it.PSIsContainer -and ($it.Attributes -band [IO.FileAttributes]::ReparsePoint)) { Log ((T "  跳过（是链接，不跟进去删）：{0}") -f $($it.FullName)); continue }
+            $la = Get-LinkedAncestor $it.FullName
+            if ($la) { Log ((T "  跳过（上级文件夹 {0} 是链接，多半已经搬到其他盘，不跟进去删）：{1}") -f $la, $it.FullName); continue }
             if (Test-Excluded $it.FullName $ex) { & $skipEx $it.FullName; continue }
             if ($it.PSIsContainer) {
                 if ($wholeDir) { if (Test-HasExcluded $it.FullName $ex) { & $skipEx $it.FullName } else { Remove-Path $it } }
@@ -3570,6 +3643,20 @@ function Get-PathItems([string]$p) {
     if ($p.IndexOfAny([char[]]'*?') -lt 0) { return @(Get-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue) }
     return @(Get-Item -Path ($p -replace '([\[\]`])', '`$1') -Force -ErrorAction SilentlyContinue)
 }
+# %TEMP% 指的地方能不能当临时文件夹清：Windows 默认的（用户目录里的 AppData\Local\Temp，远程桌面会话下面还有一层编号）、
+# 系统的 Windows\Temp，或者本工具建的（里面有 .cleanc-temp 标记）。别的（比如被改到 D:\Temp、D:\Work）一律不清：那可能是用户自己的文件夹
+function Test-TempOk([string]$x) {
+    $t = $x.TrimEnd('\', '/')
+    if (-not $t) { return $false }
+    $sep = [IO.Path]::DirectorySeparatorChar
+    $t = [FsTools]::LongPath($t)   # %TEMP% 常常是 8.3 短路径（C:\Users\RUNNER~1\...），先换成长路径再比
+    foreach ($base in @($(if ($env:USERPROFILE) { Join-Path $env:USERPROFILE ('AppData' + $sep + 'Local' + $sep + 'Temp') }), $(if ($env:SystemRoot) { Join-Path $env:SystemRoot 'Temp' }))) {
+        if (-not $base) { continue }
+        $b = ([FsTools]::LongPath($base)).TrimEnd('\', '/')
+        if ($t -ieq $b -or $t.StartsWith($b + $sep, [StringComparison]::OrdinalIgnoreCase)) { return $true }
+    }
+    return (Test-Path -LiteralPath (Join-Path $t '.cleanc-temp'))
+}
 function Expand-LibPath([string]$p) {
     $p = $p.Trim()
     if ($p.StartsWith('@chromium:')) {
@@ -3582,8 +3669,7 @@ function Expand-LibPath([string]$p) {
     $i = $p.IndexOf('%STEAM%', [StringComparison]::OrdinalIgnoreCase)
     if ($i -ge 0) { $s = Get-SteamPath; if (-not $s) { return ,@() }; $p = $p.Substring(0, $i) + $s + $p.Substring($i + 7) }
     $x = [Environment]::ExpandEnvironmentVariables($p)
-    # R3 TEMP 被改到了不像临时文件夹的地方（比如 D:\Work）：不把它当临时文件夹清
-    if ($p -match '(?i)%TE?MP%' -and $x -notmatch '%' -and (Split-Path $x.TrimEnd('\') -Leaf) -notmatch '(?i)te?mp') { return ,@() }
+    if ($p -match '(?i)%TE?MP%' -and $x -notmatch '%' -and -not (Test-TempOk $x)) { return ,@() }
     return ,@($x)
 }
 function Get-CacheLibrary {
@@ -3664,6 +3750,8 @@ function Get-InstallerOrphans {
                            'HKLM:\SOFTWARE\Classes\Installer\Patches\*', 'HKCU:\Software\Microsoft\Installer\Patches\*')) {
         foreach ($p in @(Get-ItemProperty -Path $root -ErrorAction SilentlyContinue)) { $v = [string]$p.LocalPackage; if ($v) { [void]$used.Add((Split-Path $v -Leaf)) } }
     }
+    $fromReg = $used.Count
+    if ($fromReg -eq 0) { return @() }
     try {
         $inst = New-Object -ComObject WindowsInstaller.Installer
         $t = $inst.GetType()
@@ -3677,7 +3765,7 @@ function Get-InstallerOrphans {
                 } catch {}
             }
         }
-    } catch {}
+    } catch { return @() }   # 接口读不了：只靠注册表可能漏掉还在用的安装包，宁可不判断
     if ($used.Count -eq 0) { return @() }
     $out = @()
     $recent = (Get-Date).AddDays(-1)
@@ -3705,6 +3793,7 @@ function Get-BrokenShortcuts {
                 $drv = $t.Substring(0, 3)
                 if (-not (Test-Path -LiteralPath $drv)) { continue }       # 盘没插着，不算失效
                 if (Test-Path -LiteralPath $t) { continue }
+                if (Get-LinkedAncestor $t) { continue }                     # 在搬走了的文件夹里（链接指的那块盘可能没插着），不算失效
                 $out += $f
             } catch {}
         }
@@ -3731,7 +3820,8 @@ function Get-OneDriveInfo {
             try {
                 $fi = New-Object IO.FileInfo $f
                 $a = [int]$fi.Attributes
-                if ($a -band 0x400) { continue }                            # 链接
+                # 链接不算；OneDrive「按需下载」的文件也带重解析点（云端类型），那些要算
+                if (($a -band 0x400) -and -not [FsTools]::IsCloudTag([FsTools]::ReparseTag($f))) { continue }
                 $r.Files++
                 if ($a -band 0x400000) { $r.Online += $fi.Length }
                 elseif ($a -band 0x80000) { $r.Pinned += $fi.Length }
@@ -3749,7 +3839,8 @@ function Invoke-OneDriveFree($res) {
             try {
                 $fi = New-Object IO.FileInfo $f
                 $a = [int]$fi.Attributes
-                if (($a -band 0x400) -or ($a -band 0x400000) -or ($a -band 0x80000)) { continue }
+                if (($a -band 0x400000) -or ($a -band 0x80000)) { continue }   # 已经只在云端，或者设了「始终保留在此设备」
+                if (($a -band 0x400) -and -not [FsTools]::IsCloudTag([FsTools]::ReparseTag($f))) { continue }   # 链接不动；云端类型的重解析点是 OneDrive 自己的文件
                 [IO.File]::SetAttributes($f, [IO.FileAttributes]($a -bor 0x100000))   # +U：告诉 OneDrive 这个文件只要留在云端
                 $res.Done++; $res.Bytes += $fi.Length
             } catch { $res.Fail++ }
@@ -4308,6 +4399,7 @@ function Get-DeletePreview($items, [int]$limit = 20000) {
             foreach ($x in @(Get-PathItems $p)) {
                 if ($n -ge $limit) { break }
                 if ((Test-Personal $x.FullName) -or (Test-Excluded $x.FullName $ex)) { continue }
+                if (($x.PSIsContainer -and ($x.Attributes -band [IO.FileAttributes]::ReparsePoint)) -or (Get-LinkedAncestor $x.FullName)) { continue }
                 if ($x.PSIsContainer -and -not $it.Whole) {
                     $f = if ($it.Filter) { $it.Filter } else { '*' }
                     foreach ($c in @(Get-ChildItem -LiteralPath $x.FullName -Filter $f -Force -ErrorAction SilentlyContinue)) {
@@ -4529,7 +4621,8 @@ function Invoke-Move($it, $destRoot, $res) {
             if (Stopping) { Log "  $cxNone"; $res.Cancelled = $true; $res.Msgs += $cxNone; break }
             SetP @{ Detail = ((T "核对 {0} 是不是这个文件夹的旧副本") -f $dst) }
             $extra = Get-ExtraCount $dst $src
-            if ($extra -lt 0 -or ($extra -gt [math]::Max(20, $haveFiles * 0.05))) {
+            # 副本里只要有一个 C 盘上没有（或比 C 盘上新）的文件就不复用：/E 会用 C 盘上的旧版本覆盖副本里新的，/MIR 会删掉它们
+            if ($extra -ne 0) {
                 # 副本里有大量 C 盘上没有的文件：可能是唯一的一份（比如 C 盘上的链接被软件换成了新的空文件夹），绝不覆盖它
                 $old = $dst
                 $dst = Join-Path $destRoot ("{0}_{1}" -f $leaf, (Get-Date -Format 'yyyyMMddHHmm'))
@@ -4563,6 +4656,8 @@ function Invoke-Move($it, $destRoot, $res) {
         $cxCopied = (T "已取消：{0} 已经复制到 {1}，但还没换成链接，原文件夹没动。下次再搬只补有变化的文件") -f $src, $dst
         if ($rc.Cancelled) { Log "  $cxHalf"; OpLog '搬运' (T '搬家已取消') $src $cxHalf; $res.Cancelled = $true; $res.Msgs += $cxHalf; break }
         if ($rc.Code -ge 8 -or $rc.Code -lt 0) { $m = ((T "复制失败（robocopy 代码 {0}，可能是空间不够或有文件被占用），原目录未动") -f $rc.Code); Log "  $m"; OpLog '搬运' (T '搬家失败') $src $m; $res.Fail++; $res.Msgs += $m; continue }
+        # 代码里带 4：有同名的文件和文件夹对不上，那几项没复制过去。数量核对可能照样通过，所以这里就停
+        if (($rc.Code -band 4) -ne 0) { $m = ((T "复制时有名字对不上的项目（robocopy 代码 {0}：同一个名字一边是文件一边是文件夹），原目录未动。打开 {1} 看看") -f $rc.Code, $dst); Log "  $m"; OpLog '搬运' (T '搬家失败') $src $m; $res.Fail++; $res.Msgs += $m; continue }
         SetP @{ MovePhase = 'verify'; SubKind = 'measure'; SubStart = (Get-Date); Detail = (T '复制完成，核对两边大小') }
         # 软件都已关掉，原目录不会再变：两边重新数一遍，文件个数一个不能少、总大小几乎一致，才继续（之后才会删 C 盘上的原目录）
         $srcBytes = DirBytes $src; $srcFiles = [long][DirStat]::Files
@@ -4611,8 +4706,12 @@ function Invoke-Move($it, $destRoot, $res) {
             continue
         }
         SetP @{ MovePhase = 'cleanup'; SubKind = 'delete'; SubTotal = [double]$srcBytes; SubStart = (Get-Date); FreeC0 = [double](FreeC); Detail = (T '链接已建好，删除 C 盘上的原目录') }
-        & "$sys32\cmd.exe" /c rd /s /q "\\?\$bak" 2>$null | Out-Null
-        if (Test-Path -LiteralPath $bak) { Remove-Item -LiteralPath $bak -Recurse -Force -ErrorAction SilentlyContinue }
+        if (Test-CmdPathOk $bak) { & "$sys32\cmd.exe" /c rd /s /q "\\?\$bak" 2>$null | Out-Null }
+        if (Test-Path -LiteralPath $bak) {
+            # 没删干净（有文件被占用，或者里面后来多了链接）：先拆链接再删一次，绝不用会跟进链接的 Remove-Item -Recurse
+            [void](Remove-LinksInside $bak); Remove-OneDir (Get-Item -LiteralPath $bak -Force)
+            if (Test-Path -LiteralPath $bak) { $m = ((T "C 盘上的旧文件夹没删干净（可能有文件被占用），数据已经在 {0}，可以以后再删：{1}") -f $dst, $bak); Log "  $m"; $res.Msgs += $m }
+        }
         $res.Done++; $res.Moved += $srcBytes; $res.Dest += $dst
         SetP @{ MovePhase = 'done' }
         OpLog '搬运' (T '搬到其他盘') "$src → $dst" ((T "{0:N0} 个文件，{1}，两边已核对一致") -f $srcFiles, (GB $srcBytes))
@@ -4740,6 +4839,49 @@ function Get-MovedTargets {
 }
 $script:progKeep = @('Common Files','WindowsApps','ModifiableWindowsApps','Windows Defender','Windows Defender Advanced Threat Protection','Windows Mail','Windows Media Player',
     'Windows NT','Windows Photo Viewer','Windows Portable Devices','Windows Security','Windows Sidebar','WindowsPowerShell','Internet Explorer','Reference Assemblies','MSBuild','dotnet','Microsoft Update Health Tools','Uninstall Information')
+# 聊天软件的数据：目录里「聊天软件的聊天记录」那几项的文件夹、它们搬走后的位置、商店版聊天软件的数据。只能搬，不能删。
+# 在这些文件夹里面的、或者把它们包在里面的，都不让删（空间地图、软件残留、自定义清理、重复文件都经过这里）
+$script:chatDataPaths = $null
+function Get-ChatDataPaths {
+    if ($null -ne $script:chatDataPaths) { return ,$script:chatDataPaths }
+    $l = New-Object System.Collections.Generic.List[string]
+    try {
+        foreach ($c in (Get-Catalog)) {
+            if (-not ([string]$c.G).StartsWith('聊天软件') -or -not $c.Paths) { continue }
+            foreach ($p in $c.Paths) {
+                if (-not $p) { continue }
+                $l.Add(([string]$p).TrimEnd('\'))
+                $t = LinkTarget $p; if ($t) { $l.Add($t.TrimEnd('\')) }
+            }
+        }
+    } catch {}
+    if ($env:LOCALAPPDATA) {
+        foreach ($pat in @('*WhatsAppDesktop*', 'MSTeams*', 'FACEBOOK.317180B0BB486*', '*TelegramDesktop*', '*Signal*', '*LINE*')) {
+            foreach ($d in @(Get-ChildItem -LiteralPath (Join-Path $env:LOCALAPPDATA 'Packages') -Directory -Filter $pat -Force -ErrorAction SilentlyContinue)) { $l.Add($d.FullName.TrimEnd('\')) }
+        }
+    }
+    $script:chatDataPaths = @($l | Where-Object { $_ } | Select-Object -Unique)
+    return ,$script:chatDataPaths
+}
+function Test-ChatData([string]$path) {
+    if (-not $path) { return '' }
+    $f = $path.TrimEnd('\')
+    foreach ($c in (Get-ChatDataPaths)) {
+        if ($f -ieq $c -or $f.StartsWith($c + '\', [StringComparison]::OrdinalIgnoreCase) -or $c.StartsWith($f + '\', [StringComparison]::OrdinalIgnoreCase)) {
+            return (T '这是聊天软件的聊天记录和文件，只能整体搬到其他盘，不能删。要腾地方请到「搬家管理」')
+        }
+    }
+    return ''
+}
+# 重复文件里这个文件删不得的原因（个人文件夹由页面上的开关单独管，这里只管其他的：聊天记录不管开关都不能删）
+function Get-DupBlock([string]$path, [bool]$personal) {
+    $chat = Test-ChatData $path
+    if ($chat) { return $chat }
+    if ($personal) { return '' }
+    $why = Get-DeleteBlock $path
+    if (-not $why) { $la = Get-LinkedAncestor $path; if ($la) { $why = ((T "所在的 {0} 是链接（多半是搬家留下的），这里看到的是另一个位置的文件") -f $la) } }
+    return $why
+}
 function Get-DeleteBlock([string]$path, [switch]$Leftover) {
     if (-not $path) { return (T '路径为空') }
     $full = $path
@@ -4792,6 +4934,8 @@ function Get-DeleteBlock([string]$path, [switch]$Leftover) {
             return (T '这里是搬家后的数据，C 盘上的链接指向这里。要处理请到「搬家管理」')
         }
     }
+    $chat = Test-ChatData $full
+    if ($chat) { return $chat }
     return ''
 }
 function Get-CompressBlock([string]$path) {
@@ -4822,6 +4966,21 @@ function Read-MoveMapPairs([string]$root) {
         foreach ($l in [IO.File]::ReadAllLines($f, [Text.Encoding]::UTF8)) { $a = $l.Split("`t"); if ($a.Count -ge 2 -and $a[0] -and $a[1]) { [void]$out.Add(@($a[0], $a[1])) } }
     }
     return ,$out
+}
+# 上次搬家或搬回做到一半（关机、断电、崩溃）留下的：C 盘原文件夹已经改名成 *.moved_backup（或搬回时复制到 *.cleanc_back），
+# 还没换成链接 / 还没换回来。数据都在，但用户看到的可能是软件新建的空文件夹。找出来告诉用户数据在哪
+function Find-HalfMoves {
+    $srcs = New-Object System.Collections.Generic.List[string]
+    try { foreach ($c in (Get-Catalog)) { if ($c.Kind -eq 'move' -or $c.Kind -eq 'flex') { foreach ($p in $c.Paths) { if ($p) { $srcs.Add([string]$p) } } } } } catch {}
+    foreach ($root in (All-MoveRoots)) { foreach ($pr in (Read-MoveMapPairs $root)) { $srcs.Add([string]$pr[0]) } }
+    $out = @()
+    foreach ($s in @($srcs | Select-Object -Unique)) {
+        foreach ($suf in '.moved_backup', '.cleanc_back') {
+            $b = $s.TrimEnd('\', '/') + $suf
+            if (Test-Path -LiteralPath $b) { $out += @{ Src = $s; Bak = $b; Kind = $suf } }
+        }
+    }
+    return $out
 }
 function Remove-MoveMapEntry([string]$root, [string]$src) {
     $f = MoveMapFile $root
@@ -4897,7 +5056,13 @@ function Get-MoveState($rec) {
     if ($srcLink -and -not $dstThere) {
         $fix = ''
         $leaf = Split-Path $dst -Leaf
-        foreach ($root in (All-MoveRoots)) { $c = Join-Path $root $leaf; if (Test-Path -LiteralPath $c) { $fix = $c; break } }
+        $taken = @(Get-MovedTargets)
+        foreach ($root in (All-MoveRoots)) {
+            $c = Join-Path $root $leaf
+            if (-not (Test-Path -LiteralPath $c)) { continue }
+            if (@($taken | Where-Object { $_ -ieq $c.TrimEnd('\') }).Count -gt 0) { continue }   # 别的链接正指着它：是另一项的数据
+            $fix = $c; break
+        }
         $t = (T '链接断了：目标文件夹不在了（硬盘拔了、或者盘符变了？）')
         if ($fix) { $t += ((T "。在 {0} 找到一份同名的，可以改指向它") -f $fix) }
         return @{ State = 'broken'; Text = $t; Brush = '#D70015'; Fix = $fix }
@@ -4911,7 +5076,7 @@ function Get-MoveState($rec) {
 # 搬回时取消：删掉复制回 C 盘的那一半（数据仍在目标盘上，C 盘上的链接没动）
 function Undo-MoveBackCopy([string]$tmp, [bool]$fresh, [string]$dst, [string]$src, $res) {
     $res.Cancelled = $true
-    if ($fresh -and (Test-Path -LiteralPath $tmp) -and -not (IsLink $tmp)) { & "$sys32\cmd.exe" /c rd /s /q "\\?\$tmp" 2>$null | Out-Null }
+    if ($fresh -and (Test-Path -LiteralPath $tmp) -and -not (IsLink $tmp) -and (Test-CmdPathOk $tmp)) { & "$sys32\cmd.exe" /c rd /s /q "\\?\$tmp" 2>$null | Out-Null }
     if (Test-Path -LiteralPath $tmp) { $res.Msg = (T "已取消，什么都没改，数据仍在 {0}。复制回 C 盘的那一半在 {1}，确认没用后可以手动删除") -f $dst, $tmp }
     else { $res.Msg = (T "已取消，什么都没改，数据仍在 {0}。复制回 C 盘的那一半已删掉") -f $dst }
     OpLog '搬运' (T '搬回 C 盘已取消') $src $res.Msg
@@ -4920,6 +5085,9 @@ function Invoke-MoveBack($rec, $res) {
     $res.Ok = $false; $res.Msg = ''
     $src = [string]$rec.Src; $dst = [string]$rec.Dst
     if (-not (IsLink $src) -or -not (Test-Path -LiteralPath $dst)) { $res.Msg = (T '这一项现在不是正常的搬家状态，没法搬回'); return }
+    $lt = LinkTarget $src
+    if ($lt -and $lt.TrimEnd('\') -ine $dst.TrimEnd('\')) { $res.Msg = ((T "C 盘上的链接现在指向 {0}，和记录里的 {1} 不一样，没动。请刷新「搬家管理」再试") -f $lt, $dst); return }
+    if (-not (Test-CmdPathOk $dst) -or -not (Test-CmdPathOk $src)) { $res.Msg = (T '路径里有 % 或引号，为了不删错地方，没法在这里搬回'); return }
     try { [Environment]::CurrentDirectory = $env:SystemRoot; Set-Location -LiteralPath $env:SystemRoot } catch {}
     $it = @{ Kill = @(); KillDirs = @() }
     if ($rec.Idx) { foreach ($c in (Get-Catalog)) { if ($c.Idx -eq $rec.Idx) { $it = $c } } }
@@ -4967,7 +5135,7 @@ function Invoke-MoveBack($rec, $res) {
         OpLog '搬运' (T '搬回后保留目标盘上的文件夹') $dst $res.Msg
     } else {
         SetP @{ MovePhase = 'cleanup'; SubKind = 'action'; SubStart = (Get-Date); Detail = (T '删除目标盘上的那份') }
-        & "$sys32\cmd.exe" /c rd /s /q "\\?\$dst" 2>$null | Out-Null
+        if (Test-CmdPathOk $dst) { & "$sys32\cmd.exe" /c rd /s /q "\\?\$dst" 2>$null | Out-Null }
         if (Test-Path -LiteralPath $dst) { $res.Msg = ((T "已搬回，但目标盘上的旧副本没删干净：{0}") -f $dst) }
         else { OpLog '删除' (T '搬回后删除目标盘上的旧副本') $dst (GB $bytes) }
     }
@@ -4992,11 +5160,15 @@ function Invoke-DropCopy($rec, $res) {
     $src = [string]$rec.Src; $dst = [string]$rec.Dst
     if (-not (Test-Path -LiteralPath $src) -or (IsLink $src)) { $res.Msg = (T 'C 盘原文件夹不在，这份副本可能是唯一的一份，不删'); return }
     foreach ($c in (Get-Catalog)) { foreach ($p in $c.Paths) { $t = LinkTarget $p; if ($t -and $t.TrimEnd('\') -ieq $dst.TrimEnd('\')) { $res.Msg = ((T "这份副本正被 {0} 的链接使用，不能删") -f $p); return } } }
+    foreach ($r in (Get-MoveRecords)) {
+        if ([string]$r.Src -ine $src -and ([string]$r.Dst).TrimEnd('\') -ieq $dst.TrimEnd('\') -and (IsLink ([string]$r.Src))) { $res.Msg = ((T "这份副本正被 {0} 的链接使用，不能删") -f $r.Src); return }
+    }
+    if (-not (Test-CmdPathOk $dst)) { $res.Msg = (T '路径里有 % 或引号，为了不删错地方，没法在这里删'); return }
     SetP @{ Detail = (T '核对副本里有没有 C 盘上没有的文件') }
     $b = DirBytes $dst; $nf = [long][DirStat]::Files
     if (Stopping) { $res.Msg = (T '已取消，副本没删'); return }
     $extra = Get-ExtraCount $dst $src
-    if ($extra -lt 0 -or ($extra -gt [math]::Max(20, $nf * 0.05))) {
+    if ($extra -ne 0) {
         $res.Msg = if ($extra -lt 0) { (T '核对不了，不删') } else { ((T "副本里有 {0} 个文件在 C 盘原文件夹里没有（或比 C 盘上的新），这份副本可能是唯一的一份，所以不删。请打开两边对比后再决定") -f $extra) }
         OpLog '删除' (T '没删多余副本（副本里有 C 盘没有的文件）') $dst $res.Msg; return
     }
@@ -5810,6 +5982,30 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+这里不能放搬过去的数据	Moved data can't go here
+{0} 在 {1} 里面。那是清理列表里的文件夹或临时文件夹，清理时会被清空，搬过去的数据会一起被删。请换一个位置。	{0} is inside {1}. That is a cleanup-list folder or a temporary folder, which gets emptied during cleanup, so moved data would be deleted with it. Please choose another location.
+\n但其中 {0} 项（{1}）由系统命令处理，不能放进回收站，会直接删除。	\nBut {0} of them ({1}) are handled by system commands and can't go to the Recycle Bin; they are deleted permanently.
+这个文件夹里已经有东西了	This folder already has files in it
+{0} 已经存在，里面有文件，不是本工具建的。临时文件夹会被定期清空，为了不删到你的文件，不用它。换一块盘，或者把这个文件夹改个名字再试。	{0} already exists, has files in it, and was not created by ClearC. The temporary folder is emptied regularly, so to avoid deleting your files it is not used. Choose another drive, or rename that folder and try again.
+腾挪 ClearC 建的临时文件夹：有这个文件，清理时才会把它当临时文件夹清。	Temporary folder created by ClearC: only with this file present is it cleaned as a temporary folder.
+{0} 的数据在 {1}	The data of {0} is in {1}
+{0}：搬回时复制回来的数据在 {1}	{0}: the data copied back while moving back is in {1}
+发现上次没做完的搬家：	Found an unfinished move: 
+有上次没做完的搬家	A previous move did not finish
+上次搬家或搬回 C 盘时中途停了（比如关机、断电），下面这些文件夹改了名还没收尾。数据都还在，没有删。\n\n如果软件里的数据看起来不见了：先退出那个软件，把原来名字的文件夹（多半是软件新建的空文件夹）移到别处，再把带后缀的文件夹改回原来的名字；也可以到「搬家管理」里重新搬一次。	A previous move to or from another drive stopped partway (for example a shutdown or power cut). The folders below were renamed but not finished. All data is still there; nothing was deleted.\n\nIf an app's data looks missing: quit that app, move the folder with the original name (most likely an empty folder the app created) somewhere else, then rename the folder with the suffix back to the original name. You can also move it again under "Moved folders".
+知道了	OK
+  跳过（路径里有 % 或引号，为了不删错地方不交给系统命令）：{0}	  skipped (the path contains % or a quote; not handed to a system command so nothing else gets deleted): {0}
+  夺权后又拆掉了 {0} 个链接	  removed {0} more links after taking ownership
+  跳过（上级文件夹 {0} 是链接，多半已经搬到其他盘，不跟进去删）：{1}	  skipped (the parent folder {0} is a link, probably moved to another drive; not followed): {1}
+复制时有名字对不上的项目（robocopy 代码 {0}：同一个名字一边是文件一边是文件夹），原目录未动。打开 {1} 看看	Some items did not match while copying (robocopy code {0}: a name is a file on one side and a folder on the other). The original folder was left untouched. Take a look at {1}
+C 盘上的旧文件夹没删干净（可能有文件被占用），数据已经在 {0}，可以以后再删：{1}	The old folder on C: was not fully deleted (a file may be in use). The data is already in {0}; you can delete this later: {1}
+这是聊天软件的聊天记录和文件，只能整体搬到其他盘，不能删。要腾地方请到「搬家管理」	This is chat history and files of a chat app. It can only be moved to another drive as a whole, not deleted. To free space, go to "Moved folders"
+所在的 {0} 是链接（多半是搬家留下的），这里看到的是另一个位置的文件	{0} is a link (probably left by a move), so this file actually lives somewhere else
+C 盘上的链接现在指向 {0}，和记录里的 {1} 不一样，没动。请刷新「搬家管理」再试	The link on C: now points to {0}, not {1} as recorded. Nothing was changed. Refresh "Moved folders" and try again
+路径里有 % 或引号，为了不删错地方，没法在这里搬回	The path contains % or a quote; to avoid deleting the wrong place, it can't be moved back here
+路径里有 % 或引号，为了不删错地方，没法在这里删	The path contains % or a quote; to avoid deleting the wrong place, it can't be deleted here
+路径里有 % 或引号，为了不删错地方不交给系统命令	the path contains % or a quote; not handed to a system command so nothing else gets deleted
+  跳过（保留的那份在扫描后被改过）：{0}	  skipped (the copy being kept was changed after the scan): {0}
 磁盘检查（chkdsk）修复时从损坏的文件里抢救出来的碎片，一般都没用；偶尔能从里面找回丢失的文件，删之前可以先打开看看	Fragments that a disk check (chkdsk) recovered from damaged files. Usually useless; occasionally a lost file can be recovered from them, so take a look before deleting
 已搬回 C 盘。{0} 不是本工具搬过去的（或者还有别的地方链接着它），没有删；确认不需要的话可以自己删	Moved back to C:. {0} was not moved there by ClearC (or another location still links to it), so it was not deleted; delete it yourself if you no longer need it
 搬回后保留目标盘上的文件夹	Kept the folder on the target drive after moving back
@@ -13248,6 +13444,8 @@ $ctl.BtnDestBrowse.Add_Click({
     if ($path.Length -lt 2 -or $path.Substring(0, 2) -ieq $env:SystemDrive) { Show-Sheet -Kind warn -Title (T '请选 C 盘以外的位置') -Text (T '搬到 C 盘自己身上腾不出空间。') | Out-Null; return }
     if ((DriveTypeOf ($path.Substring(0, 2))) -ne 'Fixed') { Show-Sheet -Kind warn -Title (T '只能选本机硬盘') -Text (T '网络盘、网盘和 U 盘不能做链接目标，拔掉或断网后软件会找不到数据。') | Out-Null; return }
     if ($path.Length -le 2) { $path = $path.Substring(0, 2) + '\CDriveMoved' }   # 选了整个盘（E:\），就在盘下建 CDriveMoved
+    $risky = @(@(Get-CustomClean) + @($env:TEMP, $env:TMP, "$env:SystemRoot\Temp") | Where-Object { $_ } | ForEach-Object { [Environment]::ExpandEnvironmentVariables([string]$_).TrimEnd('\') })
+    foreach ($r in $risky) { if ($path -ieq $r -or $path.StartsWith($r + '\', [StringComparison]::OrdinalIgnoreCase)) { Show-Sheet -Kind warn -Title (T '这里不能放搬过去的数据') -Text ((T "{0} 在 {1} 里面。那是清理列表里的文件夹或临时文件夹，清理时会被清空，搬过去的数据会一起被删。请换一个位置。") -f $path, $r) | Out-Null; return } }
     $script:customDest = $path
     Fill-DestChoices $path
 })
@@ -13322,7 +13520,11 @@ function Invoke-RunSelected([string]$title = (T '执行所选操作')) {
         if ($careful.Count -gt 0) { $text += (T "`n其中 {0} 项是「谨慎清理」（{1}）：删了要重新下载或重新生成，第一次打开会慢一点。不想清的，在列表里改成「跳过」。") -f $careful.Count, (@($careful | ForEach-Object { $_.Name }) -join (T '、')) }
         $conf = @($dels | Where-Object { ([string]$cat0[$_.Idx].G).StartsWith('需确认') })
         if ($conf.Count -gt 0) { $text += (T "`n其中 {0} 项是「需确认」的高风险项目（{1}），请再看一遍说明。") -f $conf.Count, (@($conf | ForEach-Object { $_.Name }) -join (T '、')) }
-        if ((Get-Setting 'Recycle' '0') -eq '1') { $text += (T "`n按设置，这次删除的文件会先放进回收站，可以从回收站恢复。") }
+        if ((Get-Setting 'Recycle' '0') -eq '1') {
+            $text += (T "`n按设置，这次删除的文件会先放进回收站，可以从回收站恢复。")
+            $acts = @($dels | Where-Object { $cat0[$_.Idx].Act })
+            if ($acts.Count -gt 0) { $text += (T "`n但其中 {0} 项（{1}）由系统命令处理，不能放进回收站，会直接删除。") -f $acts.Count, (@($acts | ForEach-Object { $_.Name }) -join (T '、')) }
+        }
         $ack = (T '我已确认要删除的内容不再需要，删除不会给我带来损失；因删除造成的后果由我自己承担。')
     }
     $kind = if ($dels) { 'warn' } else { 'info' }
@@ -13516,7 +13718,7 @@ foreach ($pair in @(
 }
 foreach ($d in [System.IO.DriveInfo]::GetDrives()) {
     try {
-        if ($d.DriveType -eq 'Fixed' -and $d.IsReady -and ($d.Name.TrimEnd('\') -ine $env:SystemDrive)) {
+        if ($d.DriveType -eq 'Fixed' -and $d.IsReady -and ($d.Name.TrimEnd('\') -ine $env:SystemDrive) -and -not [FsTools]::IsSubst($d.Name)) {
             Add-Root $d.RootDirectory.FullName ((T "整个 {0} 盘") -f $d.Name.Substring(0, 1)) $true ((T "{0}  已用 {1}") -f $d.Name, (Fmt ($d.TotalSize - $d.TotalFreeSpace)))
         }
     } catch {}
@@ -13761,7 +13963,9 @@ function Build-DupRows($groups, [int]$totalGroups) {
             $r.Modified = $f.Modified.ToString('yyyy-MM-dd HH:mm'); $r.ModifiedTicks = $f.Modified.Ticks
             $r.Risk = $f.Risk; $r.HasRisk = -not [string]::IsNullOrEmpty($f.Risk)
             $r.Protected = Test-Personal $f.Path
-            $r.CanDelete = -not ($protectOn -and $r.Protected)
+            $why = Get-DupBlock $f.Path $r.Protected
+            if ($why) { $r.Blocked = $true; $r.Risk = $why; $r.HasRisk = $true }
+            $r.CanDelete = -not $r.Blocked -and -not ($protectOn -and $r.Protected)
             $fx = [IO.Path]::GetExtension($f.Path).ToLowerInvariant()
             $r.TypeBrush = if ($script:extColor.ContainsKey($fx)) { $script:extColor[$fx] } else { '#C7C7CC' }
             $col.Add($r); [void]$list.Add($r)
@@ -13833,7 +14037,7 @@ function Apply-Protect {
     $on = [bool]$ctl.DupProtect.IsChecked
     if ($script:dupRows) {
         foreach ($r in $script:dupRows) {
-            $r.CanDelete = -not ($on -and $r.Protected)
+            $r.CanDelete = -not $r.Blocked -and -not ($on -and $r.Protected)
             if (-not $r.CanDelete) { $r.ToDelete = $false }
         }
     }
@@ -13988,8 +14192,9 @@ $ctl.BtnDupDelete.Add_Click({
         if ($del.Count -eq 0) { continue }
         if ($del.Count -ge $rows.Count) { $allChecked++; continue }
         $keep = @($rows | Where-Object { -not $_.ToDelete } | ForEach-Object { $_.Path })
+        $keepTicks = @{}; foreach ($kr in @($rows | Where-Object { -not $_.ToDelete })) { $keepTicks[[string]$kr.Path] = [long]$kr.ModifiedTicks }
         foreach ($r in $del) {
-            [void]$plan.Add(@{ Path = $r.Path; Size = $r.Size; Keep = $keep; Verified = $r.Verified; Mtime = $r.ModifiedTicks })
+            [void]$plan.Add(@{ Path = $r.Path; Size = $r.Size; Keep = $keep; KeepTicks = $keepTicks; Verified = $r.Verified; Mtime = $r.ModifiedTicks })
             $bytes += $r.Size
             if ($r.HasRisk) { $risky++ }
         }
@@ -14026,6 +14231,8 @@ foreach ($p in $arg.Plan) {
     SetP @{ Steps = $total; Step = $i; StepName = [IO.Path]::GetFileName($p.Path); SubKind = 'none' }
     # 再保险：保护打开时，C 盘个人文件夹里的文件无论如何不删
     if ($arg.Protect -and (Test-Personal $p.Path)) { Log ((T "  跳过（C 盘个人文件夹，受保护）：{0}") -f $($p.Path)); continue }
+    $why = Get-DupBlock $p.Path (Test-Personal $p.Path)
+    if ($why) { Log ((T "  跳过（{0}）：{1}") -f $why, $p.Path); continue }
     # 删之前再确认一次：要删的文件大小没变，并且至少有一份保留的副本还在、大小相同
     $fi = Get-Item -LiteralPath $p.Path -Force -ErrorAction SilentlyContinue
     if (-not $fi) { [void]$done.Add($p.Path); continue }
@@ -14038,6 +14245,8 @@ foreach ($p in $arg.Plan) {
         if ([FsTools]::SameFile($k, $p.Path)) { Log ((T "  跳过（和保留的那份是同一个文件，只是路径不同）：{0}") -f $($p.Path)); $kept = $false; $same = $true; break }
         if ($p.Similar) { $kept = $true; break }   # 相似照片：保留的那份还在就行（大小本来就不同）
         if ($ki.Length -ne $p.Size) { continue }
+        # 保留的那份在扫描后被改过（大小没变也算）：它已经不是那份内容了，不能拿它当保留
+        if ($p.KeepTicks -and $p.KeepTicks.ContainsKey([string]$k) -and $ki.LastWriteTime.Ticks -ne [long]$p.KeepTicks[[string]$k]) { continue }
         if ($p.Verified) { $kept = $true; break }
         # 抽样判定的组：和保留的那份逐字节比一遍，完全相同才删
         SetP @{ SubKind = 'verify'; Detail = $p.Path }
@@ -15513,6 +15722,7 @@ foreach ($x in $arg.Items) {
         $ok = -not (Test-Path -LiteralPath $p)
         if (-not $ok) { $msg = ((T "没有删掉（代码 {0}，可能文件正被占用，或者在提示里选了取消）") -f $rc) }
     } else {
+        if ($x.IsDir -and -not (Test-CmdPathOk $p)) { [void]$res.Fail.Add(((T "{0}：{1}") -f $p, (T '路径里有 % 或引号，为了不删错地方不交给系统命令'))); continue }
         if ($x.IsDir) { & "$sys32\cmd.exe" /c rd /s /q "\\?\$p" 2>$null | Out-Null } else { Remove-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue }
         $ok = -not (Test-Path -LiteralPath $p)
         if (-not $ok) { $msg = (T '没删干净，可能有文件正被占用') }
@@ -16309,10 +16519,17 @@ foreach ($b in @($ctl.BtnDumpSmall, $ctl.BtnDumpAuto)) {
 $ctl.BtnTmpMove.Add_Click({
     $d = [string]$ctl.SaveTmpDrive.SelectedItem.Tag
     if (-not $d) { return }
-    $p = "$d\Temp"
+    $p = "$d\CleanC-Temp"
+    if ((Test-Path -LiteralPath $p) -and -not (Test-Path -LiteralPath (Join-Path $p '.cleanc-temp')) -and @(Get-ChildItem -LiteralPath $p -Force -ErrorAction SilentlyContinue | Select-Object -First 1).Count -gt 0) {
+        Show-Sheet -Kind warn -Title (T '这个文件夹里已经有东西了') -Text ((T "{0} 已经存在，里面有文件，不是本工具建的。临时文件夹会被定期清空，为了不删到你的文件，不用它。换一块盘，或者把这个文件夹改个名字再试。") -f $p) | Out-Null; return
+    }
     $ans = Show-Sheet -Kind warn -Title ((T "把临时文件夹改到 {0}？") -f $p) -Text ((T "当前用户的 TEMP 和 TMP 会指向 {0}。以后新打开的程序把临时文件放在那里，注销再登录（或重启）后对所有程序生效。{1} 必须是一直插着的本机硬盘；个别安装程序对 C 盘以外的临时文件夹不兼容，遇到就点「恢复默认」。") -f $p, $d) -Buttons @((T '取消'), (T '改到这块盘')) -Primary (T '改到这块盘') -Cancel (T '取消')
     if ($ans -ne (T '改到这块盘')) { return }
-    try { New-Item -ItemType Directory -Path $p -Force | Out-Null; Set-UserTemp $p } catch { Show-Sheet -Kind warn -Title (T '没改成') -Text $_.Exception.Message | Out-Null; return }
+    try {
+        New-Item -ItemType Directory -Path $p -Force | Out-Null
+        $mk = Join-Path $p '.cleanc-temp'; [IO.File]::WriteAllText($mk, (T '腾挪 ClearC 建的临时文件夹：有这个文件，清理时才会把它当临时文件夹清。')); try { (Get-Item -LiteralPath $mk -Force).Attributes = 'Hidden' } catch {}
+        Set-UserTemp $p
+    } catch { Show-Sheet -Kind warn -Title (T '没改成') -Text $_.Exception.Message | Out-Null; return }
     OpLog '系统设置' (T '临时文件夹位置') $p ''
     Load-Save
 })
@@ -17259,6 +17476,8 @@ foreach ($p in $arg.Plan) {
     $i++
     SetP @{ Steps = $total; Step = $i; StepName = [IO.Path]::GetFileName($p.Path); SubKind = 'none' }
     if ($arg.Protect -and (Test-Personal $p.Path)) { Log ((T "  跳过（C 盘个人文件夹，受保护）：{0}") -f $($p.Path)); continue }
+    $why = Get-DupBlock $p.Path (Test-Personal $p.Path)
+    if ($why) { Log ((T "  跳过（{0}）：{1}") -f $why, $p.Path); continue }
     $fi = Get-Item -LiteralPath $p.Path -Force -ErrorAction SilentlyContinue
     if (-not $fi) { continue }
     if ($fi.Length -ne $p.Size -or ($p.Mtime -and $fi.LastWriteTime.Ticks -ne [long]$p.Mtime)) { Log ((T "  跳过（文件在扫描后被修改过）：{0}") -f $($p.Path)); continue }
@@ -17295,7 +17514,7 @@ $ctl.BtnDupMerge.Add_Click({
             $root = [IO.Path]::GetPathRoot($r.Path)
             $k = @($keepers | Where-Object { [IO.Path]::GetPathRoot($_.Path) -ieq $root }) | Select-Object -First 1
             if (-not $k) { $skip++; continue }
-            [void]$plan.Add(@{ Path = $r.Path; Size = $r.Size; Keep = $k.Path; Verified = $r.Verified; Mtime = $r.ModifiedTicks })
+            [void]$plan.Add(@{ Path = $r.Path; Size = $r.Size; Keep = $k.Path; KeepMtime = $k.ModifiedTicks; Verified = $r.Verified; Mtime = $r.ModifiedTicks })
             $bytes += $r.Size
         }
     }
@@ -17318,8 +17537,11 @@ foreach ($p in $arg.Plan) {
     $i++
     SetP @{ Steps = $total; Step = $i; StepName = [IO.Path]::GetFileName($p.Path); SubKind = 'none' }
     if ($arg.Protect -and (Test-Personal $p.Path)) { continue }
+    $why = Get-DupBlock $p.Path (Test-Personal $p.Path)
+    if ($why) { Log ((T "  跳过（{0}）：{1}") -f $why, $p.Path); continue }
     $fi = Get-Item -LiteralPath $p.Path -Force -ErrorAction SilentlyContinue
     $ki = Get-Item -LiteralPath $p.Keep -Force -ErrorAction SilentlyContinue
+    if ($ki -and $p.KeepMtime -and $ki.LastWriteTime.Ticks -ne [long]$p.KeepMtime) { Log ((T "  跳过（保留的那份在扫描后被改过）：{0}") -f $($p.Keep)); continue }
     if (-not $fi -or -not $ki -or $fi.Length -ne $p.Size -or $ki.Length -ne $p.Size -or ($p.Mtime -and $fi.LastWriteTime.Ticks -ne [long]$p.Mtime)) { Log ((T "  跳过（文件在扫描后变了）：{0}") -f $($p.Path)); continue }
     if ([FsTools]::SameFile($p.Keep, $p.Path)) { Log ((T "  跳过（本来就是同一个文件）：{0}") -f $($p.Path)); continue }
     if (-not $p.Verified) {
@@ -18742,7 +18964,7 @@ $win.Add_ContentRendered({
     }
     if ($script:riskShown) { return }
     $script:riskShown = $true
-    if (Test-Path -LiteralPath $script:riskFile) { return }
+    if (Test-Path -LiteralPath $script:riskFile) { Show-HalfMoves; return }
     $ans = Show-Sheet -Kind warn -Title (T '使用前请先阅读安全风险提示') `
         -Text (T "本工具会按你的选择删除或搬移电脑上的文件。删除的文件可能无法恢复，存在资料丢失的风险。`n`n每次删除前，请确认这些资料确实不再需要、删除不会给你带来损失；重要资料请先备份。因使用本工具造成的资料丢失或其他损失，责任由使用者自行承担，开发者不承担责任。`n`n完整说明随时可以在左侧「帮助」里查看。") `
         -Confirm (T '我已阅读并了解上述风险，同意自行承担使用本工具的后果。') -Buttons @((T '退出'), (T '同意并继续')) -Primary (T '同意并继续') -Cancel (T '退出')
@@ -18752,7 +18974,18 @@ $win.Add_ContentRendered({
         [IO.File]::WriteAllText($script:riskFile, ((T "{0:yyyy-MM-dd HH:mm:ss}  已同意（版本 {1}）") -f (Get-Date), $script:AppVersion), [Text.Encoding]::UTF8)
     } catch {}
     Write-LogFile (T '用户已同意安全风险提示')
+    Show-HalfMoves
 })
+# 打开时查一下有没有上次没做完的搬家（数据都在，只是要告诉用户在哪）
+function Show-HalfMoves {
+    $h = @(); try { $h = @(Find-HalfMoves) } catch { return }
+    if ($h.Count -eq 0) { return }
+    $items = @($h | ForEach-Object { if ($_.Kind -eq '.moved_backup') { (T "{0} 的数据在 {1}") -f $_.Src, $_.Bak } else { (T "{0}：搬回时复制回来的数据在 {1}") -f $_.Src, $_.Bak } })
+    Write-LogFile ((T '发现上次没做完的搬家：') + ($items -join (T '；')))
+    $ans = Show-Sheet -Kind warn -Title (T '有上次没做完的搬家') -Text (T "上次搬家或搬回 C 盘时中途停了（比如关机、断电），下面这些文件夹改了名还没收尾。数据都还在，没有删。`n`n如果软件里的数据看起来不见了：先退出那个软件，把原来名字的文件夹（多半是软件新建的空文件夹）移到别处，再把带后缀的文件夹改回原来的名字；也可以到「搬家管理」里重新搬一次。") `
+        -Items $items -Buttons @((T '知道了'), (T '打开所在位置')) -Primary (T '知道了') -Cancel (T '知道了')
+    if ($ans -eq (T '打开所在位置')) { Open-Location $h[0].Bak }
+}
 $global:CLEANC_UI_SHOWN = $true   # 告诉外层 exe：界面已经正常打开
 if ($script:uiTest) { $win.WindowStartupLocation = 'Manual'; $win.Left = -32000; $win.Top = -32000; $win.ShowActivated = $false; $win.ShowInTaskbar = $false }
 $win.ShowDialog() | Out-Null

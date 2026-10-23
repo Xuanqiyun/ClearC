@@ -18,7 +18,8 @@ New-Item -ItemType Directory -Force -Path (Join-Path $T 'a/x'), (Join-Path $T 'b
 [IO.File]::WriteAllBytes((Join-Path $T 'b/big.iso'), (New-Object byte[] 2000000))
 $lk = Join-Path $T 'lnk'
 if ($win) { New-Item -ItemType Junction -Path $lk -Target (Join-Path $T 'b') | Out-Null } else { New-Item -ItemType SymbolicLink -Path $lk -Target (Join-Path $T 'b') | Out-Null }
-try {
+try { & {
+    trap { "FAIL error in the test script: $($_.Exception.Message) (line $($_.InvocationInfo.ScriptLineNumber))"; $script:fails++; continue }   # 检查自己出错也算失败
     Init-DriveThreads
     Check 'threads ready' ([DirStat]::ThreadsReady)
     $dirA = Join-Path $T 'a'
@@ -190,7 +191,7 @@ try {
     Check "file categories by extension ($($cats -join ','))" (($cats -join ',') -eq '1,5,0,0,9,0')
     $u = [Text.Encoding]::Unicode.GetBytes('photo.JPEG'); Check 'file category from UTF-16 name bytes' ([FileCats]::Of($u, 0, $u.Length) -eq 2)
     Check 'walk scan counts file types' ($tree.TypeBytes -and $tree.TypeBytes.Length -eq 10 -and (($tree.TypeCount | Measure-Object -Sum).Sum) -eq $tree.Files)
-} finally {
+} } finally {
     Remove-Item -LiteralPath $lk -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue
 }

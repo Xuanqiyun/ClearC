@@ -29,7 +29,7 @@ foreach ($pair in @(
 }
 foreach ($d in [System.IO.DriveInfo]::GetDrives()) {
     try {
-        if ($d.DriveType -eq 'Fixed' -and $d.IsReady -and ($d.Name.TrimEnd('\') -ine $env:SystemDrive)) {
+        if ($d.DriveType -eq 'Fixed' -and $d.IsReady -and ($d.Name.TrimEnd('\') -ine $env:SystemDrive) -and -not [FsTools]::IsSubst($d.Name)) {
             Add-Root $d.RootDirectory.FullName ((T "整个 {0} 盘") -f $d.Name.Substring(0, 1)) $true ((T "{0}  已用 {1}") -f $d.Name, (Fmt ($d.TotalSize - $d.TotalFreeSpace)))
         }
     } catch {}
@@ -274,7 +274,9 @@ function Build-DupRows($groups, [int]$totalGroups) {
             $r.Modified = $f.Modified.ToString('yyyy-MM-dd HH:mm'); $r.ModifiedTicks = $f.Modified.Ticks
             $r.Risk = $f.Risk; $r.HasRisk = -not [string]::IsNullOrEmpty($f.Risk)
             $r.Protected = Test-Personal $f.Path
-            $r.CanDelete = -not ($protectOn -and $r.Protected)
+            $why = Get-DupBlock $f.Path $r.Protected
+            if ($why) { $r.Blocked = $true; $r.Risk = $why; $r.HasRisk = $true }
+            $r.CanDelete = -not $r.Blocked -and -not ($protectOn -and $r.Protected)
             $fx = [IO.Path]::GetExtension($f.Path).ToLowerInvariant()
             $r.TypeBrush = if ($script:extColor.ContainsKey($fx)) { $script:extColor[$fx] } else { '#C7C7CC' }
             $col.Add($r); [void]$list.Add($r)
@@ -346,7 +348,7 @@ function Apply-Protect {
     $on = [bool]$ctl.DupProtect.IsChecked
     if ($script:dupRows) {
         foreach ($r in $script:dupRows) {
-            $r.CanDelete = -not ($on -and $r.Protected)
+            $r.CanDelete = -not $r.Blocked -and -not ($on -and $r.Protected)
             if (-not $r.CanDelete) { $r.ToDelete = $false }
         }
     }
@@ -501,8 +503,9 @@ $ctl.BtnDupDelete.Add_Click({
         if ($del.Count -eq 0) { continue }
         if ($del.Count -ge $rows.Count) { $allChecked++; continue }
         $keep = @($rows | Where-Object { -not $_.ToDelete } | ForEach-Object { $_.Path })
+        $keepTicks = @{}; foreach ($kr in @($rows | Where-Object { -not $_.ToDelete })) { $keepTicks[[string]$kr.Path] = [long]$kr.ModifiedTicks }
         foreach ($r in $del) {
-            [void]$plan.Add(@{ Path = $r.Path; Size = $r.Size; Keep = $keep; Verified = $r.Verified; Mtime = $r.ModifiedTicks })
+            [void]$plan.Add(@{ Path = $r.Path; Size = $r.Size; Keep = $keep; KeepTicks = $keepTicks; Verified = $r.Verified; Mtime = $r.ModifiedTicks })
             $bytes += $r.Size
             if ($r.HasRisk) { $risky++ }
         }
@@ -539,6 +542,8 @@ foreach ($p in $arg.Plan) {
     SetP @{ Steps = $total; Step = $i; StepName = [IO.Path]::GetFileName($p.Path); SubKind = 'none' }
     # 再保险：保护打开时，C 盘个人文件夹里的文件无论如何不删
     if ($arg.Protect -and (Test-Personal $p.Path)) { Log ((T "  跳过（C 盘个人文件夹，受保护）：{0}") -f $($p.Path)); continue }
+    $why = Get-DupBlock $p.Path (Test-Personal $p.Path)
+    if ($why) { Log ((T "  跳过（{0}）：{1}") -f $why, $p.Path); continue }
     # 删之前再确认一次：要删的文件大小没变，并且至少有一份保留的副本还在、大小相同
     $fi = Get-Item -LiteralPath $p.Path -Force -ErrorAction SilentlyContinue
     if (-not $fi) { [void]$done.Add($p.Path); continue }
@@ -551,6 +556,8 @@ foreach ($p in $arg.Plan) {
         if ([FsTools]::SameFile($k, $p.Path)) { Log ((T "  跳过（和保留的那份是同一个文件，只是路径不同）：{0}") -f $($p.Path)); $kept = $false; $same = $true; break }
         if ($p.Similar) { $kept = $true; break }   # 相似照片：保留的那份还在就行（大小本来就不同）
         if ($ki.Length -ne $p.Size) { continue }
+        # 保留的那份在扫描后被改过（大小没变也算）：它已经不是那份内容了，不能拿它当保留
+        if ($p.KeepTicks -and $p.KeepTicks.ContainsKey([string]$k) -and $ki.LastWriteTime.Ticks -ne [long]$p.KeepTicks[[string]$k]) { continue }
         if ($p.Verified) { $kept = $true; break }
         # 抽样判定的组：和保留的那份逐字节比一遍，完全相同才删
         SetP @{ SubKind = 'verify'; Detail = $p.Path }

@@ -40,6 +40,7 @@ public class DupRow : INotifyPropertyChanged {
     public bool HasRisk { get; set; }
     string _type; public string TypeBrush { get { return Theme.F(_type); } set { _type = value; } }
     public bool Protected { get; set; }          // 在 C 盘个人文件夹里
+    public bool Blocked { get; set; }            // 系统位置、软件文件夹、搬家后的数据、聊天记录：怎么都不能删（不受个人文件夹开关影响）
     private bool _can = true;
     public bool CanDelete {
         get { return _can; }
