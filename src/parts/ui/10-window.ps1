@@ -971,8 +971,6 @@ function Update-Op {
 
 function Shorten($p) { if (-not $p) { return '' }; if ($p.Length -le 80) { $p } else { '…' + $p.Substring($p.Length - 79) } }
 
-$script:logFile = Join-Path ([IO.Path]::GetTempPath()) 'CleanC-run.log'
-function Write-LogFile([string]$m) { try { [IO.File]::AppendAllText($script:logFile, ("{0:yyyy-MM-dd HH:mm:ss}  {1}`r`n" -f (Get-Date), $m), [Text.Encoding]::UTF8) } catch {} }
 function UI-Log($m) { $ctl.Log.AppendText("$m`r`n"); $ctl.Log.ScrollToEnd(); Write-LogFile ([string]$m) }
 # 存储空间卡片：一条横条分成 已用 / 可释放（按扫描后的默认选择） / 可用 三段
 $script:reclaim = [double]0
