@@ -743,7 +743,7 @@ function Invoke-UiTest {
             }
         }
         & $step 'similar photos and keep rules' {
-            if (-not ('PhotoHash' -as [type])) { throw 'PhotoHash did not compile' }
+            if (-not (Initialize-PhotoHash)) { throw 'PhotoHash did not compile' }
             # 放在临时文件夹里：本工具自己的文件夹（appDir）在重复文件里是删不得的，勾不上
             $d = Join-Path ([IO.Path]::GetTempPath()) ('clearc-uitest-photos-' + [guid]::NewGuid().ToString('N').Substring(0, 6)); New-Item -ItemType Directory -Path "$d\sub" -Force | Out-Null
             # 画三张图：渐变图、它的缩小版（相似）、另一张方格图（不相似）

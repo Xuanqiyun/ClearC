@@ -110,7 +110,12 @@ public static class PhotoHash {
     static void Union(int[] p, int a, int b) { a = Find(p, a); b = Find(p, b); if (a != b) p[b] = a; }
 }
 '@
-if (-not ('PhotoHash' -as [type])) { try { Add-Type -TypeDefinition $script:photoCode -ReferencedAssemblies PresentationCore, WindowsBase, System.Xaml -ErrorAction Stop } catch { Write-LogFile ('photo hash: ' + $_.Exception.Message) } }
+# 照片指纹要引用 WPF 现场编译，要一两秒：只在第一次找相似照片时编（以前每次启动都编）
+function Initialize-PhotoHash {
+    if ('PhotoHash' -as [type]) { return $true }
+    try { Add-Type -TypeDefinition $script:photoCode -ReferencedAssemblies PresentationCore, WindowsBase, System.Xaml -ErrorAction Stop; return $true }
+    catch { Write-LogFile ('photo hash: ' + $_.Exception.Message); return $false }
+}
 
 $script:tPrep = $script:startClock.Elapsed.TotalSeconds
 
