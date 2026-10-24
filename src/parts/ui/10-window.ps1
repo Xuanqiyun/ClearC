@@ -951,6 +951,7 @@ function Start-Worker([string]$code, $arg) {
         Show-Sheet -Kind warn -Title (T '后台的自动清理正在运行') -Text (T '定时的自动清理正在后台清理缓存，通常一两分钟就做完。等它做完再试一次。') | Out-Null
         return
     }
+    if ($script:readOnlyModes -notcontains [string]$sync.Mode) { [void][FsTools]::KeepAwake($true) }   # 做完之前电脑不睡着
     $sync.Cancel = $false; $sync.WasCancelled = $false; Set-CanCancel $true
     [DirStat]::Cancel = $false; [DupFinder]::Cancel = $false; [DiskMap]::Cancel = $false
     $rs = [runspacefactory]::CreateRunspace(); $rs.ApartmentState = 'STA'; $rs.ThreadOptions = 'ReuseThread'; $rs.Open()

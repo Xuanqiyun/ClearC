@@ -371,6 +371,7 @@ function Start-MoveMany {
     if ($who) { $text += ((T "`n`n{0} 正在运行，搬之前会替你关掉（包括屏幕右下角托盘里的）。没保存的内容请先保存。") -f $who) }
     $text += (T "`n`n要注意：目标盘要一直接着；不要删除、改名或移动目标盘上的 CDriveMoved 文件夹。")
     $enc = Get-EncryptionWarning $dest; if ($enc) { $text += "`n`n" + $enc }
+    $pw = Get-PowerNote $total; if ($pw) { $text += "`n`n" + $pw }
     $items = @($sel | ForEach-Object { (T "{0}（{1}）") -f $_.Name, $_.SizeText })
     $btn = if ($who) { (T '关掉并搬走') } else { (T '搬到其他盘') }
     if ((Show-Sheet -Title ((T "把 {0} 项搬到其他盘？") -f $sel.Count) -Text $text -Items $items -Buttons @((T '取消'), $btn) -Primary $btn -Cancel (T '取消')) -ne $btn) { return }

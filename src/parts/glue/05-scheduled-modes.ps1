@@ -147,6 +147,7 @@ if ($script:mode -match '(?i)/selftest') {
 if ($script:mode -match '(?i)/autoclean') {
     if (-not (Enter-BusyLock)) { OpLog '删除' (T '这次自动清理跳过：本工具的窗口里正在删除或搬家') '' (T '下次到时间再做'); $global:CLEANC_UI_SHOWN = $true; return }
     [void](Prune-OpLog (Get-LogMonths))
+    [void][FsTools]::KeepAwake($true)   # 清完之前电脑不睡着（进程结束时自动放开）
     $r = Invoke-AutoClean
     Add-History
     OpLog '删除' (T '每周自动清理完成') '' ((T "C 盘多出 {0}；{1}") -f (GB $r.Freed), ($r.Items -join (T '；')))

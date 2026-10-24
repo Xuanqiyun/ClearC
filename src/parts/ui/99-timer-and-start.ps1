@@ -34,7 +34,7 @@ $timer.Add_Tick({
 
     if ($script:worker -and $script:worker.Handle.IsCompleted) {
         $w = $script:worker; $script:worker = $null
-        Exit-BusyLock
+        Exit-BusyLock; [void][FsTools]::KeepAwake($false)
         $script:movedTargets = $null
         try { $w.PS.EndInvoke($w.Handle) | Out-Null } catch { UI-Log ((T "后台出错：{0}") -f $($_.Exception.Message)) }
         foreach ($er in @($w.PS.Streams.Error | Select-Object -First 5)) { UI-Log ((T "后台出错：{0}") -f $er) }

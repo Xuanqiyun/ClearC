@@ -3263,6 +3263,20 @@ function Get-EncryptionWarning([string]$dest, $cEnc = 'ask', $dEnc = 'ask') {
     if (-not ($dEnc -is [bool]) -or $dEnc) { return '' }
     return ((T "C 盘用 BitLocker 加密了，{0} 盘没有：搬过去的聊天记录和文件在那块盘上不加密，电脑丢了或者硬盘被拆走，别人能直接读出来。介意的话，先给 {0} 盘打开 BitLocker（控制面板 →「BitLocker 驱动器加密」）再搬。") -f $dest.Substring(0, 1).ToUpperInvariant())
 }
+# 用电池时搬东西：要搬的多（2 GB 以上）或者电量低于 30%，确认框里加一句。$ps 是测试用的：@{ Battery = 在用电池; Percent = 0~1 }
+function Get-PowerNote([double]$bytes, $ps = $null) {
+    if ($null -eq $ps) {
+        try {
+            Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
+            $s = [System.Windows.Forms.SystemInformation]::PowerStatus
+            $ps = @{ Battery = ([string]$s.PowerLineStatus -eq 'Offline'); Percent = [double]$s.BatteryLifePercent }
+        } catch { return '' }
+    }
+    if (-not $ps.Battery) { return '' }
+    $pct = [int][math]::Round([double]$ps.Percent * 100)
+    if ($bytes -lt 2GB -and $pct -ge 30) { return '' }
+    return ((T "现在用的是电池（剩 {0}%）。搬家要一段时间，中途没电会停在一半（下次打开可以接着做完或撤回，数据不会丢），最好先插上电源。") -f $pct)
+}
 # 打开网页、文本文件、报告：交给资源管理器去开。本工具以管理员身份运行，直接开的话浏览器、记事本也是管理员身份，
 # 网页里的下载、记事本里的「另存为」都带着管理员权限。资源管理器把它交给当前登录用户的桌面，用普通权限打开
 function Open-AsUser([string]$target) {

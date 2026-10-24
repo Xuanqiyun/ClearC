@@ -207,6 +207,13 @@ public static class FsTools {
             return (a >= 0 && b > a) ? s.Substring(a, b - a + 1) : "";
         } catch { return ""; }
     }
+    [DllImport("kernel32.dll")]
+    static extern uint SetThreadExecutionState(uint flags);
+    // 删除、搬家期间不让电脑自己睡着（屏幕照样可以关）：在一直活着的线程（界面线程）上调用；做完以后放开
+    public static bool KeepAwake(bool on) {
+        if (!Win) return false;
+        try { return SetThreadExecutionState(on ? 0x80000001u /*ES_CONTINUOUS|ES_SYSTEM_REQUIRED*/ : 0x80000000u /*ES_CONTINUOUS*/) != 0; } catch { return false; }
+    }
     // 一批文件、文件夹一起放进回收站（可恢复删除）。太大放不进回收站的由系统弹窗问，不会悄悄永久删除
     public static int RecycleMany(string[] paths) {
         if (paths == null || paths.Length == 0) return 0;

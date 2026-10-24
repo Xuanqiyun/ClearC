@@ -651,6 +651,13 @@ try { & {
         Check 'OPS-3 the app folder is checked for writing at startup' (-not (Test-AppDirWritable (Join-Path $blocker 'app')) -and (Test-AppDirWritable (Join-Path $T 'appdir-ok')))
     } finally { $script:opLogDir = $keepLog; $script:opLogFailed = 0; $sync.OpLogFail = $null }
     Check 'OPS-3 the window tells the user when the log or its own files could not be written' ($src -match '(?s)function Show-WriteTrouble.*?OpLogFail' -and ([regex]::Matches($src, 'Show-WriteTrouble')).Count -ge 3)
+    # ============ 24. 删除、搬家期间不让电脑睡着；用电池搬大文件夹先提醒（3.6 运维评审） ============
+    Check 'OPS-4 on battery, moving a big folder or a low battery adds a note to the confirmation' ([bool](Get-PowerNote 10GB @{ Battery = $true; Percent = 0.8 }) -and [bool](Get-PowerNote 100MB @{ Battery = $true; Percent = 0.2 }))
+    Check 'OPS-4 no note on mains power, or for a small move with enough battery' (-not (Get-PowerNote 50GB @{ Battery = $false; Percent = 0.1 }) -and -not (Get-PowerNote 100MB @{ Battery = $true; Percent = 0.8 }))
+    $sw = [regex]::Match($src, '(?s)function Start-Worker\(.*?\r?\n\}').Value
+    $ac = [regex]::Match($src, "(?s)if \(\`$script:mode -match '\(\?i\)/autoclean'\) \{.*?\r?\n\}").Value
+    Check 'OPS-4 the PC is kept awake while something is being changed, and allowed to sleep again afterwards' ($sw -match '\[FsTools\]::KeepAwake\(\$true\)' -and $src -match 'Exit-BusyLock; \[void\]\[FsTools\]::KeepAwake\(\$false\)' -and $ac -match 'KeepAwake\(\$true\)' -and $dupCode -match 'SetThreadExecutionState')
+    Check 'OPS-4 the cleanup page, the move manager and app moves add the battery note' (([regex]::Matches($src, 'Get-PowerNote [$(]')).Count -ge 3)
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue
