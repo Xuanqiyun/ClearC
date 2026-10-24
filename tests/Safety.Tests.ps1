@@ -741,6 +741,9 @@ try { & {
     # ============ 40. 照片指纹的 C# 用到时才编译，不拖慢每次启动（3.6 架构评审） ============
     $top = $src.Substring(0, $src.IndexOf("`$engine = @'"))
     Check 'ARC-8 the photo-hash code is not compiled at startup, only when similar photos are searched' ($top -notmatch "(?m)^if \(-not \('PhotoHash' -as \[type\]\)\)" -and $src -match '(?s)function Initialize-PhotoHash.*?Add-Type -TypeDefinition \$script:photoCode' -and [regex]::Match($src, "(?s)if \(-not \(Initialize-PhotoHash\)\)").Success)
+    # ============ 41. 输完管理员密码马上有反应：先显示一个「正在打开」的小窗口（3.6 体验评审） ============
+    $sp = $src.IndexOf('function Show-Splash'); $call = $src.IndexOf('Show-Splash' + [Environment]::NewLine); if ($call -lt 0) { $call = $src.IndexOf("Show-Splash`n") }
+    Check 'UX-13 a small "opening" window shows right after WPF loads, before the slow part, and only for the normal window (not scheduled runs)' ($sp -gt 0 -and $src.IndexOf('Show-Splash', $sp + 20) -lt $src.IndexOf('if (-not (''RowItem'' -as [type]))') -and [regex]::Match($src, '(?s)function Show-Splash.*?\r?\n\}').Value -match 'CLEANC_ARGS' -and [regex]::Match($src, '(?s)\$win\.Add_ContentRendered\(\{.*?\r?\n\}\)').Value -match 'Close-Splash')
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue

@@ -62,6 +62,28 @@ if (-not $isAdmin) {
 }
 
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
+# 输完管理员密码到主窗口出来要几秒（编译、读界面）：先显示一个小窗口说「正在打开」，主窗口画出来后关掉。定时任务、自测不显示
+$script:splash = $null
+function Show-Splash {
+    if ($env:CLEANC_ARGS) { return }
+    try {
+        $zh = [Globalization.CultureInfo]::CurrentUICulture.Name.StartsWith('zh', [StringComparison]::OrdinalIgnoreCase)
+        $w = New-Object System.Windows.Window
+        $w.WindowStyle = 'None'; $w.ResizeMode = 'NoResize'; $w.SizeToContent = 'WidthAndHeight'; $w.WindowStartupLocation = 'CenterScreen'
+        $w.ShowInTaskbar = $true; $w.Title = $(if ($zh) { '腾挪 ClearC' } else { 'ClearC' })   # 不置顶：万一打不开，启动器的错误提示要能盖在它上面
+        $w.Background = New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color]::FromRgb(0xF5, 0xF5, 0xF7))
+        $b = New-Object System.Windows.Controls.Border; $b.Padding = New-Object System.Windows.Thickness 28, 20, 28, 20
+        $b.BorderBrush = New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color]::FromRgb(0xD9, 0xD9, 0xDE)); $b.BorderThickness = New-Object System.Windows.Thickness 1
+        $t = New-Object System.Windows.Controls.TextBlock; $t.FontSize = 15; $t.FontFamily = New-Object System.Windows.Media.FontFamily 'Segoe UI, Microsoft YaHei UI'
+        $t.Text = $(if ($zh) { '腾挪 ClearC 正在打开…' } else { 'Opening ClearC…' })
+        $b.Child = $t; $w.Content = $b
+        $w.Show()
+        [System.Windows.Threading.Dispatcher]::CurrentDispatcher.Invoke([Action]{}, [System.Windows.Threading.DispatcherPriority]::Render)
+        $script:splash = $w
+    } catch { $script:splash = $null }
+}
+function Close-Splash { if ($script:splash) { try { $script:splash.Close() } catch {}; $script:splash = $null } }
+Show-Splash
 
 # 表格行的数据类型（带属性变更通知，下拉框改动能回写）
 $rowCode = @"

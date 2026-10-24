@@ -740,6 +740,7 @@ $ctl.CleanMore.Add_Click({ $ctl.CleanScroll.PageDown() })
 # 第一次打开时先给出安全风险提示，勾选同意后才能使用；同意过就不再弹
 $script:riskFile = Join-Path $env:LOCALAPPDATA 'CleanC\risk-accepted.txt'
 $win.Add_ContentRendered({
+    Close-Splash
     try { $sync.Hwnd = [long](New-Object System.Windows.Interop.WindowInteropHelper $win).Handle } catch { $sync.Hwnd = [long]0 }
     if (-not $script:startLogged) {
         $script:startLogged = $true
