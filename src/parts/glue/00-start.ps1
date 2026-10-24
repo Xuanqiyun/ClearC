@@ -16,6 +16,28 @@ function Use-SystemPaths {
     if ($w -and $w.Length -ge 3 -and $w[1] -eq ':') { $env:SystemRoot = $w; $env:windir = $w; $env:SystemDrive = $w.Substring(0, 2) }
 }
 Use-SystemPaths
+# ---------- 运行记录 ----------
+# 运行记录（给排查问题用）放在本工具自己的文件夹里：以前放在 TEMP，本工具清理 TEMP 时会把它一起清掉。
+# 超过 2 MB 就把它改名留一份（run.1.log、run.2.log），更早的删掉。加载时就要用（编译出错也要记下来），所以写在最前面
+$script:logDir = Join-Path $env:LOCALAPPDATA 'CleanC\logs'
+$script:logFile = Join-Path $script:logDir 'run.log'
+function Rotate-RunLog([long]$max = 2MB) {
+    try {
+        if (-not (Test-Path -LiteralPath $script:logFile) -or (Get-Item -LiteralPath $script:logFile).Length -lt $max) { return }
+        $o2 = Join-Path $script:logDir 'run.2.log'; $o1 = Join-Path $script:logDir 'run.1.log'
+        if ([IO.File]::Exists($o2)) { [IO.File]::Delete($o2) }
+        if ([IO.File]::Exists($o1)) { [IO.File]::Move($o1, $o2) }
+        [IO.File]::Move($script:logFile, $o1)
+    } catch {}
+}
+function Write-LogFile([string]$m) {
+    try {
+        if (-not [IO.Directory]::Exists($script:logDir)) { [void][IO.Directory]::CreateDirectory($script:logDir) }
+        [IO.File]::AppendAllText($script:logFile, ("{0:yyyy-MM-dd HH:mm:ss}  {1}`r`n" -f (Get-Date), $m), [Text.Encoding]::UTF8)
+    } catch {}
+}
+Rotate-RunLog
+# ---------- 运行记录结束 ----------
 
 # ---------------- 管理员权限 ----------------
 $script:selfScript = $PSCommandPath

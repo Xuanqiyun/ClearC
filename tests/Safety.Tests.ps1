@@ -482,6 +482,7 @@ try { & {
         'Install-TaskExe'       = 1   # 定时任务用的副本：核对不一致时删掉刚复制的临时文件
         'Remove-TaskExeIfUnused' = 2  # Program Files\ClearC 里本工具自己的副本
         'Set-Setting'           = 1   # 设置文件的临时文件
+        'Rotate-RunLog'         = 1   # 本工具自己最旧的那份运行记录
         'Test-AppDirWritable'   = 1   # 试写本工具文件夹时写的小文件
         'Prune-OpLog'           = 1   # 一年前的操作日志
         'Update-Growth'         = 2   # 本工具自己的空间快照
@@ -700,6 +701,19 @@ try { & {
     Check 'UX-10 help items for features of a higher mode are marked in the help sources' (([regex]::Matches($src, 'Tag="lvl:[12]"')).Count -ge 40)
     $hm = [regex]::Match($src, '(?s)function Update-HelpForMode.*?\r?\n\}').Value
     Check 'UX-10 the help hides those items, and whole sections for pages this mode does not have' ($hm -match "lvl:" -and $hm -match 'helpSecPage' -and [regex]::Match($src, '(?s)function Apply-Display.*?\r?\n\}').Value -match 'Update-HelpForMode')
+    # ============ 34. 运行记录放在本工具自己的文件夹里，满了就换一份（3.6 运维评审） ============
+    $lf = [regex]::Match($src, '(?s)# ---------- 运行记录 ----------.*?# ---------- 运行记录结束 ----------').Value
+    Check 'OPS-8 the run log lives in %LOCALAPPDATA%\CleanC\logs (not in TEMP, which ClearC itself cleans) and is defined before anything uses it' ($lf -match "Join-Path \`$env:LOCALAPPDATA 'CleanC\\logs'" -and $src -notmatch "GetTempPath\(\)\) 'CleanC-run\.log'" -and $src.IndexOf('function Write-LogFile') -lt $src.IndexOf('Write-LogFile (') -and ([regex]::Matches($src, 'function Write-LogFile')).Count -eq 1)
+    & {
+        $keepLA = $env:LOCALAPPDATA; if (-not $env:LOCALAPPDATA) { $env:LOCALAPPDATA = $T }
+        try { Invoke-Expression $lf } finally { $env:LOCALAPPDATA = $keepLA }
+        $script:logDir = Join-Path $T 'logs'; $script:logFile = Join-Path $script:logDir 'run.log'
+        [void][IO.Directory]::CreateDirectory($script:logDir)
+        foreach ($k in 1..4) { [IO.File]::WriteAllText($script:logFile, ('x' * 1200)); Rotate-RunLog 1KB }
+        Write-LogFile 'hello'
+        $names = @(Get-ChildItem -LiteralPath $script:logDir -File | ForEach-Object { $_.Name } | Sort-Object)
+        Check ("OPS-8 a full run log is moved aside and at most two old copies are kept ({0})" -f ($names -join ', ')) (($names -join ',') -eq 'run.1.log,run.2.log,run.log' -and [IO.File]::ReadAllText($script:logFile) -match 'hello')
+    }
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue
