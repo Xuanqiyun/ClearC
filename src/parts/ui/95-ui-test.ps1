@@ -81,6 +81,64 @@ function Invoke-UiTest {
             $q = @($ctl.HelpFaq.Children)[0]; Select-HelpPane 'faq' -NoRemember; $q.IsExpanded = $true; $win.UpdateLayout(); $q.IsExpanded = $false
             Select-HelpPane $was
         }
+        & $step 'wide window: help items in columns, tables and cards stretch' {
+            $ws = $win.WindowState; $w0 = $win.Width; $h0 = $win.Height
+            try {
+                $win.WindowState = 'Normal'; $win.Width = 1180; $win.Height = 860
+                Show-Page 'help'; Select-HelpPane 's1' -NoRemember; $win.UpdateLayout(); $win.UpdateLayout()
+                $g = @($script:autoColGrids | Where-Object { $_.IsVisible })[0]
+                if (-not $g) { throw 'no column grid in the help item' }
+                $n1 = [int]$g.Tag.Cols; $cw1 = [double]$ctl.HelpScroll.ActualWidth
+                $win.Width = 2100; $win.UpdateLayout(); $win.UpdateLayout()
+                $n2 = [int]$g.Tag.Cols; $cw2 = [double]$ctl.HelpScroll.ActualWidth
+                $L.Add(('  help: {0} column(s) {1:N0} wide at 1180, {2} columns {3:N0} wide at 2100' -f $n1, $cw1, $n2, $cw2))
+                if ($cw2 -lt $cw1 + 700) { throw 'the help pane did not get wider with the window' }
+                if ($n2 -le $n1) { throw 'help items did not spread into more columns' }
+                Show-Page 'health'; Select-HealthTab 'mon'; $win.UpdateLayout(); $win.UpdateLayout()
+                $c0 = [double]$ctl.MonList.View.Columns[0].Width
+                if ($c0 -le 300) { throw ("the monitor table did not stretch (program column {0})" -f $c0) }
+                Select-HealthTab 'fix'; $win.UpdateLayout()
+                if ([double]$ctl.HealthCardFix.ActualWidth -lt 1400) { throw ('repair card only {0:N0} wide' -f $ctl.HealthCardFix.ActualWidth) }
+                Select-HealthTab 'hw'
+                Show-Page 'save'; $win.UpdateLayout()
+                if ([double]$ctl.SaveScroll.ActualWidth -lt 1300) { throw ('save page only {0:N0} wide' -f $ctl.SaveScroll.ActualWidth) }
+                Show-Page 'settings'; $win.UpdateLayout()
+                if ([double]$ctl.SetScroll.ActualWidth -lt 1300) { throw ('settings page only {0:N0} wide' -f $ctl.SetScroll.ActualWidth) }
+                $win.Width = 1180; Show-Page 'health'; Select-HealthTab 'mon'; $win.UpdateLayout(); $win.UpdateLayout()
+                if ([double]$ctl.MonList.View.Columns[0].Width -ge $c0) { throw 'the monitor table did not shrink back' }
+                Select-HealthTab 'hw'
+                Show-Page 'help'; $win.UpdateLayout()
+                if ([int]$g.Tag.Cols -ne $n1) { throw 'help items did not go back to fewer columns' }
+            } finally { $win.Width = $w0; $win.Height = $h0; $win.WindowState = $ws; $win.UpdateLayout() }
+        }
+        & $step 'repair steps are cards with a number, a title and a button' {
+            Show-Fixes (Get-PowerFixState)
+            $g0 = @($ctl.FixGroups.Items)[0]
+            if (-not $g0 -or @($g0.Steps).Count -lt 1) { throw 'no repair steps' }
+            $k = 1; foreach ($s in $g0.Steps) { if ([string]$s.No -ne [string]$k -or -not $s.Title -or -not $s.Act) { throw ("step {0}: No={1} Title={2} Act={3}" -f $k, $s.No, $s.Title, $s.Act) }; if ($s.Title.EndsWith([string][char]0x2026)) { throw 'title still ends with an ellipsis' }; $k++ }
+            $ask = @(@($ctl.FixGroups.Items) | ForEach-Object { @($_.Steps) } | Where-Object { $_.Id -eq 'sfcrepair' })[0]
+            if ($ask -and $ask.Enabled -and -not ([string]$ask.Act).EndsWith([string][char]0x2026)) { throw 'a step that asks first has no ellipsis on its button' }
+        }
+        & $step 'appearance picker shows three previews' {
+            $p = New-ThemePicker 'dark'
+            $rbs = @($p.Children)
+            if ($rbs.Count -ne 3) { throw ('{0} appearance cards' -f $rbs.Count) }
+            if (-not $rbs[1].IsChecked -or $rbs[0].IsChecked) { throw 'the current appearance is not the picked card' }
+            $rbs[2].IsChecked = $true; if ($script:themePick -ne 'system') { throw 'picking a card did not change the choice' }
+            if (@((New-ThemeThumb 'system').Children).Count -ne 2 -or @((New-ThemeThumb 'dark').Children).Count -ne 1) { throw 'preview pictures not drawn' }
+            foreach ($k in 'Light', 'Dark', 'System') { $pic = $win.FindName('SetTheme' + $k + 'Pic'); if (-not $pic -or -not $pic.Child) { throw "settings has no $k preview" } }
+            $script:themePick = $script:themePref
+        }
+        & $step 'dragging over movable items ticks them' {
+            $rows = @(1..5 | ForEach-Object { $r = New-Object CandRow; $r.Name = "uitest $_"; $r.CanMove = ($_ -ne 3); $r })
+            $rows[4].Checked = $true
+            $d = @{ Items = [object[]]$rows; Anchor = 0; Cur = 0; Moved = $true; Want = $true; Snap = [bool[]]@($rows | ForEach-Object { [bool]$_.Checked }); Cap = $null }
+            Set-CandRange $d $rows[3]
+            if (-not $rows[0].Checked -or -not $rows[1].Checked -or $rows[2].Checked -or -not $rows[3].Checked) { throw 'dragging to the 4th row did not tick rows 1, 2 and 4 (3 cannot move)' }
+            Set-CandRange $d $rows[1]
+            if (-not $rows[1].Checked -or $rows[3].Checked -or -not $rows[4].Checked) { throw 'dragging back did not untick, or touched a row outside the drag' }
+            $script:cdrag = $null
+        }
         & $step 'settings page shows the current settings' {
             Show-Page 'settings'
             if (-not $ctl.SetMapCheck.IsChecked -and (Get-Flag 'MapCheck')) { throw 'item check box switch not loaded' }
@@ -889,15 +947,24 @@ function Invoke-UiTest {
             $blk = $null; foreach ($b in $ctl.MapTree.Children) { if ([object]::ReferenceEquals($b.Tag, $row)) { $blk = $b } }
             if (-not $blk) { throw 'no block for the first row' }
             if ($blk.BorderBrush.Color.A -eq 0) { throw 'selected row not outlined on the treemap' }
-            # 点第二块：列表里选中的换成它
+            # 点第二块：开着复选框时只在列表里找到它（描蓝边），不勾选；关掉复选框时照 Windows 的做法选中它
             $blk2 = $null; foreach ($b in $ctl.MapTree.Children) { if ($b.Tag -and -not [object]::ReferenceEquals($b.Tag, $row)) { $blk2 = $b; break } }
             if ($blk2) {
-                $ev = New-Object System.Windows.Input.MouseButtonEventArgs ([System.Windows.Input.Mouse]::PrimaryDevice), 0, ([System.Windows.Input.MouseButton]::Left)
-                $ev.RoutedEvent = [System.Windows.UIElement]::MouseLeftButtonDownEvent
-                $blk2.RaiseEvent($ev); $win.UpdateLayout()
-                if (-not [object]::ReferenceEquals($ctl.MapList.SelectedItem, $blk2.Tag)) { throw 'clicking a block did not select the row' }
-                if ($blk.BorderBrush.Color.A -ne 0 -or $blk2.BorderBrush.Color.A -eq 0) { throw 'outline did not move to the clicked block' }
+                $press = { param($b) $ev = New-Object System.Windows.Input.MouseButtonEventArgs ([System.Windows.Input.Mouse]::PrimaryDevice), 0, ([System.Windows.Input.MouseButton]::Left); $ev.RoutedEvent = [System.Windows.UIElement]::MouseLeftButtonDownEvent; $b.RaiseEvent($ev); $win.UpdateLayout() }
+                if (-not (Test-CheckMode)) { throw 'check box mode is off in the treemap' }
+                & $press $blk2
+                if ($ctl.MapList.SelectedItems.Count -ne 1 -or -not [object]::ReferenceEquals($ctl.MapList.SelectedItem, $row)) { throw 'with check boxes a click on a block ticked its row' }
+                if ($blk.BorderBrush.Color.A -eq 0 -or $blk2.BorderBrush.Color.A -eq 0) { throw 'clicked block not marked, or the ticked one lost its outline' }
+                $win.Resources['MapCkVis'] = [System.Windows.Visibility]::Collapsed
+                try {
+                    & $press $blk2
+                    if (-not [object]::ReferenceEquals($ctl.MapList.SelectedItem, $blk2.Tag) -or $ctl.MapList.SelectedItems.Count -ne 1) { throw 'without check boxes clicking a block did not select the row' }
+                    if ($blk.BorderBrush.Color.A -ne 0 -and -not [object]::ReferenceEquals($blk.Tag, $script:treeFocus)) { throw 'outline did not move to the clicked block' }
+                } finally { $win.Resources['MapCkVis'] = [System.Windows.Visibility]::Visible }
             }
+            # 方块图下面的列表、按类型：单击行不勾选；按类型的行没有方框
+            if (-not (Invoke-RowPress 0 'Left' $false $false).Handled) { throw 'a click on a row under the treemap would tick it' }
+            $ctl.MapList.UnselectAll()
             $ctl.MapViewDirs.IsChecked = $true
         }
         if ($env:CLEANC_SHOTS -eq '1') {

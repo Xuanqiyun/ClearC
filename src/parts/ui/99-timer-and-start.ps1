@@ -610,12 +610,70 @@ function Restart-App {
 }
 # 外观：浅色 / 深色 / 跟随系统
 $script:themeNames = @{ light = (T '浅色'); dark = (T '深色'); system = (T '跟随系统') }
+function Get-RawBrush([string]$hex) { $b = New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color][System.Windows.Media.ColorConverter]::ConvertFromString($hex)); $b.Freeze(); return $b }
+# 一张小窗口：左边侧边栏（选中的一项是蓝色），右边标题和一张卡片
+function New-ThemeLayer([hashtable]$p) {
+    $cv = New-Object System.Windows.Controls.Canvas; $cv.Width = 112; $cv.Height = 72; $cv.Background = Get-RawBrush $p.Bg
+    $add = {
+        param([double]$x, [double]$y, [double]$w, [double]$h, [double]$r, [string]$c, [string]$stroke)
+        $re = New-Object System.Windows.Shapes.Rectangle; $re.Width = $w; $re.Height = $h; $re.RadiusX = $r; $re.RadiusY = $r; $re.Fill = Get-RawBrush $c
+        if ($stroke) { $re.Stroke = Get-RawBrush $stroke; $re.StrokeThickness = 0.8 }
+        [System.Windows.Controls.Canvas]::SetLeft($re, $x); [System.Windows.Controls.Canvas]::SetTop($re, $y); [void]$cv.Children.Add($re)
+    }
+    & $add 0 0 27 72 0 $p.Side ''
+    & $add 5 10 17 5 2.5 $p.Accent ''
+    & $add 5 19 14 4 2 $p.Line ''
+    & $add 5 26 16 4 2 $p.Line ''
+    & $add 5 33 12 4 2 $p.Line ''
+    & $add 34 9 34 5 2.5 $p.Text ''
+    & $add 34 20 70 44 6 $p.Card $p.Stroke
+    & $add 41 28 44 4 2 $p.Line ''
+    & $add 41 36 54 4 2 $p.Line ''
+    & $add 41 44 32 4 2 $p.Line ''
+    & $add 41 53 22 6 3 $p.Accent ''
+    return $cv
+}
+function New-ThemeThumb([string]$kind) {
+    $light = @{ Bg = '#F5F5F7'; Side = '#E6E6EB'; Card = '#FFFFFF'; Line = '#DCDCE1'; Text = '#C7C7CC'; Accent = '#0071E3'; Stroke = '#E2E2E7' }
+    $dark = @{ Bg = '#1C1C1E'; Side = '#2A2A2D'; Card = '#2E2E31'; Line = '#4A4A4E'; Text = '#5E5E63'; Accent = '#0A84FF'; Stroke = '#3A3A3D' }
+    $g = New-Object System.Windows.Controls.Grid; $g.Width = 112; $g.Height = 72
+    $g.Clip = New-Object System.Windows.Media.RectangleGeometry -ArgumentList (New-Object System.Windows.Rect 0, 0, 112, 72), 9.0, 9.0
+    if ($kind -eq 'dark') { [void]$g.Children.Add((New-ThemeLayer $dark)) }
+    else {
+        [void]$g.Children.Add((New-ThemeLayer $light))
+        # 跟随系统：一半浅色一半深色，斜着分开
+        if ($kind -eq 'system') { $d = New-ThemeLayer $dark; $d.Clip = [System.Windows.Media.Geometry]::Parse('M68,0 L112,0 L112,72 L44,72 Z'); [void]$g.Children.Add($d) }
+    }
+    return $g
+}
+foreach ($k in 'Light', 'Dark', 'System') { $pic = $win.FindName('SetTheme' + $k + 'Pic'); if ($pic) { $pic.Child = New-ThemeThumb $k.ToLowerInvariant() } }
+# 对话框里的三张缩略图：点一张选中，点「应用」才换
+function New-ThemePicker([string]$cur) {
+    $sp = New-Object System.Windows.Controls.StackPanel; $sp.Orientation = 'Horizontal'; $sp.HorizontalAlignment = 'Left'
+    $script:themePick = $cur
+    $keys = @('light', 'dark', 'system')
+    foreach ($k in $keys) {
+        $rb = New-Object System.Windows.Controls.RadioButton
+        $rb.GroupName = 'sheettheme'; $rb.Style = $win.FindResource('ThemeCard'); $rb.Tag = $k
+        if ($k -eq $keys[-1]) { $rb.Margin = New-Object System.Windows.Thickness 0 }
+        $in = New-Object System.Windows.Controls.StackPanel
+        $pic = New-Object System.Windows.Controls.Border; $pic.Style = $win.FindResource('ThemePic'); $pic.Child = New-ThemeThumb $k
+        $lb = New-Object System.Windows.Controls.TextBlock; $lb.Style = $win.FindResource('ThemeLbl'); $lb.Text = $script:themeNames[$k]
+        [void]$in.Children.Add($pic); [void]$in.Children.Add($lb); $rb.Content = $in
+        if ($k -eq $cur) { $rb.IsChecked = $true }
+        $rb.Add_Checked({ $script:themePick = [string]$this.Tag })
+        [void]$sp.Children.Add($rb)
+    }
+    return $sp
+}
 $ctl.BtnThemeText.Text = (T "外观：{0}") -f $script:themeNames[$(if ($script:themeNames.ContainsKey($script:themePref)) { $script:themePref } else { 'light' })]
 $ctl.BtnTheme.Add_Click({
     if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return }
-    $ans = Show-Sheet -Title (T '选择外观') -Text ((T "深色适合在暗的环境里用；跟随系统会照 Windows 设置里「选择应用模式」来。换了以后本工具会关闭，再自动打开。`n`n现在：{0}") -f $script:themeNames[$script:themePref]) `
-        -Buttons @((T '取消'), (T '跟随系统'), (T '深色'), (T '浅色')) -Primary (T '浅色') -Cancel (T '取消')
-    $to = if ($ans -eq (T '浅色')) { 'light' } elseif ($ans -eq (T '深色')) { 'dark' } elseif ($ans -eq (T '跟随系统')) { 'system' } else { '' }
+    $ok = (T '应用')
+    $ans = Show-Sheet -Title (T '选择外观') -Text (T '深色适合在暗的环境里用；跟随系统会照 Windows 设置里「选择应用模式」来。换了以后本工具会关闭，再自动打开。') `
+        -Extra (New-ThemePicker $script:themePref) -Buttons @((T '取消'), $ok) -Primary $ok -Cancel (T '取消')
+    if ($ans -ne $ok) { return }
+    $to = [string]$script:themePick
     if (-not $to -or $to -eq $script:themePref) { return }
     Set-ThemePref $to
 })

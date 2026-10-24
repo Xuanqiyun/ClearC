@@ -84,7 +84,8 @@ function Show-DiskHealth($list) {
         $used = [double]0; $total = [double]0
         try { $di = New-Object System.IO.DriveInfo ([string]$h.Drive + '\'); $total = [double]$di.TotalSize; $used = $total - [double]$di.AvailableFreeSpace } catch {}
         $pct = if ($total -gt 0) { 100.0 * $used / $total } else { 0 }
-        $c.UsedPct = $pct; $c.BarW = [math]::Round(266.0 * $pct / 100.0)
+        $dw = [double]$win.Resources['DcCardW']; if ($dw -lt 100) { $dw = 300 }
+        $c.UsedPct = $pct; $c.BarW = [math]::Round(($dw - 34) * $pct / 100.0)
         $c.UsedText = (T "已用 {0} / 共 {1}（{2:N0}%），剩 {3}") -f (Fmt $used), (Fmt $total), $pct, (Fmt ($total - $used))
         $c.BarBrush = if ($pct -ge 95) { '#FF3B30' } elseif ($pct -ge 85) { '#FF9F0A' } else { '#0071E3' }
         $worst = 0   # 0 绿 1 橙 2 红
@@ -119,6 +120,7 @@ function Show-DiskHealth($list) {
         $col.Add($c)
     }
     $ctl.MapHealth.ItemsSource = $col
+    Update-DcCardW
     Update-MapCardSel
     $ctl.MapHealthNote.Visibility = if ($col.Count -gt 0) { 'Collapsed' } else { 'Visible' }
     if ($col.Count -eq 0) { $ctl.MapHealthNote.Text = (T '读不到磁盘的健康信息（型号、磨损、温度）') }
@@ -312,7 +314,7 @@ function Show-MapLevel($node) {
     $ctl.MapPath.Text = $path
     Show-MapCrumbs $node
     $ctl.MapInfo.Text = (T "这一层共 {0}，{1:N0} 个文件{2}") -f (Fmt $node.Size), $node.Files, $(if ($script:mapScanAt) { (T " · 扫描于 {0:HH:mm}（{1}）") -f $script:mapScanAt, $script:mapHow } else { '' })
-    if ($script:mapView -eq 'tree') { $ctl.MapInfo.Text += (T ' · 点方块就是选中下面列表里的那一行，列表里选中的方块会描边；双击进入') }
+    if ($script:mapView -eq 'tree') { $ctl.MapInfo.Text += $(if (Test-CheckMode) { (T ' · 点方块在下面的列表里找到这一行，勾上的方块会描边；双击进入') } else { (T ' · 点方块就是选中下面列表里的那一行，列表里选中的方块会描边；双击进入') }) }
     $ctl.BtnMapAcct.Visibility = if ($script:mapRoot -and $script:mapRoot.HasDisk -and (Get-Mode) -ge 2) { 'Visible' } else { 'Collapsed' }
     $ctl.BtnMapUp.IsEnabled = ($null -ne $node.Parent)
     $ctl.BtnMapBack.IsEnabled = $script:mapBack.Count -gt 0; $ctl.BtnMapFwd.IsEnabled = $script:mapFwd.Count -gt 0
@@ -650,6 +652,7 @@ function Draw-MapTree {
                 # 点方块 = 在下面的列表里选中这一行（按住 Ctrl 可以多选），列表滚到它那里；列表选中的变化再把方块描上边
                 $ctrl = ([System.Windows.Input.Keyboard]::Modifiers -band [System.Windows.Input.ModifierKeys]::Control) -ne 0
                 if ($ctrl) { if ($ctl.MapList.SelectedItems.Contains($r)) { $ctl.MapList.SelectedItems.Remove($r) } else { [void]$ctl.MapList.SelectedItems.Add($r) } }
+                elseif (Test-CheckMode) { $script:treeFocus = $r; Sync-TreeSel }
                 else { $ctl.MapList.SelectedItems.Clear(); $ctl.MapList.SelectedItem = $r }
                 try { $ctl.MapList.ScrollIntoView($r) } catch {}
                 $e.Handled = $true
@@ -673,10 +676,10 @@ function Draw-MapTree {
 function Sync-TreeSel {
     if ($script:mapView -ne 'tree') { return }
     $sel = @{}; foreach ($x in @($ctl.MapList.SelectedItems)) { $sel[[System.Runtime.CompilerServices.RuntimeHelpers]::GetHashCode($x)] = $true }
-    $on = Brush '#1D1D1F' 'd'; $off = Brush '#00000000'
+    $on = Brush '#1D1D1F' 'd'; $off = Brush '#00000000'; $fo = Brush '#0071E3' 'd'
     foreach ($b in @($ctl.MapTree.Children)) {
         $r = $b.Tag
-        $b.BorderBrush = if ($r -and $sel.ContainsKey([System.Runtime.CompilerServices.RuntimeHelpers]::GetHashCode($r))) { $on } else { $off }
+        $b.BorderBrush = if ($r -and $sel.ContainsKey([System.Runtime.CompilerServices.RuntimeHelpers]::GetHashCode($r))) { $on } elseif ($r -and [object]::ReferenceEquals($r, $script:treeFocus)) { $fo } else { $off }
     }
 }
 $ctl.MapTree.Add_SizeChanged({ if ($script:mapView -eq 'tree') { Draw-MapTree } })
@@ -1139,8 +1142,8 @@ function Test-InCheckBox($lv, $el) {
 # 复选框模式（设置里开着「项目复选框」）：只有点方框才选中、取消。单击行的其他地方不选，双击文件夹照常往里点；
 # 按住鼠标上下拖是把拖过的行勾上（加在已勾的上面）；Ctrl 点照常加上或去掉一行；Shift 点是把上次勾的那一行到这一行都勾上；
 # 键盘上下键只移动焦点，空格勾上或取消；Esc 全部取消
-$script:tickAnchor = -1; $script:kbRow = -1; $script:lastPress = $null
-function Test-CheckMode { $win.Resources['MapCkVis'] -eq [System.Windows.Visibility]::Visible -and ($script:mapView -eq 'dirs' -or $script:mapView -eq 'files') }
+$script:tickAnchor = -1; $script:kbRow = -1; $script:lastPress = $null; $script:treeFocus = $null
+function Test-CheckMode { $win.Resources['MapCkVis'] -eq [System.Windows.Visibility]::Visible -and ($script:mapView -eq 'dirs' -or $script:mapView -eq 'files' -or $script:mapView -eq 'tree') }
 function Add-MapRange([int]$from, [int]$to) {
     $lv = $ctl.MapList; $n = $lv.Items.Count
     if ($to -lt 0 -or $to -ge $n) { return }
@@ -1211,8 +1214,9 @@ function Begin-RowDrag($s, $e, [string]$button) {
                                         [math]::Abs($pt.X - $lp.X) -le 6 -and [math]::Abs($pt.Y - $lp.Y) -le 6)
         $script:lastPress = if ($dbl) { $null } else { @{ Row = $row; Ts = $e.Timestamp; X = $pt.X; Y = $pt.Y } }
         if ($dbl) {
-            if (Enter-MapRow $row) { $e.Handled = $true }
-            elseif ($row -and $row.IsDir) { Write-LogFile ((T "空间地图：双击的「{0}」进不去（扫描结果里没有它的下一层）") -f $row.Name) }
+            if (Enter-MapRow $row) { $e.Handled = $true; return }
+            if ($row -and $row.IsDir) { Write-LogFile ((T "空间地图：双击的「{0}」进不去（扫描结果里没有它的下一层）") -f $row.Name) }
+            if (Test-CheckMode) { $e.Handled = $true; try { if (-not $s.IsKeyboardFocusWithin) { [void]$s.Focus() } } catch {} }
             return
         }
     }
