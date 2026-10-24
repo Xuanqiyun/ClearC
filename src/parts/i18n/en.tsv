@@ -156,6 +156,12 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+清后要重建（删了要重新下载或重新生成，第一次打开会慢一点；默认也清，执行前会单独列出来）	Rebuilt after cleaning (downloaded or generated again after deletion, so the first start is a bit slower; cleaned by default and listed separately before running)
+默认不清（有代价，看清说明再选）	Skipped by default (comes at a cost; read the description before selecting)
+开始处理所选项	Process selected
+在列表里把要处理的项目选成「删除」或「搬到其他盘」，再点「开始处理所选项」。	In the list, set the items you want to handle to "Delete" or "Move to another drive", then click "Process selected".
+\n其中 {0} 项是「清后要重建」（{1}）：删了要重新下载或重新生成，第一次打开会慢一点。不想清的，在列表里改成「跳过」。	\n{0} of them are "Rebuilt after cleaning" ({1}): they are downloaded or generated again, so the first start is a bit slower. To keep them, set them to "Skip" in the list.
+\n其中 {0} 项是「默认不清」里有代价的项目（{1}），请再看一遍说明。	\n{0} of them are items from "Skipped by default" that come at a cost ({1}); please read their descriptions again.
 从应用商店装的，由 Windows 管理，本工具不能搬；有的可以在 Windows 设置的「已安装的应用」里换盘	Installed from the Microsoft Store and managed by Windows, so ClearC cannot move it; some can be moved in Windows Settings under "Installed apps"
 不能搬	Can't move
 开始后会先替你关掉：{0}（包括屏幕右下角托盘里的）。开着的话文件被占用，搬家不会成功。关之前请确认没有正在发送或下载的文件，没保存的内容先保存；搬完照常打开，聊天记录和文件都在。	When it starts it first closes {0} for you (including from the system tray at the bottom right). While they are open the files are in use and the move cannot succeed. Before that, make sure nothing is being sent or downloaded and save any unsaved work; after the move, open them as usual and your chat history and files are all there.

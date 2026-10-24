@@ -101,9 +101,9 @@ try { & {
     # ============ 5. 自动清理只碰安全项 ============
     $cat = Get-Catalog
     $auto = @(Select-AutoCleanItems $cat)
-    Check ("auto cleanup picks only safe cache items ({0} items)" -f $auto.Count) ($auto.Count -gt 5 -and @($auto | Where-Object { -not ([string]$_.G).StartsWith('安全清理') -or $_.Careful -or $_.Custom -or $_.Confirm -or $_.Act -or $_.Whole -or $_.Svc }).Count -eq 0)
+    Check ("auto cleanup picks only safe cache items ({0} items)" -f $auto.Count) ($auto.Count -gt 5 -and @($auto | Where-Object { $_.Tier -ne 'safe' -or $_.Careful -or $_.Custom -or $_.Confirm -or $_.Act -or $_.Whole -or $_.Svc }).Count -eq 0)
     Check 'auto cleanup never includes Windows.old, Recycle Bin, Installer orphans, drivers, event logs' (@($auto | Where-Object { $_.N -match 'Windows\.old|回收站|Installer|驱动|事件日志|Recycle|driver|event log' }).Count -eq 0)
-    Check 'confirm items default to skip' (@($cat | Where-Object { ([string]$_.G).StartsWith('需确认') -and $_.Def -ne (T '跳过') }).Count -eq 0)
+    Check 'confirm items default to skip' (@($cat | Where-Object { $_.Tier -eq 'confirm' -and $_.Def -ne (T '跳过') }).Count -eq 0)
     Check 'move-only items (Desktop, Downloads, chat data) have no delete action' (@($cat | Where-Object { ($_.Kind -eq 'move') -and ($_.Actions -contains (T '删除')) }).Count -eq 0)
     Check 'Desktop and Downloads default to skip' (@($cat | Where-Object { ($_.N -eq (T '桌面') -or $_.N -eq (T '下载')) -and $_.Def -ne (T '跳过') }).Count -eq 0)
     # ============ 6. 重复文件：逐字节比对是真的在比 ============
@@ -216,7 +216,7 @@ try { & {
     $fl = @($lib | Where-Object { $_.N -like '*found.000*' })[0]
     Check 'chkdsk leftovers match found.??? only and need confirmation' ($fl -and $fl.Confirm -and $fl.Whole -and @($fl.Paths | Where-Object { $_ -match 'found\.\?\?\?$' }).Count -eq 1)
     # 一键清理不碰「需确认」和自己加的
-    Check 'one-click cleanup never selects needs-confirmation or custom items' ((Get-OneClickAction @{ G = '需确认（有代价）'; Kind = 'cache'; Def = (T '删除') }) -eq (T '跳过') -and (Get-OneClickAction @{ G = '安全清理'; Kind = 'cache'; Def = (T '删除'); Custom = $true }) -eq (T '跳过') -and [regex]::Match($src, '(?s)function Apply-OneClick.*?\r?\n\}').Value -match 'Get-OneClickAction')
+    Check 'one-click cleanup never selects needs-confirmation or custom items' ((Get-OneClickAction @{ Tier = 'confirm'; Kind = 'cache'; Def = (T '删除') }) -eq (T '跳过') -and (Get-OneClickAction @{ Tier = 'custom'; Kind = 'cache'; Def = (T '删除'); Custom = $true }) -eq (T '跳过') -and [regex]::Match($src, '(?s)function Apply-OneClick.*?\r?\n\}').Value -match 'Get-OneClickAction')
     # 行和后台的项对不上就不动
     Check 'item fingerprints tell two custom folders with the same name apart' ((Get-ItemSig @{ N = 'cache'; Paths = @('D:\a\cache') }) -ne (Get-ItemSig @{ N = 'cache'; Paths = @('E:\b\cache') }))
     Check 'the run worker compares each item fingerprint before acting' ($src -match '\(Get-ItemSig \$it\) -ne \$p\.Sig')
@@ -687,6 +687,12 @@ try { & {
     $aw = [regex]::Match($src, "(?s)\`$out = Get-InstalledApps.*?\`$sync\.AppsResult = \`$out").Value
     Check 'UX-7 the apps list works out up front which apps can not be moved, and why' ($aw -match 'Get-ServicePaths' -and $aw -match 'MoveWhy = \[string\]\(Get-AppMoveBlock \$a \$out \$svc\)')
     Check 'UX-7 such rows show "can not move" with the reason instead of the move button' ($src -match 'x:Name="AppNoMove"[^>]*ToolTip="\{Binding MoveWhy\}"' -and $src -match '\$r\.CanMove = \$r\.OnC -and \[bool\]\$a\.Location -and -not \$a\.MoveWhy' -and $src -match "\`$b\.Name -eq 'AppMove' -or \`$b\.Name -eq 'AppNoMove'")
+    # ============ 31. 分组用稳定的编号判断，不再看界面上的名字；三个容易误解的名字改掉（3.6 体验评审、架构评审） ============
+    $cat = @(Get-Catalog)
+    $tiers = @($cat | ForEach-Object { [string]$_.Tier } | Select-Object -Unique)
+    Check 'UX-11 every cleanup item has a stable tier (safe, careful, confirm, chat, other, custom)' (@($cat | Where-Object { @('safe', 'careful', 'confirm', 'chat', 'other', 'custom') -notcontains [string]$_.Tier }).Count -eq 0 -and $tiers -contains 'confirm' -and $tiers -contains 'careful')
+    Check 'UX-11 code decides by the tier, not by matching the Chinese group names' ($src -notmatch "StartsWith\('(需确认|谨慎清理|安全清理|聊天软件|自定义|默认不清|清后要重建)")
+    Check 'UX-11 the confusing names are gone: "careful" and "needs confirmation" groups and the "run selected" button are renamed' ($engineText -notmatch "'谨慎清理（" -and $engineText -notmatch "'需确认（" -and $src -notmatch 'Content="执行所选操作"' -and $engineText -match "'清后要重建（" -and $engineText -match "'默认不清（")
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue

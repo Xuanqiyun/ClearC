@@ -277,7 +277,7 @@ function Show-FirstResult {
 $script:chatIdx = @()
 function Update-ChatCard {
     $cat = @{}; foreach ($c in $catalog) { $cat[$c.Idx] = $c }
-    $chat = @($script:rows | Where-Object { $c = $cat[$_.Idx]; $c -and $c.Kind -eq 'move' -and ([string]$c.G).StartsWith('聊天软件') -and $_.Bytes -gt 0 -and $_.Actions -contains (T '搬到其他盘') })
+    $chat = @($script:rows | Where-Object { $c = $cat[$_.Idx]; $c -and $c.Kind -eq 'move' -and $c.Tier -eq 'chat' -and $_.Bytes -gt 0 -and $_.Actions -contains (T '搬到其他盘') })
     $bytes = [double]0; foreach ($r in $chat) { $bytes += $r.Bytes }
     $script:chatIdx = @($chat | ForEach-Object { $_.Idx })
     if ($chat.Count -eq 0 -or $bytes -lt 200MB) { $ctl.ChatCard.Visibility = 'Collapsed'; return }
@@ -522,7 +522,7 @@ function Get-BusyApps([string[]]$apps) {
 }
 
 # $OnlyMove：只搬这几项（聊天记录卡片上的按钮），列表里其他行的选择不管
-function Invoke-RunSelected([string]$title = (T '执行所选操作'), [object[]]$OnlyMove = $null) {
+function Invoke-RunSelected([string]$title = (T '开始处理所选项'), [object[]]$OnlyMove = $null) {
     $plan = @()
     foreach ($r in $script:rows) {
         $act = $r.Action
@@ -532,7 +532,7 @@ function Invoke-RunSelected([string]$title = (T '执行所选操作'), [object[]
             $plan += @{ Idx = $r.Idx; Action = $act; Name = $r.Name; Bytes = [math]::Max([double]0, [double]$b); Sig = $(if ($script:rowSig) { [string]$script:rowSig[$r.Idx] } else { '' }) }
         }
     }
-    if (-not $plan) { Show-Sheet -Title (T '没有选中任何操作') -Text (T '在列表里把要处理的项目选成「删除」或「搬到其他盘」，再点「执行所选操作」。') | Out-Null; return }
+    if (-not $plan) { Show-Sheet -Title (T '没有选中任何操作') -Text (T '在列表里把要处理的项目选成「删除」或「搬到其他盘」，再点「开始处理所选项」。') | Out-Null; return }
     $dest = Get-Dest
     $cat0 = @{}; foreach ($c in $catalog) { $cat0[$c.Idx] = $c }
     $moves = @($plan | Where-Object { $_.Action -eq (T '搬到其他盘') })
@@ -577,9 +577,9 @@ function Invoke-RunSelected([string]$title = (T '执行所选操作'), [object[]
     if ($dels) {
         $text += (T "`n`n其中 {0} 项会删除文件，删除后可能无法恢复。请确认这些资料不再需要。") -f $dels.Count
         $careful = @($dels | Where-Object { $cat0[$_.Idx].Careful })
-        if ($careful.Count -gt 0) { $text += (T "`n其中 {0} 项是「谨慎清理」（{1}）：删了要重新下载或重新生成，第一次打开会慢一点。不想清的，在列表里改成「跳过」。") -f $careful.Count, (@($careful | ForEach-Object { $_.Name }) -join (T '、')) }
-        $conf = @($dels | Where-Object { ([string]$cat0[$_.Idx].G).StartsWith('需确认') })
-        if ($conf.Count -gt 0) { $text += (T "`n其中 {0} 项是「需确认」的高风险项目（{1}），请再看一遍说明。") -f $conf.Count, (@($conf | ForEach-Object { $_.Name }) -join (T '、')) }
+        if ($careful.Count -gt 0) { $text += (T "`n其中 {0} 项是「清后要重建」（{1}）：删了要重新下载或重新生成，第一次打开会慢一点。不想清的，在列表里改成「跳过」。") -f $careful.Count, (@($careful | ForEach-Object { $_.Name }) -join (T '、')) }
+        $conf = @($dels | Where-Object { $cat0[$_.Idx].Tier -eq 'confirm' })
+        if ($conf.Count -gt 0) { $text += (T "`n其中 {0} 项是「默认不清」里有代价的项目（{1}），请再看一遍说明。") -f $conf.Count, (@($conf | ForEach-Object { $_.Name }) -join (T '、')) }
         if ((Get-Setting 'Recycle' '0') -eq '1') {
             $text += (T "`n按设置，这次删除的文件会先放进回收站，可以从回收站恢复。")
             $acts = @($dels | Where-Object { $cat0[$_.Idx].Act })
