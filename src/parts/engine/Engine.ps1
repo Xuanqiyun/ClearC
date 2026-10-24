@@ -2889,6 +2889,57 @@ function Get-ModuleHolders([string]$dir) {
     }
     return ,@($out | Select-Object -Unique)
 }
+# 普通用户能不能往这个文件夹里写（Users、Authenticated Users、Everyone、Interactive 有写入、删除、改权限之类的权限）。
+# 读不到权限就当能写：拿不准的时候不信任它
+function Test-UserWritable([string]$dir) {
+    try {
+        $acl = [IO.Directory]::GetAccessControl($dir)
+        $w = [Security.AccessControl.FileSystemRights]::WriteData -bor [Security.AccessControl.FileSystemRights]::AppendData -bor [Security.AccessControl.FileSystemRights]::Delete -bor
+             [Security.AccessControl.FileSystemRights]::DeleteSubdirectoriesAndFiles -bor [Security.AccessControl.FileSystemRights]::ChangePermissions -bor [Security.AccessControl.FileSystemRights]::TakeOwnership -bor
+             [Security.AccessControl.FileSystemRights]::WriteAttributes -bor [Security.AccessControl.FileSystemRights]::WriteExtendedAttributes
+        foreach ($r in $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
+            if ($r.AccessControlType -ne [Security.AccessControl.AccessControlType]::Allow) { continue }
+            if ($r.PropagationFlags -band [Security.AccessControl.PropagationFlags]::InheritOnly) { continue }
+            if (@('S-1-5-32-545', 'S-1-5-11', 'S-1-1-0', 'S-1-5-4') -notcontains $r.IdentityReference.Value) { continue }
+            if (([int]$r.FileSystemRights -band [int]$w) -ne 0) { return $true }
+        }
+        return $false
+    } catch { return $true }
+}
+# 定时任务运行的那一份 exe：放在 Program Files\ClearC 里，只有管理员能改。任务以最高权限运行，
+# 要是指向下载文件夹这类普通权限就能改的地方，有人换掉那个 exe，到点就能不经确认拿到管理员权限
+function Get-TaskExePath { $pf = [Environment]::GetFolderPath('ProgramFiles'); if (-not $pf) { return '' }; return (Join-Path $pf 'ClearC\ClearC.exe') }
+# 把现在运行的 exe 复制成定时任务用的那一份（内容一样就不复制）；返回 @{ Path } 或 @{ Err }
+function Install-TaskExe {
+    $src = [string]$env:CLEANC_SELF; $dst = Get-TaskExePath
+    if (-not $src -or -not (Test-Path -LiteralPath $src)) { return @{ Err = (T '只有 exe 版本支持定时任务') } }
+    if (-not $dst) { return @{ Err = (T '找不到 Program Files 文件夹') } }
+    $dir = Split-Path $dst
+    try {
+        if ([IO.Path]::GetFullPath($src) -ieq [IO.Path]::GetFullPath($dst)) { return @{ Path = $dst } }   # 现在运行的就是这一份
+        if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+        if (Test-UserWritable $dir) { return @{ Err = ((T "{0} 的权限让普通用户也能改里面的文件，定时任务不能从这里运行。删掉这个文件夹后再开。") -f $dir) } }
+        $h = (Get-FileHash -LiteralPath $src -Algorithm SHA256).Hash
+        if ((Test-Path -LiteralPath $dst) -and (Get-FileHash -LiteralPath $dst -Algorithm SHA256).Hash -eq $h) { return @{ Path = $dst } }
+        $tmp = $dst + '.new'
+        [IO.File]::Copy($src, $tmp, $true)
+        if ((Get-FileHash -LiteralPath $tmp -Algorithm SHA256).Hash -ne $h) { [IO.File]::Delete($tmp); return @{ Err = (T '复制后核对不一致，没有改') } }
+        if (Test-Path -LiteralPath $dst) { [IO.File]::Replace($tmp, $dst, $null) } else { [IO.File]::Move($tmp, $dst) }
+        OpLog '系统设置' (T '复制本工具给定时任务用') $dst ((T "来自 {0}") -f $src)
+        return @{ Path = $dst }
+    } catch { return @{ Err = ((T "没能把本工具复制到 {0}：{1}") -f $dir, $_.Exception.Message) } }
+}
+# 两个任务都关了：删掉 Program Files 里那一份（正在运行的就是它时不删）
+function Remove-TaskExeIfUnused {
+    $dst = Get-TaskExePath
+    if (-not $dst -or -not (Test-Path -LiteralPath $dst)) { return }
+    if ([string]$env:CLEANC_SELF -and [IO.Path]::GetFullPath([string]$env:CLEANC_SELF) -ieq $dst) { return }
+    try {
+        [IO.File]::Delete($dst)
+        $d = Split-Path $dst; if (@(Get-ChildItem -LiteralPath $d -Force -ErrorAction SilentlyContinue).Count -eq 0) { [IO.Directory]::Delete($d) }
+        OpLog '系统设置' (T '删除定时任务用的那一份本工具') $dst ''
+    } catch {}
+}
 # 让搬过去的文件夹和原来在 C 盘时的访问权限一样（Program Files 里只有管理员能改，其他盘默认所有用户都能改）
 function Set-DirAccess([string]$dir, [string]$sddl) {
     try {

@@ -607,7 +607,7 @@
                       <TextBlock DockPanel.Dock="Left" Text="&#xE946;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Top" Margin="0,3,14,0"/>
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Both are off by default"/>
-                        <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>Once turned on, Windows Task Scheduler runs ClearC on time. Keep ClearC in a permanent place.</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>Turning one on copies ClearC to C:\Program Files\ClearC, and Windows Task Scheduler runs it from there on time. The copy is removed when both are off.</Run></TextBlock>
                       </StackPanel>
                     </DockPanel>
                   </Border>

@@ -18,7 +18,9 @@ function Get-ExeVersion([string]$path) { try { return [version]([Diagnostics.Fil
 function Register-CleanTask([string]$name, [string]$desc, [string]$argsText, [string]$trigger) {
     $exe = [string]$env:CLEANC_SELF
     if (-not $exe -or -not (Test-Path -LiteralPath $exe)) { return (T '只有 exe 版本支持定时任务') }
-    if (Test-TempPath $exe) { return ((T "本工具现在是从临时文件夹运行的（{0}），比如直接在压缩包里双击打开的。这个位置过后会被清掉，任务就找不到本工具了。`n`n请先把本工具复制到一个固定的位置（比如 D:\工具），从那里打开，再开启。") -f $exe) }
+    $inst = Install-TaskExe
+    if ($inst.Err) { return $inst.Err }
+    $taskExe = [string]$inst.Path
     $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
     $esc = [Security.SecurityElement]
     $xml = @"
@@ -35,7 +37,7 @@ function Register-CleanTask([string]$name, [string]$desc, [string]$argsText, [st
     <ExecutionTimeLimit>PT1H</ExecutionTimeLimit>
     <Enabled>true</Enabled>
   </Settings>
-  <Actions Context="Author"><Exec><Command>$($esc::Escape($exe))</Command><Arguments>$argsText</Arguments></Exec></Actions>
+  <Actions Context="Author"><Exec><Command>$($esc::Escape($taskExe))</Command><Arguments>$argsText</Arguments></Exec></Actions>
 </Task>
 "@
     $tmp = Join-Path $env:TEMP ("cleanc-task-{0}.xml" -f (Get-Random))
@@ -59,10 +61,14 @@ function Enable-AutoTask([bool]$isRemind) {
             else { $d = $days[$when]; if (-not $d) { $d = 'Sunday' }; "<CalendarTrigger><StartBoundary>2026-01-04T12:30:00</StartBoundary><ScheduleByWeek><DaysOfWeek><$d/></DaysOfWeek><WeeksInterval>1</WeeksInterval></ScheduleByWeek></CalendarTrigger>" }
     return (Register-CleanTask $script:taskClean (T '腾挪 ClearC：定期自动清理临时文件、缓存和日志（不搬家、不清空回收站、不碰个人文件夹）。在工具的「自动提醒」页关掉开关即可删除本任务。') '/autoclean' $trig)
 }
-# 打开工具时检查一次：本工具挪了位置、或者任务是旧版本建的（提醒没有「登录后检查」），就按现在的位置和设置重建
+# 打开工具时检查一次（这时本工具是以管理员身份打开的，你确认过）：
+#   旧版本建的任务指向你自己放 exe 的地方 → 改成 Program Files 里那一份；
+#   Program Files 里那一份不在了、或者比现在打开的这个旧 → 换成现在这个；
+#   提醒任务是旧版本建的（没有「登录后检查」）→ 按现在的设置重建
 function Repair-AutoTasks {
     $exe = [string]$env:CLEANC_SELF
-    if (-not $exe -or -not (Test-Path -LiteralPath $exe) -or (Test-TempPath $exe)) { return }
+    $dst = Get-TaskExePath
+    if (-not $exe -or -not (Test-Path -LiteralPath $exe) -or -not $dst) { return }
     $myVer = Get-ExeVersion $exe
     foreach ($isRemind in @($true, $false)) {
         $tn = if ($isRemind) { $script:taskRemind } else { $script:taskClean }
@@ -70,21 +76,20 @@ function Repair-AutoTasks {
         try { $raw = (& "$env:SystemRoot\System32\schtasks.exe" /Query /TN $tn /XML 2>$null) -join "`n"; if ($LASTEXITCODE -eq 0 -and $raw) { $x = [xml]$raw } } catch {}
         if (-not $x) { continue }
         $cmd = [string]$x.Task.Actions.Exec.Command
-        $noLogon = $isRemind -and -not $x.Task.Triggers.LogonTrigger
-        $repoint = $false
-        if ($cmd -and $cmd -ine $exe) {
-            # 只在原来那个 exe 不在了、或者比现在这个旧的时候才改用现在这个，别的副本（比如下载文件夹里的另一份）不抢
-            $oldExists = Test-Path -LiteralPath $cmd
-            $oldVer = if ($oldExists) { Get-ExeVersion $cmd } else { $null }
-            $repoint = (-not $oldExists) -or ($myVer -and $oldVer -and $myVer -gt $oldVer)
-        }
-        if ($repoint -or ($noLogon -and $cmd -ieq $exe)) {
-            $err = Enable-AutoTask $isRemind
-            if (-not $err) { OpLog '系统设置' (T '更新任务计划') $tn $(if ($repoint) { ((T "改用 {0}（原来的 {1} 不在了或版本更旧）") -f $exe, $cmd) } else { (T '加上「登录电脑后检查」') }) }
-        }
+        $why = ''
+        if ($cmd -ine $dst) { $why = (T '改成从 Program Files 里那一份运行（那里只有管理员能改）') }
+        elseif (-not (Test-Path -LiteralPath $dst)) { $why = (T 'Program Files 里那一份不在了，重新复制') }
+        else { $v = Get-ExeVersion $dst; if ($myVer -and $v -and $myVer -gt $v) { $why = ((T "换成新版本 {0}") -f $myVer) } }
+        if (-not $why -and $isRemind -and -not $x.Task.Triggers.LogonTrigger) { $why = (T '加上「登录电脑后检查」') }
+        if (-not $why) { continue }
+        $err = Enable-AutoTask $isRemind
+        if (-not $err) { OpLog '系统设置' (T '更新任务计划') $tn $why }
     }
 }
-function Remove-CleanTask([string]$name) { & "$env:SystemRoot\System32\schtasks.exe" /Delete /TN $name /F 2>$null | Out-Null }
+function Remove-CleanTask([string]$name) {
+    & "$env:SystemRoot\System32\schtasks.exe" /Delete /TN $name /F 2>$null | Out-Null
+    if (-not (Test-CleanTask $script:taskRemind) -and -not (Test-CleanTask $script:taskClean)) { Remove-TaskExeIfUnused }
+}
 $script:autoSync = $false
 # 选项卡上的开关状态：开着是绿色的「已开启」，关着是灰色的「已关闭」
 function Set-TabState($badge, $text, [bool]$on) {
@@ -106,11 +111,8 @@ function Load-Auto {
     $ctl.AutoJunkGB.SelectedIndex = $idx
     $idx = [array]::IndexOf(@('sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'daily'), (Get-Setting 'CleanWhen' 'sun')); if ($idx -lt 0) { $idx = 0 }
     $ctl.AutoCleanWhen.SelectedIndex = $idx
-    $where = (T "不用开着本工具，也不用设置开机启动。开启后会在 Windows「任务计划程序」里建一个任务（{0}）：每次登录电脑 2 分钟后、以及每天中午 12 点，Windows 会在后台运行一下本工具（{1}）检查 C 盘，空间够就什么都不显示，查完马上退出。关掉开关就删除这个任务。`n请把本工具放在固定的位置，不要删掉；挪了位置后打开一次，任务会自动改用新位置。")
-    $ctl.AutoRemindNote.Text = if ($hasExe) { $where -f $script:taskRemind, $exe } else { (T '只有 exe 版本支持自动提醒。') }
-    $moved = ''
-    foreach ($t in @($script:taskRemind, $script:taskClean)) { if (Test-CleanTask $t) { $c = Get-TaskCommand $t; if ($c -and $hasExe -and ($c -ine $exe)) { $moved = (T '本工具的位置变了，请把开关关掉再打开一次，让任务改用现在的位置。') } } }
-    if ($moved) { $ctl.AutoRemindNote.Text += "`n" + $moved }
+    $where = (T "不用开着本工具，也不用设置开机启动。开启后会在 Windows「任务计划程序」里建一个任务（{0}）：每次登录电脑 2 分钟后、以及每天中午 12 点，Windows 会在后台运行一下本工具检查 C 盘，空间够就什么都不显示，查完马上退出。关掉开关就删除这个任务。`n任务运行的是复制到 {1} 的那一份（那里只有管理员能改，别人换不掉它）；两个开关都关掉后这一份会删掉。")
+    $ctl.AutoRemindNote.Text = if ($hasExe) { $where -f $script:taskRemind, (Get-TaskExePath) } else { (T '只有 exe 版本支持自动提醒。') }
     $last = ''
     foreach ($row in (Read-OpLog)) { if ($row.What -in @('每周自动清理完成', (T '每周自动清理完成'))) { $last = (T "上次自动清理：{0}，{1}") -f $row.Time, $row.Detail; break } }
     $ctl.AutoCleanNote.Text = if ($hasExe) { ((T "任务名：{0}。") -f $script:taskClean) + $(if ($last) { "`n$last" } else { '' }) } else { (T '只有 exe 版本支持每周自动清理。') }
@@ -184,7 +186,7 @@ foreach ($sw in @($ctl.AutoRemindOn, $ctl.AutoCleanOn)) {
         $err = Enable-AutoTask $isRemind
         if ($isRemind) { $what = (T '开启空间不足提醒'); $tn = $script:taskRemind } else { $what = (T '开启每周自动清理'); $tn = $script:taskClean }
         if ($err) { Show-Sheet -Kind warn -Title (T '没开成') -Text $err | Out-Null; Load-Auto; return }
-        OpLog '系统设置' $what $tn ((T "任务计划：{0}") -f [string]$env:CLEANC_SELF)
+        OpLog '系统设置' $what $tn ((T "任务计划：{0}") -f (Get-TaskExePath))
         Load-Auto
     })
     $sw.Add_Unchecked({

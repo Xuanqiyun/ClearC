@@ -156,6 +156,17 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+不用开着本工具，也不用设置开机启动。开启后会在 Windows「任务计划程序」里建一个任务（{0}）：每次登录电脑 2 分钟后、以及每天中午 12 点，Windows 会在后台运行一下本工具检查 C 盘，空间够就什么都不显示，查完马上退出。关掉开关就删除这个任务。\n任务运行的是复制到 {1} 的那一份（那里只有管理员能改，别人换不掉它）；两个开关都关掉后这一份会删掉。	ClearC does not need to stay open or start with Windows. Turning this on creates a task in Windows Task Scheduler ({0}): 2 minutes after each sign-in and every day at noon, Windows runs ClearC in the background to check C:. If there is enough space nothing is shown and it exits right away. Turning the switch off deletes the task.\nThe task runs the copy placed in {1} (only administrators can change it, so nobody can swap it); the copy is removed when both switches are off.
+改成从 Program Files 里那一份运行（那里只有管理员能改）	Run the copy in Program Files instead (only administrators can change it)
+Program Files 里那一份不在了，重新复制	The copy in Program Files was missing; copied again
+换成新版本 {0}	Updated to version {0}
+找不到 Program Files 文件夹	The Program Files folder was not found
+{0} 的权限让普通用户也能改里面的文件，定时任务不能从这里运行。删掉这个文件夹后再开。	The permissions on {0} let ordinary users change the files in it, so the scheduled task cannot run from there. Delete this folder and turn it on again.
+复制后核对不一致，没有改	The copy did not match after copying, so nothing was changed
+复制本工具给定时任务用	Copied ClearC for the scheduled tasks
+来自 {0}	From {0}
+没能把本工具复制到 {0}：{1}	Could not copy ClearC to {0}: {1}
+删除定时任务用的那一份本工具	Removed the copy of ClearC used by the scheduled tasks
 深色适合在暗的环境里用；跟随系统会照 Windows 设置里「选择应用模式」来。换了以后本工具会关闭，再自动打开。	Dark suits dim surroundings; Follow Windows uses the "Choose your app mode" setting in Windows. After a change ClearC closes and opens again.
 应用	Apply
  · 点方块在下面的列表里找到这一行，勾上的方块会描边；双击进入	 · Clicking a block finds its row in the list below; checked rows get an outline; double-click to enter

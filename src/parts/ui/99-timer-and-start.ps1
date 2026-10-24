@@ -481,7 +481,7 @@ function Ask-EnableRemind {
     if ($ans -ne (T '开启提醒')) { return }
     $err = Enable-AutoTask $true
     if ($err) { Show-Sheet -Kind warn -Title (T '没开成') -Text $err | Out-Null; return }
-    OpLog '系统设置' (T '开启空间不足提醒') $script:taskRemind ((T "任务计划：{0}") -f $exe)
+    OpLog '系统设置' (T '开启空间不足提醒') $script:taskRemind ((T "任务计划：{0}") -f (Get-TaskExePath))
     Show-Sheet -Kind done -Title (T '提醒已开启') -Text (T '在「自动提醒」页可以改提醒的界限，或者关掉。') | Out-Null
 }
 

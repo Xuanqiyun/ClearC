@@ -113,7 +113,7 @@ PAGE = dict(
             I('Junk alert', 'A notice when temporary files and caches grow past the size you set. It only counts; nothing is deleted.'),
             I('Scheduled cleanup', 'Cleans temporary files, caches and logs every week or every day. Personal folders are never touched, and nothing is moved.'),
             I('Space history', 'Records the free space on C: each day as a 30-day bar chart.'),
-            N('info', 'Both are off by default', 'Once turned on, Windows Task Scheduler runs ClearC on time. Keep ClearC in a permanent place.'),
+            N('info', 'Both are off by default', 'Turning one on copies ClearC to C:\\Program Files\\ClearC, and Windows Task Scheduler runs it from there on time. The copy is removed when both are off.'),
         ]),
         dict(icon='&#xE81C;', title='Activity log', sum='Every change is recorded', blocks=[
             I('What is recorded', 'Every delete, move, merge, compression, uninstall and system setting change: when, what, on which folder and the result.'),
