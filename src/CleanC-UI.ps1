@@ -5926,7 +5926,8 @@ function OpLog([string]$cat, [string]$what, [string]$target = '', [string]$detai
     $f = Join-Path $script:opLogDir ("操作日志-{0:yyyy-MM}.txt" -f $now)
     $c = { param($x) (([string]$x) -replace "[`t`r`n]+", ' ').Trim() }
     $line = "{0:yyyy-MM-dd HH:mm:ss}`t{1}`t{2}`t{3}`t{4}" -f $now, (& $c $cat), (& $c $what), (& $c $target), (& $c $detail)
-    for ($try = 0; $try -lt 5; $try++) {
+    $tries = if ([int]$script:opLogFailed -gt 0) { 1 } else { 5 }   # 已经写不进去过（多半是 C 盘满了）：不再每条都等半秒重试
+    for ($try = 0; $try -lt $tries; $try++) {
         try {
             if (-not (Test-Path -LiteralPath $script:opLogDir)) { New-Item -ItemType Directory -Path $script:opLogDir -Force | Out-Null }
             $enc = New-Object System.Text.UTF8Encoding $true
@@ -5935,8 +5936,20 @@ function OpLog([string]$cat, [string]$what, [string]$target = '', [string]$detai
             }
             [IO.File]::AppendAllText($f, $line + "`r`n", $enc)
             return
-        } catch { Start-Sleep -Milliseconds 120 }
+        } catch { if ($tries -gt 1) { Start-Sleep -Milliseconds 120 } }
     }
+    # 写不进去：记个数，告诉界面（后台线程通过 $sync），由界面告诉用户
+    $script:opLogFailed = [int]$script:opLogFailed + 1
+    try { if ($null -ne $sync) { $sync.OpLogFail = $line } } catch {}
+}
+# 本工具自己的文件夹（设置、操作日志、空间记录）现在能不能写：试着写一个小文件再删掉
+function Test-AppDirWritable([string]$dir) {
+    try {
+        if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force -ErrorAction Stop | Out-Null }
+        $p = Join-Path $dir ('.write-test-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+        [IO.File]::WriteAllText($p, 'ok'); [IO.File]::Delete($p)
+        return $true
+    } catch { return $false }
 }
 # 删除超过保存时间的日志（$months = 0 表示永久保存）。返回删掉的条数
 function Prune-OpLog([int]$months) {
@@ -7528,6 +7541,9 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+C 盘只剩 {0}，本工具的操作日志写不进去了：刚才删了、搬了什么，有的没有记下来。先腾出一点 C 盘空间（比如清空回收站），以后的操作才会记下来。	C: has only {0} left and ClearC can no longer write its activity log: some of what was just deleted or moved was not recorded. Free a little space on C: first (for example empty the Recycle Bin) so later actions are recorded.
+C 盘只剩 {0}，本工具的设置、操作日志和空间记录都写不进去：改的设置不会保存，删了、搬了什么也记不下来。先腾出一点空间再用，比如清空回收站，或者用「一键清理」。	C: has only {0} left and ClearC cannot write its settings, activity log or space history: changed settings are not saved and what you delete or move is not recorded. Free a little space first, for example empty the Recycle Bin or use One-click cleanup.
+本工具的记录写不进去	ClearC cannot write its records
 C 盘用 BitLocker 加密了，{0} 盘没有：搬过去的聊天记录和文件在那块盘上不加密，电脑丢了或者硬盘被拆走，别人能直接读出来。介意的话，先给 {0} 盘打开 BitLocker（控制面板 →「BitLocker 驱动器加密」）再搬。	C: is encrypted with BitLocker but {0}: is not: the chat history and files you move are not encrypted on that drive, so if the PC is lost or the disk is taken out, anyone can read them. If that matters, turn on BitLocker for {0}: first (Control Panel → "BitLocker Drive Encryption"), then move.
 搬走聊天记录…	Move chat history…
 自动扫描，清掉所有安全项和默认选中的缓存、临时文件。只删不搬：聊天记录在下面单独一张卡片里，要搬自己点。不会关闭休眠、不清空回收站，个人文件夹（桌面、文档、下载等）里的东西一律不删。	Scans, then clears all safe items and the caches and temporary files selected by default. It only deletes and never moves: chat history has its own card below; move it there if you want. It never turns off hibernation, never empties the Recycle Bin, and never deletes anything in personal folders (Desktop, Documents, Downloads and so on).
@@ -23622,6 +23638,7 @@ $timer.Add_Tick({
         if ($script:runAfterMoves) { $script:runAfterMoves = $false; Load-Moves }
         if ($script:runAfterCand) { $script:runAfterCand = $false; if (-not $script:worker) { Start-CandScan } }
         if ($script:candPending -and -not $script:worker -and $ctl.PageMoves.Visibility -eq 'Visible') { Start-CandScan }
+        if (-not $script:uiTest) { Show-WriteTrouble }   # 刚才的操作有没有写进操作日志
         if ($script:pendingDialog) {
             # 先清掉再弹，避免对话框打开期间定时器再弹一次
             $d = $script:pendingDialog; $script:pendingDialog = $null
@@ -23925,7 +23942,7 @@ $win.Add_ContentRendered({
     if ($script:riskShown) { return }
     $script:riskShown = $true
     $script:prefetchTimer.Start()
-    if (Test-Path -LiteralPath $script:riskFile) { Show-HalfMoves; Show-LooseMoves; Show-BrokenMoves; return }
+    if (Test-Path -LiteralPath $script:riskFile) { Show-WriteTrouble -Startup; Show-HalfMoves; Show-LooseMoves; Show-BrokenMoves; return }
     $ans = Show-Sheet -Kind warn -Title (T '使用前请先阅读安全风险提示') `
         -Text (T "本工具会按你的选择删除或搬移电脑上的文件。删除的文件可能无法恢复，存在资料丢失的风险。`n`n每次删除前，请确认这些资料确实不再需要、删除不会给你带来损失；重要资料请先备份。因使用本工具造成的资料丢失或其他损失，责任由使用者自行承担，开发者不承担责任。`n`n完整说明随时可以在左侧「帮助」里查看。") `
         -Confirm (T '我已阅读并了解上述风险，同意自行承担使用本工具的后果。') -Buttons @((T '退出'), (T '同意并继续')) -Primary (T '同意并继续') -Cancel (T '退出')
@@ -23956,6 +23973,21 @@ function Show-LooseMoves {
     Start-Worker @'
 $sync.AclRes = Repair-MovedAccess $arg.Items
 '@ @{ Items = $l }
+}
+# 本工具自己的记录写不进去（多半是 C 盘满了）：打开时、做完一件事后各查一次，说一次就不再说
+$script:writeTroubleShown = $false
+function Show-WriteTrouble([switch]$Startup) {
+    if ($script:writeTroubleShown) { return }
+    $kind = ''
+    if ($sync.OpLogFail -or [int]$script:opLogFailed -gt 0) { $kind = 'log' }
+    elseif ($Startup -and -not (Test-AppDirWritable $script:appDir)) { $kind = 'dir' }
+    if (-not $kind) { return }
+    $script:writeTroubleShown = $true
+    $free = Fmt ([double](FreeC))
+    $t = if ($kind -eq 'log') { (T "C 盘只剩 {0}，本工具的操作日志写不进去了：刚才删了、搬了什么，有的没有记下来。先腾出一点 C 盘空间（比如清空回收站），以后的操作才会记下来。") -f $free }
+         else { (T "C 盘只剩 {0}，本工具的设置、操作日志和空间记录都写不进去：改的设置不会保存，删了、搬了什么也记不下来。先腾出一点空间再用，比如清空回收站，或者用「一键清理」。") -f $free }
+    Write-LogFile $t
+    Show-Sheet -Kind warn -Title (T '本工具的记录写不进去') -Text $t | Out-Null
 }
 # 搬走过东西的（不管什么模式）：左边列出「搬家管理」，搬走的东西在哪、链接好不好都看得到。
 # 链接断了的（目标盘拔了、盘符变了）：打开时说一声，一天最多一次
