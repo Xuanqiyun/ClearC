@@ -182,7 +182,7 @@ function Refresh-Drives([string]$old, [string]$new) {
     foreach ($d in $add) {
         try {
             $di = New-Object System.IO.DriveInfo $d
-            if ($di.DriveType -eq 'Fixed' -and $di.IsReady -and -not [FsTools]::IsSubst($di.Name)) { Add-Root $di.RootDirectory.FullName ((T "整个 {0} 盘") -f $di.Name.Substring(0, 1)) $false ((T "{0}  已用 {1}") -f $di.Name, (Fmt ($di.TotalSize - $di.TotalFreeSpace))) }
+            if ($di.DriveType -eq 'Fixed' -and $di.IsReady -and -not [FsTools]::IsSubst($di.Name)) { Add-Root $di.RootDirectory.FullName ((T "整个 {0} 盘") -f $di.Name.Substring(0, 1)) $false ((T "{0}  已用 {1}") -f $di.Name, (Fmt (Get-DriveUse $di.Name).Used)) }
         } catch {}
     }
     foreach ($d in $gone) { foreach ($rt in @($script:roots)) { if (([string]$rt.Path).TrimEnd('\') -ieq $d.TrimEnd('\')) { [void]$script:roots.Remove($rt) } } }

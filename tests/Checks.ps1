@@ -127,8 +127,10 @@ if ($fill -and $fill -notmatch 'Fmt' -and $fill -notmatch '已用') { Ok 'space 
 if ($card -match '\.FreeText = ' -and $card -notmatch '（\{2:N0\}%），剩') { Ok 'space map: a drive card says used / total / % and free once, without cramped （…）， punctuation' } else { Bad 'space map: drive card text' }
 if ($ov -match 'Update-MapOvHead' -and $src -match '(?s)function Update-MapOvHead.*?MapHealthBox.*?MapOvHead\.Visibility' -and $card -match 'Update-MapOvHead' -and $ov -notmatch "T '剩余空间'") { Ok 'space map: the overview shows what the used space is made of; the used / total headline only when no card shows this drive' } else { Bad 'space map: the overview repeats the used / total / free of the drive card' }
 if ($lvl -match '\$ctl\.MapInfo\.Text = if \(\$node\.Parent\)') { Ok 'space map: at a drive root the info line does not repeat a size next to the drive card' } else { Bad 'space map: the info line at the drive root repeats a size' }
-$du = @('UI-Status', 'Show-DiskHealth', 'Show-MapOverview') | Where-Object { (& $fn $_) -notmatch 'Get-DriveUse' }
-if ($src -match '(?s)function Get-DriveUse' -and -not $du) { Ok 'one way to read how full a drive is (Get-DriveUse) on the cleanup page, the drive cards and the overview' } else { Bad ("these read drive use their own way: {0}" -f ($du -join ', ')) }
+$du = @('UI-Status', 'Show-DiskHealth', 'Show-MapOverview', 'Show-SpaceAcct', 'Show-Health') | Where-Object { (& $fn $_) -and (& $fn $_) -notmatch 'Get-DriveUse' }
+$ui = $src.Substring($src.IndexOf('[xml]$xaml = @"'))
+$tfs = ([regex]::Matches($ui, 'TotalFreeSpace')).Count
+if ($src -match '(?s)function Get-DriveUse' -and -not $du -and $tfs -le 2) { Ok ("one way to read how full a drive is (Get-DriveUse): cleanup page, drive cards, overview, space details, health cards ({0} growth comparisons still read the raw free space)" -f $tfs) } else { Bad ("these read drive use their own way: {0}" -f ($du -join ', ')) }
 $dc = & $fn 'Fill-DestChoices'
 if ($dc -and $dc -notmatch '已自动选了空闲最多的 \{0\} 盘（剩 \{1\}）') { Ok 'move target: the hint does not repeat the free space shown in the picker' } else { Bad 'move target: the hint repeats the free space of the picked drive' }
 # 换行的文字按字号给行距（约 1.5 倍）：12 号 19、13 号 21、14 号 22；页面说明、小字、设置说明都基于同一个基础样式
