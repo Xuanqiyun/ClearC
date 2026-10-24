@@ -609,7 +609,7 @@ function Load-Save {
     $ctl.SavePfDrive.Items.Clear()
     foreach ($d in (Fixed-Drives -NoSystem)) {
         $it = New-Object System.Windows.Controls.ComboBoxItem
-        $it.Content = (T "{0}  空闲 {1}") -f $d.Name.TrimEnd('\'), (Fmt $d.AvailableFreeSpace); $it.Tag = $d.Name.TrimEnd('\')
+        $it.Content = Drive-ChoiceLabel $d; $it.Tag = $d.Name.TrimEnd('\')
         [void]$ctl.SavePfDrive.Items.Add($it)
     }
     if ($ctl.SavePfDrive.Items.Count -gt 0) { $ctl.SavePfDrive.SelectedIndex = 0 }
@@ -642,7 +642,7 @@ function Load-Save {
     $ctl.SaveTmpDrive.Items.Clear()
     foreach ($d in (Fixed-Drives -NoSystem)) {
         $it = New-Object System.Windows.Controls.ComboBoxItem
-        $it.Content = (T "{0}  空闲 {1}") -f $d.Name.TrimEnd('\'), (Fmt $d.AvailableFreeSpace); $it.Tag = $d.Name.TrimEnd('\')
+        $it.Content = Drive-ChoiceLabel $d; $it.Tag = $d.Name.TrimEnd('\')
         [void]$ctl.SaveTmpDrive.Items.Add($it)
     }
     if ($ctl.SaveTmpDrive.Items.Count -gt 0) { $ctl.SaveTmpDrive.SelectedIndex = 0 }

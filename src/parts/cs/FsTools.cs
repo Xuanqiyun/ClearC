@@ -20,6 +20,23 @@ public static class FsTools {
 
     static bool Win { get { return System.IO.Path.DirectorySeparatorChar == '\\'; } }
 
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool DeviceIoControl(Microsoft.Win32.SafeHandles.SafeFileHandle h, uint code, byte[] inBuf, int inSize, byte[] outBuf, int outSize, out int returned, IntPtr overlapped);
+    // 一块盘接在什么总线上（STORAGE_BUS_TYPE：7 USB、4 1394、12 SD 卡、13 MMC 是插拔式的）。读不到返回 -1。只查询，不需要读写权限
+    public static int BusType(string drive) {
+        if (!Win || string.IsNullOrEmpty(drive)) return -1;
+        try {
+            using (Microsoft.Win32.SafeHandles.SafeFileHandle h = CreateFileW("\\\\.\\" + drive.Substring(0, 2), 0, 3, IntPtr.Zero, 3, 0, IntPtr.Zero)) {
+                if (h.IsInvalid) return -1;
+                byte[] q = new byte[12];          // STORAGE_PROPERTY_QUERY：StorageDeviceProperty、PropertyStandardQuery
+                byte[] o = new byte[1024]; int got;
+                if (!DeviceIoControl(h, 0x2D1400 /*IOCTL_STORAGE_QUERY_PROPERTY*/, q, q.Length, o, o.Length, out got, IntPtr.Zero) || got < 32) return -1;
+                return BitConverter.ToInt32(o, 28); // STORAGE_DEVICE_DESCRIPTOR.BusType
+            }
+        } catch { return -1; }
+    }
+    public static bool IsPluggable(string drive) { int b = BusType(drive); return b == 7 || b == 4 || b == 12 || b == 13; }
+
     // 一个文件实际占用的磁盘空间（压缩、稀疏文件会比文件大小小）
     public static long OnDisk(string file) {
         if (!Win) { try { return new FileInfo(file).Length; } catch { return 0; } }

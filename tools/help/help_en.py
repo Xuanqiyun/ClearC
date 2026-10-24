@@ -32,7 +32,7 @@ PAGE = dict(
             I('Supported apps', 'WeChat, QQ, WeCom, Tencent Meeting, Feishu, DingTalk, Telegram, Discord, Slack, Signal, LINE, Viber, KakaoTalk and Zoom. For Store versions, use "Move" under Apps in Windows Settings.'),
             F('How a move works', ['Close the app', 'Copy to the target drive', 'Verify', 'Replace with a link', 'Delete the original on C:'],
               'The app keeps reading and writing at the original location; no settings change. If the copy doesn\'t match, the original folder is not deleted.'),
-            I('Target drive', 'The local drive with the most free space is chosen; you can pick another drive or a folder. Network drives, cloud drives and USB sticks can\'t be used.'),
+            I('Target drive', 'The local drive with the most free space is chosen; you can pick another drive or a folder. Network drives, cloud drives and USB sticks can\'t be used. External disks are never picked automatically, and you are warned when you pick one: once unplugged, the moved apps stop working.'),
             N('warn', 'Leave the CDriveMoved folder on the target drive alone', 'If it is deleted, renamed or moved, the apps can no longer find their chat history.'),
         ]),
         dict(icon='&#xE8C8;', title='Duplicates', sum='Find files with identical content; keep one copy, delete the rest', blocks=[

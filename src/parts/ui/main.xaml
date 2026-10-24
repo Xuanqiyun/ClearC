@@ -3527,7 +3527,7 @@
                   <Grid Tag="cols:330:44:26:3" Margin="0,26,0,0">
                     <StackPanel>
                       <TextBlock Style="{StaticResource HelpLead}" Text="目标盘"/>
-                      <TextBlock Style="{StaticResource HelpBody}"><Run>默认选空闲最多的本机硬盘，也可以换一块盘或选一个文件夹。网络盘、网盘和 U 盘不行。</Run></TextBlock>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>默认选空闲最多的本机硬盘，也可以换一块盘或选一个文件夹。网络盘、网盘和 U 盘不行；移动硬盘不会自动选，手动选时会先提醒：拔掉后，搬过去的软件会打不开。</Run></TextBlock>
                     </StackPanel>
                   </Grid>
                   <Border Background="#FFF8EC" BorderBrush="#F5E1BC" BorderThickness="1" CornerRadius="12" Padding="18,16,22,17" Margin="0,26,0,0">
