@@ -622,6 +622,9 @@ try { & {
             Check 'SEC-5 a changed SystemRoot / SystemDrive in the environment is replaced with the real ones' ($env:SystemRoot -eq [Environment]::GetFolderPath('Windows') -and $env:SystemDrive -eq ([Environment]::GetFolderPath('Windows')).Substring(0, 2))
         } finally { $env:SystemRoot = $keepRoot; $env:SystemDrive = $keepDrive }
     } else { Skip 'SEC-5 replacing a changed SystemRoot' }
+    # ============ 20. 网页、记事本、报告都经资源管理器打开，不以管理员身份运行（3.6 安全评审） ============
+    $oa = [regex]::Match($engineText, '(?s)function Open-AsUser\(.*?\r?\n\}').Value
+    Check 'SEC-6 links, logs and reports open through Explorer (as the signed-in user), never as administrator' ($oa -match 'explorer\.exe' -and $src -notmatch '(?i)notepad\.exe' -and $src -notmatch "Start-Process (-FilePath )?(\`$url|\`$file|\`$s\.Uri|\`$dlg\.FileName|'ms-settings|'https?:)" -and ([regex]::Matches($src, 'Open-AsUser ')).Count -ge 8)
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue

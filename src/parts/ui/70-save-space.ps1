@@ -381,7 +381,7 @@ function Open-VendorPage {
     if ($script:uiTest) { $script:uiFixRuns.Add('vendor:' + $url); return }
     $txt = (T "{0} {1}，服务编号 / 序列号 {2}`n`n{3}`n`n链接已经复制。要下载的：BIOS、芯片组驱动、存储驱动（Intel RST）、固态硬盘固件；装的顺序是 BIOS → 芯片组 → 存储驱动 → 固件，每装一样重启一次。这台电脑上不了外网的话，在别的电脑上打开这个链接，下载好用 U 盘拷过来。") -f $f.Maker, $f.Model, $f.Serial, $url
     $ans = Show-Sheet -Title (T '厂商驱动下载页') -Text $txt -Buttons @((T '关闭'), (T '在浏览器里打开')) -Primary (T '在浏览器里打开') -Cancel (T '关闭')
-    if ($ans -eq (T '在浏览器里打开')) { try { Start-Process $url } catch {} }
+    if ($ans -eq (T '在浏览器里打开')) { [void](Open-AsUser $url) }
 }
 # 改用 Windows 自带的硬盘驱动：只给步骤（要进 BIOS），先替你查好能不能改
 function Show-AhciGuide {
@@ -451,7 +451,7 @@ function Invoke-FixStep([string]$id, [switch]$Quiet) {
     if ($script:uiTest) { $script:uiFixRuns.Add($id); return }   # 界面自测：不真的运行
     try {
         if ($s.Cmd) { Start-Process -FilePath "$env:SystemRoot\System32\cmd.exe" -ArgumentList ('/k title ClearC - {0} & {1} & echo. & echo {2}' -f $name, $s.Cmd, (T '运行完了，可以关掉这个窗口。')) }
-        elseif ($s.Uri) { Start-Process $s.Uri }
+        elseif ($s.Uri) { [void](Open-AsUser $s.Uri) }
         elseif ($s.Folder) { Open-Location $s.Folder; return }
         elseif ($s.Exe -and $s.Args) { Start-Process -FilePath $s.Exe -ArgumentList $s.Args }
         elseif ($s.Exe) { Start-Process -FilePath $s.Exe }

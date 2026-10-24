@@ -95,7 +95,7 @@ function Start-AppMove($r) {
     try { $why = Get-AppMoveBlock $r $sync.AppsResult } finally { $win.Cursor = $null }
     if ($why -eq 'store') {
         $ans = Show-Sheet -Title (T '应用商店的软件由 Windows 管理') -Text ((T "「{0}」是从应用商店装的，本工具不能搬它。`n`n有的应用可以在 Windows 设置里换盘：设置 → 应用 → 已安装的应用，点它右边的「…」，选「移动」（没有这个选项就是不支持）。") -f $r.Name) -Buttons @((T '好'), (T '打开 Windows 设置')) -Primary (T '打开 Windows 设置') -Cancel (T '好')
-        if ($ans -eq (T '打开 Windows 设置')) { try { Start-Process 'ms-settings:appsfeatures' } catch {} }
+        if ($ans -eq (T '打开 Windows 设置')) { [void](Open-AsUser 'ms-settings:appsfeatures') }
         return
     }
     if ($why) { Show-Sheet -Kind warn -Title ((T "「{0}」不适合搬") -f $r.Name) -Text $why | Out-Null; return }

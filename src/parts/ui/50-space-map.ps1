@@ -1421,7 +1421,7 @@ $ctl.BtnMapReport.Add_Click({
     finally { $win.Cursor = $null }
     UI-Log ((T "空间地图：报告已保存到 {0}") -f $dlg.FileName)
     $ans = Show-Sheet -Kind done -Title (T '报告已保存') -Text ((T "{0}`n`n用浏览器打开就能看；想要 PDF，在浏览器里按 Ctrl+P，打印机选「另存为 PDF」。") -f $dlg.FileName) -Buttons @((T '打开所在位置'), (T '打开报告')) -Primary (T '打开报告') -Cancel (T '打开所在位置')
-    if ($ans -eq (T '打开报告')) { try { Start-Process -FilePath $dlg.FileName } catch { Open-Location $dlg.FileName } }
+    if ($ans -eq (T '打开报告')) { if (-not (Open-AsUser $dlg.FileName)) { Open-Location $dlg.FileName } }
     elseif ($ans -eq (T '打开所在位置')) { Open-Location $dlg.FileName }
 })
 $ctl.BtnMapExport.Add_Click({

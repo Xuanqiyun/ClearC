@@ -408,8 +408,8 @@ foreach ($x in @($ctl.HelpFaq.Children)) {
 $script:projectPage = 'https://github.com/Xuanqiyun/ClearC'
 function Open-Web([string]$url) {
     # 用资源管理器打开网址：浏览器不会以管理员身份运行
-    try { Start-Process -FilePath "$env:SystemRoot\explorer.exe" -ArgumentList $url; UI-Log ((T "打开网页：{0}") -f $url) }
-    catch { Show-CopyHint ((T "打不开浏览器，请手动访问 {0}") -f $url) }
+    if (Open-AsUser $url) { UI-Log ((T "打开网页：{0}") -f $url) }
+    else { Show-CopyHint ((T "打不开浏览器，请手动访问 {0}") -f $url) }
 }
 $ctl.BtnGitHub.Add_Click({ Open-Web $script:projectPage })
 $ctl.BtnIssue.Add_Click({ Open-Web ($script:projectPage + '/issues') })
@@ -455,7 +455,7 @@ try {
 })
 
 $ctl.BtnOpenLog.Add_Click({
-    if (Test-Path -LiteralPath $script:logFile) { Start-Process -FilePath "$env:SystemRoot\System32\notepad.exe" -ArgumentList ('"{0}"' -f $script:logFile) }
+    if (Test-Path -LiteralPath $script:logFile) { [void](Open-AsUser $script:logFile) }
     else { Show-CopyHint (T '还没有运行记录') }
 })
 
