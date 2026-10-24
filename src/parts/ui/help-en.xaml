@@ -157,7 +157,7 @@
                       <TextBlock Style="{StaticResource HelpLead}" Text="Items skipped by default"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>Windows.old, the Recycle Bin, orphaned Windows Installer packages, old driver packages, broken shortcuts, event logs and more. Skipped by default; read the description before selecting them.</Run></TextBlock>
                     </StackPanel>
-                    <StackPanel>
+                    <StackPanel Tag="lvl:2">
                       <TextBlock Style="{StaticResource HelpLead}" Text="Your own folders"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>Under "Cleanup list" in Settings, add folders to clean or to exclude. For added folders only the contents are deleted; the folder itself stays.</Run></TextBlock>
                     </StackPanel>
@@ -282,7 +282,7 @@
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Compresses the Windows system files, usually saving 2 to 4 GB with no effect on use.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}" Tag="lvl:1">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Page file"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Moves pagefile.sys to another drive; takes effect after a restart.</Run></TextBlock>
@@ -294,25 +294,25 @@
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Keeping only Fast Startup halves it; turning hibernation off removes it.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}" Tag="lvl:1">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Restore points"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Shows how much they take; adjust them in Windows' System Protection. ClearC never deletes restore points.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}" Tag="lvl:1">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Compress folders"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>NTFS compression: files work as usual but take less space. Good for documents and old projects.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}" Tag="lvl:1">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Virtual disks"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Compacts WSL and Docker disks; emulators and virtual machines can be moved as a whole.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}" Tag="lvl:1">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Merge duplicates"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Duplicates on the same drive take up space only once. Good for photos and videos you no longer edit.</Run></TextBlock>
@@ -324,31 +324,31 @@
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Local copies become cloud-only and download when opened.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}" Tag="lvl:2">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Reserved storage"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Gives back the roughly 7 GB Windows keeps for updates; can be turned back on at any time.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}" Tag="lvl:2">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Component store"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Lets Windows work out how much WinSxS can free before you decide to clean it up.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}" Tag="lvl:2">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Small crash dumps"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Blue screens write a 256 KB dump instead of a multi-GB file.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}" Tag="lvl:2">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Temp folder"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Moves TEMP to another drive; takes effect after signing out and in.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}" Tag="lvl:1">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Move WSL"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Moves a whole distribution with wsl --manage --move; needs WSL 2.5 or later.</Run></TextBlock>
@@ -396,7 +396,7 @@
                       <TextBlock Style="{StaticResource HelpLead}" Text="Treemap"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>The bigger the block, the more space it takes. The colour shows what a folder holds; hatched blocks are caches whose space can be had back.</Run></TextBlock>
                     </StackPanel>
-                    <StackPanel>
+                    <StackPanel Tag="lvl:1">
                       <TextBlock Style="{StaticResource HelpLead}" Text="Find files"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>Search files of 1 MB or more by size, age, type and name, or only the large files inside chat apps.</Run></TextBlock>
                     </StackPanel>
@@ -404,11 +404,11 @@
                       <TextBlock Style="{StaticResource HelpLead}" Text="By type"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>Splits every file on the drive into ten kinds, such as videos, pictures, documents and archives, and shows how much each takes.</Run></TextBlock>
                     </StackPanel>
-                    <StackPanel>
+                    <StackPanel Tag="lvl:1">
                       <TextBlock Style="{StaticResource HelpLead}" Text="Recent changes and Since last scan"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>"Recent changes" lists the folders with the most new or rewritten files in the last few days; "Since last scan" finds the folders that grew and where the extra space went.</Run></TextBlock>
                     </StackPanel>
-                    <StackPanel>
+                    <StackPanel Tag="lvl:1">
                       <TextBlock Style="{StaticResource HelpLead}" Text="Export"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>Save the list as CSV, or the whole drive as a web page report.</Run></TextBlock>
                     </StackPanel>
@@ -468,22 +468,22 @@
                       <TextBlock Style="{StaticResource HelpLead}" Text="Uninstall and leftovers"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>After uninstalling, click "Check leftovers" to find folders left behind and move them to the Recycle Bin.</Run></TextBlock>
                     </StackPanel>
-                    <StackPanel>
+                    <StackPanel Tag="lvl:1">
                       <TextBlock Style="{StaticResource HelpLead}" Text="Move to another drive"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>Moves an app installed on C: to another drive as a whole; shortcuts, uninstalling and updates keep working. Apps with services or drivers, Microsoft's own apps and a few others aren't suited to moving, and ClearC says why.</Run></TextBlock>
                     </StackPanel>
-                    <StackPanel>
+                    <StackPanel Tag="lvl:1">
                       <TextBlock Style="{StaticResource HelpLead}" Text="Check for updates"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>Uses winget, which comes with Windows, and upgrades in a terminal. ClearC only goes online when you click it.</Run></TextBlock>
                     </StackPanel>
                   </Grid>
                   <TextBlock Text="Startup and extensions" Style="{StaticResource HelpGroup}" Margin="0,40,0,0"/>
                   <Grid Tag="cols:330:44:26:3" Margin="0,14,0,0">
-                    <StackPanel>
+                    <StackPanel Tag="lvl:1">
                       <TextBlock Style="{StaticResource HelpLead}" Text="Startup, scheduled tasks, context menu"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>Third-party startup items, scheduled tasks and context menu extensions. Disabling deletes nothing and can be undone at any time.</Run></TextBlock>
                     </StackPanel>
-                    <StackPanel>
+                    <StackPanel Tag="lvl:1">
                       <TextBlock Style="{StaticResource HelpLead}" Text="Leftover folders"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>Finds folders uninstalled apps may have left behind. It is only a guess, so open them first, then move them to the Recycle Bin.</Run></TextBlock>
                     </StackPanel>
@@ -505,7 +505,7 @@
                       <TextBlock Style="{StaticResource HelpLead}" Text="Hardware"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>The state of the CPU, memory, drives, battery, graphics and Windows, marked green, amber or red; anything that can't be read says so. It is read in the background after ClearC opens.</Run></TextBlock>
                     </StackPanel>
-                    <StackPanel>
+                    <StackPanel Tag="lvl:1">
                       <TextBlock Style="{StaticResource HelpLead}" Text="Boot time"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>How long recent starts took, and which programs slowed them down.</Run></TextBlock>
                     </StackPanel>
@@ -521,7 +521,7 @@
                       <TextBlock Style="{StaticResource HelpLead}" Text="Common fixes"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>Proven fixes listed by problem, all built from Windows' own commands and run in a visible window. Anything that changes the system explains itself and asks first.</Run></TextBlock>
                     </StackPanel>
-                    <StackPanel>
+                    <StackPanel Tag="lvl:1">
                       <TextBlock Style="{StaticResource HelpLead}" Text="Activity monitor"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>Checks every 3 seconds how much CPU, memory and disk writing each program uses, to find what is slowing the PC down.</Run></TextBlock>
                     </StackPanel>

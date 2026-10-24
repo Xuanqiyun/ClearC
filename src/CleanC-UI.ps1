@@ -10317,7 +10317,7 @@ $script:helpEnXaml = @'
                       <TextBlock Style="{StaticResource HelpLead}" Text="Items skipped by default"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>Windows.old, the Recycle Bin, orphaned Windows Installer packages, old driver packages, broken shortcuts, event logs and more. Skipped by default; read the description before selecting them.</Run></TextBlock>
                     </StackPanel>
-                    <StackPanel>
+                    <StackPanel Tag="lvl:2">
                       <TextBlock Style="{StaticResource HelpLead}" Text="Your own folders"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>Under "Cleanup list" in Settings, add folders to clean or to exclude. For added folders only the contents are deleted; the folder itself stays.</Run></TextBlock>
                     </StackPanel>
@@ -10442,7 +10442,7 @@ $script:helpEnXaml = @'
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Compresses the Windows system files, usually saving 2 to 4 GB with no effect on use.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}" Tag="lvl:1">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Page file"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Moves pagefile.sys to another drive; takes effect after a restart.</Run></TextBlock>
@@ -10454,25 +10454,25 @@ $script:helpEnXaml = @'
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Keeping only Fast Startup halves it; turning hibernation off removes it.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}" Tag="lvl:1">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Restore points"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Shows how much they take; adjust them in Windows' System Protection. ClearC never deletes restore points.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}" Tag="lvl:1">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Compress folders"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>NTFS compression: files work as usual but take less space. Good for documents and old projects.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}" Tag="lvl:1">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Virtual disks"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Compacts WSL and Docker disks; emulators and virtual machines can be moved as a whole.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}" Tag="lvl:1">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Merge duplicates"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Duplicates on the same drive take up space only once. Good for photos and videos you no longer edit.</Run></TextBlock>
@@ -10484,31 +10484,31 @@ $script:helpEnXaml = @'
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Local copies become cloud-only and download when opened.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}" Tag="lvl:2">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Reserved storage"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Gives back the roughly 7 GB Windows keeps for updates; can be turned back on at any time.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}" Tag="lvl:2">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Component store"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Lets Windows work out how much WinSxS can free before you decide to clean it up.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}" Tag="lvl:2">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Small crash dumps"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Blue screens write a 256 KB dump instead of a multi-GB file.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}" Tag="lvl:2">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Temp folder"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Moves TEMP to another drive; takes effect after signing out and in.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}" Tag="lvl:1">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Move WSL"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Moves a whole distribution with wsl --manage --move; needs WSL 2.5 or later.</Run></TextBlock>
@@ -10556,7 +10556,7 @@ $script:helpEnXaml = @'
                       <TextBlock Style="{StaticResource HelpLead}" Text="Treemap"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>The bigger the block, the more space it takes. The colour shows what a folder holds; hatched blocks are caches whose space can be had back.</Run></TextBlock>
                     </StackPanel>
-                    <StackPanel>
+                    <StackPanel Tag="lvl:1">
                       <TextBlock Style="{StaticResource HelpLead}" Text="Find files"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>Search files of 1 MB or more by size, age, type and name, or only the large files inside chat apps.</Run></TextBlock>
                     </StackPanel>
@@ -10564,11 +10564,11 @@ $script:helpEnXaml = @'
                       <TextBlock Style="{StaticResource HelpLead}" Text="By type"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>Splits every file on the drive into ten kinds, such as videos, pictures, documents and archives, and shows how much each takes.</Run></TextBlock>
                     </StackPanel>
-                    <StackPanel>
+                    <StackPanel Tag="lvl:1">
                       <TextBlock Style="{StaticResource HelpLead}" Text="Recent changes and Since last scan"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>"Recent changes" lists the folders with the most new or rewritten files in the last few days; "Since last scan" finds the folders that grew and where the extra space went.</Run></TextBlock>
                     </StackPanel>
-                    <StackPanel>
+                    <StackPanel Tag="lvl:1">
                       <TextBlock Style="{StaticResource HelpLead}" Text="Export"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>Save the list as CSV, or the whole drive as a web page report.</Run></TextBlock>
                     </StackPanel>
@@ -10628,22 +10628,22 @@ $script:helpEnXaml = @'
                       <TextBlock Style="{StaticResource HelpLead}" Text="Uninstall and leftovers"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>After uninstalling, click "Check leftovers" to find folders left behind and move them to the Recycle Bin.</Run></TextBlock>
                     </StackPanel>
-                    <StackPanel>
+                    <StackPanel Tag="lvl:1">
                       <TextBlock Style="{StaticResource HelpLead}" Text="Move to another drive"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>Moves an app installed on C: to another drive as a whole; shortcuts, uninstalling and updates keep working. Apps with services or drivers, Microsoft's own apps and a few others aren't suited to moving, and ClearC says why.</Run></TextBlock>
                     </StackPanel>
-                    <StackPanel>
+                    <StackPanel Tag="lvl:1">
                       <TextBlock Style="{StaticResource HelpLead}" Text="Check for updates"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>Uses winget, which comes with Windows, and upgrades in a terminal. ClearC only goes online when you click it.</Run></TextBlock>
                     </StackPanel>
                   </Grid>
                   <TextBlock Text="Startup and extensions" Style="{StaticResource HelpGroup}" Margin="0,40,0,0"/>
                   <Grid Tag="cols:330:44:26:3" Margin="0,14,0,0">
-                    <StackPanel>
+                    <StackPanel Tag="lvl:1">
                       <TextBlock Style="{StaticResource HelpLead}" Text="Startup, scheduled tasks, context menu"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>Third-party startup items, scheduled tasks and context menu extensions. Disabling deletes nothing and can be undone at any time.</Run></TextBlock>
                     </StackPanel>
-                    <StackPanel>
+                    <StackPanel Tag="lvl:1">
                       <TextBlock Style="{StaticResource HelpLead}" Text="Leftover folders"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>Finds folders uninstalled apps may have left behind. It is only a guess, so open them first, then move them to the Recycle Bin.</Run></TextBlock>
                     </StackPanel>
@@ -10665,7 +10665,7 @@ $script:helpEnXaml = @'
                       <TextBlock Style="{StaticResource HelpLead}" Text="Hardware"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>The state of the CPU, memory, drives, battery, graphics and Windows, marked green, amber or red; anything that can't be read says so. It is read in the background after ClearC opens.</Run></TextBlock>
                     </StackPanel>
-                    <StackPanel>
+                    <StackPanel Tag="lvl:1">
                       <TextBlock Style="{StaticResource HelpLead}" Text="Boot time"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>How long recent starts took, and which programs slowed them down.</Run></TextBlock>
                     </StackPanel>
@@ -10681,7 +10681,7 @@ $script:helpEnXaml = @'
                       <TextBlock Style="{StaticResource HelpLead}" Text="Common fixes"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>Proven fixes listed by problem, all built from Windows' own commands and run in a visible window. Anything that changes the system explains itself and asks first.</Run></TextBlock>
                     </StackPanel>
-                    <StackPanel>
+                    <StackPanel Tag="lvl:1">
                       <TextBlock Style="{StaticResource HelpLead}" Text="Activity monitor"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>Checks every 3 seconds how much CPU, memory and disk writing each program uses, to find what is slowing the PC down.</Run></TextBlock>
                     </StackPanel>
@@ -14671,7 +14671,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                       <TextBlock Style="{StaticResource HelpLead}" Text="默认不清的项目"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>Windows.old、回收站、Windows Installer 孤儿安装包、旧版驱动包、失效的快捷方式和事件日志等。默认跳过，看清说明再选。</Run></TextBlock>
                     </StackPanel>
-                    <StackPanel>
+                    <StackPanel Tag="lvl:2">
                       <TextBlock Style="{StaticResource HelpLead}" Text="自己加文件夹"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>在设置的「清理列表」里添加要清理或要排除的文件夹。添加的文件夹只清里面的东西，文件夹本身保留。</Run></TextBlock>
                     </StackPanel>
@@ -14796,7 +14796,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                         <TextBlock Style="{StaticResource HelpBody}"><Run>压缩 Windows 系统文件，通常省 2 到 4 GB，不影响使用。</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}" Tag="lvl:1">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="页面文件"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>把 pagefile.sys 移到其他盘，重启后生效。</Run></TextBlock>
@@ -14808,25 +14808,25 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                         <TextBlock Style="{StaticResource HelpBody}"><Run>只留快速启动能缩小一半；关闭休眠会删掉它。</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}" Tag="lvl:1">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="系统还原点"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>看还原点占了多少，到 Windows 的系统保护里调整。本工具不删还原点。</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}" Tag="lvl:1">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="压缩文件夹"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>NTFS 压缩。文件照常使用，只是占得少，适合文档和旧项目。</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}" Tag="lvl:1">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="虚拟磁盘"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>压缩 WSL、Docker 的虚拟磁盘；模拟器和虚拟机可以整个搬走。</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}" Tag="lvl:1">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="合并重复文件"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>同一块盘上的重复文件只占一份空间，适合不再修改的照片和视频。</Run></TextBlock>
@@ -14838,31 +14838,31 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                         <TextBlock Style="{StaticResource HelpBody}"><Run>本地副本改成只在云端，打开时再下载。</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}" Tag="lvl:2">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="保留的存储"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>把 Windows 为更新预留的约 7 GB 还给你，随时能恢复。</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}" Tag="lvl:2">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="组件存储分析"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>让 Windows 算一下 WinSxS 能回收多少，再决定要不要清理。</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}" Tag="lvl:2">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="蓝屏小转储"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>蓝屏时只存 256 KB 的小转储，不再生成几 GB 的文件。</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}" Tag="lvl:2">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="临时文件夹"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>把 TEMP 改到其他盘，注销再登录后生效。</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}" Tag="lvl:1">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="WSL 搬到其他盘"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>用 wsl --manage --move 搬走整个发行版，需要 WSL 2.5 以上。</Run></TextBlock>
@@ -14910,7 +14910,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                       <TextBlock Style="{StaticResource HelpLead}" Text="方块图"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>方块越大，占得越多。颜色表示文件夹里是哪一类东西，带斜线的是删了能腾出空间的缓存。</Run></TextBlock>
                     </StackPanel>
-                    <StackPanel>
+                    <StackPanel Tag="lvl:1">
                       <TextBlock Style="{StaticResource HelpLead}" Text="找文件"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>在 1 MB 以上的文件里，按大小、修改时间、类型和名称找。也可以只看聊天软件里的大文件。</Run></TextBlock>
                     </StackPanel>
@@ -14918,11 +14918,11 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                       <TextBlock Style="{StaticResource HelpLead}" Text="按类型"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>把全盘文件按视频、图片、文档、压缩包等分成十类，看每类占多少。</Run></TextBlock>
                     </StackPanel>
-                    <StackPanel>
+                    <StackPanel Tag="lvl:1">
                       <TextBlock Style="{StaticResource HelpLead}" Text="最近改动、和上次比"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>「最近改动」列出这几天新建、改写文件最多的文件夹；「和上次比」找出变大的文件夹，说明多出的空间主要在哪。</Run></TextBlock>
                     </StackPanel>
-                    <StackPanel>
+                    <StackPanel Tag="lvl:1">
                       <TextBlock Style="{StaticResource HelpLead}" Text="导出"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>把列表导出成 CSV，或把整块盘的情况存成网页报告。</Run></TextBlock>
                     </StackPanel>
@@ -14982,22 +14982,22 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                       <TextBlock Style="{StaticResource HelpLead}" Text="卸载和残留"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>卸载后点「检查残留」，找出留下的文件夹，确认后移到回收站。</Run></TextBlock>
                     </StackPanel>
-                    <StackPanel>
+                    <StackPanel Tag="lvl:1">
                       <TextBlock Style="{StaticResource HelpLead}" Text="搬到其他盘"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>把装在 C 盘的软件整个搬到其他盘，快捷方式、卸载和更新照常可用。带服务或驱动的、微软自己的软件等不适合搬，会写明原因。</Run></TextBlock>
                     </StackPanel>
-                    <StackPanel>
+                    <StackPanel Tag="lvl:1">
                       <TextBlock Style="{StaticResource HelpLead}" Text="检查新版本"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>用 Windows 自带的 winget 查新版本，在终端里升级。只在你点的时候联网。</Run></TextBlock>
                     </StackPanel>
                   </Grid>
                   <TextBlock Text="启动项和扩展" Style="{StaticResource HelpGroup}" Margin="0,40,0,0"/>
                   <Grid Tag="cols:330:44:26:3" Margin="0,14,0,0">
-                    <StackPanel>
+                    <StackPanel Tag="lvl:1">
                       <TextBlock Style="{StaticResource HelpLead}" Text="开机启动、计划任务、右键菜单"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>列出第三方的启动项、计划任务和右键菜单扩展。禁用不删除任何东西，随时可以重新启用。</Run></TextBlock>
                     </StackPanel>
-                    <StackPanel>
+                    <StackPanel Tag="lvl:1">
                       <TextBlock Style="{StaticResource HelpLead}" Text="残留文件夹"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>找已卸载软件可能留下的文件夹。只是猜测，先打开看看，再移到回收站。</Run></TextBlock>
                     </StackPanel>
@@ -15019,7 +15019,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                       <TextBlock Style="{StaticResource HelpLead}" Text="硬件"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>CPU、内存、硬盘、电池、显卡和 Windows 的状态，按绿、橙、红标出，读不到的写明读不到。打开本工具后会在后台先读好。</Run></TextBlock>
                     </StackPanel>
-                    <StackPanel>
+                    <StackPanel Tag="lvl:1">
                       <TextBlock Style="{StaticResource HelpLead}" Text="开机用时"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>最近几次开机用了多久，以及拖慢开机的程序。</Run></TextBlock>
                     </StackPanel>
@@ -15035,7 +15035,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                       <TextBlock Style="{StaticResource HelpLead}" Text="常见问题修复"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>按问题列出常用的修法，都是 Windows 自带的命令，在看得见的窗口里运行。会改动系统的先说明，再由你确认。</Run></TextBlock>
                     </StackPanel>
-                    <StackPanel>
+                    <StackPanel Tag="lvl:1">
                       <TextBlock Style="{StaticResource HelpLead}" Text="活动监控"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>每 3 秒看一次各程序的 CPU、内存和磁盘写入，找出是谁在拖慢电脑。</Run></TextBlock>
                     </StackPanel>
@@ -15811,7 +15811,7 @@ function Select-HelpPane([string]$k, [switch]$NoRemember) {
     foreach ($x in $script:helpPanes.Keys) { $script:helpPanes[$x].Pane.Visibility = $(if ($x -eq $k) { 'Visible' } else { 'Collapsed' }) }
     $rb = $script:helpPanes[$k].Nav
     if (-not $rb.IsChecked) { $script:helpNavQuiet = $true; try { $rb.IsChecked = $true } finally { $script:helpNavQuiet = $false } }
-    $keys = @($script:helpPanes.Keys); $i = [array]::IndexOf($keys, $k)
+    $keys = @($script:helpPanes.Keys | Where-Object { $_ -eq $k -or $script:helpPanes[$_].Nav.Visibility -eq 'Visible' }); $i = [array]::IndexOf($keys, $k)
     $prev = if ($i -gt 0) { $keys[$i - 1] } else { '' }; $next = if ($i -lt $keys.Count - 1) { $keys[$i + 1] } else { '' }
     $ctl.BtnHelpPrev.Tag = $prev; $ctl.BtnHelpNext.Tag = $next
     $ctl.BtnHelpPrev.Content = if ($prev) { (T "← 上一项：{0}") -f $script:helpPanes[$prev].Name } else { '' }
@@ -15821,6 +15821,35 @@ function Select-HelpPane([string]$k, [switch]$NoRemember) {
     if (-not $NoRemember) { $script:helpPick = $k; Set-Setting 'HelpPane' $k }
 }
 foreach ($x in @($script:helpPanes.Values)) { $x.Nav.Add_Checked({ if ($script:helpNavQuiet) { return }; Select-HelpPane ([string]$this.Tag) }) }
+# 帮助只讲当前模式里有的功能：标着 lvl:1、lvl:2 的说明在低一级的模式里藏起来；这个模式没有的页面（重复文件、搬家管理……），
+# 帮助目录里那一项也不列；一组里都藏了，组名也不列
+$script:helpSecPage = @{ s1 = 'dup'; s6 = 'moves'; s7 = 'auto'; s8 = 'log' }
+function Update-HelpForMode {
+    $m = Get-Mode
+    $st = New-Object System.Collections.Stack; $st.Push($ctl.HelpSections); $grids = @{}
+    while ($st.Count -gt 0) {
+        $e = $st.Pop()
+        if ($e -is [System.Windows.FrameworkElement] -and $e.Tag -is [string] -and ([string]$e.Tag).StartsWith('lvl:')) {
+            $e.Visibility = $(if ([int]([string]$e.Tag).Substring(4) -le $m) { 'Visible' } else { 'Collapsed' })
+            if ($e.Parent -is [System.Windows.Controls.Grid] -and $e.Parent.Tag -is [hashtable]) { $grids[$e.Parent.GetHashCode()] = $e.Parent }
+        }
+        foreach ($c in [System.Windows.LogicalTreeHelper]::GetChildren($e)) { if ($c -is [System.Windows.DependencyObject]) { $st.Push($c) } }
+    }
+    foreach ($g in $grids.Values) { $g.Tag.Sig = ''; Update-AutoCols $g }
+    foreach ($k in $script:helpSecPage.Keys) {
+        if (-not $script:helpPanes.Contains($k)) { continue }
+        $nav = $ctl[$script:pageList[$script:helpSecPage[$k]][1]]
+        $script:helpPanes[$k].Nav.Visibility = $nav.Visibility
+    }
+    # 组名：下面一项都没有了就不列
+    $head = $null; $any = $false
+    foreach ($c in @($ctl.HelpNav.Children) + @($null)) {
+        if ($null -eq $c -or $c -is [System.Windows.Controls.TextBlock]) { if ($head) { $head.Visibility = $(if ($any) { 'Visible' } else { 'Collapsed' }) }; $head = $c; $any = $false }
+        elseif ($c.Visibility -eq 'Visible') { $any = $true }
+    }
+    if ($script:helpPane -and $script:helpPanes.Contains($script:helpPane) -and $script:helpPanes[$script:helpPane].Nav.Visibility -ne 'Visible') { Select-HelpPane 'start' -NoRemember }
+    elseif ($script:helpPane) { Select-HelpPane $script:helpPane -NoRemember }   # 上一项、下一项跳过藏起来的
+}
 $ctl.BtnHelpPrev.Add_Click({ if ($this.Tag) { Select-HelpPane ([string]$this.Tag) } })
 $ctl.BtnHelpNext.Add_Click({ if ($this.Tag) { Select-HelpPane ([string]$this.Tag) } })
 Select-HelpPane (Get-Setting 'HelpPane' 'start') -NoRemember
@@ -22150,6 +22179,7 @@ function Apply-Display {
     $show = @{}
     foreach ($k in $script:optPages.Keys) { $show[$k] = (-not $hp.ContainsKey($k)) -and (-not $script:pageLvl.ContainsKey($k) -or $script:pageLvl[$k] -le $m -or ($k -eq 'moves' -and $script:hasMoves)); $ctl[$script:pageList[$k][1]].Visibility = & $vis $show[$k] }
     $ctl.NavHeadManage.Visibility = & $vis ($show['moves'] -or $show['auto'] -or $show['log'])
+    if ($script:helpPanes) { Update-HelpForMode }
     $hl = Get-HiddenSet 'HideLinks'
     foreach ($k in $script:optLinks.Keys) { $ctl[$script:optLinks[$k][1]].Visibility = & $vis ((-not $hl.ContainsKey($k)) -and (-not $script:linkLvl.ContainsKey($k) -or $script:linkLvl[$k] -le $m)) }
 }
@@ -22653,7 +22683,12 @@ function Invoke-UiTest {
             $basicSteps = @(@($ctl.FixGroups.Items) | ForEach-Object { @($_.Steps) } | ForEach-Object { $_.Id })
             if ($basicSteps -contains 'netreset' -or $basicSteps -contains 'wureset' -or $basicSteps -notcontains 'sfcrepair') { throw ('basic mode repair steps: ' + ($basicSteps -join ',')) }
             if ($ctl.ModeTag.Text -ne ((T '普通用户') + (T '模式'))) { throw ('mode tag: ' + $ctl.ModeTag.Text) }
+            # 帮助：这个模式没有的页面不列，更高模式才有的说明藏起来
+            $lv1 = @(); $stk = New-Object System.Collections.Stack; $stk.Push($ctl.HelpSections)
+            while ($stk.Count) { $x = $stk.Pop(); if ($x -is [System.Windows.FrameworkElement] -and [string]$x.Tag -eq 'lvl:1') { $lv1 += $x }; foreach ($c in [System.Windows.LogicalTreeHelper]::GetChildren($x)) { if ($c -is [System.Windows.DependencyObject]) { $stk.Push($c) } } }
+            if ($script:helpPanes['s1'].Nav.Visibility -ne 'Collapsed' -or $lv1.Count -lt 5 -or @($lv1 | Where-Object { $_.Visibility -ne 'Collapsed' }).Count) { throw 'basic mode help still lists engineer features' }
             Set-Mode 'pro'
+            if ($script:helpPanes['s1'].Nav.Visibility -ne 'Visible' -or @($lv1 | Where-Object { $_.Visibility -ne 'Visible' }).Count) { throw 'engineer mode help hides its own features' }
             if ($ctl.NavDup.Visibility -ne 'Visible' -or $ctl.AppsViewStartup.Visibility -ne 'Visible' -or $ctl.AppsViewTasks.Visibility -ne 'Collapsed' -or $ctl.SaveNavPf.Visibility -ne 'Visible' -or $ctl.SaveNavRs.Visibility -ne 'Collapsed') { throw 'pro mode wrong' }
             Set-Mode 'expert'
             if ($ctl.AppsViewTasks.Visibility -ne 'Visible' -or $ctl.SaveNavRs.Visibility -ne 'Visible' -or $ctl.BtnLog.Visibility -ne 'Visible' -or $ctl.BtnSetCustomAdd.Visibility -ne 'Visible' -or $ctl.BtnSfcRepair.Visibility -ne 'Visible' -or $ctl.HTabEvents.Visibility -ne 'Visible') { throw 'expert mode wrong' }

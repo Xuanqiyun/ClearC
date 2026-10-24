@@ -378,7 +378,12 @@ function Invoke-UiTest {
             $basicSteps = @(@($ctl.FixGroups.Items) | ForEach-Object { @($_.Steps) } | ForEach-Object { $_.Id })
             if ($basicSteps -contains 'netreset' -or $basicSteps -contains 'wureset' -or $basicSteps -notcontains 'sfcrepair') { throw ('basic mode repair steps: ' + ($basicSteps -join ',')) }
             if ($ctl.ModeTag.Text -ne ((T '普通用户') + (T '模式'))) { throw ('mode tag: ' + $ctl.ModeTag.Text) }
+            # 帮助：这个模式没有的页面不列，更高模式才有的说明藏起来
+            $lv1 = @(); $stk = New-Object System.Collections.Stack; $stk.Push($ctl.HelpSections)
+            while ($stk.Count) { $x = $stk.Pop(); if ($x -is [System.Windows.FrameworkElement] -and [string]$x.Tag -eq 'lvl:1') { $lv1 += $x }; foreach ($c in [System.Windows.LogicalTreeHelper]::GetChildren($x)) { if ($c -is [System.Windows.DependencyObject]) { $stk.Push($c) } } }
+            if ($script:helpPanes['s1'].Nav.Visibility -ne 'Collapsed' -or $lv1.Count -lt 5 -or @($lv1 | Where-Object { $_.Visibility -ne 'Collapsed' }).Count) { throw 'basic mode help still lists engineer features' }
             Set-Mode 'pro'
+            if ($script:helpPanes['s1'].Nav.Visibility -ne 'Visible' -or @($lv1 | Where-Object { $_.Visibility -ne 'Visible' }).Count) { throw 'engineer mode help hides its own features' }
             if ($ctl.NavDup.Visibility -ne 'Visible' -or $ctl.AppsViewStartup.Visibility -ne 'Visible' -or $ctl.AppsViewTasks.Visibility -ne 'Collapsed' -or $ctl.SaveNavPf.Visibility -ne 'Visible' -or $ctl.SaveNavRs.Visibility -ne 'Collapsed') { throw 'pro mode wrong' }
             Set-Mode 'expert'
             if ($ctl.AppsViewTasks.Visibility -ne 'Visible' -or $ctl.SaveNavRs.Visibility -ne 'Visible' -or $ctl.BtnLog.Visibility -ne 'Visible' -or $ctl.BtnSetCustomAdd.Visibility -ne 'Visible' -or $ctl.BtnSfcRepair.Visibility -ne 'Visible' -or $ctl.HTabEvents.Visibility -ne 'Visible') { throw 'expert mode wrong' }
