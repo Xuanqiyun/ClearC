@@ -7,6 +7,11 @@ $ErrorActionPreference = 'Stop'
 $src = [IO.File]::ReadAllText($Script)
 $dupCode = [regex]::Match($src, "(?s)\`$dupCode = @'\r?\n(.*?)\r?\n'@").Groups[1].Value
 $engineText = [regex]::Match($src, "(?s)\`$engine = @'\r?\n(.*?)\r?\n'@").Groups[1].Value
+# 源码锁用语法树找调用（注释、字符串里的字不算，别名和后台代码里的也找得到），见 CallSites.ps1
+. (Join-Path $PSScriptRoot 'CallSites.ps1')
+$calls = @(Get-CallSites $src)
+function Calls([string[]]$names) { @($calls | Where-Object { $names -contains $_.Name }) }
+function Fn($site) { ([string]$site.Where -split '/')[-1] }
 if (-not ('DupFinder' -as [type])) { Add-Type -TypeDefinition $dupCode }
 Invoke-Expression $engineText
 $ErrorActionPreference = 'Continue'
@@ -113,8 +118,8 @@ try { & {
     Check 'SameContent: identical files' ([DupFinder]::SameContent($f1, $f2))
     Check 'SameContent: one byte differs in the middle' (-not [DupFinder]::SameContent($f1, $f3))
     # ============ 7. 旧版驱动包：绝不加 /force，非 oem 不删 ============
-    $pnp = @([regex]::Matches($engineText, '[^\r\n]*pnputil\.exe[^\r\n]*') | ForEach-Object { $_.Value } | Where-Object { $_ -notmatch '^\s*#' })
-    Check ("pnputil is never called with /force ({0} call sites)" -f $pnp.Count) ($pnp.Count -ge 1 -and @($pnp | Where-Object { $_ -match '(?i)/force' }).Count -eq 0)
+    $pnp = Calls 'pnputil'
+    Check ("pnputil is never called with /force ({0} call sites)" -f $pnp.Count) ($pnp.Count -ge 1 -and @($pnp | Where-Object { @($_.Args) -contains '/force' -or @($_.Args) -contains '/f' }).Count -eq 0)
     Check 'Remove-DriverPackage refuses names that are not oemNN.inf' ((Remove-DriverPackage 'C:\Windows\INF\nvlti.inf') -ne '' -and (Remove-DriverPackage '..\oem1.inf') -ne '')
     # ============ 7b. 审计后补的规则 ============
     # Windows.old：先拆里面的链接再删；不进「一键清理」
@@ -287,8 +292,8 @@ try { & {
     $rdGuarded = @($rdLines | Where-Object { $_ -match 'Test-CmdPathOk|IsDir\) \{ & ' })
     Check ("every rd /s call is guarded against % paths ({0} of {1})" -f $rdGuarded.Count, $rdLines.Count) ($sr -match '(?s)\$isDir -and -not \(Test-CmdPathOk \$Path\).*?rd /s /q' -and ([regex]::Matches($engineText, 'Test-CmdPathOk \$(bak|dst|tmp)')).Count -ge 4)
     # 不用会跟进链接的 Remove-Item -Recurse（界面自测删它自己建的临时文件夹除外）
-    $progLines = @(($engineText + "`n" + ($src -replace '(?s)function Invoke-UiTest.*', '')) -split "`r?`n" | Where-Object { $_ -notmatch '^\s*#' -and $_ -match 'Remove-Item\b.*-Recurse' })
-    Check ("no Remove-Item -Recurse in program code ({0})" -f ($progLines -join ' | ')) ($progLines.Count -eq 0)
+    $progLines = @(Calls 'remove-item' | Where-Object { @($_.Args | Where-Object { $_ -like '-r*' }).Count -gt 0 -and (Fn $_) -ne 'Invoke-UiTest' } | ForEach-Object { '{0}: {1}' -f (Fn $_), $_.Text })
+    Check ("no Remove-Item -Recurse in program code ({0})" -f ($progLines -join ' | ')) ($progLines.Count -eq 0 -and (Calls 'remove-item').Count -ge 10)
     # 搬家
     Check 'a reused or dropped copy must have zero files that C: lacks (no 5% tolerance any more)' (([regex]::Matches($engineText, 'if \(\$extra -ne 0\) \{')).Count -eq 2 -and $engineText -notmatch 'Max\(20, \$(haveFiles|nf) \* 0\.05\)')
     Check 'robocopy mismatches (exit bit 4) stop the move' ($engineText -match '\(\$rc\.Code -band 4\) -ne 0')
@@ -376,14 +381,21 @@ try { & {
     Check 'the space-map delete list deletes through Start-MapDelete (same checks as a normal delete)' ($src -match '\$ctl\.BtnMarkDelete\.Add_Click\(\{[^\r\n]*Start-MapDelete @\(\$script:mapMarks\.Values\)')
     # ============ 8. 源码锁：改坏了就报 ============
     Check 'recycle bin: SHFileOperation asks when a file is too big instead of nuking it (ALLOWUNDO|NOCONFIRMATION|WANTNUKEWARNING)' (([regex]::Matches($dupCode, '0x40 \| 0x10 \| 0x4000')).Count -ge 2)
-    Check 'restore points are never deleted (no vssadmin delete / Win32_ShadowCopy.Delete / Remove-ComputerRestorePoint)' ($src -notmatch '(?i)vssadmin\s+delete|Remove-ComputerRestorePoint|Disable-ComputerRestore|ShadowCopy[^\r\n]*\.Delete\(')
-    Check 'no registry cleaner: no Remove-Item on HKLM/HKCU keys' ($src -notmatch ('(?i)Remove-Item\s+(-LiteralPath\s+|-Path\s+)?[' + "'" + '"]HK(LM|CU):'))
-    Check 'registry values are only removed for the context-menu block list and the UI test' (([regex]::Matches($src, 'Remove-ItemProperty')).Count -le 2)
-    Check 'scheduled tasks run as the current user (InteractiveToken), never SYSTEM' ($src -match 'LogonType>InteractiveToken<' -and $src -notmatch '(?i)/RU\s+SYSTEM|<UserId>S-1-5-18<|NT AUTHORITY\\SYSTEM')
-    Check 'processes are only stopped in the chat-app close flow (2 call sites)' (([regex]::Matches($engineText, 'Stop-Process')).Count -eq 2 -and $src -notmatch '(?i)taskkill')
-    Check 'no self-deleting scripts or boot-time tasks' ($src -notmatch '(?i)schtasks[^\r\n]*ONSTART' -and $src -notmatch 'RunOnce' -and $src -notmatch '(?i)Remove-Item[^\r\n]*\$PSCommandPath')
+    $vss = @(Calls 'vssadmin', 'wmic', 'cmd:vssadmin' | Where-Object { @($_.Args) -contains 'delete' -or @($_.Args) -contains 'resize' }) + @(Calls 'remove-computerrestorepoint', 'disable-computerrestore') + @(Calls 'remove-ciminstance', 'remove-wmiobject' | Where-Object { (Fn $_) -ne 'Set-PageFile' }) + @(Calls '.delete' | Where-Object { $_.Text -match '(?i)shadow' })
+    Check 'restore points are never deleted (no vssadmin delete / Win32_ShadowCopy.Delete / Remove-ComputerRestorePoint)' ($vss.Count -eq 0 -and (Calls 'checkpoint-computer').Count -eq 1)
+    Check 'no registry cleaner: no Remove-Item on HKLM/HKCU keys' (@(Calls 'remove-item' | Where-Object { ($_.Args -join ' ') -match '(^|\s)(hk(lm|cu|cr|u)|registry)::?' }).Count -eq 0 -and @(Calls 'reg' | Where-Object { @($_.Args) -contains 'delete' }).Count -eq 0)
+    $rip = Calls 'remove-itemproperty'
+    Check ("registry values are only removed for the context-menu block list and the UI test ({0})" -f (($rip | ForEach-Object { Fn $_ }) -join ', ')) ($rip.Count -le 2)
+    $sch = Calls 'schtasks'
+    Check 'scheduled tasks run as the current user (InteractiveToken), never SYSTEM' ($src -match 'LogonType>InteractiveToken<' -and $src -notmatch '(?i)<UserId>S-1-5-18<|NT AUTHORITY\\SYSTEM' -and $sch.Count -ge 3 -and @($sch | Where-Object { @($_.Args) -contains '/ru' -or @($_.Args) -contains '/rp' }).Count -eq 0 -and (Calls 'register-scheduledtask').Count -eq 0)
+    # 删 WMI 对象只有一处：改虚拟内存时去掉旧的页面文件设置（Win32_PageFileSetting），和还原点无关
+    # 结束进程：只有搬聊天记录前关掉确认框里列出的程序（Close-Holders），以及本工具自己开的 robocopy、winget 超时或取消时
+    $kills = @(Calls 'stop-process', 'taskkill', 'cmd:taskkill', '.kill', 'tskill' | ForEach-Object { '{0}:{1}' -f (Fn $_), $_.Name } | Sort-Object)
+    Check ("processes are only stopped in the chat-app close flow, or our own child process ({0})" -f ($kills -join ' ')) (($kills -join ' ') -eq 'Close-Holders:stop-process Close-Holders:stop-process Get-WingetUpgrades:.kill Invoke-Tool:.kill Invoke-Tool:.kill')
+    Check 'no self-deleting scripts or boot-time tasks' (@($sch | Where-Object { @($_.Args) -contains 'onstart' -or @($_.Args) -contains 'onlogon' }).Count -eq 0 -and $src -notmatch 'RunOnce' -and @(Calls 'remove-item' | Where-Object { ($_.Args -join ' ') -match 'pscommandpath|cleanc_self' }).Count -eq 0)
     # rd /s 的调用点：删除入口（先看是不是链接）、搬家收尾删备份、搬回来 / 删多余副本（核对过才删）、撤回没搬完的副本。全部调用点见第 14 节
-    Check ("rd /s call sites are the known 5 ({0})" -f ([regex]::Matches($src, 'rd /s /q')).Count) (([regex]::Matches($src, 'rd /s /q')).Count -eq 5 -and $sr -match 'if \(\$isLink\) \{ & "\$sys32\\cmd.exe" /c rmdir')
+    $rds = @(Calls 'cmd:rd', 'cmd:rmdir' | Where-Object { @($_.Args) -contains '/s' } | ForEach-Object { Fn $_ } | Sort-Object)
+    Check ("rd /s call sites are the known 5 ({0})" -f ($rds -join ', ')) (($rds -join ' ') -eq 'Invoke-DropCopy Invoke-MoveBack Invoke-SafeRemove Remove-MovedOriginal Undo-MoveBackCopy' -and $sr -match 'if \(\$isLink\) \{ & "\$sys32\\cmd.exe" /c rmdir')
     $mapDel = [regex]::Match($src, "(?s)function Start-MapDelete.*?'@ @\{").Value
     Check 'space map delete goes through the delete entry with the strict checks (Get-DeleteBlock, links, linked parents)' ($mapDel -match 'Invoke-SafeRemove -Path \$p -Scope pick' -and $mapDel -notmatch 'rd /s|Remove-Item|\[FsTools\]::Recycle')
     Check 'moves verify the copy before replacing the original (robocopy/compare step present)' ($engineText -match '(?i)robocopy' -and $engineText -match '(?i)Compare-Copy|Verify-Copy|核对|对不上')
@@ -815,6 +827,12 @@ try { & {
     Check ("ARC-6 no code decides by comparing with the translated action words ({0} comparisons, {1} catalog defaults left)" -f $cmpWords.Count, $defWords.Count) ($cmpWords.Count -eq 0 -and $defWords.Count -eq 0)
     $sv = [regex]::Match($src, '(?s)function Save-ResumeState.*?\r?\n\}').Value; $rs = [regex]::Match($src, '(?s)function Restore-ResumeState.*?\r?\n\}').Value
     Check 'ARC-6 the choices kept over a language switch are saved as ids and shown in the new language' ($sv -match 'ActId' -and $rs -match 'ActText' -and [regex]::Match($src, '(?s)function Invoke-RunSelected.*?\r?\n\}').Value -match 'Action = \(ActId ')
+    # ============ 48. 源码锁用语法树找调用：注释和字符串里的字不算，别名、cmd /c、后台代码里的都找得到（3.6 架构评审） ============
+    $demo = "# Stop-Process -Name chat   (a comment)`n`$s = 'taskkill /f /im x.exe'`nfunction Close-Holders { Get-Process x | spps -Force }`nfunction Other {`n    & `"`$sys32\cmd.exe`" /c rd /s /q `"C:\x`"`n    Start-Worker @'`nkill -Id 1   # the helper process this worker started itself`n'@`n}`n"
+    $ds = @(Get-CallSites $demo)
+    $dk = @($ds | Where-Object { $_.Name -eq 'stop-process' } | ForEach-Object { [string]$_.Where } | Sort-Object)
+    Check ("ARC-7 the call finder sees spps and kill (also inside a worker here-string), cmd /c rd, and ignores comments and strings ({0})" -f ($dk -join ', ')) (($dk -join '|') -eq 'Close-Holders|Other/worker/(top)' -and @($ds | Where-Object { $_.Name -eq 'taskkill' }).Count -eq 0 -and @($ds | Where-Object { $_.Name -eq 'cmd:rd' -and @($_.Args) -contains '/s' -and $_.Where -eq 'Other' }).Count -eq 1 -and ([regex]::Matches($demo, 'Stop-Process')).Count -eq 1)
+    Check ("ARC-7 the safety locks read the syntax tree ({0} call sites in the program)" -f $calls.Count) ($calls.Count -gt 5000 -and ([IO.File]::ReadAllText($PSCommandPath)) -notmatch ("\[regex\]::Matches\(\`$engineText, 'Stop-" + "Process'\)"))
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue

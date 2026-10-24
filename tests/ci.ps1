@@ -4,7 +4,8 @@ $ErrorActionPreference = 'Continue'
 Set-Location (Split-Path $PSScriptRoot -Parent)
 function Esc([string]$s) { $s.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A') }
 $fail = 0
-function Step([string]$name, [scriptblock]$body) {
+# -NoNotice：成功时不写说明注释（一步最多留 10 条，留给更有用的）
+function Step([string]$name, [scriptblock]$body, [switch]$NoNotice) {
     Write-Host "::group::$name"
     $out = @(& $body 2>&1 | ForEach-Object { "$_" })
     $code = $LASTEXITCODE
@@ -14,12 +15,14 @@ function Step([string]$name, [scriptblock]$body) {
         $fails = @($out | Where-Object { $_ -like 'FAIL*' } | Select-Object -First 20) -join "`n"
         Write-Host ("::error title={0} (exit {1})::{2}" -f $name, $code, (Esc ($fails + "`n----`n" + ((@($out) | Select-Object -Last 40) -join "`n"))))
         $script:fail = 1
-    } else { Write-Host ("::notice title={0}::{1}" -f $name, (Esc ((@($out) | Select-Object -Last 3) -join "`n"))) }
+    } elseif (-not $NoNotice) { Write-Host ("::notice title={0}::{1}" -f $name, (Esc ((@($out) | Select-Object -Last 3) -join "`n"))) }
 }
 Step 'checks (PS 5.1)' { powershell -NoProfile -ExecutionPolicy Bypass -File tests\Checks.ps1 }
 Step 'engine tests (PS 5.1)' { powershell -NoProfile -ExecutionPolicy Bypass -File tests\Engine.Tests.ps1 }
 Step 'safety tests (PS 5.1)' { powershell -NoProfile -ExecutionPolicy Bypass -File tests\Safety.Tests.ps1 }
-Step 'build exe' { powershell -NoProfile -ExecutionPolicy Bypass -File build\build.ps1 }
+# 挂一个虚拟磁盘当目标盘，真的搬一次、搬回来，再模拟两次中途断电
+Step 'real move on a virtual disk' { powershell -NoProfile -ExecutionPolicy Bypass -File tests\MoveDisk.Tests.ps1 }
+Step 'build exe' -NoNotice { powershell -NoProfile -ExecutionPolicy Bypass -File build\build.ps1 }
 # exe 的文件属性：版本号要和程序里的一致（挪位置后重建定时任务时靠它比新旧），版权、原始文件名要对
 Step 'exe file properties' {
     $want = [regex]::Match([IO.File]::ReadAllText('src\CleanC-UI.ps1'), "\`$script:AppVersion = '([\d.]+)'").Groups[1].Value
