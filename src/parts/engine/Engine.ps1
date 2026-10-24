@@ -1868,81 +1868,81 @@ function Get-Catalog {
     # ---- 安全清理：缓存 / 临时文件 / 日志，删了程序自动重建（目录库里的）----
     foreach ($x in $lib) {
         if ($x.Confirm -or $x.Careful) { continue }
-        $list += @{ G=$safeG; Kind='cache'; Def=(T '删除'); N=$x.N; Paths=$x.Paths; Note=$x.Note; Filter=$x.Filter; Whole=$x.Whole; Svc=$x.Svc; Lvl=$x.Lvl }
+        $list += @{ G=$safeG; Kind='cache'; Def='delete'; N=$x.N; Paths=$x.Paths; Note=$x.Note; Filter=$x.Filter; Whole=$x.Whole; Svc=$x.Svc; Lvl=$x.Lvl }
     }
     # ---- 清后要重建：浏览器缓存、缩略图、着色器、下载缓存这类，删了要重新下载或重新生成 ----
     foreach ($x in $lib) {
         if ($x.Confirm -or -not $x.Careful) { continue }
-        $list += @{ G=$careG; Kind='cache'; Def=(T '删除'); N=$x.N; Paths=$x.Paths; Note=$x.Note; Filter=$x.Filter; Whole=$x.Whole; Svc=$x.Svc; Lvl=$x.Lvl; Careful=$true }
+        $list += @{ G=$careG; Kind='cache'; Def='delete'; N=$x.N; Paths=$x.Paths; Note=$x.Note; Filter=$x.Filter; Whole=$x.Whole; Svc=$x.Svc; Lvl=$x.Lvl; Careful=$true }
     }
     $list += @(
-        @{ G=$confG; Kind='cache'; Def=(T '跳过'); N=(T '清空回收站');            Note=(T '回收站里是你以前删掉、但还能找回的文件。清空后就永远找不回了，请先打开回收站确认里面没有要的东西')
+        @{ G=$confG; Kind='cache'; Def='skip'; N=(T '清空回收站');            Note=(T '回收站里是你以前删掉、但还能找回的文件。清空后就永远找不回了，请先打开回收站确认里面没有要的东西')
            Size={ $q = [FsTools]::RecycleBinBytes(); if ($q -ge 0) { [double]$q } else { try { $s = ((New-Object -ComObject Shell.Application).NameSpace(0xA).Items() | Measure-Object -Property Size -Sum).Sum; if ($s) { $s } else { 0 } } catch { 0 } } }
            Act ={ if ($script:recycledThisRun) { Log (T '  这一轮刚把文件放进回收站，不清空回收站（下次再清）') } else { Clear-RecycleBin -Force -ErrorAction SilentlyContinue } } }
-        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Windows 传递优化缓存'); Note=(T 'Windows 更新的点对点分发缓存'); Bg=$true
+        @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def='delete'; N=(T 'Windows 传递优化缓存'); Note=(T 'Windows 更新的点对点分发缓存'); Bg=$true
            Size={ try { $s = (Get-DeliveryOptimizationStatus -ErrorAction Stop | Measure-Object -Property FileSize -Sum).Sum; if ($s) { $s } else { 0 } } catch { 0 } }
            Act ={ Delete-DeliveryOptimizationCache -Force -ErrorAction SilentlyContinue } }
 
         # ---- 默认不清：有代价 ----
-        @{ G=$confG; Kind='cache';  Def=(T '跳过'); One=(T '跳过'); N='Windows.old';        Paths=@('C:\Windows.old'); Whole=$true; Note=(T '上一版 Windows 的完整副本。删后不能回退到上一版系统（系统升级 10 天后会自动删）')
+        @{ G=$confG; Kind='cache';  Def='skip'; One='skip'; N='Windows.old';        Paths=@('C:\Windows.old'); Whole=$true; Note=(T '上一版 Windows 的完整副本。删后不能回退到上一版系统（系统升级 10 天后会自动删）')
            Act ={ Remove-WindowsOld } }
-        @{ G=$confG; Kind='action'; Def=(T '跳过'); One=(T '执行'); N=(T '重建 Windows 搜索索引'); Lvl=1; Note=(T '搜索索引膨胀时可重建，重建后通常只剩 1 到 2 GB。重建期间（约 1 小时）搜文件会变慢')
+        @{ G=$confG; Kind='action'; Def='skip'; One='run'; N=(T '重建 Windows 搜索索引'); Lvl=1; Note=(T '搜索索引膨胀时可重建，重建后通常只剩 1 到 2 GB。重建期间（约 1 小时）搜文件会变慢')
            Size={ $s = 0; foreach ($f in 'C:\ProgramData\Microsoft\Search\Data\Applications\Windows\Windows.edb','C:\ProgramData\Microsoft\Search\Data\Applications\Windows\Windows.db') { $i = Get-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue; if ($i) { $s += $i.Length } }; if ($s -gt 2GB) { $s } else { 0 } }
            Act ={ Stop-Service WSearch -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 3; foreach ($f in 'C:\ProgramData\Microsoft\Search\Data\Applications\Windows\Windows.edb','C:\ProgramData\Microsoft\Search\Data\Applications\Windows\Windows.db') { [void](Invoke-SafeRemove -Path $f -Scope list -How delete -What (T '重建 Windows 搜索索引')) }; Set-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows Search' -Name SetupCompletedSuccessfully -Value 0 -ErrorAction SilentlyContinue; Start-Service WSearch -ErrorAction SilentlyContinue } }
-        @{ G=$confG; Kind='action'; Def=(T '跳过'); N=(T '关闭休眠 (hiberfil.sys)'); Lvl=1; Paths=@('C:\hiberfil.sys'); Note=(T '休眠文件约等于内存大小。关闭后睡眠不受影响，只是没有「休眠」和「快速启动」')
+        @{ G=$confG; Kind='action'; Def='skip'; N=(T '关闭休眠 (hiberfil.sys)'); Lvl=1; Paths=@('C:\hiberfil.sys'); Note=(T '休眠文件约等于内存大小。关闭后睡眠不受影响，只是没有「休眠」和「快速启动」')
            Act ={ & "$env:SystemRoot\System32\powercfg.exe" /h off } }
-        @{ G=$confG; Kind='action'; Def=(T '跳过'); One=(T '执行'); N=(T '禁用 XTU 超频日志服务'); Lvl=2; Note=(T '外星人 Command Center 的 CPU 超频组件，会持续写几 GB 日志。不超频可禁用，AWCC 的风扇和性能档位不受影响')
+        @{ G=$confG; Kind='action'; Def='skip'; One='run'; N=(T '禁用 XTU 超频日志服务'); Lvl=2; Note=(T '外星人 Command Center 的 CPU 超频组件，会持续写几 GB 日志。不超频可禁用，AWCC 的风扇和性能档位不受影响')
            Size={ $s = Get-Service XTU3SERVICE -ErrorAction SilentlyContinue; if ($s -and $s.Status -eq 'Running') { -1 } else { 0 } }
            Act ={ Stop-Service XTU3SERVICE -Force -ErrorAction SilentlyContinue; Set-Service XTU3SERVICE -StartupType Disabled -ErrorAction SilentlyContinue } }
-        @{ G=$confG; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T 'Windows Installer 孤儿安装包'); Lvl=2; Bg=$true; Note=(T 'C:\Windows\Installer 里没有任何已装软件和补丁再引用的安装包（.msi / .msp），多半是软件升级、卸载后留下的。判断方法和 PatchCleaner 一样。删了以后，万一哪个软件修复或卸载时提示找不到安装包，重新下载安装一次即可')
+        @{ G=$confG; Kind='cache'; Def='skip'; One='skip'; N=(T 'Windows Installer 孤儿安装包'); Lvl=2; Bg=$true; Note=(T 'C:\Windows\Installer 里没有任何已装软件和补丁再引用的安装包（.msi / .msp），多半是软件升级、卸载后留下的。判断方法和 PatchCleaner 一样。删了以后，万一哪个软件修复或卸载时提示找不到安装包，重新下载安装一次即可')
            Size={ $s = [double]0; foreach ($f in (Get-InstallerOrphans)) { $s += $f.Length }; $s }
            Act ={ $n = 0; $b = [double]0; foreach ($f in (Get-InstallerOrphans)) { $r = Invoke-SafeRemove -Item $f -Scope list -How delete -Bytes $f.Length -What (T 'Windows Installer 孤儿安装包'); if ($r.Ok) { $n++; $b += $f.Length } else { Log ((T "  没删掉：{0}（{1}）") -f $f.FullName, $r.Why) } }; Log ((T "  Windows Installer 孤儿安装包：删了 {0} 个，{1}") -f $n, (GB $b)) } }
-        @{ G=$confG; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T '驱动存储里的旧版驱动包'); Lvl=2; Bg=$true; Note=(T '驱动更新后，旧版本的安装包还留在 C:\Windows\System32\DriverStore 里（和 Driver Store Explorer 的判断一样：同一个驱动、同一厂商有更新版本的那些）。用 pnputil 删除，正在使用的删不掉、启动必需的不碰。删了以后不能回滚到旧版驱动')
+        @{ G=$confG; Kind='cache'; Def='skip'; One='skip'; N=(T '驱动存储里的旧版驱动包'); Lvl=2; Bg=$true; Note=(T '驱动更新后，旧版本的安装包还留在 C:\Windows\System32\DriverStore 里（和 Driver Store Explorer 的判断一样：同一个驱动、同一厂商有更新版本的那些）。用 pnputil 删除，正在使用的删不掉、启动必需的不碰。删了以后不能回滚到旧版驱动')
            Size={ $s = [double]0; foreach ($d in (Get-OldDriverPackages)) { $s += $d.Bytes }; $s }
            Act ={ $n = 0; $b = [double]0; foreach ($d in (Get-OldDriverPackages -Fresh)) { if (Stopping) { break }; $r = Remove-DriverPackage $d.Published; if ($r -eq '') { $n++; $b += $d.Bytes; Log ((T "  已删除旧版驱动包 {0}（{1} {2}）") -f $d.Published, $d.Provider, $d.Version) } else { Log ((T "  没删掉 {0}：{1}") -f $d.Published, $r) } }; Log ((T "  旧版驱动包：删了 {0} 个，{1}") -f $n, (GB $b)) } }
-        @{ G=$confG; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T '开始菜单里失效的快捷方式'); Lvl=1; Bg=$true; Note=(T '指向的程序已经不在了的快捷方式（只看开始菜单，不碰桌面）。目标在没插着的硬盘上的不算。不占什么空间，只是清爽')
+        @{ G=$confG; Kind='cache'; Def='skip'; One='skip'; N=(T '开始菜单里失效的快捷方式'); Lvl=1; Bg=$true; Note=(T '指向的程序已经不在了的快捷方式（只看开始菜单，不碰桌面）。目标在没插着的硬盘上的不算。不占什么空间，只是清爽')
            Size={ $s = [double]0; foreach ($f in (Get-BrokenShortcuts)) { $s += $f.Length }; $s }
            Act ={ $n = 0; foreach ($f in (Get-BrokenShortcuts)) { if ((Invoke-SafeRemove -Item $f -Scope list -How delete -What (T '失效的快捷方式')).Ok) { $n++ } }; Log ((T "  删了 {0} 个失效的快捷方式") -f $n) } }
-        @{ G=$confG; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T 'Windows 事件日志'); Lvl=2; Note=(T '系统、应用程序、安全等日志，排查问题的工程师会看。清空后就查不到以前的记录了，不确定就跳过')
+        @{ G=$confG; Kind='cache'; Def='skip'; One='skip'; N=(T 'Windows 事件日志'); Lvl=2; Note=(T '系统、应用程序、安全等日志，排查问题的工程师会看。清空后就查不到以前的记录了，不确定就跳过')
            Size={ $s = [double]0; foreach ($f in @(Get-ChildItem -LiteralPath "$env:SystemRoot\System32\winevt\Logs" -Filter '*.evtx' -File -Force -ErrorAction SilentlyContinue)) { $s += $f.Length }; $s }
            Act ={ $n = 0; foreach ($l in @(& "$sys32\wevtutil.exe" el 2>$null)) { if (Stopping) { break }; & "$sys32\wevtutil.exe" cl "$l" 2>$null | Out-Null; if ($LASTEXITCODE -eq 0) { $n++ } }; Log ((T "  清空了 {0} 个事件日志") -f $n) } }
-        @{ G=$confG; Kind='action'; Def=(T '跳过'); One=(T '执行'); N=(T 'WinSxS 组件清理 (DISM)'); Lvl=1; Note=(T '清掉系统更新替换下来的旧组件，通常能省 2 到 10 GB。耗时 10 到 20 分钟，完成后建议重启'); Last=$true
+        @{ G=$confG; Kind='action'; Def='skip'; One='run'; N=(T 'WinSxS 组件清理 (DISM)'); Lvl=1; Note=(T '清掉系统更新替换下来的旧组件，通常能省 2 到 10 GB。耗时 10 到 20 分钟，完成后建议重启'); Last=$true
            Size={ -1 }
            Act ={ & "$env:SystemRoot\System32\Dism.exe" /Online /Cleanup-Image /StartComponentCleanup /ResetBase | Out-Null }; Slow=$true }
 
         # ---- 可搬家：数据不能删，但可以整体搬到其他盘并在原位置留链接 ----
         # ---- 聊天软件：聊天记录不能删，整体搬到其他盘，原位置留链接 ----
-        @{ G=$chatG; Kind='move'; Def=(T '搬到其他盘'); N=(T '微信/QQ 缓存 (Roaming)');  Paths=@("$env:APPDATA\Tencent");      Apps=@('微信','QQ','企业微信','腾讯会议'); Note=(T '微信、QQ、企业微信、腾讯会议的聊天图片、视频和缓存。搬之前要先退出它们，开着的话会提醒你') }
-        @{ G=$chatG; Kind='move'; Def=(T '搬到其他盘'); N=(T '微信/QQ 缓存 (Local)');    Paths=@("$env:LOCALAPPDATA\Tencent"); Apps=@('微信','QQ','企业微信','腾讯会议'); Note=(T '微信、QQ 等腾讯软件的本地缓存') }
-        @{ G=$chatG; Kind='move'; Def=(T '搬到其他盘'); N=(T '微信文件 (旧版)');         Paths=@("$docs\WeChat Files","$env:USERPROFILE\WeChat Files");     Apps=@('微信'); Note=(T '微信 3.x 的聊天记录和接收的文件') }
-        @{ G=$chatG; Kind='move'; Def=(T '搬到其他盘'); N=(T '微信文件 (新版)');         Paths=@("$docs\xwechat_files","$env:USERPROFILE\xwechat_files");   Apps=@('微信'); Note=(T '微信 4.x 的聊天记录、图片、视频和接收的文件，通常是 C 盘最大的一块') }
-        @{ G=$chatG; Kind='move'; Def=(T '搬到其他盘'); N=(T '企业微信文件');            Paths=@("$docs\WXWork");                                         Apps=@('企业微信'); Note=(T '企业微信的聊天记录、图片、文件和缓存') }
-        @{ G=$chatG; Kind='move'; Def=(T '搬到其他盘'); N=(T 'QQ 文件');                 Paths=@("$docs\Tencent Files","$env:USERPROFILE\Tencent Files");   Apps=@('QQ'); Note=(T 'QQ 的聊天记录和接收的文件') }
-        @{ G=$chatG; Kind='move'; Def=(T '搬到其他盘'); N=(T '飞书聊天记录');            Paths=@("$env:APPDATA\LarkShell");                               Apps=@('飞书'); Note=(T '飞书的聊天记录、图片、文件和缓存。搬之前要先退出飞书') }
-        @{ G=$chatG; Kind='move'; Def=(T '搬到其他盘'); N=(T '钉钉聊天记录');            Paths=@("$env:APPDATA\DingTalk");                                Apps=@('钉钉'); Note=(T '钉钉的聊天记录、图片和缓存（每个账号一个以 _v2 结尾的文件夹）。搬之前要先退出钉钉') }
-        @{ G=$chatG; Kind='move'; Def=(T '搬到其他盘'); N=(T 'Telegram 聊天记录');       Paths=@("$env:APPDATA\Telegram Desktop");                        Apps=@('Telegram'); Note=(T 'Telegram 电脑版的本地数据、缓存和程序本身。搬之前要先退出 Telegram') }
-        @{ G=$chatG; Kind='move'; Def=(T '搬到其他盘'); N=(T 'Discord 数据和缓存');      Paths=@("$env:APPDATA\discord");                               Apps=@('Discord'); Note=(T 'Discord 的登录状态、缓存，以及看过的图片和视频。搬之前要先退出 Discord（包括右下角托盘图标）') }
-        @{ G=$chatG; Kind='move'; Def=(T '搬到其他盘'); N=(T 'Slack 数据和缓存');        Paths=@("$env:APPDATA\Slack");                                 Apps=@('Slack'); Note=(T 'Slack 的登录状态、缓存和下载过的文件预览') }
-        @{ G=$chatG; Kind='move'; Def=(T '搬到其他盘'); N=(T 'Signal 聊天记录');         Paths=@("$env:APPDATA\Signal");                                Apps=@('Signal'); Note=(T 'Signal 电脑版的聊天记录（加密存放）和收到的附件') }
-        @{ G=$chatG; Kind='move'; Def=(T '搬到其他盘'); N=(T 'LINE 聊天记录');           Paths=@("$env:LOCALAPPDATA\LINE\Data");                         Apps=@('LINE'); Note=(T 'LINE 电脑版的聊天记录、图片和收到的文件') }
-        @{ G=$chatG; Kind='move'; Def=(T '搬到其他盘'); N=(T 'Viber 聊天记录');          Paths=@("$env:APPDATA\ViberPC");                               Apps=@('Viber'); Note=(T 'Viber 电脑版的聊天记录、图片和视频') }
-        @{ G=$chatG; Kind='move'; Def=(T '搬到其他盘'); N=(T 'KakaoTalk 聊天记录');      Paths=@("$env:LOCALAPPDATA\Kakao\KakaoTalk");                   Apps=@('KakaoTalk'); Note=(T 'KakaoTalk 电脑版的聊天记录和图片、视频缓存') }
-        @{ G=$chatG; Kind='move'; Def=(T '搬到其他盘'); N=(T 'Zoom 程序和数据');         Paths=@("$env:APPDATA\Zoom");                                  Apps=@('Zoom'); Note=(T 'Zoom 装在这里的程序和本地数据。会议录像默认存在「文档」里的 Zoom 文件夹，那里属于个人文件夹，不动') }
+        @{ G=$chatG; Kind='move'; Def='move'; N=(T '微信/QQ 缓存 (Roaming)');  Paths=@("$env:APPDATA\Tencent");      Apps=@('微信','QQ','企业微信','腾讯会议'); Note=(T '微信、QQ、企业微信、腾讯会议的聊天图片、视频和缓存。搬之前要先退出它们，开着的话会提醒你') }
+        @{ G=$chatG; Kind='move'; Def='move'; N=(T '微信/QQ 缓存 (Local)');    Paths=@("$env:LOCALAPPDATA\Tencent"); Apps=@('微信','QQ','企业微信','腾讯会议'); Note=(T '微信、QQ 等腾讯软件的本地缓存') }
+        @{ G=$chatG; Kind='move'; Def='move'; N=(T '微信文件 (旧版)');         Paths=@("$docs\WeChat Files","$env:USERPROFILE\WeChat Files");     Apps=@('微信'); Note=(T '微信 3.x 的聊天记录和接收的文件') }
+        @{ G=$chatG; Kind='move'; Def='move'; N=(T '微信文件 (新版)');         Paths=@("$docs\xwechat_files","$env:USERPROFILE\xwechat_files");   Apps=@('微信'); Note=(T '微信 4.x 的聊天记录、图片、视频和接收的文件，通常是 C 盘最大的一块') }
+        @{ G=$chatG; Kind='move'; Def='move'; N=(T '企业微信文件');            Paths=@("$docs\WXWork");                                         Apps=@('企业微信'); Note=(T '企业微信的聊天记录、图片、文件和缓存') }
+        @{ G=$chatG; Kind='move'; Def='move'; N=(T 'QQ 文件');                 Paths=@("$docs\Tencent Files","$env:USERPROFILE\Tencent Files");   Apps=@('QQ'); Note=(T 'QQ 的聊天记录和接收的文件') }
+        @{ G=$chatG; Kind='move'; Def='move'; N=(T '飞书聊天记录');            Paths=@("$env:APPDATA\LarkShell");                               Apps=@('飞书'); Note=(T '飞书的聊天记录、图片、文件和缓存。搬之前要先退出飞书') }
+        @{ G=$chatG; Kind='move'; Def='move'; N=(T '钉钉聊天记录');            Paths=@("$env:APPDATA\DingTalk");                                Apps=@('钉钉'); Note=(T '钉钉的聊天记录、图片和缓存（每个账号一个以 _v2 结尾的文件夹）。搬之前要先退出钉钉') }
+        @{ G=$chatG; Kind='move'; Def='move'; N=(T 'Telegram 聊天记录');       Paths=@("$env:APPDATA\Telegram Desktop");                        Apps=@('Telegram'); Note=(T 'Telegram 电脑版的本地数据、缓存和程序本身。搬之前要先退出 Telegram') }
+        @{ G=$chatG; Kind='move'; Def='move'; N=(T 'Discord 数据和缓存');      Paths=@("$env:APPDATA\discord");                               Apps=@('Discord'); Note=(T 'Discord 的登录状态、缓存，以及看过的图片和视频。搬之前要先退出 Discord（包括右下角托盘图标）') }
+        @{ G=$chatG; Kind='move'; Def='move'; N=(T 'Slack 数据和缓存');        Paths=@("$env:APPDATA\Slack");                                 Apps=@('Slack'); Note=(T 'Slack 的登录状态、缓存和下载过的文件预览') }
+        @{ G=$chatG; Kind='move'; Def='move'; N=(T 'Signal 聊天记录');         Paths=@("$env:APPDATA\Signal");                                Apps=@('Signal'); Note=(T 'Signal 电脑版的聊天记录（加密存放）和收到的附件') }
+        @{ G=$chatG; Kind='move'; Def='move'; N=(T 'LINE 聊天记录');           Paths=@("$env:LOCALAPPDATA\LINE\Data");                         Apps=@('LINE'); Note=(T 'LINE 电脑版的聊天记录、图片和收到的文件') }
+        @{ G=$chatG; Kind='move'; Def='move'; N=(T 'Viber 聊天记录');          Paths=@("$env:APPDATA\ViberPC");                               Apps=@('Viber'); Note=(T 'Viber 电脑版的聊天记录、图片和视频') }
+        @{ G=$chatG; Kind='move'; Def='move'; N=(T 'KakaoTalk 聊天记录');      Paths=@("$env:LOCALAPPDATA\Kakao\KakaoTalk");                   Apps=@('KakaoTalk'); Note=(T 'KakaoTalk 电脑版的聊天记录和图片、视频缓存') }
+        @{ G=$chatG; Kind='move'; Def='move'; N=(T 'Zoom 程序和数据');         Paths=@("$env:APPDATA\Zoom");                                  Apps=@('Zoom'); Note=(T 'Zoom 装在这里的程序和本地数据。会议录像默认存在「文档」里的 Zoom 文件夹，那里属于个人文件夹，不动') }
 
         # ---- 其他可搬的文件夹 ----
-        @{ G=$otherG; Kind='move'; Def=(T '跳过');    N=(T '桌面'); Lvl=1;                   Paths=@($desk); NoOneDrive=$true; Note=(T '桌面上的所有文件。搬后桌面照常显示，文件实际在 D 盘') }
-        @{ G=$otherG; Kind='move'; Def=(T '跳过');    N=(T '下载'); Lvl=1;                   Paths=@($down); NoOneDrive=$true; Note=(T '下载文件夹。搬后浏览器照常下载到这里，文件实际在 D 盘') }
-        @{ G=$otherG; Kind='flex'; Def=(T '跳过');    N=(T '用户目录 .cache'); Lvl=2;        Paths=@("$env:USERPROFILE\.cache"); Note=(T '各类开发工具的缓存（HuggingFace 模型、uv、playwright 等）。删了会重新下载；也可搬走') }
-        @{ G=$otherG; Kind='flex'; Def=(T '跳过');    N=(T 'conda 环境 (.conda)'); Lvl=2;    Paths=@("$env:USERPROFILE\.conda"); Note=(T 'conda 创建的 Python 环境。搬走后照常使用；删了要重建环境') }
-        @{ G=$otherG; Kind='flex'; Def=(T '跳过');    N=(T 'pip --user 安装的包'); Lvl=2;    Paths=@("$env:APPDATA\Python"); Note=(T '用 pip install --user 装的 Python 包。有 conda 的话多半已不用，可删；不确定就搬走') }
+        @{ G=$otherG; Kind='move'; Def='skip';    N=(T '桌面'); Lvl=1;                   Paths=@($desk); NoOneDrive=$true; Note=(T '桌面上的所有文件。搬后桌面照常显示，文件实际在 D 盘') }
+        @{ G=$otherG; Kind='move'; Def='skip';    N=(T '下载'); Lvl=1;                   Paths=@($down); NoOneDrive=$true; Note=(T '下载文件夹。搬后浏览器照常下载到这里，文件实际在 D 盘') }
+        @{ G=$otherG; Kind='flex'; Def='skip';    N=(T '用户目录 .cache'); Lvl=2;        Paths=@("$env:USERPROFILE\.cache"); Note=(T '各类开发工具的缓存（HuggingFace 模型、uv、playwright 等）。删了会重新下载；也可搬走') }
+        @{ G=$otherG; Kind='flex'; Def='skip';    N=(T 'conda 环境 (.conda)'); Lvl=2;    Paths=@("$env:USERPROFILE\.conda"); Note=(T 'conda 创建的 Python 环境。搬走后照常使用；删了要重建环境') }
+        @{ G=$otherG; Kind='flex'; Def='skip';    N=(T 'pip --user 安装的包'); Lvl=2;    Paths=@("$env:APPDATA\Python"); Note=(T '用 pip install --user 装的 Python 包。有 conda 的话多半已不用，可删；不确定就搬走') }
     )
     foreach ($x in $lib) {
         if (-not $x.Confirm) { continue }
-        $list += @{ G=$confG; Kind='cache'; Def=(T '跳过'); One=(T '删除'); N=$x.N; Paths=$x.Paths; Note=$x.Note; Filter=$x.Filter; Whole=$x.Whole; Svc=$x.Svc; Lvl=$x.Lvl }
+        $list += @{ G=$confG; Kind='cache'; Def='skip'; One='delete'; N=$x.N; Paths=$x.Paths; Note=$x.Note; Filter=$x.Filter; Whole=$x.Whole; Svc=$x.Svc; Lvl=$x.Lvl }
     }
     # ---- 自定义：用户在设置里加的文件夹，删里面的东西 ----
     foreach ($p in (Get-CustomClean)) {
-        $list += @{ G=$customG; Kind='cache'; Def=(T '删除'); N=(Split-Path $p -Leaf); Paths=@($p); Note=$p; Custom=$true; Lvl=2 }
+        $list += @{ G=$customG; Kind='cache'; Def='delete'; N=(Split-Path $p -Leaf); Paths=@($p); Note=$p; Custom=$true; Lvl=2 }
     }
     $apps = Get-ChatApps
     $i = 0
@@ -1955,7 +1955,7 @@ function Get-Catalog {
         }
         # 稳定的分组编号：代码按它判断，不看界面上的组名（组名可以改、会翻译）
         $it.Tier = if ($it.G -eq $careG) { 'careful' } elseif ($it.G -eq $confG) { 'confirm' } elseif ($it.G -eq $chatG) { 'chat' } elseif ($it.G -eq $otherG) { 'other' } elseif ($it.G -eq $customG) { 'custom' } else { 'safe' }
-        $it.Actions = switch ($it.Kind) { 'cache' { @((T '删除'),(T '跳过')) } 'action' { @((T '执行'),(T '跳过')) } 'move' { @((T '搬到其他盘'),(T '跳过')) } 'flex' { @((T '搬到其他盘'),(T '删除'),(T '跳过')) } }
+        $it.Actions = switch ($it.Kind) { 'cache' { @('delete', 'skip') } 'action' { @('run', 'skip') } 'move' { @('move', 'skip') } 'flex' { @('move', 'delete', 'skip') } }
     }
     return $list
 }
@@ -3437,28 +3437,38 @@ function Open-AsUser([string]$target) {
     if (-not $target) { return $false }
     try { Start-Process -FilePath "$env:SystemRoot\explorer.exe" -ArgumentList ('"{0}"' -f $target.Replace('"', '')); return $true } catch { return $false }
 }
+# 清理项的操作用稳定的编号：delete 删除、skip 跳过、run 执行、move 搬到其他盘。目录、清理计划、换语言重开时记下的选择
+# 都存编号，代码也按编号判断；只有列表上显示的是翻译后的文字（ActText），从列表读回来时换回编号（ActId）
+function ActText([string]$id) {
+    switch ($id) { 'delete' { return (T '删除') } 'skip' { return (T '跳过') } 'run' { return (T '执行') } 'move' { return (T '搬到其他盘') } }
+    return $id
+}
+function ActId([string]$text) {
+    foreach ($id in 'delete', 'skip', 'run', 'move') { if ($text -eq $id -or $text -eq (ActText $id)) { return $id } }
+    return $text
+}
 # 清理页按当前选择的合计：N 选了几项，Del 删除（和「执行」）能腾出多少，Move 要搬走多少；Groups 每个选项卡选了几项、一共几项
 function Get-PlanTotals($rows, $sizes) {
     $out = @{ N = 0; Del = [double]0; Move = [double]0; Groups = @{} }
-    $skip = T '跳过'; $mv = T '搬到其他盘'
     foreach ($r in $rows) {
         $g = [string]$r.GroupTitle
         if (-not $out.Groups.ContainsKey($g)) { $out.Groups[$g] = @{ Sel = 0; Cnt = 0 } }
         $out.Groups[$g].Cnt++
-        if ([string]$r.Action -eq $skip) { continue }
+        $a = ActId ([string]$r.Action)
+        if ($a -eq 'skip') { continue }
         $out.N++; $out.Groups[$g].Sel++
         $b = if ($sizes) { [double]$sizes[$r.Idx] } else { [double]0 }
         if ($b -le 0) { continue }
-        if ([string]$r.Action -eq $mv) { $out.Move += $b } else { $out.Del += $b }
+        if ($a -eq 'move') { $out.Move += $b } else { $out.Del += $b }
     }
     return $out
 }
 # 一键清理给目录里的一项选什么：只删不搬（聊天记录这类要搬的在清理页单独一张卡片，用户自己点）；
 # 有代价的（「默认不清」一组）和自己加的文件夹一律跳过
 function Get-OneClickAction($it) {
-    if ($it.Tier -eq 'confirm' -or $it.Custom -or $it.Kind -eq 'move') { return (T '跳过') }
+    if ($it.Tier -eq 'confirm' -or $it.Custom -or $it.Kind -eq 'move') { return 'skip' }
     $want = if ($it.One) { [string]$it.One } else { [string]$it.Def }
-    if ($want -eq (T '搬到其他盘')) { return (T '跳过') }
+    if ($want -eq 'move') { return 'skip' }
     return $want
 }
 # 普通用户能不能往这个文件夹里写（Users、Authenticated Users、Everyone、Interactive 有写入、删除、改权限之类的权限）。
@@ -3877,7 +3887,7 @@ function ConvertFrom-WingetTable([string]$txt) {
 function Select-AutoCleanItems($catalog) {
     $out = @()
     foreach ($it in $catalog) {
-        if ($it.Kind -ne 'cache' -or $it.Def -ne (T '删除') -or $it.Act -or $it.Svc -or $it.Whole -or $it.Custom -or $it.Careful -or $it.Confirm -or $it.Tier -ne 'safe') { continue }
+        if ($it.Kind -ne 'cache' -or $it.Def -ne 'delete' -or $it.Act -or $it.Svc -or $it.Whole -or $it.Custom -or $it.Careful -or $it.Confirm -or $it.Tier -ne 'safe') { continue }
         $out += $it
     }
     return $out

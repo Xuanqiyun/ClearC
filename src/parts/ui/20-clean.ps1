@@ -231,8 +231,8 @@ function Build-Rows($sizes) {
         if ($it.Lvl -and [int]$it.Lvl -gt $mode) { continue }   # 这个模式下不列（换到更高的模式再扫描就有）
         $r = New-Object RowItem
         $script:rowSig[$it.Idx] = Get-ItemSig $it
-        $r.Idx = $it.Idx; $r.Group = $it.G; $r.Name = $it.N; $r.Note = $it.Note; $r.Actions = $it.Actions; $r.Action = $it.Def
-        if ($noDest -and $it.Def -eq (T '搬到其他盘')) { $r.Action = (T '跳过'); $r.Status = (T '没有可以搬去的其他硬盘，先跳过'); $r.StatusBrush = '#6E6E73' }
+        $r.Idx = $it.Idx; $r.Group = $it.G; $r.Name = $it.N; $r.Note = $it.Note; $r.Actions = @($it.Actions | ForEach-Object { ActText $_ }); $r.Action = ActText $it.Def
+        if ($noDest -and $it.Def -eq 'move') { $r.Action = ActText 'skip'; $r.Status = (T '没有可以搬去的其他硬盘，先跳过'); $r.StatusBrush = '#6E6E73' }
         # 组名「安全清理（缓存、临时文件……）」拆成标题和说明两行显示
         $gt = T ([string]$it.G)
         $gp = $gt.Split([char]0xFF08, 2); if ($gp.Count -lt 2) { $gp = $gt.Split([char]'(', 2) }
@@ -241,7 +241,7 @@ function Build-Rows($sizes) {
         $r.First = -not $seen.ContainsKey($it.G); $seen[$it.G] = $true
         $r.SizeText = if ($b -lt 0) { (T '运行后知道') } else { Fmt $b }
         $r.Bytes = [double]$b
-        if ($b -gt 0 -and $r.Action -ne (T '跳过')) { $total += $b }
+        if ($b -gt 0 -and (ActId $r.Action) -ne 'skip') { $total += $b }
         $col.Add($r)
     }
     $script:rows = $col
@@ -260,7 +260,7 @@ function Show-FirstResult {
     if (-not $script:rows) { return }
     $cat = @{}; foreach ($c in $catalog) { $cat[$c.Idx] = $c }
     $b = [double]0
-    foreach ($r in $script:rows) { $a = Get-OneClickAction $cat[$r.Idx]; if ($a -ne (T '跳过') -and $r.Actions -contains $a -and $r.Bytes -gt 0) { $b += $r.Bytes } }
+    foreach ($r in $script:rows) { $a = Get-OneClickAction $cat[$r.Idx]; if ($a -ne 'skip' -and $r.Actions -contains (ActText $a) -and $r.Bytes -gt 0) { $b += $r.Bytes } }
     if ($b -lt 100MB) {
         Show-Sheet -Kind done -Title (T '扫描完了') -Text ((T "C 盘上能放心删的缓存和临时文件不多（{0}）。下面的列表里有每一项的说明；左边的「空间地图」能看到是什么占着 C 盘。") -f (Fmt $b)) | Out-Null
         return
@@ -277,7 +277,7 @@ function Show-FirstResult {
 $script:chatIdx = @()
 function Update-ChatCard {
     $cat = @{}; foreach ($c in $catalog) { $cat[$c.Idx] = $c }
-    $chat = @($script:rows | Where-Object { $c = $cat[$_.Idx]; $c -and $c.Kind -eq 'move' -and $c.Tier -eq 'chat' -and $_.Bytes -gt 0 -and $_.Actions -contains (T '搬到其他盘') })
+    $chat = @($script:rows | Where-Object { $c = $cat[$_.Idx]; $c -and $c.Kind -eq 'move' -and $c.Tier -eq 'chat' -and $_.Bytes -gt 0 -and $_.Actions -contains (ActText 'move') })
     $bytes = [double]0; foreach ($r in $chat) { $bytes += $r.Bytes }
     $script:chatIdx = @($chat | ForEach-Object { $_.Idx })
     if ($chat.Count -eq 0 -or $bytes -lt 200MB) { $ctl.ChatCard.Visibility = 'Collapsed'; return }
@@ -330,13 +330,13 @@ $script:cleanBadge = @{}
 $ctl.BtnCleanSkipTab.Add_Click({
     if (-not $script:rows -or $script:worker) { return }
     $mine = @($script:rows | Where-Object { [string]($_.GroupTitle) -eq $script:cleanTab })
-    $skip = T '跳过'
+    $skip = ActText 'skip'
     $any = @($mine | Where-Object { $_.Action -ne $skip }).Count -gt 0
     $cat = @{}; foreach ($c in $catalog) { $cat[$c.Idx] = $c }
     $noDest = -not (Test-DestOk)
     foreach ($r in $mine) {
         if ($any) { $r.Action = $skip }
-        else { $d = [string]$cat[$r.Idx].Def; if ($noDest -and $d -eq (T '搬到其他盘')) { $d = $skip }; if (@($r.Actions) -contains $d) { $r.Action = $d } }
+        else { $d = [string]$cat[$r.Idx].Def; if ($noDest -and $d -eq 'move') { $d = 'skip' }; $d = ActText $d; if (@($r.Actions) -contains $d) { $r.Action = $d } }
     }
     $script:planSig = ''; Update-CleanSummary; Apply-CleanFilter
 })
@@ -564,27 +564,27 @@ Register-BgJob 'run' -Cancel run -Moves -Done {
 function Invoke-RunSelected([string]$title = (T '开始处理所选项'), [object[]]$OnlyMove = $null) {
     $plan = @()
     foreach ($r in $script:rows) {
-        $act = $r.Action
-        if ($OnlyMove) { if ($OnlyMove -notcontains $r.Idx) { continue }; $act = (T '搬到其他盘') }
-        if ($act -ne (T '跳过')) {
+        $act = ActId $r.Action
+        if ($OnlyMove) { if ($OnlyMove -notcontains $r.Idx) { continue }; $act = 'move' }
+        if ($act -ne 'skip') {
             $b = if ($sync.Sizes) { [double]$sync.Sizes[$r.Idx] } else { 0 }
-            $plan += @{ Idx = $r.Idx; Action = $act; Name = $r.Name; Bytes = [math]::Max([double]0, [double]$b); Sig = $(if ($script:rowSig) { [string]$script:rowSig[$r.Idx] } else { '' }) }
+            $plan += @{ Idx = $r.Idx; Action = (ActId $act); Name = $r.Name; Bytes = [math]::Max([double]0, [double]$b); Sig = $(if ($script:rowSig) { [string]$script:rowSig[$r.Idx] } else { '' }) }
         }
     }
     if (-not $plan) { Show-Sheet -Title (T '没有选中任何操作') -Text (T '在列表里把要处理的项目选成「删除」或「搬到其他盘」，再点「开始处理所选项」。') | Out-Null; return }
     $dest = Get-Dest
     $cat0 = @{}; foreach ($c in $catalog) { $cat0[$c.Idx] = $c }
-    $moves = @($plan | Where-Object { $_.Action -eq (T '搬到其他盘') })
+    $moves = @($plan | Where-Object { $_.Action -eq 'move' })
     $moveBytes = [double]0; foreach ($x in $moves) { $moveBytes += $x.Bytes }
     if ($moves) {
         if (-not (Test-DestOk)) {
             # 找不到搬家目标：不要整单放弃，问一下要不要先只做删除，要搬的这几项留着不动
             $only = (T '只做删除')
-            $rest = @($plan | Where-Object { $_.Action -ne (T '搬到其他盘') })
+            $rest = @($plan | Where-Object { $_.Action -ne 'move' })
             $btns = if ($rest.Count) { @((T '取消'), $only) } else { @((T '好')) }
             $ans = Show-Sheet -Kind warn -Title (T '没有可用的搬家目标') -Text ((T "要搬的 {0} 项找不到可以搬去的其他硬盘（这台电脑只有 C 盘，或者选的盘拔掉了）。可以在「搬家目标」里换一块盘；也可以先只做删除，这几项留着不动。") -f $moves.Count) -Items @($moves | ForEach-Object { $_.Name }) -Buttons $btns -Primary $btns[-1] -Cancel $btns[0]
             if ($ans -ne $only) { return }
-            foreach ($r in $script:rows) { if ($r.Action -eq (T '搬到其他盘')) { $r.Action = (T '跳过') } }
+            foreach ($r in $script:rows) { if ((ActId $r.Action) -eq 'move') { $r.Action = ActText 'skip' } }
             $plan = $rest; $moves = @(); $moveBytes = [double]0
         }
     }
@@ -603,7 +603,7 @@ function Invoke-RunSelected([string]$title = (T '开始处理所选项'), [objec
         }
     }
     $total = [double]0; foreach ($x in $plan) { $total += $x.Bytes }
-    $items = @($plan | ForEach-Object { (T "{0}　{1}") -f $_.Action, $_.Name })
+    $items = @($plan | ForEach-Object { (T "{0}　{1}") -f (ActText $_.Action), $_.Name })
     $text = (T "涉及约 {0}。大文件夹搬家可能要几十分钟，进度会显示在窗口中间，做完会告诉你结果。") -f (GB $total)
     if ($moves) {
         $text += ((T "`n`n要搬的东西会放到 {0}。") -f $dest)
@@ -611,7 +611,7 @@ function Invoke-RunSelected([string]$title = (T '开始处理所选项'), [objec
         $pw = Get-PowerNote $moveBytes; if ($pw) { $text += "`n`n" + $pw }
     }
     # 有删除项时，必须勾选「确认不会带来损失」才能开始
-    $dels = @($plan | Where-Object { $_.Action -eq (T '删除') })
+    $dels = @($plan | Where-Object { $_.Action -eq 'delete' })
     $ack = ''
     if ($dels) {
         $text += (T "`n`n其中 {0} 项会删除文件，删除后可能无法恢复。请确认这些资料不再需要。") -f $dels.Count
@@ -702,13 +702,13 @@ foreach ($p in $ordered) {
         [void]$summary.Add(((T "{0} {1}：{2}") -f '·', $p.Name, $t)); $handled[$p.Idx] = $true
         continue
     }
-    SetP @{ Steps = $ordered.Count; Step = $si; StepName = ("{0} {1}" -f $p.Action, $it.N); StepIdx = $p.Idx; StepNote = $it.Note; MoveItem = $false
+    SetP @{ Steps = $ordered.Count; Step = $si; StepName = ("{0} {1}" -f (ActText $p.Action), $it.N); StepIdx = $p.Idx; StepNote = $it.Note; MoveItem = $false
             SubKind = 'none'; SubDone = [double]0; SubTotal = [double]$p.Bytes; SubStart = (Get-Date); Detail = '' }
     SetStatus $p.Idx (T '进行中…') 'run'
-    Log ("[{0}] {1}" -f $p.Action, $it.N)
+    Log ("[{0}] {1}" -f (ActText $p.Action), $it.N)
     $res = @{}
     try {
-        if ($p.Action -eq (T '搬到其他盘')) {
+        if ($p.Action -eq 'move') {
             New-Item -ItemType Directory -Path $dest -Force | Out-Null
             $it.Restrict = $true; $it.Allowed = @($arg.Allowed)
             Invoke-Move $it $dest $res
@@ -767,7 +767,7 @@ function Show-DeletePreview($items) {
 function Apply-OneClick {
     $cat = @{}; foreach ($it in $catalog) { $cat[$it.Idx] = $it }
     foreach ($r in $script:rows) {
-        $want = Get-OneClickAction $cat[$r.Idx]   # 只删不搬；有代价的和自己加的文件夹不碰
+        $want = ActText (Get-OneClickAction $cat[$r.Idx])   # 只删不搬；有代价的和自己加的文件夹不碰
         if ($r.Actions -contains $want) { $r.Action = $want }
     }
 }

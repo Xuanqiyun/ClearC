@@ -107,7 +107,7 @@ if ($script:mode -match '(?i)/check') {
         try { [Diagnostics.Process]::GetCurrentProcess().PriorityClass = 'BelowNormal' } catch {}
         $junk = [double]0
         foreach ($it in (Get-Catalog)) {
-            if ($it.Kind -ne 'cache' -or $it.Def -ne (T '删除') -or $it.Act -or $it.Tier -ne 'safe') { continue }
+            if ($it.Kind -ne 'cache' -or $it.Def -ne 'delete' -or $it.Act -or $it.Tier -ne 'safe') { continue }
             $junk += [double](Measure-Item $it)
         }
         if ($junk -ge $jgb * 1GB) {

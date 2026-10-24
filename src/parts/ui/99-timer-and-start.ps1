@@ -239,7 +239,7 @@ $timer.Start()
 function Save-ResumeState {
     $sizes = @{}; $sigs = @{}; $acts = @{}
     if ($script:rows -and $sync.Sizes) {
-        foreach ($r in $script:rows) { $sizes[$r.Idx] = [double]$sync.Sizes[$r.Idx]; $sigs[$r.Idx] = [string]$script:rowSig[$r.Idx]; $acts[$r.Idx] = [string]$r.Action }
+        foreach ($r in $script:rows) { $sizes[$r.Idx] = [double]$sync.Sizes[$r.Idx]; $sigs[$r.Idx] = [string]$script:rowSig[$r.Idx]; $acts[$r.Idx] = ActId ([string]$r.Action) }
     }
     Write-ResumeData (Join-Path $script:appDir 'resume.txt') ([string]$script:curPage) $sizes $sigs $acts
 }
@@ -254,7 +254,7 @@ function Restore-ResumeState {
         foreach ($k in $d.Sizes.Keys) { if ($cat.ContainsKey($k) -and (Get-ItemSig $cat[$k]) -eq $d.Sigs[$k]) { $sizes[$k] = $d.Sizes[$k] } }
         if ($sizes.Count) {
             $sync.Sizes = $sizes; Build-Rows $sizes
-            foreach ($r in $script:rows) { $a = $d.Acts[$r.Idx]; if ($a -and @($r.Actions) -contains $a) { $r.Action = $a } }
+            foreach ($r in $script:rows) { $a = $d.Acts[$r.Idx]; if ($a) { $a = ActText $a }; if ($a -and @($r.Actions) -contains $a) { $r.Action = $a } }
             $script:planSig = ''; Update-CleanSummary
             UI-Log (T '重开前的扫描结果已经恢复；要最新的数字，点「扫描」')
         }

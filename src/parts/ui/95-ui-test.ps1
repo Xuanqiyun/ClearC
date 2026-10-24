@@ -210,11 +210,11 @@ function Invoke-UiTest {
                 if (-not $script:rows -or $script:rows.Count -lt 3) { throw 'no rows' }
                 Apply-OneClick
                 $tierOf = @{}; foreach ($c in $catalog) { $tierOf[$c.Idx] = [string]$c.Tier }
-                $bad = @($script:rows | Where-Object { $_.Action -ne (T '跳过') -and @('confirm', 'custom') -contains $tierOf[$_.Idx] })
+                $bad = @($script:rows | Where-Object { (ActId $_.Action) -ne 'skip' -and @('confirm', 'custom') -contains $tierOf[$_.Idx] })
                 if ($bad.Count) { throw ("one-click picked: {0}" -f (($bad | ForEach-Object { $_.Name }) -join ', ')) }
-                if (@($script:rows | Where-Object { $_.Action -eq (T '删除') -and $tierOf[$_.Idx] -eq 'safe' }).Count -lt 3) { throw 'one-click picked no safe items' }
+                if (@($script:rows | Where-Object { (ActId $_.Action) -eq 'delete' -and $tierOf[$_.Idx] -eq 'safe' }).Count -lt 3) { throw 'one-click picked no safe items' }
                 # 一键清理只删不搬；聊天记录大的时候单独一张卡片，小的时候不出现
-                $mv0 = @($script:rows | Where-Object { $_.Action -eq (T '搬到其他盘') })
+                $mv0 = @($script:rows | Where-Object { (ActId $_.Action) -eq 'move' })
                 if ($mv0.Count) { throw ("one-click moves: {0}" -f (($mv0 | ForEach-Object { $_.Name }) -join ', ')) }
                 $big = @{}; foreach ($k in $sizes.Keys) { $big[$k] = $sizes[$k] }
                 foreach ($c in $catalog) { if ($c.Kind -eq 'move' -and $c.Tier -eq 'chat') { $big[$c.Idx] = [double]300MB } }
@@ -227,11 +227,11 @@ function Invoke-UiTest {
                 try {
                     $ctl.DestPick.SelectedIndex = -1
                     Build-Rows $sizes; Apply-OneClick
-                    $mv = @($script:rows | Where-Object { $_.Action -eq (T '搬到其他盘') })
+                    $mv = @($script:rows | Where-Object { (ActId $_.Action) -eq 'move' })
                     if ($mv.Count) { throw ("without a target, one-click still moves: {0}" -f (($mv | ForEach-Object { $_.Name }) -join ', ')) }
-                    if (@($script:rows | Where-Object { $_.Action -eq (T '删除') }).Count -lt 3) { throw 'without a target, one-click deletes nothing' }
-                    $chat = @($script:rows | Where-Object { @($_.Actions) -contains (T '搬到其他盘') })[0]
-                    if ($chat) { $chat.Action = (T '搬到其他盘'); $n0 = $script:uiSheets.Count; Invoke-RunSelected; if ($script:worker -or $script:uiSheets.Count -ne $n0 + 1 -or $script:uiSheets[-1] -notmatch [regex]::Escape((T '没有可用的搬家目标'))) { throw 'a run without a target did not offer to delete only' } }
+                    if (@($script:rows | Where-Object { (ActId $_.Action) -eq 'delete' }).Count -lt 3) { throw 'without a target, one-click deletes nothing' }
+                    $chat = @($script:rows | Where-Object { @($_.Actions) -contains (ActText 'move') })[0]
+                    if ($chat) { $chat.Action = ActText 'move'; $n0 = $script:uiSheets.Count; Invoke-RunSelected; if ($script:worker -or $script:uiSheets.Count -ne $n0 + 1 -or $script:uiSheets[-1] -notmatch [regex]::Escape((T '没有可用的搬家目标'))) { throw 'a run without a target did not offer to delete only' } }
                 } finally { $ctl.DestPick.SelectedIndex = $keepDest; Build-Rows $sizes }
                 foreach ($r in $script:rows) { $it = @($catalog | Where-Object { $_.Idx -eq $r.Idx })[0]; if ((Get-ItemSig $it) -ne $script:rowSig[$r.Idx]) { throw ("fingerprint mismatch: {0}" -f $r.Name) } }
                 Save-CleanList 'CustomClean' @($d2)
@@ -542,7 +542,7 @@ function Invoke-UiTest {
             $mine = @($script:rows | Where-Object { $_.GroupTitle -eq $groups[1] }); $keepAct = @($mine | ForEach-Object { $_.Action })
             $other = @($script:rows | Where-Object { $_.GroupTitle -ne $groups[1] } | ForEach-Object { $_.Action }) -join '|'
             & $click $ctl.BtnCleanSkipTab; $win.UpdateLayout()
-            if (@($mine | Where-Object { $_.Action -ne (T '跳过') }).Count) { throw 'skip-this-tab left rows selected' }
+            if (@($mine | Where-Object { (ActId $_.Action) -ne 'skip' }).Count) { throw 'skip-this-tab left rows selected' }
             if ((@($script:rows | Where-Object { $_.GroupTitle -ne $groups[1] } | ForEach-Object { $_.Action }) -join '|') -ne $other) { throw 'skip-this-tab changed other tabs' }
             if ([string]$script:cleanBadge[$groups[1]].Text -ne ('0/{0}' -f $mine.Count)) { throw ('tab badge shows "{0}"' -f $script:cleanBadge[$groups[1]].Text) }
             & $click $ctl.BtnCleanSkipTab; $win.UpdateLayout()
