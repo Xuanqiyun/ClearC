@@ -11163,6 +11163,16 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
         WindowStartupLocation="CenterScreen" FontFamily="Segoe UI, Microsoft YaHei UI" FontSize="13" Background="#F5F5F7"
         Foreground="#1D1D1F" UseLayoutRounding="True" SnapsToDevicePixels="True" TextOptions.TextFormattingMode="Display">
   <Window.Resources>
+    <!-- 用键盘（Tab）走到哪里，哪里就有一圈蓝边；鼠标点击时不出现 -->
+    <Style x:Key="FocusRing">
+      <Setter Property="Control.Template">
+        <Setter.Value>
+          <ControlTemplate>
+            <Rectangle Margin="-3" RadiusX="9" RadiusY="9" Stroke="#0071E3" StrokeThickness="2" SnapsToDevicePixels="True"/>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
     <!-- 设置里可以关掉的显示项：改这几个资源，界面上用到的地方都跟着变 -->
     <Visibility x:Key="MapCkVis">Visible</Visibility>
     <Visibility x:Key="MapBarVis">Visible</Visibility>
@@ -11394,7 +11404,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
       <Setter Property="Padding" Value="14,6"/>
       <Setter Property="MinHeight" Value="30"/>
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Button">
@@ -11439,7 +11449,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
       <Setter Property="Background" Value="Transparent"/>
       <Setter Property="Padding" Value="2,2"/>
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Button">
@@ -11460,7 +11470,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
       <Setter Property="Foreground" Value="#6E6E73"/>
       <Setter Property="FontSize" Value="12"/>
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="Padding" Value="0,3"/>
       <Setter Property="HorizontalContentAlignment" Value="Left"/>
       <Setter Property="ToolTip" Value="点一下按这一列排序，再点一下反过来"/>
@@ -11488,7 +11498,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
       <Setter Property="Foreground" Value="#6E6E73"/>
       <Setter Property="FontSize" Value="13"/>
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="Margin" Value="0,0,22,0"/>
       <Setter Property="Template">
         <Setter.Value>
@@ -11521,7 +11531,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
       <Setter Property="Foreground" Value="#3A3A3C"/>
       <Setter Property="FontSize" Value="13"/>
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="Margin" Value="0,0,0,1"/>
       <Setter Property="Template">
         <Setter.Value>
@@ -11550,7 +11560,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
       <Setter Property="FontSize" Value="13"/>
       <Setter Property="FontWeight" Value="SemiBold"/>
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="Margin" Value="0,10,0,2"/>
       <Setter Property="Template">
         <Setter.Value>
@@ -11586,7 +11596,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
       <Setter Property="Foreground" Value="#1D1D1F"/>
       <Setter Property="FontWeight" Value="SemiBold"/>
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
       <Setter Property="Margin" Value="0,0,0,2"/>
       <Setter Property="Template">
@@ -11613,7 +11623,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
       <Setter Property="Foreground" Value="#1D1D1F"/>
       <Setter Property="FontSize" Value="13.5"/>
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="Margin" Value="0,0,0,3"/>
       <Setter Property="Template">
         <Setter.Value>
@@ -11647,7 +11657,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
     <!-- 外观选择：每种外观一张缩略图（浅色、深色、跟随系统），下面写名字；选中的那张描蓝边 -->
     <Style x:Key="ThemeCard" TargetType="RadioButton">
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="Margin" Value="0,0,16,0"/>
       <Setter Property="Template">
         <Setter.Value>
@@ -11683,7 +11693,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
       <Setter Property="Foreground" Value="#1D1D1F"/>
       <Setter Property="FontSize" Value="12.5"/>
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="RadioButton">
@@ -11734,7 +11744,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="FontSize" Value="12.5"/>
             <Setter Property="Foreground" Value="#3A3A3C"/>
-            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
             <Setter Property="Template">
               <Setter.Value>
                 <ControlTemplate TargetType="ListBoxItem">
@@ -11776,7 +11786,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
       <Setter Property="FontSize" Value="12.5"/>
       <Setter Property="Cursor" Value="Hand"/>
       <Setter Property="Margin" Value="0,0,6,6"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="ToggleButton">
@@ -11800,7 +11810,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
     <Style TargetType="CheckBox">
       <Setter Property="Foreground" Value="#1D1D1F"/>
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="VerticalContentAlignment" Value="Center"/>
       <Setter Property="Template">
         <Setter.Value>
@@ -11936,7 +11946,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
       <Setter Property="Foreground" Value="#1D1D1F"/>
       <Setter Property="MinHeight" Value="30"/>
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="ComboBox">
@@ -12124,7 +12134,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
     </Style>
     <Style x:Key="PlainRow" TargetType="ListViewItem">
       <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="ListViewItem">
@@ -12193,7 +12203,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
     </Style>
     <Style x:Key="GridRow" TargetType="ListViewItem">
       <Setter Property="Padding" Value="0,5"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="ListViewItem">
@@ -12209,7 +12219,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
       </Setter>
     </Style>
     <Style x:Key="RootRow" TargetType="ListBoxItem">
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="Margin" Value="0,0,6,6"/>
       <Setter Property="Template">
         <Setter.Value>
@@ -12222,7 +12232,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
       <Setter Property="Foreground" Value="#1D1D1F"/>
       <Setter Property="FontSize" Value="12.5"/>
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="CheckBox">
@@ -12242,7 +12252,8 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
     </Style>
     <Style x:Key="PillX" TargetType="Button">
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="AutomationProperties.Name" Value="{Binding ToolTip, RelativeSource={RelativeSource Self}}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Button">
@@ -12267,7 +12278,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
     <Style x:Key="Switch" TargetType="CheckBox">
       <Setter Property="Foreground" Value="#1D1D1F"/>
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="CheckBox">
@@ -12296,7 +12307,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
     <!-- ===== 可以选中的列表行（空间地图、软件、搬家记录） ===== -->
     <Style x:Key="SelRow" TargetType="ListViewItem">
       <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="ListViewItem">
@@ -15717,6 +15728,36 @@ function Apply-ListSort([string]$name) {
         } finally { $d.Dispose() }
     } catch { Write-LogFile ("sort {0}: {1}" -f $name, $_.Exception.Message) }
 }
+
+# ---------- 读屏软件读的名字 ----------
+# 按钮里是「图标 + 文字」（StackPanel）时，系统读不出名字；只有图标的按钮更读不出来。
+# 按里面的文字（去掉图标字符）补上，只有图标的用它的提示文字。已经写了名字的不动
+function Set-AutoNames($root) {
+    $plain = { param([string]$t) (-join @($t.ToCharArray() | Where-Object { ([int]$_ -lt 0xE000 -or [int]$_ -gt 0xF8FF) })).Trim() }
+    $st = New-Object System.Collections.Stack; $st.Push($root); $n = 0
+    while ($st.Count -gt 0) {
+        $e = $st.Pop()
+        if (-not ($e -is [System.Windows.DependencyObject])) { continue }
+        foreach ($c in [System.Windows.LogicalTreeHelper]::GetChildren($e)) { if ($c -is [System.Windows.DependencyObject]) { $st.Push($c) } }
+        if (-not ($e -is [System.Windows.Controls.Primitives.ButtonBase])) { continue }
+        if ([System.Windows.Automation.AutomationProperties]::GetName($e)) { continue }
+        $name = ''
+        if ($e.Content -is [string]) { $name = & $plain $e.Content; if ($name -eq $e.Content) { continue } }   # 普通的文字按钮系统自己读得出来
+        elseif ($e.Content -is [System.Windows.DependencyObject]) {
+            $parts = @(); $s2 = New-Object System.Collections.Stack; $s2.Push($e.Content)
+            while ($s2.Count -gt 0) {
+                $x = $s2.Pop()
+                if ($x -is [System.Windows.Controls.TextBlock]) { $t = & $plain $x.Text; if ($t) { $parts += $t } }
+                if ($x -is [System.Windows.DependencyObject]) { foreach ($c in [System.Windows.LogicalTreeHelper]::GetChildren($x)) { if ($c -is [System.Windows.DependencyObject]) { $s2.Push($c) } } }
+            }
+            $name = ($parts -join ' ').Trim()
+        }
+        if (-not $name -and $e.ToolTip -is [string]) { $name = [string]$e.ToolTip }
+        if ($name) { [System.Windows.Automation.AutomationProperties]::SetName($e, $name); $n++ }
+    }
+    return $n
+}
+[void](Set-AutoNames $win)
 
 # ---------- 左侧导航：两页切换 ----------
 $script:pageList = [ordered]@{
@@ -22352,6 +22393,12 @@ function Invoke-UiTest {
             $k = 1; foreach ($s in $g0.Steps) { if ([string]$s.No -ne [string]$k -or -not $s.Title -or -not $s.Act) { throw ("step {0}: No={1} Title={2} Act={3}" -f $k, $s.No, $s.Title, $s.Act) }; if ($s.Title.EndsWith([string][char]0x2026)) { throw 'title still ends with an ellipsis' }; $k++ }
             $ask = @(@($ctl.FixGroups.Items) | ForEach-Object { @($_.Steps) } | Where-Object { $_.Id -eq 'sfcrepair' })[0]
             if ($ask -and $ask.Enabled -and -not ([string]$ask.Act).EndsWith([string][char]0x2026)) { throw 'a step that asks first has no ellipsis on its button' }
+        }
+        & $step 'screen readers get names for icon buttons; keyboard focus shows a ring' {
+            $nm = { param($b) [string][System.Windows.Automation.AutomationProperties]::GetName($b) }
+            if (-not (& $nm $ctl.BtnTheme)) { throw 'the appearance button (icon and text) has no name' }
+            if ((& $nm $ctl.BtnMapBack) -ne [string]$ctl.BtnMapBack.ToolTip) { throw ('icon-only back button is named "{0}"' -f (& $nm $ctl.BtnMapBack)) }
+            if ($ctl.BtnRun.FocusVisualStyle -ne $win.FindResource('FocusRing')) { throw 'buttons do not use the focus ring' }
         }
         & $step 'appearance picker shows three previews' {
             $p = New-ThemePicker 'dark'

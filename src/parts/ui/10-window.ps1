@@ -327,6 +327,36 @@ function Apply-ListSort([string]$name) {
     } catch { Write-LogFile ("sort {0}: {1}" -f $name, $_.Exception.Message) }
 }
 
+# ---------- 读屏软件读的名字 ----------
+# 按钮里是「图标 + 文字」（StackPanel）时，系统读不出名字；只有图标的按钮更读不出来。
+# 按里面的文字（去掉图标字符）补上，只有图标的用它的提示文字。已经写了名字的不动
+function Set-AutoNames($root) {
+    $plain = { param([string]$t) (-join @($t.ToCharArray() | Where-Object { ([int]$_ -lt 0xE000 -or [int]$_ -gt 0xF8FF) })).Trim() }
+    $st = New-Object System.Collections.Stack; $st.Push($root); $n = 0
+    while ($st.Count -gt 0) {
+        $e = $st.Pop()
+        if (-not ($e -is [System.Windows.DependencyObject])) { continue }
+        foreach ($c in [System.Windows.LogicalTreeHelper]::GetChildren($e)) { if ($c -is [System.Windows.DependencyObject]) { $st.Push($c) } }
+        if (-not ($e -is [System.Windows.Controls.Primitives.ButtonBase])) { continue }
+        if ([System.Windows.Automation.AutomationProperties]::GetName($e)) { continue }
+        $name = ''
+        if ($e.Content -is [string]) { $name = & $plain $e.Content; if ($name -eq $e.Content) { continue } }   # 普通的文字按钮系统自己读得出来
+        elseif ($e.Content -is [System.Windows.DependencyObject]) {
+            $parts = @(); $s2 = New-Object System.Collections.Stack; $s2.Push($e.Content)
+            while ($s2.Count -gt 0) {
+                $x = $s2.Pop()
+                if ($x -is [System.Windows.Controls.TextBlock]) { $t = & $plain $x.Text; if ($t) { $parts += $t } }
+                if ($x -is [System.Windows.DependencyObject]) { foreach ($c in [System.Windows.LogicalTreeHelper]::GetChildren($x)) { if ($c -is [System.Windows.DependencyObject]) { $s2.Push($c) } } }
+            }
+            $name = ($parts -join ' ').Trim()
+        }
+        if (-not $name -and $e.ToolTip -is [string]) { $name = [string]$e.ToolTip }
+        if ($name) { [System.Windows.Automation.AutomationProperties]::SetName($e, $name); $n++ }
+    }
+    return $n
+}
+[void](Set-AutoNames $win)
+
 # ---------- 左侧导航：两页切换 ----------
 $script:pageList = [ordered]@{
     clean = @('PageClean', 'NavClean'); dup = @('PageDup', 'NavDup'); save = @('PageSave', 'NavSave'); map = @('PageMap', 'NavMap'); apps = @('PageApps', 'NavApps'); health = @('PageHealth', 'NavHealth')
