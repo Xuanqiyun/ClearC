@@ -314,37 +314,48 @@ $script:customDest = $null
 function DriveTypeOf([string]$d) { try { [string](New-Object System.IO.DriveInfo $d).DriveType } catch { 'Unknown' } }
 function Fill-DestChoices([string]$keep) {
     if (-not $keep) { $keep = Get-Dest }
-    $ctl.DestPick.Items.Clear()
-    $drives = @([IO.DriveInfo]::GetDrives() | Where-Object {
-        try { $_.DriveType -eq 'Fixed' -and $_.IsReady -and ($_.Name.TrimEnd('\') -ine $env:SystemDrive) } catch { $false } } |
-        Sort-Object AvailableFreeSpace -Descending)
-    $first = $true
-    foreach ($d in $drives) {
-        $path = Join-Path $d.RootDirectory.FullName 'CDriveMoved'
-        $label = (T "{0}    空闲 {1}{2}") -f $path, (Fmt $d.AvailableFreeSpace), $(if ($first) { (T '，空间最大') } else { '' })
-        $item = New-Object System.Windows.Controls.ComboBoxItem
-        $item.Content = $label; $item.Tag = $path
-        [void]$ctl.DestPick.Items.Add($item)
-        $first = $false
-    }
-    if ($script:customDest) {
-        $free = DriveFree ($script:customDest.Substring(0, 2))
-        $item = New-Object System.Windows.Controls.ComboBoxItem
-        $item.Content = (T "{0}    空闲 {1}，自选") -f $script:customDest, (Fmt $free); $item.Tag = $script:customDest
-        [void]$ctl.DestPick.Items.Add($item)
-    }
-    if ($ctl.DestPick.Items.Count -eq 0) {
-        $item = New-Object System.Windows.Controls.ComboBoxItem
-        $item.Content = (T '这台电脑只有 C 盘，没有可以搬去的磁盘'); $item.Tag = ''
-        [void]$ctl.DestPick.Items.Add($item)
-    }
-    $ctl.DestPick.SelectedIndex = 0
-    if ($drives.Count -gt 0) {
-        $ctl.DestHint.Text = (T "已自动选了空闲最多的 {0} 盘（剩 {1}）。也可以从下拉框换一块盘，或点「选择文件夹」。只列本机硬盘：网络盘、网盘、U 盘不能做链接目标。") -f $drives[0].Name.Substring(0, 1), (Fmt $drives[0].AvailableFreeSpace)
-    } else {
-        $ctl.DestHint.Text = (T '这台电脑只有 C 盘，不能搬家；其他清理照常可以做。')
-    }
-    if ($keep) { for ($i = 0; $i -lt $ctl.DestPick.Items.Count; $i++) { if ([string]$ctl.DestPick.Items[$i].Tag -ieq $keep) { $ctl.DestPick.SelectedIndex = $i } } }
+    $script:destFilling = $true
+    try {
+        $ctl.DestPick.Items.Clear()
+        $choices = @(Get-DestChoices)
+        $auto = $null
+        foreach ($c in $choices) {
+            $note = if ($c.Auto) { (T '，空间最大') } elseif ($c.Plug) { (T '，移动硬盘') } else { '' }
+            $item = New-Object System.Windows.Controls.ComboBoxItem
+            $item.Content = (T "{0}    空闲 {1}{2}") -f $c.Path, (Fmt $c.Free), $note; $item.Tag = $c.Path
+            [void]$ctl.DestPick.Items.Add($item)
+            if ($c.Auto) { $auto = $c }
+        }
+        if ($script:customDest) {
+            $free = DriveFree ($script:customDest.Substring(0, 2))
+            $item = New-Object System.Windows.Controls.ComboBoxItem
+            $item.Content = (T "{0}    空闲 {1}，自选") -f $script:customDest, (Fmt $free); $item.Tag = $script:customDest
+            [void]$ctl.DestPick.Items.Add($item)
+        }
+        if ($choices.Count -gt 0 -and -not $auto) {
+            # 只有移动硬盘：默认先不搬，要搬到移动硬盘得自己从下拉框选
+            $item = New-Object System.Windows.Controls.ComboBoxItem
+            $item.Content = (T '先不搬（只找到移动硬盘）'); $item.Tag = ''
+            $ctl.DestPick.Items.Insert(0, $item)
+        }
+        if ($ctl.DestPick.Items.Count -eq 0) {
+            $item = New-Object System.Windows.Controls.ComboBoxItem
+            $item.Content = (T '这台电脑只有 C 盘，没有可以搬去的磁盘'); $item.Tag = ''
+            [void]$ctl.DestPick.Items.Add($item)
+        }
+        $ctl.DestPick.SelectedIndex = 0
+        $plugs = @($choices | Where-Object { $_.Plug }).Count
+        if ($auto) {
+            $ctl.DestHint.Text = (T "已自动选了空闲最多的 {0} 盘（剩 {1}）。也可以从下拉框换一块盘，或点「选择文件夹」。只列本机硬盘：网络盘、网盘、U 盘不能做链接目标。") -f $auto.Drive.Substring(0, 1), (Fmt $auto.Free)
+            if ($plugs) { $ctl.DestHint.Text += (T '移动硬盘排在最后，不会自动选：拔掉以后，搬过去的软件会打不开。') }
+        } elseif ($plugs) {
+            $ctl.DestHint.Text = (T '只找到移动硬盘，所以没有自动选：拔掉以后，搬过去的软件会打不开。这块盘一直插着用的话，可以从下拉框选它；其他清理照常可以做。')
+        } else {
+            $ctl.DestHint.Text = (T '这台电脑只有 C 盘，不能搬家；其他清理照常可以做。')
+        }
+        if ($keep) { for ($i = 0; $i -lt $ctl.DestPick.Items.Count; $i++) { if ([string]$ctl.DestPick.Items[$i].Tag -ieq $keep) { $ctl.DestPick.SelectedIndex = $i } } }
+        $script:destPrev = $ctl.DestPick.SelectedIndex
+    } finally { $script:destFilling = $false }
     Sync-MovesDest
 }
 function Get-Dest { $i = $ctl.DestPick.SelectedItem; if ($i) { [string]$i.Tag } else { '' } }
@@ -360,16 +371,36 @@ function Sync-MovesDest {
         $ctl.MovesDest.SelectedIndex = $ctl.DestPick.SelectedIndex
     } finally { $script:destSyncing = $false }
 }
+# 手动选了移动硬盘：先说清楚拔掉以后会怎样。同一块盘这次打开只问一次
+$script:plugOk = @{}
+$script:destPrev = -1
+$script:destFilling = $false
+function Confirm-PlugDest([string]$path) {
+    if (-not $path -or $path.Length -lt 2) { return $true }
+    $d = $path.Substring(0, 2).ToUpperInvariant()
+    if ($script:plugOk[$d] -or -not (Test-PluggableDrive $d)) { return $true }
+    $go = T '仍然搬到这块盘'
+    $r = Show-Sheet -Kind warn -Title (T '搬到移动硬盘？') -Text ((T "{0} 盘接在 USB 这类可以拔插的接口上。搬过去的东西在 C 盘只留一个链接：这块盘拔掉、换了盘符，或者开机时还没认出来，用到这些文件的软件就打不开，聊天软件会像没有记录一样，插回去才恢复。`n`n只有这块盘一直插在这台电脑上时才选它。") -f $d) -Buttons @((T '取消'), $go) -Primary $go -Cancel (T '取消')
+    if ($r -eq $go) { $script:plugOk[$d] = $true; return $true }
+    return $false
+}
 $ctl.MovesDest.Add_SelectionChanged({
     if ($script:destSyncing -or $ctl.MovesDest.SelectedIndex -lt 0) { return }
     $script:destSyncing = $true
-    try { $ctl.DestPick.SelectedIndex = $ctl.MovesDest.SelectedIndex } finally { $script:destSyncing = $false }
+    try {
+        if (Confirm-PlugDest ([string]$ctl.MovesDest.SelectedItem.Tag)) { $ctl.DestPick.SelectedIndex = $ctl.MovesDest.SelectedIndex; $script:destPrev = $ctl.DestPick.SelectedIndex }
+        else { $ctl.MovesDest.SelectedIndex = $ctl.DestPick.SelectedIndex }
+    } finally { $script:destSyncing = $false }
     Update-CandSel
 })
 $ctl.DestPick.Add_SelectionChanged({
     if ($script:destSyncing) { return }
     $script:destSyncing = $true
-    try { $ctl.MovesDest.SelectedIndex = $ctl.DestPick.SelectedIndex } finally { $script:destSyncing = $false }
+    try {
+        if (-not $script:destFilling -and $ctl.DestPick.SelectedIndex -ge 0 -and -not (Confirm-PlugDest (Get-Dest))) { $ctl.DestPick.SelectedIndex = $script:destPrev; return }
+        $script:destPrev = $ctl.DestPick.SelectedIndex
+        $ctl.MovesDest.SelectedIndex = $ctl.DestPick.SelectedIndex
+    } finally { $script:destSyncing = $false }
 })
 $ctl.BtnDestBrowse.Add_Click({
     $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
@@ -381,6 +412,7 @@ $ctl.BtnDestBrowse.Add_Click({
     if ($path.Length -le 2) { $path = $path.Substring(0, 2) + '\CDriveMoved' }   # 选了整个盘（E:\），就在盘下建 CDriveMoved
     $risky = @(@(Get-CustomClean) + @($env:TEMP, $env:TMP, "$env:SystemRoot\Temp") | Where-Object { $_ } | ForEach-Object { [Environment]::ExpandEnvironmentVariables([string]$_).TrimEnd('\') })
     foreach ($r in $risky) { if ($path -ieq $r -or $path.StartsWith($r + '\', [StringComparison]::OrdinalIgnoreCase)) { Show-Sheet -Kind warn -Title (T '这里不能放搬过去的数据') -Text ((T "{0} 在 {1} 里面。那是清理列表里的文件夹或临时文件夹，清理时会被清空，搬过去的数据会一起被删。请换一个位置。") -f $path, $r) | Out-Null; return } }
+    if (-not (Confirm-PlugDest $path)) { return }
     $script:customDest = $path
     Fill-DestChoices $path
 })

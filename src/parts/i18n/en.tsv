@@ -156,6 +156,13 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+，移动硬盘	, external disk
+先不搬（只找到移动硬盘）	Don't move for now (only external disks found)
+移动硬盘排在最后，不会自动选：拔掉以后，搬过去的软件会打不开。	 External disks are listed last and never picked automatically: once unplugged, the apps you moved there stop working.
+只找到移动硬盘，所以没有自动选：拔掉以后，搬过去的软件会打不开。这块盘一直插着用的话，可以从下拉框选它；其他清理照常可以做。	Only external disks were found, so none was picked: once unplugged, the apps you moved there stop working. If the disk always stays connected, pick it from the list. Other cleanup works as usual.
+仍然搬到这块盘	Use this disk anyway
+搬到移动硬盘？	Move to an external disk?
+{0} 盘接在 USB 这类可以拔插的接口上。搬过去的东西在 C 盘只留一个链接：这块盘拔掉、换了盘符，或者开机时还没认出来，用到这些文件的软件就打不开，聊天软件会像没有记录一样，插回去才恢复。\n\n只有这块盘一直插在这台电脑上时才选它。	{0} is connected through USB or a similar plug-in port. What you move there leaves only a link on C:. If the disk is unplugged, gets a different letter, or isn't ready yet at startup, the apps that use these files won't open and chat apps will look as if the history is gone, until it's plugged back in.\n\nOnly choose it if this disk always stays connected to this PC.
 没有可以搬去的其他硬盘，先跳过	No other drive to move to; skipped for now
 只做删除	Delete only
 要搬的 {0} 项找不到可以搬去的其他硬盘（这台电脑只有 C 盘，或者选的盘拔掉了）。可以在「搬家目标」里换一块盘；也可以先只做删除，这几项留着不动。	There is no other drive to move the {0} item(s) to (this PC has only C:, or the chosen drive was unplugged). Pick another drive under Move target, or do only the deletions now and leave these items as they are.

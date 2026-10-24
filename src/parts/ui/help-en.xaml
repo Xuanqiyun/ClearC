@@ -200,7 +200,7 @@
                   <Grid Tag="cols:330:44:26:3" Margin="0,26,0,0">
                     <StackPanel>
                       <TextBlock Style="{StaticResource HelpLead}" Text="Target drive"/>
-                      <TextBlock Style="{StaticResource HelpBody}"><Run>The local drive with the most free space is chosen; you can pick another drive or a folder. Network drives, cloud drives and USB sticks can't be used.</Run></TextBlock>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>The local drive with the most free space is chosen; you can pick another drive or a folder. Network drives, cloud drives and USB sticks can't be used. External disks are never picked automatically, and you are warned when you pick one: once unplugged, the moved apps stop working.</Run></TextBlock>
                     </StackPanel>
                   </Grid>
                   <Border Background="#FFF8EC" BorderBrush="#F5E1BC" BorderThickness="1" CornerRadius="12" Padding="18,16,22,17" Margin="0,26,0,0">

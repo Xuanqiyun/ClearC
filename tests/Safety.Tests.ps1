@@ -446,6 +446,18 @@ try { & {
     Check 'OPS-1 the scheduled cleanup skips its run while the window is changing things' ($ac -match 'Enter-BusyLock' -and $ac.IndexOf('Enter-BusyLock') -lt $ac.IndexOf('Invoke-AutoClean'))
     $sw = [regex]::Match($src, '(?s)function Start-Worker\(.*?\r?\n\}').Value
     Check 'OPS-1 every worker that changes things takes the busy lock first; only one window opens' ($sw -match 'Enter-BusyLock' -and $src -match "Local\\ClearC-UI")
+    # ============ 12. 搬家目标不自动选移动硬盘（3.6 体验评审） ============
+    $oldSys = $env:SystemDrive; if (-not $env:SystemDrive) { $env:SystemDrive = 'C:' }
+    try {
+        $dc = @(Get-DestChoices @(@{ Drive = 'D:'; Free = 100; Plug = $false }, @{ Drive = 'E:'; Free = 900; Plug = $true }, @{ Drive = 'F:'; Free = 300; Plug = $false }, @{ Drive = $env:SystemDrive; Free = 999; Plug = $false }))
+        Check 'UX-2 move targets: C: is not offered, local disks by free space first, USB disks last' (($dc | ForEach-Object { $_.Drive }) -join ',' -eq 'F:,D:,E:' -and $dc[0].Path -eq 'F:\CDriveMoved')
+        Check 'UX-2 only the local disk with the most free space is picked automatically, never a USB disk' ($dc[0].Auto -and -not $dc[1].Auto -and -not $dc[2].Auto -and $dc[2].Plug)
+        $dc = @(Get-DestChoices @(@{ Drive = 'E:'; Free = 900; Plug = $true }))
+        Check 'UX-2 when the only other disk is a USB disk, nothing is picked automatically' ($dc.Count -eq 1 -and -not $dc[0].Auto)
+    } finally { $env:SystemDrive = $oldSys }
+    Check 'UX-2 a drive whose bus can not be read is not taken for a USB disk' (-not (Test-PluggableDrive 'Q:'))
+    $fd = [regex]::Match($src, '(?s)function Fill-DestChoices\(.*?\r?\n\}').Value
+    Check 'UX-2 the move target list uses these choices, and picking a USB disk by hand asks first' ($fd -match 'Get-DestChoices' -and $src -match 'function Confirm-PlugDest' -and ([regex]::Matches($src, 'Confirm-PlugDest ')).Count -ge 3)
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue

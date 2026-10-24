@@ -2926,6 +2926,26 @@ function Get-ModuleHolders([string]$dir) {
     }
     return ,@($out | Select-Object -Unique)
 }
+# 这块盘是不是接在 USB、1394、SD 卡这类插拔式总线上（移动硬盘在 Windows 里也算「本机硬盘」）。读不到当作不是
+function Test-PluggableDrive([string]$drive) { try { return [bool][FsTools]::IsPluggable($drive) } catch { return $false } }
+# 搬家目标的候选：C 盘以外、插着的本机硬盘，按空闲从多到少；移动硬盘排在后面，不参与自动选择（拔掉后搬走的软件打不开）。
+# $drives 是测试用的，每项 @{ Drive; Free; Plug }
+function Get-DestChoices($drives = $null) {
+    if ($null -eq $drives) {
+        $drives = @([IO.DriveInfo]::GetDrives() | Where-Object { try { $_.DriveType -eq 'Fixed' -and $_.IsReady } catch { $false } } | ForEach-Object {
+            $n = $_.Name.Substring(0, 2); @{ Drive = $n; Free = [long]$_.AvailableFreeSpace; Plug = (Test-PluggableDrive $n) } })
+    }
+    $list = @($drives | Where-Object { $_.Drive -ine $env:SystemDrive } |
+        Sort-Object @{ Expression = { [int][bool]$_.Plug } }, @{ Expression = { [long]$_.Free }; Descending = $true })
+    $out = New-Object System.Collections.Generic.List[object]
+    $auto = $true
+    foreach ($d in $list) {
+        $plug = [bool]$d.Plug
+        $out.Add([pscustomobject]@{ Drive = $d.Drive; Path = $d.Drive + '\CDriveMoved'; Free = [long]$d.Free; Plug = $plug; Auto = ($auto -and -not $plug) })
+        if (-not $plug) { $auto = $false }
+    }
+    return $out.ToArray()
+}
 # 普通用户能不能往这个文件夹里写（Users、Authenticated Users、Everyone、Interactive 有写入、删除、改权限之类的权限）。
 # 读不到权限就当能写：拿不准的时候不信任它
 function Test-UserWritable([string]$dir) {
