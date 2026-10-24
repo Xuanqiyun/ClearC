@@ -210,12 +210,19 @@ public sealed class DirReader {
     }
 }
 
-// 快速统计文件夹大小：不进入链接目录（搬走后留下的链接不会把别的盘算进来），Files/Bytes 实时可读，用来显示进度。
+// 一次统计的结果：文件个数、大小，跳过的特殊项目（链接、用 Windows 压缩功能压过的文件等）的个数和第一个的位置
+public sealed class DirCount {
+    public long Files, Bytes, Reparse;
+    public string ReparseSample = "";
+    public bool Cancelled;     // 数到一半被取消了：结果不完整，不能拿来做判断
+}
+// 快速统计文件夹大小：不进入链接目录（搬走后留下的链接不会把别的盘算进来）。
+// 每次统计返回自己的 DirCount：几处同时统计（界面和后台、搬家的两边）互不覆盖。Files/Bytes 只是给进度显示看的，是最近开始的那次统计的数字。
 // SSD 上多线程一起数，机械硬盘上线程少一点（来回寻道反而慢）
 public static class DirStat {
-    public static long Files, Bytes;
-    // 统计时跳过的特殊项目（链接、用 Windows 压缩功能压过的文件等）的个数和第一个的位置
-    public static long Reparse; public static string ReparseSample;
+    static DirCount live = new DirCount();
+    public static long Files { get { return Interlocked.Read(ref live.Files); } }
+    public static long Bytes { get { return Interlocked.Read(ref live.Bytes); } }
     // 用户点了「取消」：数到一半就停。结果不完整，调用方看到取消标记后不会再用它做判断
     public static volatile bool Cancel;
     public static volatile bool ThreadsReady;
@@ -227,10 +234,12 @@ public static class DirStat {
         return Math.Max(2, Math.Min(4, Environment.ProcessorCount));
     }
 
-    public static long Measure(string root) {
-        Files = 0; Bytes = 0; Reparse = 0; ReparseSample = "";
-        if (string.IsNullOrEmpty(root)) return 0;
-        try { if (!Directory.Exists(root)) return 0; } catch { return 0; }
+    public static long Measure(string root) { return Count(root).Bytes; }
+    public static DirCount Count(string root) {
+        DirCount c = new DirCount();
+        live = c;
+        if (string.IsNullOrEmpty(root)) return c;
+        try { if (!Directory.Exists(root)) return c; } catch { return c; }
         string r0 = root.TrimEnd('\\', '/');
         if (r0.Length == 0 || (r0.Length == 2 && r0[1] == ':')) r0 = root;
         ConcurrentStack<string> work = new ConcurrentStack<string>();
@@ -248,18 +257,19 @@ public static class DirStat {
                     string d;
                     if (work.TryPop(out d)) {
                         try {
-                            if (!Cancel && r.Open(d)) {
+                            if (Cancel) c.Cancelled = true;
+                            else if (r.Open(d)) {
                                 long f = 0, b = 0;
                                 string sep = (d.EndsWith("\\") || d.EndsWith("/")) ? "" : System.IO.Path.DirectorySeparatorChar.ToString();
                                 while (r.Next()) {
                                     if (r.IsReparse) {
-                                        if (Interlocked.Increment(ref Reparse) == 1) lock (sampleLock) ReparseSample = d + sep + r.Name;
+                                        if (Interlocked.Increment(ref c.Reparse) == 1) lock (sampleLock) c.ReparseSample = d + sep + r.Name;
                                         continue;
                                     }
                                     if (r.IsDir) { Interlocked.Increment(ref pending); work.Push(d + sep + r.Name); }
-                                    else { f++; b += r.Size; if ((f & 1023) == 0) { Interlocked.Add(ref Files, f); Interlocked.Add(ref Bytes, b); f = 0; b = 0; } }
+                                    else { f++; b += r.Size; if ((f & 1023) == 0) { Interlocked.Add(ref c.Files, f); Interlocked.Add(ref c.Bytes, b); f = 0; b = 0; } }
                                 }
-                                Interlocked.Add(ref Files, f); Interlocked.Add(ref Bytes, b);
+                                Interlocked.Add(ref c.Files, f); Interlocked.Add(ref c.Bytes, b);
                                 if (n > 1 && Volatile.Read(ref started) < n && !work.IsEmpty) {   // IsEmpty 很快；Count 要数一遍
                                     if (Interlocked.Increment(ref started) <= n) {
                                         try { Thread t = new Thread(job); t.IsBackground = true; t.Start(); lock (helpers) helpers.Add(t); }
@@ -283,7 +293,8 @@ public static class DirStat {
             foreach (Thread t in ts) t.Join();
             lock (helpers) { if (helpers.Count == ts.Length) break; }
         }
-        return Bytes;
+        if (Cancel) c.Cancelled = true;
+        return c;
     }
 }
 

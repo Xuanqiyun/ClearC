@@ -15,6 +15,8 @@ $script:AppBuilt = [DateTime]'2026-10-24'   # 这一版的发布日期（发版�
 function GB($b) { "{0:N2} GB" -f ([double]$b / 1GB) }
 function FreeC { (Get-PSDrive C).Free }
 function DirBytes($p) { [double][DirStat]::Measure([string]$p) }
+# 统计一个文件夹：返回这一次自己的结果（.Files、.Bytes、.Reparse、.ReparseSample、.Cancelled），做判断都用它
+function DirCount($p) { [DirStat]::Count([string]$p) }
 # 向界面报告某一行的状态：kind = wait / run / ok / warn / fail / skip
 function SetStatus($idx, [string]$text, [string]$kind) { if ($sync -and $sync.Status) { $sync.Status[$idx] = @($text, $kind); $sync.StatusVer = [int]$sync.StatusVer + 1 } }
 
@@ -2179,19 +2181,19 @@ function Invoke-Move($it, $destRoot, $res) {
         $dstRoot = Split-Path $dst -Parent
         $pathNo = [int]$sync.P.PathNo + 1
         SetP @{ MovePhase = 'measure'; PathNo = $pathNo; MovePath = $src; MoveDest = $dst; MoveReuse = $reuse; SubKind = 'measure'; SubStart = (Get-Date); Detail = ((T "统计 {0} 的大小") -f $src) }
-        $srcBytes = DirBytes $src
+        $sc = DirCount $src; $srcBytes = [double]$sc.Bytes
         $cxNone = (T "已取消：{0} 还没开始复制，原文件夹没动") -f $src
-        if (Stopping) { Log "  $cxNone"; $res.Cancelled = $true; $res.Msgs += $cxNone; break }
-        if ([long][DirStat]::Reparse -gt 0) {
+        if ((Stopping) -or $sc.Cancelled) { Log "  $cxNone"; $res.Cancelled = $true; $res.Msgs += $cxNone; break }
+        if ($sc.Reparse -gt 0) {
             # 里面的链接（或系统压缩过的文件）复制和核对时都会被跳过，搬完删原目录时就会丢。宁可不搬
-            $m = (T "{0} 里有 {1} 个特殊项目（链接，或用 Windows 压缩功能压过的文件，比如 {2}）。复制时可能漏掉它们，为了不丢东西，这个文件夹不搬，原目录未动") -f $src, [DirStat]::Reparse, [DirStat]::ReparseSample
+            $m = (T "{0} 里有 {1} 个特殊项目（链接，或用 Windows 压缩功能压过的文件，比如 {2}）。复制时可能漏掉它们，为了不丢东西，这个文件夹不搬，原目录未动") -f $src, $sc.Reparse, $sc.ReparseSample
             Log "  $m"; OpLog '搬运' (T '搬家失败') $src $m; $res.Fail++; $res.Msgs += $m; continue
         }
         $haveBytes = [double]0
         if ($reuse) {
             SetP @{ SubStart = (Get-Date); Detail = ((T "统计上次留下的副本 {0}") -f $dst) }
-            $haveBytes = DirBytes $dst; $haveFiles = [long][DirStat]::Files
-            if (Stopping) { Log "  $cxNone"; $res.Cancelled = $true; $res.Msgs += $cxNone; break }
+            $hc = DirCount $dst; $haveBytes = [double]$hc.Bytes; $haveFiles = [long]$hc.Files
+            if ((Stopping) -or $hc.Cancelled) { Log "  $cxNone"; $res.Cancelled = $true; $res.Msgs += $cxNone; break }
             SetP @{ Detail = ((T "核对 {0} 是不是这个文件夹的旧副本") -f $dst) }
             $extra = Get-ExtraCount $dst $src
             # 副本里只要有一个 C 盘上没有（或比 C 盘上新）的文件就不复用：/E 会用 C 盘上的旧版本覆盖副本里新的，/MIR 会删掉它们
@@ -2239,9 +2241,9 @@ function Invoke-Move($it, $destRoot, $res) {
         if (($rc.Code -band 4) -ne 0) { $m = ((T "复制时有名字对不上的项目（robocopy 代码 {0}：同一个名字一边是文件一边是文件夹），原目录未动。打开 {1} 看看") -f $rc.Code, $dst); Log "  $m"; OpLog '搬运' (T '搬家失败') $src $m; $res.Fail++; $res.Msgs += $m; continue }
         SetP @{ MovePhase = 'verify'; SubKind = 'measure'; SubStart = (Get-Date); Detail = (T '复制完成，核对两边大小') }
         # 软件都已关掉，原目录不会再变：两边重新数一遍，文件个数一个不能少、总大小几乎一致，才继续（之后才会删 C 盘上的原目录）
-        $srcBytes = DirBytes $src; $srcFiles = [long][DirStat]::Files
-        $dstBytes = DirBytes $dst; $dstFiles = [long][DirStat]::Files
-        if (Stopping) { Log "  $cxCopied"; OpLog '搬运' (T '搬家已取消') $src $cxCopied; $res.Cancelled = $true; $res.Msgs += $cxCopied; break }
+        $sc = DirCount $src; $srcBytes = [double]$sc.Bytes; $srcFiles = [long]$sc.Files
+        $dc = DirCount $dst; $dstBytes = [double]$dc.Bytes; $dstFiles = [long]$dc.Files
+        if ((Stopping) -or $sc.Cancelled -or $dc.Cancelled) { Log "  $cxCopied"; OpLog '搬运' (T '搬家已取消') $src $cxCopied; $res.Cancelled = $true; $res.Msgs += $cxCopied; break }
         if ($dstFiles -lt $srcFiles -or [math]::Abs($dstBytes - $srcBytes) -gt [math]::Max([double]16MB, [double]$srcBytes * 0.001)) {
             $m = (T "核对不一致（源 {0:N0} 个文件 {1}，目标 {2:N0} 个文件 {3}），原目录未动") -f $srcFiles, (GB $srcBytes), $dstFiles, (GB $dstBytes)
             Log "  $m"; OpLog '搬运' (T '搬家失败') $src $m; $res.Fail++; $res.Msgs += $m; continue
@@ -2703,8 +2705,8 @@ function Invoke-MoveBack($rec, $res) {
     SetP @{ MoveItem = $true; MoveBack = $true; HasKill = [bool]$it.Kill; MovePhase = 'kill'; PathNo = 0; PathCount = 1; MovePath = $dst; MoveDest = $src; MoveReuse = $false }
     [void](Close-Holders $it $src); [void](Close-Holders $it $dst)
     SetP @{ MovePhase = 'measure'; SubKind = 'measure'; SubStart = (Get-Date); Detail = ((T "统计 {0} 的大小") -f $dst) }
-    $bytes = DirBytes $dst; $files = [long][DirStat]::Files
-    if (Stopping) { $res.Cancelled = $true; $res.Msg = (T '已取消，什么都没改'); return }
+    $dc = DirCount $dst; $bytes = [double]$dc.Bytes; $files = [long]$dc.Files
+    if ((Stopping) -or $dc.Cancelled) { $res.Cancelled = $true; $res.Msg = (T '已取消，什么都没改'); return }
     $free = [double](FreeC)
     if ($free -lt $bytes + 2GB) { $res.Msg = (T "C 盘只剩 {0}，放不下 {1}（还要留 2 GB 余量）") -f (GB $free), (GB $bytes); OpLog '搬运' (T '搬回 C 盘失败') $src $res.Msg; return }
     $tmp = "$src.cleanc_back"
@@ -2716,8 +2718,8 @@ function Invoke-MoveBack($rec, $res) {
     if ($rc.Cancelled) { Undo-MoveBackCopy $tmp $tmpFresh $dst $src $res; return }
     if ($rc.Code -ge 8 -or $rc.Code -lt 0) { $res.Msg = ((T "复制回 C 盘失败（robocopy 代码 {0}），什么都没改，复制了一半的临时文件夹在 {1}") -f $rc.Code, $tmp); OpLog '搬运' (T '搬回 C 盘失败') $src $res.Msg; return }
     SetP @{ MovePhase = 'verify'; SubKind = 'measure'; SubStart = (Get-Date); Detail = (T '核对两边是否一致') }
-    $b2 = DirBytes $tmp; $f2 = [long][DirStat]::Files
-    if (Stopping) { Undo-MoveBackCopy $tmp $tmpFresh $dst $src $res; return }
+    $tc = DirCount $tmp; $b2 = [double]$tc.Bytes; $f2 = [long]$tc.Files
+    if ((Stopping) -or $tc.Cancelled) { Undo-MoveBackCopy $tmp $tmpFresh $dst $src $res; return }
     if ($f2 -lt $files -or [math]::Abs($b2 - $bytes) -gt [math]::Max([double]16MB, [double]$bytes * 0.001)) {
         $res.Msg = (T "核对不一致（目标盘 {0:N0} 个文件，复制回来 {1:N0} 个），什么都没改") -f $files, $f2; OpLog '搬运' (T '搬回 C 盘失败') $src $res.Msg; return
     }
@@ -2773,8 +2775,8 @@ function Invoke-DropCopy($rec, $res) {
     }
     if (-not (Test-CmdPathOk $dst)) { $res.Msg = (T '路径里有 % 或引号，为了不删错地方，没法在这里删'); return }
     SetP @{ Detail = (T '核对副本里有没有 C 盘上没有的文件') }
-    $b = DirBytes $dst; $nf = [long][DirStat]::Files
-    if (Stopping) { $res.Msg = (T '已取消，副本没删'); return }
+    $dc = DirCount $dst; $b = [double]$dc.Bytes; $nf = [long]$dc.Files
+    if ((Stopping) -or $dc.Cancelled) { $res.Msg = (T '已取消，副本没删'); return }
     $extra = Get-ExtraCount $dst $src
     if ($extra -ne 0) {
         $res.Msg = if ($extra -lt 0) { (T '核对不了，不删') } else { ((T "副本里有 {0} 个文件在 C 盘原文件夹里没有（或比 C 盘上的新），这份副本可能是唯一的一份，所以不删。请打开两边对比后再决定") -f $extra) }
