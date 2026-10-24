@@ -572,7 +572,7 @@ $ctl.BtnDupDelete.Add_Click({
     if ($risky)      { $msg += ((T "`n`n其中 {0} 个文件带有「注意」提示（程序目录或微信数据），请确认确实要删。") -f $risky) }
     $btnDel = if ($recycle) { (T '移到回收站') } else { (T '永久删除') }
     $ack = (T '我已确认这些文件删除后不会给我带来损失；因删除造成的后果由我自己承担。')
-    if ((Show-Sheet -Kind danger -Title ((T "删除 {0} 个重复文件，释放 {1}？") -f $plan.Count, (Fmt $bytes)) -Text $msg -Buttons @((T '取消'), $btnDel) -Primary $btnDel -Cancel (T '取消') -Confirm $ack) -ne $btnDel) { return }
+    if ((Show-Sheet -Kind danger -Title ((T "删除 {0} 个重复文件，释放 {1}？") -f $plan.Count, (Fmt $bytes)) -Text $msg -Buttons @((T '取消'), $btnDel) -Primary $btnDel -Destructive $(if ($recycle) { '' } else { $btnDel }) -Cancel (T '取消') -Confirm $ack) -ne $btnDel) { return }
     $sync.Mode = 'dupdel'; $sync.DupDeleted = $null
     Start-Op ((T "删除 {0} 个重复文件") -f $plan.Count)
     UI-Busy $true

@@ -104,7 +104,7 @@ foreach ($k in $keys) {
 if (-not $fmtBad) { Ok 'translated format strings are valid' }
 
 # 6. 对话框的参数名都写对了
-$known = @('Title', 'Text', 'Items', 'Buttons', 'Primary', 'Cancel', 'Kind', 'Confirm', 'Extra')
+$known = @('Title', 'Text', 'Items', 'Buttons', 'Primary', 'Cancel', 'Kind', 'Confirm', 'Extra', 'Destructive')
 $sheetBad = 0
 foreach ($c in $ast.FindAll({ param($x) $x -is [System.Management.Automation.Language.CommandAst] -and $x.GetCommandName() -eq 'Show-Sheet' }, $true)) {
     $ps = @($c.CommandElements | Where-Object { $_ -is [System.Management.Automation.Language.CommandParameterAst] } | ForEach-Object { $_.ParameterName })
