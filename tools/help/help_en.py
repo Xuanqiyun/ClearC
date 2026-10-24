@@ -5,7 +5,7 @@ PAGE = dict(
     title='Help', sub='How to use ClearC, what it never touches, and how to report problems.',
     quick_title='Getting started',
     quick=[
-        ('One-click cleanup', 'On "Clean up C:", click "One-click cleanup": caches and temporary files are deleted and chat history moves to the drive with the most free space. Everything is listed for you to confirm first.'),
+        ('One-click cleanup', 'On "Clean up C:", click "One-click cleanup": caches and temporary files are deleted; nothing is moved. Everything is listed for you to confirm first. When chat history takes a lot of space, the page shows a separate card; click "Move chat history" there to move it to another drive.'),
         ('Choose for yourself', 'Click "Scan", choose "Delete", "Move to another drive" or "Skip" on each row, then click "Run selected".'),
         ('Find duplicates', 'In "Duplicates", choose where to look, click "Start search", check the results and delete the checked files.'),
         ('See what takes space', 'In "Space map", scan a drive and double-click folders to look inside, level by level.'),

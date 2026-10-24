@@ -206,6 +206,15 @@ function Invoke-UiTest {
                 $bad = @($script:rows | Where-Object { $_.Action -ne (T '跳过') -and (([string]$_.Group).StartsWith('需确认') -or ([string]$_.Group).StartsWith('自定义')) })
                 if ($bad.Count) { throw ("one-click picked: {0}" -f (($bad | ForEach-Object { $_.Name }) -join ', ')) }
                 if (@($script:rows | Where-Object { $_.Action -eq (T '删除') -and ([string]$_.Group).StartsWith('安全清理') }).Count -lt 3) { throw 'one-click picked no safe items' }
+                # 一键清理只删不搬；聊天记录大的时候单独一张卡片，小的时候不出现
+                $mv0 = @($script:rows | Where-Object { $_.Action -eq (T '搬到其他盘') })
+                if ($mv0.Count) { throw ("one-click moves: {0}" -f (($mv0 | ForEach-Object { $_.Name }) -join ', ')) }
+                $big = @{}; foreach ($k in $sizes.Keys) { $big[$k] = $sizes[$k] }
+                foreach ($c in $catalog) { if ($c.Kind -eq 'move' -and ([string]$c.G).StartsWith('聊天软件')) { $big[$c.Idx] = [double]300MB } }
+                Build-Rows $big
+                if ($ctl.ChatCard.Visibility -ne 'Visible' -or @($script:chatIdx).Count -lt 1 -or -not $ctl.ChatCardTitle.Text) { throw 'the chat-history card did not show' }
+                Build-Rows $sizes
+                if ($ctl.ChatCard.Visibility -ne 'Collapsed') { throw 'the chat-history card shows for small chat folders' }
                 # 只有 C 盘（没有搬家目标）时：要搬的项默认跳过，一键清理照样清，执行时不会整单放弃
                 $keepDest = $ctl.DestPick.SelectedIndex
                 try {

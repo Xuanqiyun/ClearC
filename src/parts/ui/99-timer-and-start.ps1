@@ -43,6 +43,10 @@ $timer.Add_Tick({
         if ($sync.WasCancelled) { UI-Log (T '已中途取消。') }
         # 删过、搬过东西以后，逐个扫描得到的旧树不再拿来用（读文件表的结果靠变更日志更新）
         if ($script:readOnlyModes -notcontains [string]$sync.Mode) { [DiskMap]::Invalidate() }
+        # 刚搬过东西（或者搬回来了）：「搬家管理」在普通用户模式下也列出来 / 没有搬走的了就收起来
+        if (@('run', 'appmove', 'movemany', 'moveback', 'moveresume') -contains [string]$sync.Mode) {
+            try { $hm = @(Get-MoveRecords | Where-Object { IsLink ([string]$_.Src) }).Count -gt 0; if ($hm -ne $script:hasMoves) { $script:hasMoves = $hm; Apply-Display } } catch {}
+        }
 
         if ($sync.Mode -eq 'scan') {
             if ($sync.WasCancelled -or -not $sync.Sizes) {
@@ -758,7 +762,7 @@ $win.Add_ContentRendered({
     if ($script:riskShown) { return }
     $script:riskShown = $true
     $script:prefetchTimer.Start()
-    if (Test-Path -LiteralPath $script:riskFile) { Show-HalfMoves; Show-LooseMoves; return }
+    if (Test-Path -LiteralPath $script:riskFile) { Show-HalfMoves; Show-LooseMoves; Show-BrokenMoves; return }
     $ans = Show-Sheet -Kind warn -Title (T '使用前请先阅读安全风险提示') `
         -Text (T "本工具会按你的选择删除或搬移电脑上的文件。删除的文件可能无法恢复，存在资料丢失的风险。`n`n每次删除前，请确认这些资料确实不再需要、删除不会给你带来损失；重要资料请先备份。因使用本工具造成的资料丢失或其他损失，责任由使用者自行承担，开发者不承担责任。`n`n完整说明随时可以在左侧「帮助」里查看。") `
         -Confirm (T '我已阅读并了解上述风险，同意自行承担使用本工具的后果。') -Buttons @((T '退出'), (T '同意并继续')) -Primary (T '同意并继续') -Cancel (T '退出')
@@ -768,7 +772,7 @@ $win.Add_ContentRendered({
         [IO.File]::WriteAllText($script:riskFile, ((T "{0:yyyy-MM-dd HH:mm:ss}  已同意（版本 {1}）") -f (Get-Date), $script:AppVersion), [Text.Encoding]::UTF8)
     } catch {}
     Write-LogFile (T '用户已同意安全风险提示')
-    Show-HalfMoves
+    Show-HalfMoves; Show-BrokenMoves
 })
 # 打开时查一下有没有上次没做完的搬家（数据都在，只是要告诉用户在哪）
 # 以前的版本搬走的文件夹，其他账户也能打开：问一次要不要改成和在 C 盘时一样（一个月最多问一次）
@@ -789,6 +793,25 @@ function Show-LooseMoves {
     Start-Worker @'
 $sync.AclRes = Repair-MovedAccess $arg.Items
 '@ @{ Items = $l }
+}
+# 搬走过东西的（不管什么模式）：左边列出「搬家管理」，搬走的东西在哪、链接好不好都看得到。
+# 链接断了的（目标盘拔了、盘符变了）：打开时说一声，一天最多一次
+$script:hasMoves = $false
+function Show-BrokenMoves {
+    $recs = @(); try { $recs = @(Get-MoveRecords | Where-Object { IsLink ([string]$_.Src) }) } catch { return }
+    $had = $script:hasMoves
+    $script:hasMoves = $recs.Count -gt 0
+    if ($script:hasMoves -ne $had) { Apply-Display }
+    if ($script:worker) { return }
+    $bad = @($recs | Where-Object { (Get-MoveState $_).State -eq 'broken' })
+    if ($bad.Count -eq 0) { return }
+    $key = '{0:yyyyMMdd}|{1}' -f (Get-Date), $bad.Count
+    if ((Get-Setting 'BrokenAsked' '') -eq $key) { return }
+    Set-Setting 'BrokenAsked' $key
+    $go = T '打开搬家管理'
+    $ans = Show-Sheet -Kind warn -Title (T '有搬走的文件夹找不到了') -Text (T "下面这些文件夹搬到了其他盘，C 盘上只留了链接，但链接指向的地方现在找不到（那块盘没插着，或者盘符变了）。用到它们的软件现在打不开，聊天软件会像没有记录一样。`n`n把那块盘插上就好；盘符变了的，可以在「搬家管理」里改指向。") `
+        -Items @($bad | ForEach-Object { (T "{0} → {1}") -f $_.Src, $_.Dst }) -Buttons @((T '知道了'), $go) -Primary $go -Cancel (T '知道了')
+    if ($ans -eq $go) { Show-Page 'moves' }
 }
 function Show-HalfMoves {
     # 有进度记录的：说清楚停在哪一步，可以接着做完或撤回

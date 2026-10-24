@@ -78,7 +78,7 @@ function Apply-Mode {
     try { $ctl.SetModeBasic.IsChecked = ($m -eq 0); $ctl.SetModePro.IsChecked = ($m -eq 1); $ctl.SetModeExpert.IsChecked = ($m -eq 2) } finally { $script:setLoading = $false }
     Apply-Display
     # 正在看的页面在这个模式下没有了：回到清理页
-    if ($script:curPage -and $script:pageLvl.ContainsKey($script:curPage) -and $script:pageLvl[$script:curPage] -gt $m) { Show-Page 'clean' }
+    if ($script:curPage -and $script:pageLvl.ContainsKey($script:curPage) -and $script:pageLvl[$script:curPage] -gt $m -and -not ($script:curPage -eq 'moves' -and $script:hasMoves)) { Show-Page 'clean' }
     if ($script:mapRoot) { try { $ctl.BtnMapAcct.Visibility = if ($script:mapRoot.HasDisk -and $m -ge 2) { 'Visible' } else { 'Collapsed' } } catch {} }
 }
 function Set-Mode([string]$mode) {
@@ -126,7 +126,7 @@ function Apply-Display {
     $ctl.MapFast.Visibility = & $vis ((Get-Flag 'MapFastBtn') -and $m -ge 2)
     $hp = Get-HiddenSet 'HidePages'
     $show = @{}
-    foreach ($k in $script:optPages.Keys) { $show[$k] = (-not $hp.ContainsKey($k)) -and (-not $script:pageLvl.ContainsKey($k) -or $script:pageLvl[$k] -le $m); $ctl[$script:pageList[$k][1]].Visibility = & $vis $show[$k] }
+    foreach ($k in $script:optPages.Keys) { $show[$k] = (-not $hp.ContainsKey($k)) -and (-not $script:pageLvl.ContainsKey($k) -or $script:pageLvl[$k] -le $m -or ($k -eq 'moves' -and $script:hasMoves)); $ctl[$script:pageList[$k][1]].Visibility = & $vis $show[$k] }
     $ctl.NavHeadManage.Visibility = & $vis ($show['moves'] -or $show['auto'] -or $show['log'])
     $hl = Get-HiddenSet 'HideLinks'
     foreach ($k in $script:optLinks.Keys) { $ctl[$script:optLinks[$k][1]].Visibility = & $vis ((-not $hl.ContainsKey($k)) -and (-not $script:linkLvl.ContainsKey($k) -or $script:linkLvl[$k] -le $m)) }
