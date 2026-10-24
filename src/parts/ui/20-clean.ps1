@@ -341,11 +341,24 @@ $ctl.BtnCleanSkipTab.Add_Click({
     $script:planSig = ''; Update-CleanSummary; Apply-CleanFilter
 })
 
+Register-BgJob 'scan' -Cancel look -Stop { $script:oneClickPending = $false } -ReadOnly -Done {
+    if ($sync.WasCancelled -or -not $sync.Sizes) {
+        $script:oneClickPending = $false
+        $sync.Sizes = $script:prevSizes
+        End-Op $(if ($sync.WasCancelled) { (T '已中途取消，列表没有更新') } else { (T '没有完成') })
+        if ($script:rows) { $ctl.Summary.Text = (T '扫描已取消，下面还是上一次扫描的结果。') }
+        else { $ctl.Summary.Text = (T '扫描已取消。点「扫描」重新开始。'); $ctl.EmptyCleanText.Text = (T '扫描已取消。点「扫描」重新开始。') }
+    } else {
+        Build-Rows $sync.Sizes; End-Op (T '完成')
+        if ($script:oneClickPending) { $script:oneClickPending = $false; $script:runAfterScan = $true }
+        elseif ($script:firstRun) { $script:firstRun = $false; $script:firstResult = $true }
+    }
+}
 function Do-Scan([switch]$Quiet) {
     $ctl.Summary.Text = (T '正在扫描，一般几秒钟…')
     if (-not $script:rows) { $ctl.EmptyCleanText.Text = (T '正在扫描…') }
     $script:prevSizes = $sync.Sizes   # 扫描中途取消时，列表还用上一次的结果
-    $sync.Mode = 'scan'; $sync.Sizes = $null
+    Use-BgJob 'scan'; $sync.Sizes = $null
     if (-not $Quiet) { Start-Op (T '扫描可清理项') }
     UI-Busy $true
     Start-Worker @'
@@ -521,6 +534,32 @@ function Get-BusyApps([string[]]$apps) {
     return ,$names
 }
 
+Register-BgJob 'run' -Cancel run -Moves -Done {
+    $script:candScanned = $false
+    $after = [double](FreeC); $freed = $after - $script:runFreeC0
+    $cardWasOpen = ($ctl.Overlay.Visibility -eq 'Visible')
+    $head = (T "C 盘剩余：{0} → {1}，释放了 {2}") -f (GB $script:runFreeC0), (GB $after), (GB ([math]::Max([double]0, [double]$freed)))
+    $waitNote = ''
+    if ([int]$sync.WaitCount -gt 0) {
+        $waitNote = (T "有 {0} 个文件夹已经复制好，但原文件夹还被别的程序占着，没换成链接。彻底退出相关的聊天软件（包括右下角托盘图标）后再点一次「执行」，会接着用复制好的副本，很快完成。") -f [int]$sync.WaitCount
+        $head += "`n" + $waitNote
+    }
+    $cx = [bool]$sync.WasCancelled
+    if ($cx) { $head = (T '已中途取消：还没开始的项目都没做，已经做完的不会撤销。') + "`n" + $head }
+    $endText = if ($cx) { (T "已中途取消，释放 {0}，C 盘现在剩余 {1}") } else { (T "完成，释放 {0}，C 盘现在剩余 {1}") }
+    End-Op ($endText -f (GB ([math]::Max([double]0, [double]$freed))), (GB $after)) -KeepCard -headline $head -reportLines (Plan-Lines)
+    if (-not $cx) { if ($ctl.Overlay.Visibility -eq 'Visible') { $script:askRemind = $true } else { $script:askRemindNow = $true } }
+    $sumText = if ($cx) { (T "已中途取消：C 盘从剩余 {0} 变成 {1}。每一项的结果写在列表里；想看还剩什么，再点「扫描」。") } else { (T "已完成：C 盘从剩余 {0} 变成 {1}。每一项的结果写在列表里；想看还剩什么，再点「扫描」。") }
+    $ctl.Summary.Text = $sumText -f (GB $script:runFreeC0), (GB $after)
+    $script:reclaim = [double]0
+    $lines = @(); if ($sync.RunSummary) { $lines = @($sync.RunSummary) }
+    $shown = @($lines | Select-Object -First 22)
+    if ($lines.Count -gt 22) { $shown += ((T "……另有 {0} 项，见左下角「运行记录」") -f ($lines.Count - 22)) }
+    if (-not $cardWasOpen) { $script:pendingDialog = @{ Title = $(if ($cx) { (T '已中途取消') } else { (T '执行完成') }); Kind = $(if ($waitNote -or $cx) { 'warn' } else { 'done' }); Items = $shown
+        Text = (T "共用时 {0}。C 盘剩余 {1} → {2}，释放 {3}。{4}") -f (FmtSpan $script:lastElapsed), (GB $script:runFreeC0), (GB $after), (GB ([math]::Max([double]0, [double]$freed))), $(if ($waitNote) { "`n`n" + $waitNote } else { '' }) } }
+    try { [System.Media.SystemSounds]::Asterisk.Play() } catch {}
+    Fill-DestChoices
+}
 # $OnlyMove：只搬这几项（聊天记录卡片上的按钮），列表里其他行的选择不管
 function Invoke-RunSelected([string]$title = (T '开始处理所选项'), [object[]]$OnlyMove = $null) {
     $plan = @()
@@ -642,7 +681,7 @@ function Invoke-RunSelected([string]$title = (T '开始处理所选项'), [objec
     }
     $script:runFreeC0 = [double](FreeC)
     $script:runPlan = $plan
-    $sync.Mode = 'run'; Start-Op $title; UI-Busy $true
+    Use-BgJob 'run'; Start-Op $title; UI-Busy $true
     if ($moves) { UI-Log ((T "搬家目标：{0}") -f $dest) }
     UI-Log ((T "开始执行 {0} 项...") -f $plan.Count)
     Start-Worker @'

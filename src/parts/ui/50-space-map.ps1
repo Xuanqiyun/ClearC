@@ -154,13 +154,37 @@ $ctl.MapHealth.AddHandler([System.Windows.UIElement]::MouseLeftButtonUpEvent, [S
     if (-not $el) { return }
     Select-MapDriveCard ([string]$el.Tag.Letter) $true
 })
+Register-BgJob 'map' -Cancel look -ReadOnly -Done {
+    $root = $sync.MapResult
+    $mm = [string]$sync.MapMethod; $secs = [double]$sync.MapMs / 1000
+    # 读文件表时，读完以后（核对的时候）才点停止的，结果是完整的
+    $stopped = ($mm -eq 'mft-partial') -or ([DiskMap]::Cancel -and $mm -notlike 'mft*')
+    if ($sync.MapNote -and $mm -notlike 'mft*') { UI-Log ((T "空间地图：没能直接读取文件表（{0}），改为逐个文件夹扫描") -f $sync.MapNote) }
+    if ($root) {
+        $script:mapHow = if ($mm -eq 'mft-usn') { (T '按变更日志更新') } elseif ($mm -like 'mft*') { (T '直接读文件表') } else { (T '逐个文件夹扫描') }
+        UI-Log ((T "空间地图：{0}，用时 {1:N1} 秒") -f $script:mapHow, $secs)
+        [DiskMap]::Use($root)
+        $script:mapMethod = $mm
+        $script:mapRoot = $root; $script:mapCur = $root; $script:mapScanAt = Get-Date
+        Reset-MapHistory; $script:worthKey = $null
+        $script:movedTargets = $null
+        $script:prevSnap = $null
+        if (-not $stopped) { try { Update-Growth $root } catch { $script:growNote = (T '没能和上次比较') } } else { $script:growNote = (T '这次扫描中途停止了，不和上次比较') }
+        End-Op ($(if ($stopped) { (T "已中途停止，看过 {0:N0} 个文件，共 {1}") } else { (T "完成，{0:N0} 个文件，共 {1}") }) -f $root.Files, (Fmt $root.Size))
+        $script:recentRows = $null; $script:recentNote = ''
+        if ($script:mapView -eq 'grow') { Set-MapView 'grow' } elseif ($script:mapView -eq 'files') { Show-MapOverview; Show-MapFiles } elseif ($script:mapView -eq 'types') { Show-MapTypes } elseif ($script:mapView -eq 'recent') { Show-MapOverview; Show-MapRecent } else { Show-MapLevel $root }
+        if ($stopped) { $ctl.MapInfo.Text = (T '扫描中途停止了，下面只是已经看过的部分') }
+        Add-History
+    } else { End-Op (T '没有完成') }
+    $ctl.BtnMapStop.IsEnabled = $false
+}
 function Start-MapScan([string]$root) {
     if ($script:worker -or -not $root) { return }
     $di = $null; try { $di = New-Object System.IO.DriveInfo $root } catch {}
     $sync.MapUsed = if ($di) { [double]($di.TotalSize - $di.AvailableFreeSpace) } else { [double]0 }
     $sync.MapRoot = $root; $sync.MapResult = $null; $sync.MapMethod = ''; $sync.MapNote = ''
     [DiskMap]::Cancel = $false
-    $sync.Mode = 'map'
+    Use-BgJob 'map'
     Start-Op ((T "扫描 {0}") -f $root)
     UI-Busy $true; $ctl.BtnMapStop.IsEnabled = $true
     $ctl.EmptyMap.Visibility = 'Visible'; $ctl.EmptyMapText.Text = (T '正在扫描…')
@@ -919,11 +943,24 @@ function Show-MapRecent {
     $ctl.BtnMapExport.IsEnabled = ($rows.Count -gt 0); $ctl.BtnMapReport.IsEnabled = [bool]$script:mapRoot
     Update-MapSel
 }
+Register-BgJob 'recent' -Cancel look -ReadOnly -Done {
+    End-Op (T '完成')
+    $script:recentRows = $sync.RecentResult
+    $n = [string]$sync.RecentNote
+    $script:recentNote = switch -Wildcard ($n) {
+        'no-index' { (T '这块盘的文件表不在内存里了，再扫描一次就可以') }
+        'no-journal' { (T '这块盘没有开变更日志（USN Journal），Windows 一般只给系统盘开') }
+        'refs' { (T '这块盘的变更日志是 ReFS 的格式，暂时不认') }
+        'journal-from:*' { (T "按变更日志统计，最近 {0} 天。日志只保留到 {1:yyyy-MM-dd HH:mm}，更早的改动看不到。大小按文件现在的大小算，删掉的只计个数；只列改动最集中的文件夹") -f $sync.RecentDays, [DateTime]::FromFileTimeUtc([long]$n.Substring(13)).ToLocalTime() }
+        default { (T "按变更日志统计，最近 {0} 天。大小按文件现在的大小算（日志里没有写了多少字节），删掉的只计个数；只列改动最集中的文件夹") -f $sync.RecentDays }
+    }
+    if ($script:mapView -eq 'recent') { Show-MapRecent }
+}
 function Start-MapRecent {
     if ($script:worker -or -not $script:mapRoot) { return }
     $days = 1; $t = $ctl.MapRecentDays.SelectedItem; if ($t) { $days = [int]([string]$t.Tag) }
     if ([string]$script:mapMethod -notlike 'mft*') { $script:recentRows = $null; $script:recentNote = (T '这块盘是逐个文件夹扫描的，没有读文件表，看不了变更日志。打开「快速扫描」再扫一次就可以'); Show-MapRecent; return }
-    $sync.Mode = 'recent'; $sync.RecentResult = $null; $sync.RecentNote = ''; $sync.RecentDays = $days
+    Use-BgJob 'recent'; $sync.RecentResult = $null; $sync.RecentNote = ''; $sync.RecentDays = $days
     Start-Op (T '读取变更日志') -NoCard; UI-Busy $true
     $ctl.EmptyMap.Visibility = 'Visible'; $ctl.EmptyMapText.Text = (T '正在读变更日志…'); $ctl.MapList.ItemsSource = $null
     Start-Worker @'
@@ -1591,6 +1628,33 @@ function Compare-Snapshot($root) {
 
 # 删除：移到回收站或永久删除，都要先勾选确认
 $ctl.BtnMapDelete.Add_Click({ Start-MapDelete @($ctl.MapList.SelectedItems) })
+Register-BgJob 'mapdel' -Cancel dupdel -Done {
+    $res = $sync.MapDel
+    $okSet = @{}; if ($res) { foreach ($p in $res.Ok) { $okSet[([string]$p).ToLowerInvariant()] = $true } }
+    foreach ($r in @($script:mapDelRows)) {
+        if (-not $okSet.ContainsKey(([string]$r.Path).ToLowerInvariant())) { continue }
+        if ($r.Node) { [DiskMap]::Detach($r.Node) }
+        else {
+            $pn = [DiskMap]::Find($script:mapRoot, (Split-Path $r.Path -Parent))
+            if ($pn) { [DiskMap]::DropFile($pn, $r.Size, $r.Disk, [bool]$r.Shared) }
+            [DiskMap]::ForgetFile($r.Path)
+        }
+    }
+    $nOk = $okSet.Count; $fails = @(); if ($res) { $fails = @($res.Fail) }
+    $one = (@($script:mapDelRows).Count -eq 1)
+    $txt = if ($sync.WasCancelled) { (T "已中途取消，删除了 {0} 项") -f $nOk } elseif ($fails.Count -eq 0) { $(if ($one) { (T "已删除 {0}") -f @($script:mapDelRows)[0].Name } else { (T "已删除 {0} 项") -f $nOk }) } elseif ($nOk -eq 0) { (T '没有删掉') } else { (T "删除了 {0} 项，{1} 项没删掉") -f $nOk, $fails.Count }
+    # 实际多出来多少空间（删前删后各问一次 Windows）；删掉的从待删清单里拿掉
+    $gain = @(foreach ($d in @($script:mapDelFree.Keys)) { $g = (DriveFree ($d + '\')) - [double]$script:mapDelFree[$d]; if ($g -ge 10MB) { (T "{0} 多出 {1}") -f $d, (Fmt $g) } })
+    if ($gain.Count -gt 0) { $txt += (T '，') + ($gain -join (T '，')) }
+    foreach ($k in @($okSet.Keys)) { $kk = $k.TrimEnd(''); if ($script:mapMarks.Contains($kk)) { $script:mapMarks.Remove($kk) } }
+    Update-MapMarks
+    End-Op $txt
+    if ($nOk -gt 0) { if ($script:mapView -eq 'files') { Show-MapFiles } elseif ($script:mapView -ne 'grow') { Show-MapLevel $script:mapCur } }
+    if ($fails.Count -gt 0) {
+        $script:pendingDialog = @{ Title = $(if ($nOk -eq 0) { (T '没有删掉') } else { (T '有的没有删掉') }); Kind = 'warn'; Items = @($fails | Select-Object -First 20)
+            Text = (T '下面这些没有删掉。正被别的程序打开的文件，关掉那个程序后再删一次。') }
+    }
+}
 # 删除空间地图里的几行（下面的按钮删选中的；右键菜单删右键点到的）
 function Start-MapDelete($sel) {
     if ($script:worker) { return }
@@ -1640,7 +1704,7 @@ function Start-MapDelete($sel) {
     $ans = Show-Sheet -Kind danger -Title $title -Text $text -Items $items `
         -Confirm (T '我已确认这些资料不再需要，删除不会给我带来损失；因删除造成的后果由我自己承担。') -Buttons @((T '取消'), (T '永久删除'), (T '移到回收站')) -Destructive (T '永久删除') -Primary (T '移到回收站') -Cancel (T '取消')
     if ($ans -ne (T '移到回收站') -and $ans -ne (T '永久删除')) { return }
-    $sync.Mode = 'mapdel'; $sync.MapDel = $null
+    Use-BgJob 'mapdel'; $sync.MapDel = $null
     $script:mapDelRows = $rows
     $script:mapDelFree = @{}; foreach ($d in @($rows | ForEach-Object { ([string]$_.Path).Substring(0, 2).ToUpperInvariant() } | Select-Object -Unique)) { $script:mapDelFree[$d] = DriveFree ($d + '\') }
     Start-Op $(if ($rows.Count -eq 1) { (T "删除 {0}") -f $rows[0].Name } else { (T "删除 {0} 项") -f $rows.Count })
@@ -1665,6 +1729,15 @@ $sync.MapDel = $res
 '@ @{ Items = @($rows | ForEach-Object { @{ Path = [string]$_.Path; IsDir = [bool]$_.IsDir; Size = [double]$_.Size } }); Recycle = ($ans -eq (T '移到回收站')) }
 }
 
+Register-BgJob 'fcompress' -Cancel fcompress -Done {
+    $x = $sync.FcResult
+    if ($x) {
+        $saved = [math]::Max([double]0, $x.Before - $x.After)
+        End-Op ($(if ($x.Cancelled) { (T "已中途取消，省了 {0}") } else { (T "完成，省了 {0}") }) -f (Fmt $saved))
+        $ctl.SaveFcState.Text = (T "上次压缩：{0}，实际占用 {1} → {2}，省了 {3}") -f $x.Path, (Fmt $x.Before), (Fmt $x.After), (Fmt $saved)
+        $script:pendingDialog = @{ Title = $(if ($x.Cancelled) { (T '压缩已中途取消') } else { (T '压缩完成') }); Kind = 'done'; Text = ((T "{0}`n`n实际占用 {1} → {2}，省了 {3}。文件照常使用。") -f $x.Path, (Fmt $x.Before), (Fmt $x.After), (Fmt $saved)) + $(if ($x.Cancelled) { (T "`n`n已经压缩的文件保持压缩，剩下的没压缩。想压缩剩下的，再压缩一次这个文件夹就好。") } else { '' }) }
+    } else { End-Op (T '没有完成') }
+}
 # 压缩文件夹（NTFS）：空间地图和「省空间」页共用
 function Start-FolderCompress([string]$path) {
     if ($script:worker) { return }
@@ -1672,7 +1745,7 @@ function Start-FolderCompress([string]$path) {
     if ($why) { Show-Sheet -Kind warn -Title (T '这个文件夹不适合这样压缩') -Text $why | Out-Null; return }
     $ans = Show-Sheet -Title (T '压缩这个文件夹？') -Text ((T "{0}`n`n用 Windows 自带的 NTFS 压缩：文件照常打开、照常修改，只是占的空间变小。文档、代码、日志通常能省一半；照片、视频、压缩包几乎省不了。文件多的话要几分钟。") -f $path) -Buttons @((T '取消'), (T '压缩')) -Primary (T '压缩') -Cancel (T '取消')
     if ($ans -ne (T '压缩')) { return }
-    $sync.Mode = 'fcompress'; $sync.FcResult = $null
+    Use-BgJob 'fcompress'; $sync.FcResult = $null
     Start-Op (T '压缩文件夹')
     UI-Busy $true
     Start-Worker @'

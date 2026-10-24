@@ -422,13 +422,25 @@ $ctl.DupList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickEv
 $ctl.ModeSimilar.Add_Checked({ $ctl.SimilarRow.Visibility = 'Visible'; Update-FilterSummary })
 $ctl.ModeSimilar.Add_Unchecked({ $ctl.SimilarRow.Visibility = 'Collapsed'; Update-FilterSummary })
 $script:dupSimilar = $false
+Register-BgJob 'similar' -Cancel look -ReadOnly -Done {
+    $res = $sync.DupResult
+    $cnt = if ($res) { $res.Count } else { 0 }
+    $script:dupSimilar = $true
+    $ctl.DupProgressText.Text = [string]$sync.SimNote
+    End-Op ((T "完成，{0} 组相似照片") -f $cnt)
+    if ($res) { Build-DupRows $res $cnt } else { Build-DupRows @() 0 }
+    if ($script:dupRows -and $script:dupRows.Count -gt 0) {
+        Pick-Dup 'none'
+        UI-Log (T '相似照片不是同一个文件：没有自动勾选。每组第一张是分辨率最高的，看过以后自己勾要处理的；只能放进回收站或归档，不能永久删除，也不能合并。')
+    } elseif (-not $sync.WasCancelled) { $ctl.EmptyDupText.Text = (T '没有找到相似的照片') }
+}
 function Start-SimilarScan([string[]]$paths, $range) {
     if (-not (Initialize-PhotoHash)) { Show-Sheet -Kind warn -Title (T '这台电脑上用不了相似照片') -Text (T '图片解码组件没有加载成功（运行记录里有原因）。') | Out-Null; return }
     $dist = if ($ctl.SimStrict.IsChecked) { 4 } elseif ($ctl.SimLoose.IsChecked) { 12 } else { 8 }
     $script:dupRows = $null; $script:dupByGroup = @{}; $ctl.DupList.ItemsSource = $null
     $ctl.EmptyDup.Visibility = 'Visible'; $ctl.EmptyDupText.Text = (T '正在找照片…')
     Set-DupFilterOpen $false
-    $sync.Mode = 'similar'; $sync.DupResult = $null; $sync.SimNote = ''
+    Use-BgJob 'similar'; $sync.DupResult = $null; $sync.SimNote = ''
     Start-Op (T '查找相似照片')
     $ctl.DupProgressText.Text = (T '正在找照片…')
     UI-Busy $true
@@ -472,6 +484,19 @@ foreach ($g in $sorted) { $sync.DupResult.Add($g) }
 $sync.SimNote = (T "看了 {0:N0} 张照片，{1:N0} 张读不了，{2} 组相似{3}") -f $list.Count, [PhotoHash]::Failed, $groups.Count, $(if ($stopped) { (T '（中途停止）') } else { '' })
 '@ @{ Roots = [string[]]$paths; Min = [long][math]::Max([double]1, [double]$range.Min); Max = [long]$range.Max; Dist = $dist }
 }
+Register-BgJob 'dup' -Cancel look -Stop { [DupFinder]::Cancel = $true } -ReadOnly -Done {
+    $script:dupSimilar = $false
+    $res = $sync.DupResult
+    $cnt = if ($res) { $res.Count } else { 0 }
+    $stopped = [DupFinder]::Cancel
+    $ctl.DupProgressText.Text = ((T "{0}看过 {1:N0} 个文件夹、{2:N0} 个文件，找到 {3:N0} 组重复。") -f $(if ($stopped) { (T '已停止。') } else { (T '查找完成。') }), [DupFinder]::DirsSeen, [DupFinder]::FilesSeen, $cnt)
+    End-Op $(if ($stopped) { ((T "已停止，找到 {0} 组") -f $cnt) } else { ((T "完成，找到 {0} 组") -f $cnt) })
+    if ($res) { Build-DupRows $res $cnt } else { Build-DupRows @() 0 }
+    if ($script:dupRows -and $script:dupRows.Count -gt 0) {
+        Pick-Dup 'new'
+        UI-Log (T '已自动勾选：每组留最新的一份，其余删除。可以改勾选，或点上面的按钮换一种留法。')
+    }
+}
 $ctl.BtnDupScan.Add_Click({
     $paths = @($script:roots | Where-Object { $_.Enabled } | ForEach-Object { $_.Path })
     if (-not $paths) { Show-Sheet -Title (T '还没选查找位置') -Text (T '请在「查找位置」里至少勾选一个文件夹或磁盘。') | Out-Null; Set-DupFilterOpen $true 'roots'; return }
@@ -491,7 +516,7 @@ $ctl.BtnDupScan.Add_Click({
     }
     $sync.DriveNote = ''
     Set-DupFilterOpen $false
-    $sync.Mode = 'dup'; $sync.DupResult = $null
+    Use-BgJob 'dup'; $sync.DupResult = $null
     Start-Op (T '查找重复文件')
     $ctl.DupProgressText.Text = (T '正在查找…')
     UI-Busy $true
@@ -539,6 +564,33 @@ if (-not [DupFinder]::UsedFastEnum) { Log (T '提示：快速列举不可用，�
 
 $ctl.BtnDupStop.Add_Click({ [DupFinder]::Cancel = $true; try { [PhotoHash]::Cancel = $true } catch {}; UI-Log (T "正在停止...") })
 
+Register-BgJob 'dupdel' -Cancel dupdel -Stop { [DupFinder]::Cancel = $true } -Done {
+    $moveMode = ($sync.Mode -eq 'dupmove')
+    $gone = @{}
+    if ($sync.DupDeleted) { foreach ($p in $sync.DupDeleted) { $gone[$p.ToLowerInvariant()] = $true } }
+    $left = New-Object System.Collections.Generic.List[DupGroup]
+    foreach ($g in $script:dupGroups) {
+        $ng = New-Object DupGroup
+        $ng.Name = $g.Name; $ng.Size = $g.Size; $ng.Verified = $g.Verified
+        foreach ($f in $g.Files) { if (-not $gone.ContainsKey($f.Path.ToLowerInvariant())) { $ng.Files.Add($f) } }
+        if ($ng.Files.Count -ge 2) { $left.Add($ng) }
+    }
+    Build-DupRows $left $left.Count
+    $nDel = if ($sync.DupDeleted) { $sync.DupDeleted.Count } else { 0 }
+    $cardWasOpen = ($ctl.Overlay.Visibility -eq 'Visible')
+    if ($moveMode) {
+        $cx = [bool]$sync.WasCancelled
+        End-Op ($(if ($cx) { (T "已中途取消，归档了 {0} 个文件") } else { (T "完成，归档了 {0} 个文件") }) -f $nDel)
+        UI-Log ((T "归档完成：{0} 个文件已搬到 {1}") -f $nDel, $sync.DupMoveDest)
+    } else {
+        $bin = if ($script:lastRecycle) { (T "`n`n文件在回收站里，清空回收站后才真正释放磁盘空间。") } else { '' }
+        $binShort = if ($script:lastRecycle) { (T '文件在回收站里，清空回收站后才真正释放空间。') } else { '' }
+        $cx = [bool]$sync.WasCancelled
+        End-Op ($(if ($cx) { (T "已中途取消，删除了 {0} 个文件") } else { (T "完成，删除了 {0} 个文件") }) -f $nDel) -KeepCard -headline ($(if ($cx) { (T "已中途取消：删除了 {0} 个重复文件，剩下的没删。{1}") } else { (T "删除了 {0} 个重复文件。{1}") }) -f $nDel, $binShort) -reportLines @(,@((T '没删的（内容和保留的那份不完全相同，或文件被占用）记在左下角的「运行记录」里。'), '#6E6E73', $false))
+        try { [System.Media.SystemSounds]::Asterisk.Play() } catch {}
+        if (-not $cardWasOpen) { $script:pendingDialog = @{ Title = $(if ($cx) { (T '已中途取消') } else { (T '删除完成') }); Kind = 'done'; Text = ((T "删除了 {0} 个重复文件，共用时 {1}。{2}`n`n没删的（内容和保留的那份不完全相同，或文件被占用）记在「运行记录」里。") -f $nDel, (FmtSpan $script:lastElapsed), $bin) } }
+    }
+}
 $ctl.BtnDupDelete.Add_Click({
     $plan = New-Object System.Collections.ArrayList
     $allChecked = 0; $risky = 0; $bytes = [double]0
@@ -573,7 +625,7 @@ $ctl.BtnDupDelete.Add_Click({
     $btnDel = if ($recycle) { (T '移到回收站') } else { (T '永久删除') }
     $ack = (T '我已确认这些文件删除后不会给我带来损失；因删除造成的后果由我自己承担。')
     if ((Show-Sheet -Kind danger -Title ((T "删除 {0} 个重复文件，释放 {1}？") -f $plan.Count, (Fmt $bytes)) -Text $msg -Buttons @((T '取消'), $btnDel) -Primary $btnDel -Destructive $(if ($recycle) { '' } else { $btnDel }) -Cancel (T '取消') -Confirm $ack) -ne $btnDel) { return }
-    $sync.Mode = 'dupdel'; $sync.DupDeleted = $null
+    Use-BgJob 'dupdel'; $sync.DupDeleted = $null
     Start-Op ((T "删除 {0} 个重复文件") -f $plan.Count)
     UI-Busy $true
     UI-Log ((T "开始删除 {0} 个重复文件...") -f $plan.Count)

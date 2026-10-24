@@ -1,6 +1,7 @@
 # ------------------------------------------------------------
 # 重复文件：合并为一份（硬链接）
 # ------------------------------------------------------------
+Register-BgJob 'dupmove' -Cancel dupdel -Done (Get-BgJob 'dupdel').Done
 # 归档：不删，把勾选的搬到选定的文件夹（<文件夹>\<盘符>\<原路径>），每组照样至少留一份不动
 $ctl.BtnDupMove.Add_Click({
     if ($script:worker) { return }
@@ -26,7 +27,7 @@ $ctl.BtnDupMove.Add_Click({
     $text = (T "把 {0} 个勾选的文件搬到 {1}，共 {2}。不删任何东西：每个文件放到「{1}\盘符\原来的路径」，保留的那份留在原地。跨盘的会复制再删原件。`n`n归档以后这些文件就不在原来的位置了，用到它们的程序要重新指路径。") -f $plan.Count, $dest, (Fmt $bytes)
     if ($allChecked) { $text += ((T "`n`n另有 {0} 组所有副本都被勾选，这些组会跳过。") -f $allChecked) }
     if ((Show-Sheet -Title ((T "归档 {0} 个文件？") -f $plan.Count) -Text $text -Buttons @((T '取消'), (T '归档')) -Primary (T '归档') -Cancel (T '取消')) -ne (T '归档')) { return }
-    $sync.Mode = 'dupmove'; $sync.DupDeleted = $null; $sync.DupMoveDest = $dest
+    Use-BgJob 'dupmove'; $sync.DupDeleted = $null; $sync.DupMoveDest = $dest
     Start-Op ((T "归档 {0} 个文件") -f $plan.Count)
     UI-Busy $true
     UI-Log ((T "开始归档 {0} 个文件到 {1}") -f $plan.Count, $dest)
@@ -62,6 +63,21 @@ Log ((T "归档完成：{0} 个文件，{1}；失败 {2} 个。") -f $done.Count
 $sync.DupDeleted = $done
 '@ @{ Plan = $plan; Dest = $dest; Protect = [bool]$ctl.DupProtect.IsChecked }
 })
+Register-BgJob 'merge' -Cancel merge -Stop { [DupFinder]::Cancel = $true } -Done {
+    $done = @{}
+    if ($sync.DupMerged) { foreach ($p in $sync.DupMerged) { $done[$p.ToLowerInvariant()] = $true } }
+    $left = New-Object System.Collections.Generic.List[DupGroup]
+    foreach ($g in $script:dupGroups) {
+        $ng = New-Object DupGroup
+        $ng.Name = $g.Name; $ng.Size = $g.Size; $ng.Verified = $g.Verified
+        foreach ($f in $g.Files) { if (-not $done.ContainsKey($f.Path.ToLowerInvariant())) { $ng.Files.Add($f) } }
+        if ($ng.Files.Count -ge 2) { $left.Add($ng) }
+    }
+    Build-DupRows $left $left.Count
+    $n = $done.Count
+    $cx = [bool]$sync.WasCancelled
+    End-Op ($(if ($cx) { (T "已中途取消，合并了 {0} 个文件") } else { (T "完成，合并了 {0} 个文件") }) -f $n) -KeepCard -headline ($(if ($cx) { (T "已中途取消：合并了 {0} 个重复文件，剩下的没合并。每个位置的文件都还在。") } else { (T "合并了 {0} 个重复文件。每个位置的文件都还在，只占一份空间。") }) -f $n) -reportLines @(,@((T '没合并的（内容不完全相同、文件正被打开、不在同一块盘）记在左下角的「运行记录」里。'), '#6E6E73', $false))
+}
 $ctl.BtnDupMerge.Add_Click({
     if ($script:worker) { return }
     if ($script:dupSimilar) { Show-Sheet -Kind warn -Title (T '相似照片不能合并') -Text (T '合并是把内容完全相同的文件换成硬链接；相似照片内容不同，合并会丢掉其中一张。') | Out-Null; return }
@@ -88,7 +104,7 @@ $ctl.BtnDupMerge.Add_Click({
     if ($skip -gt 0) { $text += ((T "`n`n另有 {0} 个勾选的副本和保留的那份不在同一块盘上，不能合并，会跳过。") -f $skip) }
     $ans = Show-Sheet -Title ((T "合并 {0} 个重复文件，腾出 {1}？") -f $plan.Count, (Fmt $bytes)) -Text $text -Confirm (T '我知道合并后改动一个位置，其他位置会跟着变。') -Buttons @((T '取消'), (T '合并')) -Primary (T '合并') -Cancel (T '取消')
     if ($ans -ne (T '合并')) { return }
-    $sync.Mode = 'merge'; $sync.DupMerged = $null
+    Use-BgJob 'merge'; $sync.DupMerged = $null
     Start-Op ((T "合并 {0} 个重复文件") -f $plan.Count)
     UI-Busy $true
     Start-Worker @'

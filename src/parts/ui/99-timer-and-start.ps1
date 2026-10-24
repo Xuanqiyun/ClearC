@@ -38,416 +38,25 @@ $timer.Add_Tick({
         $script:movedTargets = $null
         try { $w.PS.EndInvoke($w.Handle) | Out-Null } catch { UI-Log ((T "后台出错：{0}") -f $($_.Exception.Message)) }
         foreach ($er in @($w.PS.Streams.Error | Select-Object -First 5)) { UI-Log ((T "后台出错：{0}") -f $er) }
+        $job = Get-BgJob ([string]$sync.Mode)
         Write-WorkerErrors $w ([string]$sync.Mode)
         $w.PS.Dispose(); $w.RS.Dispose()
         [DirStat]::Cancel = $false
         if ($sync.WasCancelled) { UI-Log (T '已中途取消。') }
         # 删过、搬过东西以后，逐个扫描得到的旧树不再拿来用（读文件表的结果靠变更日志更新）
-        if ($script:readOnlyModes -notcontains [string]$sync.Mode) { [DiskMap]::Invalidate() }
+        if (-not ($job -and $job.ReadOnly)) { [DiskMap]::Invalidate() }
         # 刚搬过东西（或者搬回来了）：「搬家管理」在普通用户模式下也列出来 / 没有搬走的了就收起来
-        if (@('run', 'appmove', 'movemany', 'moveback', 'moveresume') -contains [string]$sync.Mode) {
+        if ($job -and $job.Moves) {
             try { $hm = @(Get-MoveRecords | Where-Object { IsLink ([string]$_.Src) }).Count -gt 0; if ($hm -ne $script:hasMoves) { $script:hasMoves = $hm; Apply-Display } } catch {}
         }
 
-        if ($sync.Mode -eq 'scan') {
-            if ($sync.WasCancelled -or -not $sync.Sizes) {
-                $script:oneClickPending = $false
-                $sync.Sizes = $script:prevSizes
-                End-Op $(if ($sync.WasCancelled) { (T '已中途取消，列表没有更新') } else { (T '没有完成') })
-                if ($script:rows) { $ctl.Summary.Text = (T '扫描已取消，下面还是上一次扫描的结果。') }
-                else { $ctl.Summary.Text = (T '扫描已取消。点「扫描」重新开始。'); $ctl.EmptyCleanText.Text = (T '扫描已取消。点「扫描」重新开始。') }
-            } else {
-                Build-Rows $sync.Sizes; End-Op (T '完成')
-                if ($script:oneClickPending) { $script:oneClickPending = $false; $script:runAfterScan = $true }
-                elseif ($script:firstRun) { $script:firstRun = $false; $script:firstResult = $true }
+        if ($job -and $job.Done) {
+            # 收尾的代码出错，也要把「正在进行」收起来，不然界面一直是忙的
+            try { . $job.Done } catch {
+                UI-Log ((T "后台出错：{0}") -f $_.Exception.Message)
+                Write-LogFile ((T "[内部] ") + $_.Exception.Message + "  @ " + ([string]$_.InvocationInfo.PositionMessage).Split([char]10)[0])
+                if ($script:op) { End-Op (T '没有完成') }
             }
-        }
-        elseif ($sync.Mode -eq 'run') {
-            $script:candScanned = $false
-            $after = [double](FreeC); $freed = $after - $script:runFreeC0
-            $cardWasOpen = ($ctl.Overlay.Visibility -eq 'Visible')
-            $head = (T "C 盘剩余：{0} → {1}，释放了 {2}") -f (GB $script:runFreeC0), (GB $after), (GB ([math]::Max([double]0, [double]$freed)))
-            $waitNote = ''
-            if ([int]$sync.WaitCount -gt 0) {
-                $waitNote = (T "有 {0} 个文件夹已经复制好，但原文件夹还被别的程序占着，没换成链接。彻底退出相关的聊天软件（包括右下角托盘图标）后再点一次「执行」，会接着用复制好的副本，很快完成。") -f [int]$sync.WaitCount
-                $head += "`n" + $waitNote
-            }
-            $cx = [bool]$sync.WasCancelled
-            if ($cx) { $head = (T '已中途取消：还没开始的项目都没做，已经做完的不会撤销。') + "`n" + $head }
-            $endText = if ($cx) { (T "已中途取消，释放 {0}，C 盘现在剩余 {1}") } else { (T "完成，释放 {0}，C 盘现在剩余 {1}") }
-            End-Op ($endText -f (GB ([math]::Max([double]0, [double]$freed))), (GB $after)) -KeepCard -headline $head -reportLines (Plan-Lines)
-            if (-not $cx) { if ($ctl.Overlay.Visibility -eq 'Visible') { $script:askRemind = $true } else { $script:askRemindNow = $true } }
-            $sumText = if ($cx) { (T "已中途取消：C 盘从剩余 {0} 变成 {1}。每一项的结果写在列表里；想看还剩什么，再点「扫描」。") } else { (T "已完成：C 盘从剩余 {0} 变成 {1}。每一项的结果写在列表里；想看还剩什么，再点「扫描」。") }
-            $ctl.Summary.Text = $sumText -f (GB $script:runFreeC0), (GB $after)
-            $script:reclaim = [double]0
-            $lines = @(); if ($sync.RunSummary) { $lines = @($sync.RunSummary) }
-            $shown = @($lines | Select-Object -First 22)
-            if ($lines.Count -gt 22) { $shown += ((T "……另有 {0} 项，见左下角「运行记录」") -f ($lines.Count - 22)) }
-            if (-not $cardWasOpen) { $script:pendingDialog = @{ Title = $(if ($cx) { (T '已中途取消') } else { (T '执行完成') }); Kind = $(if ($waitNote -or $cx) { 'warn' } else { 'done' }); Items = $shown
-                Text = (T "共用时 {0}。C 盘剩余 {1} → {2}，释放 {3}。{4}") -f (FmtSpan $script:lastElapsed), (GB $script:runFreeC0), (GB $after), (GB ([math]::Max([double]0, [double]$freed))), $(if ($waitNote) { "`n`n" + $waitNote } else { '' }) } }
-            try { [System.Media.SystemSounds]::Asterisk.Play() } catch {}
-            Fill-DestChoices
-        }
-        elseif ($sync.Mode -eq 'hogs') { End-Op (T '完成') }
-        elseif ($sync.Mode -eq 'similar') {
-            $res = $sync.DupResult
-            $cnt = if ($res) { $res.Count } else { 0 }
-            $script:dupSimilar = $true
-            $ctl.DupProgressText.Text = [string]$sync.SimNote
-            End-Op ((T "完成，{0} 组相似照片") -f $cnt)
-            if ($res) { Build-DupRows $res $cnt } else { Build-DupRows @() 0 }
-            if ($script:dupRows -and $script:dupRows.Count -gt 0) {
-                Pick-Dup 'none'
-                UI-Log (T '相似照片不是同一个文件：没有自动勾选。每组第一张是分辨率最高的，看过以后自己勾要处理的；只能放进回收站或归档，不能永久删除，也不能合并。')
-            } elseif (-not $sync.WasCancelled) { $ctl.EmptyDupText.Text = (T '没有找到相似的照片') }
-        }
-        elseif ($sync.Mode -eq 'dup') {
-            $script:dupSimilar = $false
-            $res = $sync.DupResult
-            $cnt = if ($res) { $res.Count } else { 0 }
-            $stopped = [DupFinder]::Cancel
-            $ctl.DupProgressText.Text = ((T "{0}看过 {1:N0} 个文件夹、{2:N0} 个文件，找到 {3:N0} 组重复。") -f $(if ($stopped) { (T '已停止。') } else { (T '查找完成。') }), [DupFinder]::DirsSeen, [DupFinder]::FilesSeen, $cnt)
-            End-Op $(if ($stopped) { ((T "已停止，找到 {0} 组") -f $cnt) } else { ((T "完成，找到 {0} 组") -f $cnt) })
-            if ($res) { Build-DupRows $res $cnt } else { Build-DupRows @() 0 }
-            if ($script:dupRows -and $script:dupRows.Count -gt 0) {
-                Pick-Dup 'new'
-                UI-Log (T '已自动勾选：每组留最新的一份，其余删除。可以改勾选，或点上面的按钮换一种留法。')
-            }
-        }
-        elseif ($sync.Mode -eq 'dupdel' -or $sync.Mode -eq 'dupmove') {
-            $moveMode = ($sync.Mode -eq 'dupmove')
-            $gone = @{}
-            if ($sync.DupDeleted) { foreach ($p in $sync.DupDeleted) { $gone[$p.ToLowerInvariant()] = $true } }
-            $left = New-Object System.Collections.Generic.List[DupGroup]
-            foreach ($g in $script:dupGroups) {
-                $ng = New-Object DupGroup
-                $ng.Name = $g.Name; $ng.Size = $g.Size; $ng.Verified = $g.Verified
-                foreach ($f in $g.Files) { if (-not $gone.ContainsKey($f.Path.ToLowerInvariant())) { $ng.Files.Add($f) } }
-                if ($ng.Files.Count -ge 2) { $left.Add($ng) }
-            }
-            Build-DupRows $left $left.Count
-            $nDel = if ($sync.DupDeleted) { $sync.DupDeleted.Count } else { 0 }
-            $cardWasOpen = ($ctl.Overlay.Visibility -eq 'Visible')
-            if ($moveMode) {
-                $cx = [bool]$sync.WasCancelled
-                End-Op ($(if ($cx) { (T "已中途取消，归档了 {0} 个文件") } else { (T "完成，归档了 {0} 个文件") }) -f $nDel)
-                UI-Log ((T "归档完成：{0} 个文件已搬到 {1}") -f $nDel, $sync.DupMoveDest)
-            } else {
-                $bin = if ($script:lastRecycle) { (T "`n`n文件在回收站里，清空回收站后才真正释放磁盘空间。") } else { '' }
-                $binShort = if ($script:lastRecycle) { (T '文件在回收站里，清空回收站后才真正释放空间。') } else { '' }
-                $cx = [bool]$sync.WasCancelled
-                End-Op ($(if ($cx) { (T "已中途取消，删除了 {0} 个文件") } else { (T "完成，删除了 {0} 个文件") }) -f $nDel) -KeepCard -headline ($(if ($cx) { (T "已中途取消：删除了 {0} 个重复文件，剩下的没删。{1}") } else { (T "删除了 {0} 个重复文件。{1}") }) -f $nDel, $binShort) -reportLines @(,@((T '没删的（内容和保留的那份不完全相同，或文件被占用）记在左下角的「运行记录」里。'), '#6E6E73', $false))
-                try { [System.Media.SystemSounds]::Asterisk.Play() } catch {}
-                if (-not $cardWasOpen) { $script:pendingDialog = @{ Title = $(if ($cx) { (T '已中途取消') } else { (T '删除完成') }); Kind = 'done'; Text = ((T "删除了 {0} 个重复文件，共用时 {1}。{2}`n`n没删的（内容和保留的那份不完全相同，或文件被占用）记在「运行记录」里。") -f $nDel, (FmtSpan $script:lastElapsed), $bin) } }
-            }
-        }
-        elseif ($sync.Mode -eq 'map') {
-            $root = $sync.MapResult
-            $mm = [string]$sync.MapMethod; $secs = [double]$sync.MapMs / 1000
-            # 读文件表时，读完以后（核对的时候）才点停止的，结果是完整的
-            $stopped = ($mm -eq 'mft-partial') -or ([DiskMap]::Cancel -and $mm -notlike 'mft*')
-            if ($sync.MapNote -and $mm -notlike 'mft*') { UI-Log ((T "空间地图：没能直接读取文件表（{0}），改为逐个文件夹扫描") -f $sync.MapNote) }
-            if ($root) {
-                $script:mapHow = if ($mm -eq 'mft-usn') { (T '按变更日志更新') } elseif ($mm -like 'mft*') { (T '直接读文件表') } else { (T '逐个文件夹扫描') }
-                UI-Log ((T "空间地图：{0}，用时 {1:N1} 秒") -f $script:mapHow, $secs)
-                [DiskMap]::Use($root)
-                $script:mapMethod = $mm
-                $script:mapRoot = $root; $script:mapCur = $root; $script:mapScanAt = Get-Date
-                Reset-MapHistory; $script:worthKey = $null
-                $script:movedTargets = $null
-                $script:prevSnap = $null
-                if (-not $stopped) { try { Update-Growth $root } catch { $script:growNote = (T '没能和上次比较') } } else { $script:growNote = (T '这次扫描中途停止了，不和上次比较') }
-                End-Op ($(if ($stopped) { (T "已中途停止，看过 {0:N0} 个文件，共 {1}") } else { (T "完成，{0:N0} 个文件，共 {1}") }) -f $root.Files, (Fmt $root.Size))
-                $script:recentRows = $null; $script:recentNote = ''
-                if ($script:mapView -eq 'grow') { Set-MapView 'grow' } elseif ($script:mapView -eq 'files') { Show-MapOverview; Show-MapFiles } elseif ($script:mapView -eq 'types') { Show-MapTypes } elseif ($script:mapView -eq 'recent') { Show-MapOverview; Show-MapRecent } else { Show-MapLevel $root }
-                if ($stopped) { $ctl.MapInfo.Text = (T '扫描中途停止了，下面只是已经看过的部分') }
-                Add-History
-            } else { End-Op (T '没有完成') }
-            $ctl.BtnMapStop.IsEnabled = $false
-        }
-        elseif ($sync.Mode -eq 'mapdel') {
-            $res = $sync.MapDel
-            $okSet = @{}; if ($res) { foreach ($p in $res.Ok) { $okSet[([string]$p).ToLowerInvariant()] = $true } }
-            foreach ($r in @($script:mapDelRows)) {
-                if (-not $okSet.ContainsKey(([string]$r.Path).ToLowerInvariant())) { continue }
-                if ($r.Node) { [DiskMap]::Detach($r.Node) }
-                else {
-                    $pn = [DiskMap]::Find($script:mapRoot, (Split-Path $r.Path -Parent))
-                    if ($pn) { [DiskMap]::DropFile($pn, $r.Size, $r.Disk, [bool]$r.Shared) }
-                    [DiskMap]::ForgetFile($r.Path)
-                }
-            }
-            $nOk = $okSet.Count; $fails = @(); if ($res) { $fails = @($res.Fail) }
-            $one = (@($script:mapDelRows).Count -eq 1)
-            $txt = if ($sync.WasCancelled) { (T "已中途取消，删除了 {0} 项") -f $nOk } elseif ($fails.Count -eq 0) { $(if ($one) { (T "已删除 {0}") -f @($script:mapDelRows)[0].Name } else { (T "已删除 {0} 项") -f $nOk }) } elseif ($nOk -eq 0) { (T '没有删掉') } else { (T "删除了 {0} 项，{1} 项没删掉") -f $nOk, $fails.Count }
-            # 实际多出来多少空间（删前删后各问一次 Windows）；删掉的从待删清单里拿掉
-            $gain = @(foreach ($d in @($script:mapDelFree.Keys)) { $g = (DriveFree ($d + '\')) - [double]$script:mapDelFree[$d]; if ($g -ge 10MB) { (T "{0} 多出 {1}") -f $d, (Fmt $g) } })
-            if ($gain.Count -gt 0) { $txt += (T '，') + ($gain -join (T '，')) }
-            foreach ($k in @($okSet.Keys)) { $kk = $k.TrimEnd(''); if ($script:mapMarks.Contains($kk)) { $script:mapMarks.Remove($kk) } }
-            Update-MapMarks
-            End-Op $txt
-            if ($nOk -gt 0) { if ($script:mapView -eq 'files') { Show-MapFiles } elseif ($script:mapView -ne 'grow') { Show-MapLevel $script:mapCur } }
-            if ($fails.Count -gt 0) {
-                $script:pendingDialog = @{ Title = $(if ($nOk -eq 0) { (T '没有删掉') } else { (T '有的没有删掉') }); Kind = 'warn'; Items = @($fails | Select-Object -First 20)
-                    Text = (T '下面这些没有删掉。正被别的程序打开的文件，关掉那个程序后再删一次。') }
-            }
-        }
-        elseif ($sync.Mode -eq 'selftest') {
-            $r = $sync.SelfTest
-            if (-not $r) { End-Op (T '没有完成') }
-            else {
-                $text = (@($r.Lines) -join "`r`n")
-                $file = Join-Path $script:appDir 'selftest.txt'
-                try { New-Item -ItemType Directory -Force -Path $script:appDir | Out-Null; [IO.File]::WriteAllText($file, $text, (New-Object Text.UTF8Encoding $true)) } catch {}
-                $copied = $true; try { [System.Windows.Clipboard]::SetText($text) } catch { $copied = $false }
-                $x = $r.Res
-                $sum = (T "{0} 项正常，{1} 项提醒，{2} 项有问题") -f $x.Pass, $x.Warn, $x.Fail
-                End-Op $(if ($r.Stopped) { (T '已中途停止') } else { $sum })
-                UI-Log ((T "检查扫描功能：{0}；结果存在 {1}") -f $sum, $file)
-                $msg = $sum + (T '。') + $(if ($copied) { (T '结果已经复制，可以粘贴到 GitHub 的问题（Issue）里。') } else { '' }) + "`n`n" + ((T "完整结果存在 {0}") -f $file)
-                if ($x.Fail -gt 0) { $msg += "`n`n" + (T '有问题的项目，扫描时会自动改用逐个文件夹扫描，不影响使用；把结果贴到 GitHub 的问题里可以帮助修好它。') }
-                $script:pendingDialog = @{ Title = (T '扫描功能检查完了'); Kind = $(if ($x.Fail -gt 0) { 'warn' } else { 'done' }); Text = $msg
-                    Buttons = @((T '好'), (T '打开结果')); Primary = (T '打开结果'); Cancel = (T '好'); Then = { [void](Open-AsUser $file) }.GetNewClosure() }
-            }
-        }
-        elseif ($sync.Mode -eq 'update') {
-            $u = $sync.Update
-            End-Op (T '完成')
-            if ($u -and $u.Ok -and -not ([string]$u.Tag).Trim()) { $u = @{ Ok = $false; Err = (T '返回的内容里没有版本号') } }   # 比如被网络登录页拦下来了
-            # 版本号补齐到四段再比（2.6 和 2.6.0 是同一个版本）
-            $norm = { param([string]$s) $v = $null; if ([version]::TryParse(([string]$s).Trim().TrimStart('v', 'V'), [ref]$v)) { New-Object Version ([math]::Max(0, $v.Major)), ([math]::Max(0, $v.Minor)), ([math]::Max(0, $v.Build)), ([math]::Max(0, $v.Revision)) } else { $null } }
-            $cur = & $norm $script:AppVersion
-            $new = if ($u -and $u.Ok) { & $norm $u.Tag } else { $null }
-            $url = if ($u -and $u.Url -and ([string]$u.Url).StartsWith('https://github.com/')) { [string]$u.Url } else { $script:releasePage }
-            $open = { Start-Process -FilePath "$env:SystemRoot\explorer.exe" -ArgumentList $url }.GetNewClosure()   # 用资源管理器打开：浏览器不会以管理员身份运行
-            if (-not $u -or -not $u.Ok) {
-                $script:pendingDialog = @{ Title = (T '没能检查新版本'); Kind = 'warn'; Text = ((T "连不上 GitHub：{0}`n`n可以直接打开下载页面看看。") -f $(if ($u) { $u.Err } else { '' }))
-                    Buttons = @((T '好'), (T '打开下载页面')); Primary = (T '打开下载页面'); Cancel = (T '好'); Then = $open }
-            } elseif ($new -and $cur -and $new -gt $cur) {
-                $notes = @(([string]$u.Body -split "`r?`n") | Where-Object { $_ -match '^\s*[-*] ' } | Select-Object -First 6 | ForEach-Object { ($_ -replace '^\s*[-*]\s*', '' -replace '\*\*', '').Trim() })
-                $script:pendingDialog = @{ Title = ((T "有新版本 {0}") -f $u.Tag); Kind = 'info'; Text = ((T "现在用的是 {0}。下载页面会在浏览器里打开，下载新的 exe 替换现在这个就好，设置都会保留。") -f $script:AppVersion); Items = $notes
-                    Buttons = @((T '以后再说'), (T '打开下载页面')); Primary = (T '打开下载页面'); Cancel = (T '以后再说'); Then = $open }
-            } else {
-                $script:pendingDialog = @{ Title = (T '已经是最新版本'); Kind = 'done'; Text = ((T "现在用的是 {0}，GitHub 上最新的是 {1}。") -f $script:AppVersion, $u.Tag) }
-            }
-        }
-        elseif ($sync.Mode -eq 'fcompress') {
-            $x = $sync.FcResult
-            if ($x) {
-                $saved = [math]::Max([double]0, $x.Before - $x.After)
-                End-Op ($(if ($x.Cancelled) { (T "已中途取消，省了 {0}") } else { (T "完成，省了 {0}") }) -f (Fmt $saved))
-                $ctl.SaveFcState.Text = (T "上次压缩：{0}，实际占用 {1} → {2}，省了 {3}") -f $x.Path, (Fmt $x.Before), (Fmt $x.After), (Fmt $saved)
-                $script:pendingDialog = @{ Title = $(if ($x.Cancelled) { (T '压缩已中途取消') } else { (T '压缩完成') }); Kind = 'done'; Text = ((T "{0}`n`n实际占用 {1} → {2}，省了 {3}。文件照常使用。") -f $x.Path, (Fmt $x.Before), (Fmt $x.After), (Fmt $saved)) + $(if ($x.Cancelled) { (T "`n`n已经压缩的文件保持压缩，剩下的没压缩。想压缩剩下的，再压缩一次这个文件夹就好。") } else { '' }) }
-            } else { End-Op (T '没有完成') }
-        }
-        elseif ($sync.Mode -eq 'compactos') {
-            $x = $sync.CosRes
-            End-Op (T '完成')
-            if ($x) { $script:pendingDialog = @{ Title = (T '系统压缩完成'); Kind = 'done'; Text = ((T "C 盘可用空间变化：{0}{1}") -f $(if ($x.Delta -ge 0) { (T '多了 ') } else { (T '少了 ') }), (Fmt ([math]::Abs($x.Delta)))) } }
-            if ($ctl.PageSave.Visibility -eq 'Visible') { Load-Save }
-        }
-        elseif ($sync.Mode -eq 'odinfo') { End-Op (T '完成'); Show-OneDriveInfo $sync.OdInfo }
-        elseif ($sync.Mode -eq 'odfree') {
-            $x = $sync.OdRes
-            End-Op (T '完成')
-            if ($x) { $script:pendingDialog = @{ Title = (T '已标记为仅在线'); Kind = 'done'; Text = ((T "{0} 个文件（{1}）已改成仅在线{2}。OneDrive 会在后台释放本地空间，要等它同步一会儿。") -f $x.Done, (Fmt $x.Bytes), $(if ($x.Fail) { ((T "，{0} 个没改成（可能正被占用）") -f $x.Fail) } else { '' })) } }
-            $script:odWanted = $true
-        }
-        elseif ($sync.Mode -eq 'moveresume') {
-            $x = @($sync.ResumeRes)
-            End-Op (T '完成')
-            $script:movedTargets = $null
-            $bad = @($x | Where-Object { -not $_.Ok })
-            $script:pendingDialog = @{ Title = $(if ($bad.Count) { (T '有的没做成') } else { (T '处理好了') }); Kind = $(if ($bad.Count) { 'warn' } else { 'done' }); Text = (@($x | ForEach-Object { $_.Msg }) -join "`n`n") }
-        }
-        elseif ($sync.Mode -eq 'aclfix') {
-            $x = $sync.AclRes
-            End-Op (T '完成')
-            if ($x) {
-                $t = (T "{0} 个文件夹改好了，现在只有你、系统和管理员能打开。") -f $x.Ok
-                if (@($x.Bad).Count) { $t += "`n" + ((T "{0} 个没改成：{1}") -f @($x.Bad).Count, (@($x.Bad) -join (T '；'))) }
-                $script:pendingDialog = @{ Title = (T '权限改好了'); Kind = $(if (@($x.Bad).Count) { 'warn' } else { 'done' }); Text = $t }
-            }
-        }
-        elseif ($sync.Mode -eq 'csanalyze') {
-            $x = $sync.CsRes
-            End-Op (T '完成')
-            if ($x -and $x.Ok) {
-                $rec = if ($x.Recommended -match '(?i)^(yes|是|true)') { (T '建议清理') } else { (T '不需要清理') }
-                $ctl.SaveCsState.Text = (T "当前：资源管理器显示 {0}，实际 {1}（其中和系统共用的 {2}），可回收的旧组件 {3} 个，上次清理 {4}。Windows 的判断：{5}。") -f $x.Reported, $x.Actual, $x.Shared, $x.Reclaimable, $x.LastCleanup, $rec
-            } else { $ctl.SaveCsState.Text = (T '没分析成。') + $(if ($x) { ' ' + (($x.Out -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -Last 2) -join ' ') } else { '' }) }
-        }
-        elseif ($sync.Mode -eq 'wslmove') {
-            $x = $sync.WslRes
-            End-Op $(if ($x -and $x.Ok) { (T '已搬') } else { (T '没搬成') })
-            if ($x -and $x.Ok) { $script:pendingDialog = @{ Title = (T 'WSL 发行版已搬到其他盘'); Kind = 'done'; Text = (T '照常用 wsl 打开即可。') } }
-            elseif ($x -and $x.Old) { $script:pendingDialog = @{ Title = (T 'WSL 版本太旧'); Kind = 'warn'; Text = ((T "这个 WSL 还没有 --move 命令。在终端里运行 wsl --update 更新 WSL 后再试。`n`n{0}") -f $x.Out) } }
-            elseif ($x) { $script:pendingDialog = @{ Title = (T '没搬成'); Kind = 'warn'; Text = $x.Out } }
-            if ($ctl.PageSave.Visibility -eq 'Visible') { Load-Save }
-        }
-        elseif ($sync.Mode -eq 'leftovers') {
-            End-Op (T '完成')
-            Build-StartRows 'leftover' $sync.LeftoverResult
-        }
-        elseif ($sync.Mode -eq 'recent') {
-            End-Op (T '完成')
-            $script:recentRows = $sync.RecentResult
-            $n = [string]$sync.RecentNote
-            $script:recentNote = switch -Wildcard ($n) {
-                'no-index' { (T '这块盘的文件表不在内存里了，再扫描一次就可以') }
-                'no-journal' { (T '这块盘没有开变更日志（USN Journal），Windows 一般只给系统盘开') }
-                'refs' { (T '这块盘的变更日志是 ReFS 的格式，暂时不认') }
-                'journal-from:*' { (T "按变更日志统计，最近 {0} 天。日志只保留到 {1:yyyy-MM-dd HH:mm}，更早的改动看不到。大小按文件现在的大小算，删掉的只计个数；只列改动最集中的文件夹") -f $sync.RecentDays, [DateTime]::FromFileTimeUtc([long]$n.Substring(13)).ToLocalTime() }
-                default { (T "按变更日志统计，最近 {0} 天。大小按文件现在的大小算（日志里没有写了多少字节），删掉的只计个数；只列改动最集中的文件夹") -f $sync.RecentDays }
-            }
-            if ($script:mapView -eq 'recent') { Show-MapRecent }
-        }
-        elseif ($sync.Mode -eq 'vdisk') {
-            $x = $sync.VdRes
-            End-Op (T '完成')
-            if ($x) {
-                $t = if ($x.After -lt $x.Before) { (T "{0} → {1}，省了 {2}。") -f (Fmt $x.Before), (Fmt $x.After), (Fmt ($x.Before - $x.After)) } else { (T "大小没有变化（{0}）。可能里面本来就没有可回收的空间，或者虚拟磁盘还在使用中。`n`n{1}") -f (Fmt $x.After), $x.Out }
-                $script:pendingDialog = @{ Title = (T '虚拟磁盘压缩完成'); Kind = $(if ($x.After -lt $x.Before) { 'done' } else { 'info' }); Text = $t }
-            }
-            Load-Save
-        }
-        elseif ($sync.Mode -eq 'vmove') {
-            $script:candScanned = $false; if ($ctl.PageMoves.Visibility -eq 'Visible') { $script:candPending = $true }
-            $res = $sync.VmRes
-            $ok = $res -and $res.Done -gt 0
-            $cx = $res -and $res.Cancelled -and -not $ok
-            End-Op $(if ($ok) { (T "已搬 {0}") -f (GB $res.Moved) } elseif ($cx) { (T '已取消') } else { (T '没搬成') })
-            $msg = if ($res -and $res.Msgs) { ($res.Msgs -join "`n") } else { '' }
-            $script:pendingDialog = @{ Title = $(if ($ok) { (T '搬好了') } elseif ($cx) { (T '已取消') } else { (T '没搬成') }); Kind = $(if ($ok) { 'done' } elseif ($cx) { 'info' } else { 'warn' }); Text = $(if ($ok) { (T "已搬到 {0}。原位置留了链接，软件照常使用。{1}") -f ($res.Dest -join (T '；')), $msg } else { $msg }) }
-            Load-Save; Fill-DestChoices
-        }
-        elseif ($sync.Mode -eq 'appmove') {
-            $script:candScanned = $false; if ($ctl.PageMoves.Visibility -eq 'Visible') { $script:candPending = $true }
-            $res = $sync.AmRes; $r = $script:appMoveRow
-            $ok = $res -and $res.Done -gt 0
-            $cx = $res -and $res.Cancelled -and -not $ok
-            End-Op $(if ($ok) { (T "已搬 {0}") -f (GB $res.Moved) } elseif ($cx) { (T '已取消') } else { (T '没搬成') })
-            $msg = if ($res -and $res.Msgs) { ($res.Msgs -join "`n") } else { '' }
-            if ($ok) {
-                $script:pendingDialog = @{ Title = ((T "「{0}」搬好了") -f $r.Name); Kind = 'done'
-                    Text = ((T "已搬到 {0}，C 盘腾出约 {1}。原位置留了链接，快捷方式和开始菜单照常能打开。建议现在打开一次这个软件，确认一切正常。`n`n要搬回来，到「搬家管理」点「搬回 C 盘」。{2}") -f ($res.Dest -join (T '；')), (GB $res.Moved), $(if ($msg) { "`n`n$msg" } else { '' })) }
-            } else { $script:pendingDialog = @{ Title = $(if ($cx) { (T '已取消') } else { (T '没搬成') }); Kind = $(if ($cx) { 'info' } else { 'warn' }); Text = $(if ($msg) { $msg } else { (T '没有搬，原文件夹没动。') }) } }
-            $script:runAfterApps = $true
-            Fill-DestChoices
-        }
-        elseif ($sync.Mode -eq 'apps') {
-            End-Op $(if ($sync.WasCancelled) { (T '已中途取消，没统计到的软件显示安装时登记的大小') } else { (T '完成') })
-            if ($sync.AppsResult) { Build-AppRows $sync.AppsResult } else { $ctl.EmptyAppsText.Text = (T '没读到已安装的软件') }
-        }
-        elseif ($sync.Mode -eq 'startup') {
-            End-Op (T '完成')
-            Build-StartRows ([string]$sync.StartKind) $sync.StartResult
-        }
-        elseif ($sync.Mode -eq 'winget') {
-            End-Op $(if ($sync.WingetResult -and -not $sync.WingetResult.Err) { ((T "{0} 个有新版本") -f @($sync.WingetResult.Items).Count) } else { (T '没查成') })
-            Apply-WingetResult $sync.WingetResult
-        }
-        elseif ($sync.Mode -eq 'uninst') {
-            $x = $sync.UninstRes
-            End-Op $(if ($x -and $x.Ok) { (T '已卸载') } else { (T '没卸载成') })
-            if ($x -and -not $x.Ok) { $script:pendingDialog = @{ Title = (T '没卸载成'); Kind = 'warn'; Text = $x.Msg } }
-            $script:runAfterApps = $true
-        }
-        elseif ($sync.Mode -eq 'uninstmany') {
-            End-Op $(if ($sync.WasCancelled) { (T '已中途取消') } else { (T '完成') })
-            if ($script:uq) {
-                foreach ($u in @($sync.UninstMany)) { if ($u.Ok) { $script:uq.Done++ } else { [void]$script:uq.Fail.Add(((T "{0}：{1}") -f $u.Name, $u.Msg)) } }
-                if ($sync.WasCancelled) { $script:uq.Stop = $true }
-                Step-UninstQueue
-            }
-        }
-        elseif ($sync.Mode -eq 'leftdel') {
-            $x = $sync.LeftRes
-            $cx = [bool]$sync.WasCancelled
-            End-Op $(if ($cx) { (T '已中途取消') } else { (T '完成') })
-            $ctl.AppsLeftBox.Visibility = 'Collapsed'; $script:leftApp = $null
-            if ($script:leftBatch) {
-                # 从「残留文件夹」里一次选了几个：已经不在的从列表里拿掉
-                $script:leftBatch = $false
-                if ($script:startRows.ContainsKey('leftover')) { foreach ($lr in @($script:startRows['leftover'])) { if (-not (Test-Path -LiteralPath $lr.Detail)) { [void]$script:startRows['leftover'].Remove($lr) } } }
-                Filter-StartRows; Update-PickBar
-                if ($x) { $script:pendingDialog = @{ Title = $(if ($cx) { (T '已中途取消') } else { (T '残留已清理') }); Kind = 'done'; Text = ((T "{0} 个文件夹已移到回收站。清空回收站后才真正腾出空间。") -f $x.Count) + $(if ($cx) { (T '剩下的没删。') } else { '' }) } }
-            } else {
-                if ($x) { $script:pendingDialog = @{ Title = $(if ($cx) { (T '已中途取消') } else { (T '残留已清理') }); Kind = 'done'; Text = ((T "「{0}」留下的 {1} 个文件夹已移到回收站。清空回收站后才真正腾出空间。") -f $x.Name, $x.Count) + $(if ($cx) { (T '剩下的没删。') } else { '' }) } }
-                $script:runAfterApps = $true
-            }
-        }
-        elseif ($sync.Mode -eq 'movescan') {
-            End-Op $(if ($sync.WasCancelled) { (T '已中途取消') } else { (T '完成') })
-            if ($sync.WasCancelled -or $null -eq $sync.CandResult) {
-                $script:candScanned = $false
-                $ctl.EmptyCandText.Text = (T '已取消。点右上角「刷新」重新看。')
-                Set-CandInfo (T '已取消，没有看完。')
-                if ($script:movesTab -eq 'cand') { $ctl.EmptyCand.Visibility = 'Visible' }
-            } else {
-                $script:storeChat = @($sync.CandStore)
-                $ctl.CandStoreText.Text = if ($script:storeChat.Count -gt 0) { (T "{0} 是从应用商店装的，由 Windows 管理，本工具不搬。可以在 Windows 设置 → 应用 → 已安装的应用 里点它右边的「…」→「移动」，连同数据换到其他盘（要这个应用支持）。") -f ($script:storeChat -join (T '、')) } else { '' }
-                Build-CandRows $sync.CandResult
-                Set-MovesTab $script:movesTab
-            }
-        }
-        elseif ($sync.Mode -eq 'movemany') {
-            $x = $sync.MmRes
-            $after = [double](FreeC); $freed = [math]::Max([double]0, [double]($after - $script:mmFreeC0))
-            $cx = [bool]$sync.WasCancelled
-            $cardWasOpen = ($ctl.Overlay.Visibility -eq 'Visible')
-            $head = (T "C 盘剩余：{0} → {1}，腾出了 {2}") -f (GB $script:mmFreeC0), (GB $after), (GB $freed)
-            if ($cx) { $head = (T '已中途取消：还没开始的项目都没做，已经做完的不会撤销。') + "`n" + $head }
-            $waitNote = ''
-            if ([int]$sync.WaitCount -gt 0) { $waitNote = (T "有 {0} 个文件夹已经复制好，但原文件夹还被别的程序占着，没换成链接。彻底退出相关的软件（包括右下角托盘图标）后再搬一次，会接着用复制好的副本，很快完成。") -f [int]$sync.WaitCount; $head += "`n" + $waitNote }
-            End-Op ($(if ($cx) { (T "已中途取消，腾出 {0}") } else { (T "完成，腾出 {0}") }) -f (GB $freed)) -KeepCard -headline $head -reportLines (Plan-Lines)
-            # 搬好的从「可以搬的」里去掉，其余的保留这次的结果
-            if ($x -and $x.Done -and $x.Done.Count -gt 0 -and $script:candList) {
-                $gone = @{}; foreach ($k in $x.Done) { $gone[[string]$k] = $true }
-                $keep = @($script:candList | Where-Object { $k = if ($_.Type -eq 'app') { 'a:' + ([string]$_.Location).ToLowerInvariant() } else { 'c:' + $_.Idx }; -not $gone.ContainsKey($k) })
-                Build-CandRows $keep
-                $script:candSeen = -1
-            }
-            if (-not $cardWasOpen) {
-                $lines = @(); if ($x -and $x.Summary) { $lines = @($x.Summary) }
-                $script:pendingDialog = @{ Title = $(if ($cx) { (T '已中途取消') } else { (T '搬家完成') }); Kind = $(if ($waitNote -or $cx) { 'warn' } else { 'done' }); Items = @($lines | Select-Object -First 22); Text = $head }
-            }
-            try { [System.Media.SystemSounds]::Asterisk.Play() } catch {}
-            $script:pageLoaded.apps = $false
-            $script:runAfterMoves = $true
-            Fill-DestChoices
-        }
-        elseif ($sync.Mode -eq 'movesize') {
-            $t = $sync.MoveTotal
-            if ($t -and $script:moveRows) { Set-DoneInfo ((T "共 {0} 个文件夹，其中 {1} 个正常，已经帮 C 盘腾出约 {2}。") -f $script:moveRows.Count, $t.Count, (Fmt $t.Bytes)) }
-            if ($script:candPending) { $script:runAfterCand = $true }
-        }
-        elseif ($sync.Mode -eq 'moveback' -or $sync.Mode -eq 'movedrop') {
-            $script:candScanned = $false; if ($ctl.PageMoves.Visibility -eq 'Visible') { $script:candPending = $true }
-            $x = $sync.MoveRes
-            $ok = $x -and $x.Ok
-            $back = ($sync.Mode -eq 'moveback')
-            $cx = $x -and $x.Cancelled -and -not $ok
-            End-Op $(if ($ok) { (T '完成') } elseif ($cx) { (T '已取消') } else { (T '没有完成') })
-            if ($ok) { $script:pendingDialog = @{ Title = $(if ($back) { (T '已搬回 C 盘') } else { (T '多余的副本已删除') }); Kind = 'done'; Text = $(if ($x.Msg) { $x.Msg } elseif ($back) { (T "搬回了 {0}，软件照常使用。") -f (Fmt $x.Bytes) } else { (T "腾出了 {0}。") -f (Fmt $x.Bytes) }) } }
-            else { $script:pendingDialog = @{ Title = $(if ($cx) { (T '已取消') } else { (T '没有完成') }); Kind = $(if ($cx) { 'info' } else { 'warn' }); Text = $(if ($x) { $x.Msg } else { '' }) } }
-            $script:runAfterMoves = $true
-            Fill-DestChoices
-        }
-        elseif ($sync.Mode -eq 'merge') {
-            $done = @{}
-            if ($sync.DupMerged) { foreach ($p in $sync.DupMerged) { $done[$p.ToLowerInvariant()] = $true } }
-            $left = New-Object System.Collections.Generic.List[DupGroup]
-            foreach ($g in $script:dupGroups) {
-                $ng = New-Object DupGroup
-                $ng.Name = $g.Name; $ng.Size = $g.Size; $ng.Verified = $g.Verified
-                foreach ($f in $g.Files) { if (-not $done.ContainsKey($f.Path.ToLowerInvariant())) { $ng.Files.Add($f) } }
-                if ($ng.Files.Count -ge 2) { $left.Add($ng) }
-            }
-            Build-DupRows $left $left.Count
-            $n = $done.Count
-            $cx = [bool]$sync.WasCancelled
-            End-Op ($(if ($cx) { (T "已中途取消，合并了 {0} 个文件") } else { (T "完成，合并了 {0} 个文件") }) -f $n) -KeepCard -headline ($(if ($cx) { (T "已中途取消：合并了 {0} 个重复文件，剩下的没合并。每个位置的文件都还在。") } else { (T "合并了 {0} 个重复文件。每个位置的文件都还在，只占一份空间。") }) -f $n) -reportLines @(,@((T '没合并的（内容不完全相同、文件正被打开、不在同一块盘）记在左下角的「运行记录」里。'), '#6E6E73', $false))
         }
         $sync.Mode = $null
         UI-Status; UI-Busy $false
@@ -808,6 +417,15 @@ $win.Add_ContentRendered({
     # 第一次打开：不用找从哪开始，直接扫一遍，扫完只给一句结论和一个主按钮
     if (-not $script:worker) { $script:firstRun = $true; Show-Page 'clean'; Do-Scan }
 })
+Register-BgJob 'aclfix' -Done {
+    $x = $sync.AclRes
+    End-Op (T '完成')
+    if ($x) {
+        $t = (T "{0} 个文件夹改好了，现在只有你、系统和管理员能打开。") -f $x.Ok
+        if (@($x.Bad).Count) { $t += "`n" + ((T "{0} 个没改成：{1}") -f @($x.Bad).Count, (@($x.Bad) -join (T '；'))) }
+        $script:pendingDialog = @{ Title = (T '权限改好了'); Kind = $(if (@($x.Bad).Count) { 'warn' } else { 'done' }); Text = $t }
+    }
+}
 # 打开时查一下有没有上次没做完的搬家（数据都在，只是要告诉用户在哪）
 # 以前的版本搬走的文件夹，其他账户也能打开：问一次要不要改成和在 C 盘时一样（一个月最多问一次）
 function Show-LooseMoves {
@@ -822,7 +440,7 @@ function Show-LooseMoves {
         -Text (T "下面这些文件夹是以前的版本搬到其他盘的。在 C 盘时只有你、系统和管理员能打开；搬过去后用的是那块盘的默认权限，这台电脑上的其他账户也能打开、修改。`n`n可以改成和在 C 盘时一样。只改权限，不动里面的文件，文件多的要等一会儿。") `
         -Items @($l | ForEach-Object { $_.Dst }) -Buttons @((T '以后再说'), $ok) -Primary $ok -Cancel (T '以后再说')
     if ($ans -ne $ok) { return }
-    $sync.Mode = 'aclfix'; $sync.AclRes = $null
+    Use-BgJob 'aclfix'; $sync.AclRes = $null
     Start-Op (T '修正搬走的文件夹的权限') -NoCard; UI-Busy $true
     Start-Worker @'
 $sync.AclRes = Repair-MovedAccess $arg.Items
@@ -873,6 +491,13 @@ function Show-BrokenMoves {
         -Items @($bad | ForEach-Object { (T "{0} → {1}") -f $_.Src, $_.Dst }) -Buttons @((T '知道了'), $go) -Primary $go -Cancel (T '知道了')
     if ($ans -eq $go) { Show-Page 'moves' }
 }
+Register-BgJob 'moveresume' -Moves -Done {
+    $x = @($sync.ResumeRes)
+    End-Op (T '完成')
+    $script:movedTargets = $null
+    $bad = @($x | Where-Object { -not $_.Ok })
+    $script:pendingDialog = @{ Title = $(if ($bad.Count) { (T '有的没做成') } else { (T '处理好了') }); Kind = $(if ($bad.Count) { 'warn' } else { 'done' }); Text = (@($x | ForEach-Object { $_.Msg }) -join "`n`n") }
+}
 function Show-HalfMoves {
     # 有进度记录的：说清楚停在哪一步，可以接着做完或撤回
     $js = @(); try { $js = @(Get-MoveJournal) } catch {}
@@ -884,7 +509,7 @@ function Show-HalfMoves {
         $ans = Show-Sheet -Kind warn -Title (T '有上次没做完的搬家') -Text (T "上次搬家或搬回 C 盘时中途停了（比如关机、断电、程序被关掉）。每一步都有记录，数据都还在，没有删。`n`n「接着做完」按原来的计划做完；「撤回」恢复成搬之前的样子（已经删了一部分旧文件夹的，只能接着做完）。先退出下面这些文件夹所属的软件，再选。") `
             -Items $items -Buttons @((T '以后再说'), $undo, $fin) -Primary $fin -Cancel (T '以后再说')
         if ($ans -ne $fin -and $ans -ne $undo) { return }
-        $sync.Mode = 'moveresume'; $sync.ResumeRes = $null
+        Use-BgJob 'moveresume'; $sync.ResumeRes = $null
         Start-Op $(if ($ans -eq $fin) { (T '接着做完上次的搬家') } else { (T '撤回上次没做完的搬家') }) -NoCard; UI-Busy $true
         Start-Worker @'
 $out = @()

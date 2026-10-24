@@ -2,11 +2,15 @@
 # 软件管理
 # ------------------------------------------------------------
 $script:appRows = $null; $script:leftApp = $null
+Register-BgJob 'apps' -Cancel look -ReadOnly -Done {
+    End-Op $(if ($sync.WasCancelled) { (T '已中途取消，没统计到的软件显示安装时登记的大小') } else { (T '完成') })
+    if ($sync.AppsResult) { Build-AppRows $sync.AppsResult } else { $ctl.EmptyAppsText.Text = (T '没读到已安装的软件') }
+}
 function Load-Apps {
     if ($script:worker) { return }
     $ctl.EmptyApps.Visibility = 'Visible'; $ctl.EmptyAppsText.Text = (T '正在读取已安装的软件，并统计每个占多少空间…')
     $ctl.AppsList.ItemsSource = $null
-    $sync.Mode = 'apps'; $sync.AppsResult = $null
+    Use-BgJob 'apps'; $sync.AppsResult = $null
     Start-Op (T '统计已安装的软件') -NoCard
     UI-Busy $true
     Start-Worker @'
@@ -138,6 +142,20 @@ function Start-AppIcons {
     }
     $script:iconTimer.Start()
 }
+Register-BgJob 'appmove' -Cancel move -Moves -Done {
+    $script:candScanned = $false; if ($ctl.PageMoves.Visibility -eq 'Visible') { $script:candPending = $true }
+    $res = $sync.AmRes; $r = $script:appMoveRow
+    $ok = $res -and $res.Done -gt 0
+    $cx = $res -and $res.Cancelled -and -not $ok
+    End-Op $(if ($ok) { (T "已搬 {0}") -f (GB $res.Moved) } elseif ($cx) { (T '已取消') } else { (T '没搬成') })
+    $msg = if ($res -and $res.Msgs) { ($res.Msgs -join "`n") } else { '' }
+    if ($ok) {
+        $script:pendingDialog = @{ Title = ((T "「{0}」搬好了") -f $r.Name); Kind = 'done'
+            Text = ((T "已搬到 {0}，C 盘腾出约 {1}。原位置留了链接，快捷方式和开始菜单照常能打开。建议现在打开一次这个软件，确认一切正常。`n`n要搬回来，到「搬家管理」点「搬回 C 盘」。{2}") -f ($res.Dest -join (T '；')), (GB $res.Moved), $(if ($msg) { "`n`n$msg" } else { '' })) }
+    } else { $script:pendingDialog = @{ Title = $(if ($cx) { (T '已取消') } else { (T '没搬成') }); Kind = $(if ($cx) { 'info' } else { 'warn' }); Text = $(if ($msg) { $msg } else { (T '没有搬，原文件夹没动。') }) } }
+    $script:runAfterApps = $true
+    Fill-DestChoices
+}
 # 软件整个搬到其他盘
 function Start-AppMove($r) {
     UI-Log ((T "检查「{0}」能不能搬") -f $r.Name)
@@ -172,7 +190,7 @@ function Start-AppMove($r) {
     if ((Show-Sheet -Title ((T "把「{0}」搬到其他盘？") -f $r.Name) -Text $text -Buttons @((T '取消'), $btn) -Primary $btn -Cancel (T '取消')) -ne $btn) { return }
     $item = @{ N = $r.Name; Paths = @($loc); Apps = @(); Kill = @(); KillDirs = @(); Restrict = $true; Allowed = @($running)
         BusyHint = (T '还有程序开着里面的文件。请退出这个软件（包括屏幕右下角托盘里的图标），关掉打开着这个文件夹的窗口，再搬一次；已经复制好的部分下次直接用，很快') }
-    $sync.Mode = 'appmove'; $sync.AmRes = $null; $script:appMoveRow = $r
+    Use-BgJob 'appmove'; $sync.AmRes = $null; $script:appMoveRow = $r
     Start-Op ((T "搬到其他盘：{0}") -f $r.Name); UI-Busy $true
     Start-Worker @'
 New-Item -ItemType Directory -Path $arg.Dest -Force | Out-Null
@@ -191,6 +209,12 @@ function Split-Command([string]$cmd) {
     if ($m.Success) { return @($m.Groups[1].Value, $m.Groups[2].Value.Trim()) }
     return @($cmd, '')
 }
+Register-BgJob 'uninst' -Done {
+    $x = $sync.UninstRes
+    End-Op $(if ($x -and $x.Ok) { (T '已卸载') } else { (T '没卸载成') })
+    if ($x -and -not $x.Ok) { $script:pendingDialog = @{ Title = (T '没卸载成'); Kind = 'warn'; Text = $x.Msg } }
+    $script:runAfterApps = $true
+}
 $ctl.AppsList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent, [System.Windows.RoutedEventHandler]{
     param($s, $e)
     $b = $e.OriginalSource
@@ -206,7 +230,7 @@ $ctl.AppsList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickE
     $txt = if ($r.Kind -eq 'store') { (T "从应用商店卸载 {0}（{1}）。") -f $r.Name, $r.SizeText } else { (T "会打开 {0} 自带的卸载程序，按它的提示一步步操作即可。卸载完回到这里点「检查残留」，看看还有没有剩下的文件夹。") -f $r.Name }
     if ((Show-Sheet -Kind warn -Title ((T "卸载「{0}」？") -f $r.Name) -Text ($txt + (T "`n`n卸载会删除这个软件，它保存在软件里的数据可能一起被删掉。")) -Buttons @((T '取消'), (T '卸载')) -Primary (T '卸载') -Cancel (T '取消')) -ne (T '卸载')) { return }
     if ($r.Kind -eq 'store') {
-        $sync.Mode = 'uninst'; $sync.UninstRes = $null
+        Use-BgJob 'uninst'; $sync.UninstRes = $null
         Start-Op ((T "卸载 {0}") -f $r.Name); UI-Busy $true
         Start-Worker @'
 $ok = $true; $msg = ''
@@ -278,6 +302,22 @@ function Find-Leftovers($r) {
     }
     return ,$out
 }
+Register-BgJob 'leftdel' -Cancel leftdel -Done {
+    $x = $sync.LeftRes
+    $cx = [bool]$sync.WasCancelled
+    End-Op $(if ($cx) { (T '已中途取消') } else { (T '完成') })
+    $ctl.AppsLeftBox.Visibility = 'Collapsed'; $script:leftApp = $null
+    if ($script:leftBatch) {
+        # 从「残留文件夹」里一次选了几个：已经不在的从列表里拿掉
+        $script:leftBatch = $false
+        if ($script:startRows.ContainsKey('leftover')) { foreach ($lr in @($script:startRows['leftover'])) { if (-not (Test-Path -LiteralPath $lr.Detail)) { [void]$script:startRows['leftover'].Remove($lr) } } }
+        Filter-StartRows; Update-PickBar
+        if ($x) { $script:pendingDialog = @{ Title = $(if ($cx) { (T '已中途取消') } else { (T '残留已清理') }); Kind = 'done'; Text = ((T "{0} 个文件夹已移到回收站。清空回收站后才真正腾出空间。") -f $x.Count) + $(if ($cx) { (T '剩下的没删。') } else { '' }) } }
+    } else {
+        if ($x) { $script:pendingDialog = @{ Title = $(if ($cx) { (T '已中途取消') } else { (T '残留已清理') }); Kind = 'done'; Text = ((T "「{0}」留下的 {1} 个文件夹已移到回收站。清空回收站后才真正腾出空间。") -f $x.Name, $x.Count) + $(if ($cx) { (T '剩下的没删。') } else { '' }) } }
+        $script:runAfterApps = $true
+    }
+}
 $ctl.BtnAppsLeft.Add_Click({
     $r = $script:leftApp
     if (-not $r -or $script:worker) { return }
@@ -295,7 +335,7 @@ $ctl.BtnAppsLeft.Add_Click({
     $ans = Show-Sheet -Kind danger -Title ((T "「{0}」留下了 {1} 个文件夹") -f $r.Name, $left.Count) -Text (T '这些文件夹以软件名命名，多半是卸载后剩下的设置和缓存。会移到回收站，需要的话还能恢复。') -Items $items `
         -Confirm (T '我已确认这些是已卸载软件留下的，删除不会给我带来损失。') -Buttons @((T '先不删'), (T '移到回收站')) -Primary (T '移到回收站') -Destructive '' -Cancel (T '先不删')
     if ($ans -ne (T '移到回收站')) { return }
-    $sync.Mode = 'leftdel'; $sync.LeftRes = $null; $script:leftBatch = $false
+    Use-BgJob 'leftdel'; $sync.LeftRes = $null; $script:leftBatch = $false
     Start-Op ((T "清理「{0}」的残留") -f $r.Name); UI-Busy $true
     Start-Worker $script:leftDelCode @{ Items = $left; Name = $r.Name }
 })
@@ -349,13 +389,21 @@ function Filter-StartRows {
     if ($col.Count -eq 0) { $ctl.EmptyAppsText.Text = switch ($v) { 'startup' { (T '没有开机启动项') } 'task' { (T '没有第三方的计划任务') } 'leftover' { (T '没找到像是残留的文件夹') } default { (T '没有第三方的右键菜单扩展') } } }
     Update-PickBar
 }
+Register-BgJob 'leftovers' -Cancel look -ReadOnly -Done {
+    End-Op (T '完成')
+    Build-StartRows 'leftover' $sync.LeftoverResult
+}
+Register-BgJob 'startup' -ReadOnly -Done {
+    End-Op (T '完成')
+    Build-StartRows ([string]$sync.StartKind) $sync.StartResult
+}
 function Load-StartRows([string]$kind) {
     if ($script:worker) { return }
     $ctl.StartList.ItemsSource = $null
     $ctl.EmptyApps.Visibility = 'Visible'; $ctl.EmptyAppsText.Text = (T '正在读取…')
     if ($kind -eq 'leftover') {
         $ctl.EmptyAppsText.Text = (T '正在找已卸载软件可能留下的文件夹…')
-        $sync.Mode = 'leftovers'; $sync.LeftoverResult = $null
+        Use-BgJob 'leftovers'; $sync.LeftoverResult = $null
         Start-Op (T '查找残留文件夹') -NoCard; UI-Busy $true
         Start-Worker @'
 $apps = if ($sync.AppsResult) { $sync.AppsResult } else { Get-InstalledApps }
@@ -364,7 +412,7 @@ $sync.LeftoverResult = @(Get-OrphanFolders $apps $tree)
 '@ $null
         return
     }
-    $sync.Mode = 'startup'; $sync.StartResult = $null; $sync.StartKind = $kind
+    Use-BgJob 'startup'; $sync.StartResult = $null; $sync.StartKind = $kind
     Start-Op $(switch ($kind) { 'startup' { (T '读取开机启动项') } 'task' { (T '读取计划任务') } default { (T '读取右键菜单扩展') } }) -NoCard
     UI-Busy $true
     Start-Worker @'
@@ -564,6 +612,14 @@ $script:uq = $null
 $script:uqTimer = New-Object System.Windows.Threading.DispatcherTimer
 $script:uqTimer.Interval = [TimeSpan]::FromMilliseconds(800)
 $script:uqTimer.Add_Tick({ Step-UninstQueue })
+Register-BgJob 'uninstmany' -Done {
+    End-Op $(if ($sync.WasCancelled) { (T '已中途取消') } else { (T '完成') })
+    if ($script:uq) {
+        foreach ($u in @($sync.UninstMany)) { if ($u.Ok) { $script:uq.Done++ } else { [void]$script:uq.Fail.Add(((T "{0}：{1}") -f $u.Name, $u.Msg)) } }
+        if ($sync.WasCancelled) { $script:uq.Stop = $true }
+        Step-UninstQueue
+    }
+}
 function Start-BatchUninstall {
     $rows = @(Get-Picked | Where-Object { $_ -is [AppRow] })
     if ($rows.Count -eq 0) { return }
@@ -581,7 +637,7 @@ function Start-BatchUninstall {
     $script:uq = @{ Win32 = $win32; I = -1; Proc = $null; At = (Get-Date); ExitAt = $null; Done = 0; Fail = (New-Object System.Collections.ArrayList); Stop = $false; Total = ($win32.Count + $store.Count) }
     OpLog '卸载' (T '批量卸载') ((@($rows | ForEach-Object { $_.Name })) -join (T '、')) ((T "{0} 个") -f $rows.Count)
     if ($store.Count -gt 0) {
-        $sync.Mode = 'uninstmany'; $sync.UninstMany = $null
+        Use-BgJob 'uninstmany'; $sync.UninstMany = $null
         Start-Op ((T "卸载 {0} 个应用商店软件") -f $store.Count); UI-Busy $true
         Start-Worker @'
 $res = New-Object System.Collections.ArrayList; $i = 0
@@ -678,16 +734,20 @@ function Start-BatchLeftover {
     $ans = Show-Sheet -Kind danger -Title ((T "把选中的 {0} 个文件夹移到回收站？") -f $rows.Count) -Text ((T "共 {0}。这些只是猜测：名字对不上任何已装软件、没有程序在用、一个月没动过。拿不准的先点「打开位置」看一眼。移到回收站后还能恢复。") -f (Fmt $tb)) -Items $items `
         -Confirm (T '我看过了，这些是已卸载软件留下的，删除不会给我带来损失。') -Buttons @((T '先不删'), (T '移到回收站')) -Primary (T '移到回收站') -Destructive '' -Cancel (T '先不删')
     if ($ans -ne (T '移到回收站')) { return }
-    $sync.Mode = 'leftdel'; $sync.LeftRes = $null; $script:leftBatch = $true
+    Use-BgJob 'leftdel'; $sync.LeftRes = $null; $script:leftBatch = $true
     Start-Op ((T "把 {0} 个残留文件夹移到回收站") -f $rows.Count); UI-Busy $true
     Start-Worker $script:leftDelCode @{ Items = @($rows | ForEach-Object { @{ Path = [string]$_.Detail; Bytes = [double]$_.Key2 } }); Name = (T '残留文件夹') }
 }
 $ctl.BtnPickRecycle.Add_Click({ Start-BatchLeftover })
 # ---------- 检查新版本（winget）----------
+Register-BgJob 'winget' -ReadOnly -Done {
+    End-Op $(if ($sync.WingetResult -and -not $sync.WingetResult.Err) { ((T "{0} 个有新版本") -f @($sync.WingetResult.Items).Count) } else { (T '没查成') })
+    Apply-WingetResult $sync.WingetResult
+}
 function Start-WingetCheck {
     if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return }
     if (-not (Get-WingetExe)) { Show-Sheet -Kind warn -Title (T '这台电脑没有 winget') -Text (T 'winget 是 Windows 自带的软件包管理器（「应用安装程序」），Windows 10 1809 以后的系统都有。打不开的话，在应用商店里搜「应用安装程序」装一下。') | Out-Null; return }
-    $sync.Mode = 'winget'; $sync.WingetResult = $null
+    Use-BgJob 'winget'; $sync.WingetResult = $null
     Start-Op (T '用 winget 检查新版本') -NoCard; UI-Busy $true
     $ctl.AppsInfo.Text = (T '正在用 winget 查，要几十秒…')
     Start-Worker @'
