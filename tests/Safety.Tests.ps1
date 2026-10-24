@@ -469,7 +469,10 @@ try { & {
         'Invoke-SafeRemove'     = 4   # 唯一的删除入口：Recycle、链接只拆链接（rmdir）、rd /s、删文件
         'Recycle-Flush'         = 1   # 入口攒下的一批交给回收站（每一项进批之前都在入口里查过）
         'Remove-LinksInside'    = 2   # 只拆链接本身（rmdir、不递归的 Directory.Delete），从不删数据
-        'Invoke-Move'           = 2   # 搬家：撤回时去掉刚建的链接；核对一致后删 C 盘上改了名的原目录
+        'Invoke-Move'           = 1   # 搬家：建链接失败时去掉 C 盘上那个位置的空文件夹，再把原目录改回来
+        'Remove-MovedOriginal'  = 1   # 搬家核对一致、链接建好以后，删 C 盘上改了名的原目录（rd /s，先拆里面的链接）
+        'Resume-Move'           = 3   # 上次没做完的搬家：C 盘那个位置是空文件夹（软件重新建的）时删掉它（不递归，有内容就删不掉）；撤回时只拆链接
+        'Clear-MoveStep'        = 1   # 本工具自己的搬家进度记录
         'Invoke-MoveBack'       = 2   # 搬回：去掉链接；核对一致后删目标盘上的旧副本（Test-OurMoveCopy）
         'Invoke-DropCopy'       = 1   # 删没搬完留下的多余副本：副本里有 C 盘没有的文件就不删
         'Undo-MoveBackCopy'     = 1   # 搬回中途失败：删掉刚复制回 C 盘的那份
@@ -537,6 +540,68 @@ try { & {
     $got = @(foreach ($j in $jobs) { $o = @($j.PS.EndInvoke($j.H))[0]; $j.PS.Dispose(); $o })
     Check 'ARC-3 four counts at the same time each get their own file count and size' ($got.Count -eq 4 -and $got[0].Files -eq 1500 -and $got[0].Bytes -eq 6000 -and $got[1].Files -eq 7 -and $got[1].Bytes -eq 14 -and $got[2].Files -eq 1500 -and $got[3].Files -eq 7 -and -not $got[1].Cancelled)
     Check 'ARC-3 the move checks read their own count, not the shared progress counters' ($engineText -notmatch '\[DirStat\]::(Files|Bytes|Reparse)' -and ([regex]::Matches($engineText, 'DirCount \$')).Count -ge 6)
+    # ============ 16. 搬家每一步都有记录，断电后能接着做完或撤回；核对要零差异（3.6 架构评审） ============
+    $js = Join-Path $T 'journal-src'
+    Check 'ARC-2 a move step is written down and read back' ((Set-MoveStep @{ Kind = 'move'; Src = $js; Dst = 'D:\CDriveMoved\x'; Bak = "$js.moved_backup"; Cp = '/COPY:DAT'; Step = 'renamed' }) -and @(Get-MoveJournal | Where-Object { $_.Src -eq $js -and $_.Step -eq 'renamed' -and $_.Bak -eq "$js.moved_backup" }).Count -eq 1)
+    [void](Set-MoveStep @{ Kind = 'move'; Src = $js; Dst = 'D:\CDriveMoved\x'; Bak = "$js.moved_backup"; Cp = '/COPY:DAT'; Step = 'linked' })
+    Check 'ARC-2 a later step replaces the earlier one for the same folder' (@(Get-MoveJournal | Where-Object { $_.Src -eq $js }).Count -eq 1 -and @(Get-MoveJournal | Where-Object { $_.Src -eq $js })[0].Step -eq 'linked')
+    Clear-MoveStep $js
+    Check 'ARC-2 a finished move leaves no record' (@(Get-MoveJournal | Where-Object { $_.Src -eq $js }).Count -eq 0)
+    $a = [pscustomobject]@{ Files = 1500; Bytes = 6000; Cancelled = $false }
+    Check 'ARC-2 the copy check needs both sides exactly the same (one byte off fails)' ((Test-SameCount $a ([pscustomobject]@{ Files = 1500; Bytes = 6000; Cancelled = $false })) -and -not (Test-SameCount $a ([pscustomobject]@{ Files = 1500; Bytes = 6001; Cancelled = $false })) -and -not (Test-SameCount $a ([pscustomobject]@{ Files = 1501; Bytes = 6000; Cancelled = $false })) -and -not (Test-SameCount $a ([pscustomobject]@{ Files = 1500; Bytes = 6000; Cancelled = $true })))
+    $im = [regex]::Match($engineText, '(?s)function Invoke-Move\(.*?\r?\n\}').Value
+    $order = @("Step = 'copying'", 'robocopy.exe', "Step = 'renamed'", 'mklink /J', "Step = 'linked'", "Step = 'cleanup'", 'Remove-MovedOriginal', 'Clear-MoveStep')
+    $pos = @($order | ForEach-Object { if ($_ -eq 'Clear-MoveStep') { $im.LastIndexOf($_) } else { $im.IndexOf($_) } })
+    Check 'ARC-2 the move writes each step before going on to the next (copy, rename, link, delete the old folder)' (@($pos | Where-Object { $_ -lt 0 }).Count -eq 0 -and (($pos | Sort-Object) -join ',') -eq ($pos -join ',') -and $im -match 'Test-SameCount \$sc \$dc')
+    $ib = [regex]::Match($engineText, '(?s)function Invoke-MoveBack\(.*?\r?\n\}').Value
+    $order = @("Step = 'copying'", 'Test-SameCount', 'rmdir', "Step = 'unlinked'", '[IO.Directory]::Move($tmp, $src)', "Step = 'swapped'", "Step = 'cleanup'", 'Clear-MoveStep')
+    $pos = @($order | ForEach-Object { if ($_ -eq 'Clear-MoveStep') { $ib.LastIndexOf($_) } else { $ib.IndexOf($_) } })
+    Check 'ARC-2 the move back writes its steps in order too' (@($pos | Where-Object { $_ -lt 0 }).Count -eq 0 -and (($pos | Sort-Object) -join ',') -eq ($pos -join ','))
+    Check 'ARC-2 an unfinished move found at startup can be finished or undone' ($src -match "(?s)function Show-HalfMoves.*?Get-MoveJournal.*?'moveresume'" -and $src -match 'Resume-Move \$x \$arg\.How')
+    if ($win) {
+        $mvRoot = Join-Path $T 'jroot'; [void][IO.Directory]::CreateDirectory($mvRoot)
+        $mk = {
+            param([string]$name, [string]$step)
+            $s = Join-Path $T $name; $d = Join-Path $mvRoot $name; $b = "$s.moved_backup"
+            [void][IO.Directory]::CreateDirectory($s); foreach ($i in 1..5) { [IO.File]::WriteAllText((Join-Path $s "f$i.txt"), "data $i") }
+            & "$env:SystemRoot\System32\robocopy.exe" $s $d /E /COPY:DAT /NJH /NJS /NFL /NDL /NP | Out-Null
+            [IO.Directory]::Move($s, $b)
+            if ($step -eq 'linked') { & "$env:SystemRoot\System32\cmd.exe" /c mklink /J "$s" "$d" | Out-Null }
+            [void](Set-MoveStep @{ Kind = 'move'; Src = $s; Dst = $d; Bak = $b; Cp = '/COPY:DAT'; Step = $step })
+            return @{ S = $s; D = $d; B = $b }
+        }
+        $sync.Stop = $false
+        $x = & $mk 'jr-fin' 'renamed'; $r = Resume-Move (@(Get-MoveJournal | Where-Object { $_.Src -eq $x.S })[0]) 'finish'
+        Check 'ARC-2 power cut after the rename: "finish" links the folder, all files reachable, old copy removed, no record left' ($r.Ok -and (IsLink $x.S) -and (Test-Path (Join-Path $x.S 'f5.txt')) -and -not (Test-Path $x.B) -and @(Get-MoveJournal | Where-Object { $_.Src -eq $x.S }).Count -eq 0)
+        $x = & $mk 'jr-undo' 'renamed'; $r = Resume-Move (@(Get-MoveJournal | Where-Object { $_.Src -eq $x.S })[0]) 'undo'
+        Check 'ARC-2 power cut after the rename: "undo" puts the real folder back' ($r.Ok -and -not (IsLink $x.S) -and ([IO.File]::ReadAllText((Join-Path $x.S 'f3.txt')) -eq 'data 3') -and -not (Test-Path $x.B))
+        $x = & $mk 'jr-link' 'linked'; $r = Resume-Move (@(Get-MoveJournal | Where-Object { $_.Src -eq $x.S })[0]) 'undo'
+        Check 'ARC-2 power cut after the link: "undo" removes only the link and puts the real folder back (the far copy stays)' ($r.Ok -and -not (IsLink $x.S) -and (Test-Path (Join-Path $x.S 'f1.txt')) -and (Test-Path (Join-Path $x.D 'f1.txt')))
+        $x = & $mk 'jr-link2' 'linked'; [IO.File]::WriteAllText((Join-Path $x.B 'late.txt'), 'written after the check')
+        $r = Resume-Move (@(Get-MoveJournal | Where-Object { $_.Src -eq $x.S })[0]) 'finish'
+        Check 'ARC-2 power cut after the link: "finish" copies the files written late, then removes the old folder' ($r.Ok -and (Test-Path (Join-Path $x.S 'late.txt')) -and -not (Test-Path $x.B))
+        $x = & $mk 'jr-new' 'renamed'; [void][IO.Directory]::CreateDirectory($x.S); [IO.File]::WriteAllText((Join-Path $x.S 'new.db'), 'the app started again')
+        $r1 = Resume-Move (@(Get-MoveJournal | Where-Object { $_.Src -eq $x.S })[0]) 'finish'; $r2 = Resume-Move (@(Get-MoveJournal | Where-Object { $_.Src -eq $x.S })[0]) 'undo'
+        Check 'ARC-2 if the app made a new folder with data in the old place, neither choice touches anything' (-not $r1.Ok -and -not $r2.Ok -and (Test-Path (Join-Path $x.S 'new.db')) -and (Test-Path (Join-Path $x.B 'f1.txt')) -and (Test-Path (Join-Path $x.D 'f1.txt')))
+        Clear-MoveStep $x.S
+        $x = & $mk 'jr-old' 'copying'
+        Check 'ARC-2 a record that says "copying" but finds the folder already renamed is treated as renamed' ((Get-JournalStep (@(Get-MoveJournal | Where-Object { $_.Src -eq $x.S })[0])) -eq 'renamed')
+        Clear-MoveStep $x.S
+    } else { Skip 'ARC-2 finishing and undoing interrupted moves' }
+    # ============ 17. 换掉已有文件（File.Replace）：PowerShell 把 $null 当成空字符串传进去，会直接报错 ============
+    & {
+        function Get-TaskExePath { Join-Path (Join-Path $T 'pf-clearc') 'ClearC.exe' }
+        function Test-UserWritable($d) { $false }
+        $self = Join-Path $T 'self.exe'; [IO.File]::WriteAllText($self, 'version 1')
+        $old = $env:CLEANC_SELF; $env:CLEANC_SELF = $self
+        try {
+            $r1 = Install-TaskExe
+            [IO.File]::WriteAllText($self, 'version 2')
+            $r2 = Install-TaskExe
+            Check 'SEC-2 opening a newer version replaces the task copy (it used to fail on File.Replace)' ($r1.Path -and $r2.Path -and -not $r2.Err -and [IO.File]::ReadAllText((Get-TaskExePath)) -eq 'version 2')
+        } finally { $env:CLEANC_SELF = $old }
+    }
+    Check 'no File.Replace call passes $null as the backup name' ($src -notmatch 'File\]::Replace\([^\r\n]*,\s*\$null\)')
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue

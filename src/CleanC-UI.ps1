@@ -5697,6 +5697,8 @@ function Invoke-Move($it, $destRoot, $res) {
     SetP @{ MoveItem = $true; MoveBack = $false; HasKill = [bool]$it.Kill; MovePhase = 'kill'; PathNo = 0; PathCount = $todo.Count; MovePath = ''; MoveDest = ''; MoveReuse = $false }
     if ($it.Kill) { foreach ($s in $todo) { [void](Close-Holders $it $s) } }
     foreach ($src in $it.Paths) {
+      $jr = $null   # 这一项的搬家进度记录；这一项结束时（不管成没成）还停在「复制中」就删掉：C 盘没动过
+      try {
         Set-CanCancel $true
         if (-not (Test-Path -LiteralPath $src)) { continue }
         if (Stopping) { $m = (T '已取消，剩下的文件夹没有搬'); Log "  $m"; $res.Cancelled = $true; $res.Msgs += $m; break }
@@ -5753,6 +5755,8 @@ function Invoke-Move($it, $destRoot, $res) {
         }
         $cp = if ($it.Sddl) { '/COPY:DATS' } else { '/COPY:DAT' }
         Save-MoveMap $dstRoot $src $dst
+        $bak = "$src.moved_backup"
+        $jr = @{ Kind = 'move'; Src = $src; Dst = $dst; Bak = $bak; Cp = $cp; Step = 'copying' }; [void](Set-MoveStep $jr)
         $base = [math]::Min([double]$haveBytes, [double]$srcBytes)
         SetP @{ MovePhase = 'copy'; SubKind = 'copy'; SubTotal = [double]$srcBytes; SubBase = $base; SubDone = $base; SubStart = (Get-Date); DestDrive = $destDrive; DestFree0 = $destFree0; Detail = "$src  ->  $dst" }
         # 每复制完一个文件，robocopy 输出一行「大小<Tab>文件名」，累加起来就是已复制的字节数。
@@ -5760,7 +5764,8 @@ function Invoke-Move($it, $destRoot, $res) {
         # 副本里有一个 C 盘上没有的文件（在允许范围内）也不用 /MIR：那些文件留着不删，只补新的
         $mode = if ($reuse -and $extra -eq 0) { '/MIR' } else { '/E' }
         $more = @(); if ($reuse -and $it.Sddl) { $more += '/SECFIX' }   # 用上次的副本时，连没变的文件的权限也改对
-        $rc = Invoke-Tool "$sys32\robocopy.exe" (@($src, $dst, $mode, $cp) + $more + @('/DCOPY:DAT', '/R:2', '/W:2', '/NDL', '/NJH', '/NJS', '/NP', '/BYTES', '/XJ')) '' $base
+        $rcArgs = @($src, $dst, $mode, $cp) + $more + @('/DCOPY:DAT', '/R:2', '/W:2', '/NDL', '/NJH', '/NJS', '/NP', '/BYTES', '/XJ')
+        $rc = Invoke-Tool "$sys32\robocopy.exe" $rcArgs '' $base
         $cxHalf = (T "已取消：{0} 原文件夹没动。已复制的部分留在 {1}，下次再搬这一项会接着复制；不需要的话，可以在「搬家管理」里删掉这份副本") -f $src, $dst
         $cxCopied = (T "已取消：{0} 已经复制到 {1}，但还没换成链接，原文件夹没动。下次再搬只补有变化的文件") -f $src, $dst
         if ($rc.Cancelled) { Log "  $cxHalf"; OpLog '搬运' (T '搬家已取消') $src $cxHalf; $res.Cancelled = $true; $res.Msgs += $cxHalf; break }
@@ -5768,11 +5773,17 @@ function Invoke-Move($it, $destRoot, $res) {
         # 代码里带 4：有同名的文件和文件夹对不上，那几项没复制过去。数量核对可能照样通过，所以这里就停
         if (($rc.Code -band 4) -ne 0) { $m = ((T "复制时有名字对不上的项目（robocopy 代码 {0}：同一个名字一边是文件一边是文件夹），原目录未动。打开 {1} 看看") -f $rc.Code, $dst); Log "  $m"; OpLog '搬运' (T '搬家失败') $src $m; $res.Fail++; $res.Msgs += $m; continue }
         SetP @{ MovePhase = 'verify'; SubKind = 'measure'; SubStart = (Get-Date); Detail = (T '复制完成，核对两边大小') }
-        # 软件都已关掉，原目录不会再变：两边重新数一遍，文件个数一个不能少、总大小几乎一致，才继续（之后才会删 C 盘上的原目录）
-        $sc = DirCount $src; $srcBytes = [double]$sc.Bytes; $srcFiles = [long]$sc.Files
-        $dc = DirCount $dst; $dstBytes = [double]$dc.Bytes; $dstFiles = [long]$dc.Files
+        # 两边重新数一遍，文件个数和总大小一个都不能差，才继续（之后才会删 C 盘上的原目录）。
+        # 对不上多半是复制时还有程序在写：再补复制一遍、再数一次，还对不上就不搬
+        $sc = DirCount $src; $dc = DirCount $dst
+        if (-not (Stopping) -and -not (Test-SameCount $sc $dc)) {
+            SetP @{ Detail = (T '两边差一点，补复制一遍再核对') }
+            & "$sys32\robocopy.exe" @rcArgs | Out-Null
+            $sc = DirCount $src; $dc = DirCount $dst
+        }
+        $srcBytes = [double]$sc.Bytes; $srcFiles = [long]$sc.Files; $dstBytes = [double]$dc.Bytes; $dstFiles = [long]$dc.Files
         if ((Stopping) -or $sc.Cancelled -or $dc.Cancelled) { Log "  $cxCopied"; OpLog '搬运' (T '搬家已取消') $src $cxCopied; $res.Cancelled = $true; $res.Msgs += $cxCopied; break }
-        if ($dstFiles -lt $srcFiles -or [math]::Abs($dstBytes - $srcBytes) -gt [math]::Max([double]16MB, [double]$srcBytes * 0.001)) {
+        if (-not (Test-SameCount $sc $dc)) {
             $m = (T "核对不一致（源 {0:N0} 个文件 {1}，目标 {2:N0} 个文件 {3}），原目录未动") -f $srcFiles, (GB $srcBytes), $dstFiles, (GB $dstBytes)
             Log "  $m"; OpLog '搬运' (T '搬家失败') $src $m; $res.Fail++; $res.Msgs += $m; continue
         }
@@ -5780,7 +5791,6 @@ function Invoke-Move($it, $destRoot, $res) {
 
         if (Stopping) { Log "  $cxCopied"; OpLog '搬运' (T '搬家已取消') $src $cxCopied; $res.Cancelled = $true; $res.Msgs += $cxCopied; break }
         SetP @{ MovePhase = 'link'; SubKind = 'action'; SubStart = (Get-Date); Detail = ((T "把 {0} 换成指向 {1} 的链接") -f $src, $dst) }
-        $bak = "$src.moved_backup"
         if (Test-Path -LiteralPath $bak) {
             # 以前留下的备份不直接删（万一是唯一的一份），改个名放在旁边
             $old = "{0}_{1:yyyyMMddHHmmss}" -f $bak, (Get-Date)
@@ -5795,16 +5805,19 @@ function Invoke-Move($it, $destRoot, $res) {
             $m = ((T "已复制到 {0}，但原文件夹被占用，还没换成链接：{1}。再搬时直接用这份副本，只补差异，很快就好") -f $dst, $why)
             Log ((T "  {0}（系统提示：{1}）") -f $m, $($r.Err)); OpLog '搬运' (T '搬家未完成：原文件夹被占用') $src $m; $res.Wait++; $res.Msgs += $m; continue
         }
-        # 从这里到删掉 C 盘上的备份，停在一半会留下半截状态：不能取消，做完这一项才停
+        # 从这里到删掉 C 盘上的备份，停在一半会留下半截状态：不能取消，做完这一项才停；断电的话下次打开按记录接着做完或撤回
         Set-CanCancel $false
+        $jr.Step = 'renamed'; [void](Set-MoveStep $jr)
         & "$sys32\cmd.exe" /c mklink /J "$src" "$dst" | Out-Null
         if (-not (IsLink $src)) {
             $back = $true
             try { if (Test-Path -LiteralPath $src) { Remove-Item -LiteralPath $src -Force -ErrorAction Stop }; [IO.Directory]::Move($bak, $src) } catch { $back = $false }
+            if ($back) { Clear-MoveStep $src }   # 改回去了；没改回去的留着记录，下次打开还能处理
             $m = if ($back) { ((T "建链接失败，已改回原目录，副本在 {0}") -f $dst) } else { ((T "建链接失败，而且没能把原目录改回来：你的数据在 {0}，请手动把它改名回 {1}（{1} 现在可能是别的程序新建的空文件夹）；副本在 {2}") -f $bak, $src, $dst) }
             Log "  $m"; OpLog '搬运' (T '搬家失败') $src $m; $res.Fail++; $res.Msgs += $m; continue
         }
-        # 核对之后到改名之间可能有程序又写了文件，补复制一遍新文件；补不过去就保留 C 盘上的旧文件夹
+        $jr.Step = 'linked'; [void](Set-MoveStep $jr)
+        # 核对之后到改名之间可能有程序又写了文件，补复制一遍新文件；补不过去就保留 C 盘上的旧文件夹（记录留着，下次打开可以接着做完或撤回）
         SetP @{ Detail = (T '补复制最后写入的文件') }
         & "$sys32\robocopy.exe" "$bak" "$dst" /E /XO $cp /R:1 /W:1 /XJ /NFL /NDL /NJH /NJS /NP | Out-Null
         if ($LASTEXITCODE -ge 8) {
@@ -5815,11 +5828,8 @@ function Invoke-Move($it, $destRoot, $res) {
             continue
         }
         SetP @{ MovePhase = 'cleanup'; SubKind = 'delete'; SubTotal = [double]$srcBytes; SubStart = (Get-Date); FreeC0 = [double](FreeC); Detail = (T '链接已建好，删除 C 盘上的原目录') }
-        # rd /s 遇到链接只拆不跟。没删干净（有文件被占用，或者里面后来多了链接）就先拆掉里面的链接再删一次，绝不用会跟进链接的 Remove-Item -Recurse
-        foreach ($pass in 1, 2) {
-            if ($pass -eq 2) { if (-not (Test-Path -LiteralPath $bak)) { break }; [void](Remove-LinksInside $bak) }
-            if (Test-CmdPathOk $bak) { & "$sys32\cmd.exe" /c rd /s /q "\\?\$bak" 2>$null | Out-Null }
-        }
+        $jr.Step = 'cleanup'; [void](Set-MoveStep $jr)
+        if (Remove-MovedOriginal $bak) { Clear-MoveStep $src }
         if (Test-Path -LiteralPath $bak) { $m = ((T "C 盘上的旧文件夹没删干净（可能有文件被占用），数据已经在 {0}，可以以后再删：{1}") -f $dst, $bak); Log "  $m"; $res.Msgs += $m }
         $res.Done++; $res.Moved += $srcBytes; $res.Dest += $dst
         SetP @{ MovePhase = 'done' }
@@ -5827,6 +5837,7 @@ function Invoke-Move($it, $destRoot, $res) {
         $script:movedTargets = $null
         if (Test-Path -LiteralPath $bak) { $m = ((T "已搬好，但 C 盘上的备份没删干净（有文件被占用），过后可手动删除：{0}") -f $bak); Log "  $m"; OpLog '删除' (T '搬家后 C 盘旧文件夹没删干净') $bak ''; $res.Msgs += $m }
         else { Log ((T "  完成  {0}  ->  {1}") -f $src, $dst); OpLog '删除' (T '搬家后删除 C 盘上的原文件夹') $bak (((T "数据已在 {0}") -f $dst)) }
+      } finally { if ($jr -and $jr.Step -eq 'copying') { Clear-MoveStep $src } }
     }
     Set-CanCancel $true
 }
@@ -6120,6 +6131,196 @@ function Find-HalfMoves {
     }
     return $out
 }
+# ---------- 搬家进度记录：每做完一步写一次，断电、崩溃后下次打开能接着做完或者撤回 ----------
+# 每个正在搬的文件夹一个文件（%LOCALAPPDATA%\CleanC\搬家进度），一行一项：Kind（move 搬走 / back 搬回）、Src（C 盘上的位置）、
+# Dst（目标盘上的副本）、Bak（搬走时 C 盘原文件夹改成的名字；搬回时复制回来的临时文件夹）、Cp（复制参数）、Fresh、Step、Time。
+# 搬走：copying 复制中（C 盘没动）→ renamed 原文件夹已改名 → linked 已换成链接 → cleanup 删 C 盘上的旧文件夹 → 删掉记录
+# 搬回：copying 复制回 C 盘中（链接没动）→ unlinked 链接已拆 → swapped 已换回真文件夹 → cleanup 删目标盘上的那份 → 删掉记录
+# 写不进去（C 盘满）不拦着搬家：打开时还会按 *.moved_backup 找没做完的
+function MoveJournalPath([string]$src) {
+    $name = ($src.TrimEnd('\', '/').ToLowerInvariant() -replace '[\\/:*?"<>|]', '_') + '.txt'
+    return (Join-Path (Join-Path $script:appDir '搬家进度') $name)
+}
+function Set-MoveStep($j) {
+    try {
+        $f = MoveJournalPath ([string]$j.Src)
+        $dir = Split-Path $f -Parent
+        if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+        $lines = foreach ($k in 'Kind', 'Src', 'Dst', 'Bak', 'Cp', 'Fresh', 'Step') { "{0}`t{1}" -f $k, ([string]$j.$k -replace "[`t`r`n]", ' ') }
+        $text = (@($lines) + ("Time`t{0:yyyy-MM-dd HH:mm:ss}" -f (Get-Date))) -join "`r`n"
+        $tmp = "$f.tmp"
+        [IO.File]::WriteAllText($tmp, $text, (New-Object System.Text.UTF8Encoding $true))
+        if ([IO.File]::Exists($f)) { [IO.File]::Replace($tmp, $f, [NullString]::Value) } else { [IO.File]::Move($tmp, $f) }   # $null 会被当成空字符串
+        return $true
+    } catch { Log ((T "  没能写下搬家进度（{0}）：断电的话，下次打开要按 *.moved_backup 找") -f $_.Exception.Message); return $false }
+}
+function Clear-MoveStep([string]$src) {
+    $f = MoveJournalPath $src
+    foreach ($x in $f, "$f.tmp") { try { if ([IO.File]::Exists($x)) { [IO.File]::Delete($x) } } catch {} }
+}
+function Get-MoveJournal {
+    $dir = Join-Path $script:appDir '搬家进度'
+    $out = New-Object System.Collections.Generic.List[object]
+    foreach ($f in @(Get-ChildItem -LiteralPath $dir -Filter '*.txt' -File -ErrorAction SilentlyContinue)) {
+        $j = @{ File = $f.FullName }
+        try { foreach ($l in [IO.File]::ReadAllLines($f.FullName, [Text.Encoding]::UTF8)) { $p = $l.Split("`t", 2); if ($p.Count -eq 2) { $j[$p[0]] = $p[1] } } } catch { continue }
+        if ($j.Src -and $j.Step -and ($j.Kind -eq 'move' -or $j.Kind -eq 'back')) { $out.Add([pscustomobject]$j) }
+    }
+    return $out.ToArray()
+}
+# 两次统计是不是完全一样：个数、大小一个都不能差，哪边数到一半被取消都不算
+function Test-SameCount($a, $b) { return [bool]($a -and $b -and -not $a.Cancelled -and -not $b.Cancelled -and [long]$a.Files -eq [long]$b.Files -and [long]$a.Bytes -eq [long]$b.Bytes) }
+# C 盘上那个位置现在是什么：none 不在、link 链接、empty 空文件夹（多半是软件重新建的）、data 有内容的真文件夹
+function Get-PlaceState([string]$p) {
+    if (IsLink $p) { return 'link' }
+    if (-not (Test-Path -LiteralPath $p)) { return 'none' }
+    if (@(Get-ChildItem -LiteralPath $p -Force -ErrorAction SilentlyContinue | Select-Object -First 1).Count -eq 0) { return 'empty' }
+    return 'data'
+}
+# 记录里写的那一步，和磁盘上实际的样子对一下：写记录前一刻断电时，实际可能已经多做了一步
+function Get-JournalStep($j) {
+    $st = Get-PlaceState ([string]$j.Src)
+    $bakThere = $j.Bak -and (Test-Path -LiteralPath ([string]$j.Bak))
+    $step = [string]$j.Step
+    if ($j.Kind -eq 'move') {
+        if ($step -eq 'copying' -and $bakThere -and ($st -eq 'none' -or $st -eq 'empty')) { $step = 'renamed' }
+        if ($step -eq 'renamed' -and $st -eq 'link') { $step = 'linked' }
+        if (($step -eq 'linked' -or $step -eq 'cleanup') -and -not $bakThere -and $st -eq 'link') { $step = 'done' }
+    } else {
+        if ($step -eq 'copying' -and $bakThere -and ($st -eq 'none' -or $st -eq 'empty')) { $step = 'unlinked' }
+        if ($step -eq 'unlinked' -and -not $bakThere -and $st -eq 'data') { $step = 'swapped' }
+        if (($step -eq 'swapped' -or $step -eq 'cleanup') -and -not (Test-Path -LiteralPath ([string]$j.Dst))) { $step = 'done' }
+    }
+    return $step
+}
+# 给人看的一句：停在了哪一步
+function Get-JournalText($j) {
+    $s = [string]$j.Src; $d = [string]$j.Dst; $b = [string]$j.Bak
+    switch ((Get-JournalStep $j) + '/' + $j.Kind) {
+        'copying/move'  { return ((T "{0}：复制到 {1} 时停了，C 盘上的原文件夹没动") -f $s, $d) }
+        'renamed/move'  { return ((T "{0}：原文件夹已改名为 {1}，还没换成链接") -f $s, $b) }
+        'linked/move'   { return ((T "{0}：已换成指向 {1} 的链接，C 盘上的旧文件夹 {2} 还没删") -f $s, $d, $b) }
+        'cleanup/move'  { return ((T "{0}：已搬好，删 C 盘上的旧文件夹 {1} 时停了") -f $s, $b) }
+        'copying/back'  { return ((T "{0}：搬回 C 盘时复制到一半，C 盘上的链接没动") -f $s) }
+        'unlinked/back' { return ((T "{0}：搬回时链接已拆掉，复制回来的数据在 {1}") -f $s, $b) }
+        'swapped/back'  { return ((T "{0}：已搬回 C 盘，目标盘上的 {1} 还没删") -f $s, $d) }
+        'cleanup/back'  { return ((T "{0}：已搬回 C 盘，删目标盘上的 {1} 时停了") -f $s, $d) }
+        default         { return ((T "{0}：已经做完了") -f $s) }
+    }
+}
+# 搬家时 C 盘上改了名的原文件夹（搬回时目标盘上的那份）：核对过以后删掉。rd /s 遇到链接只拆不跟；
+# 没删干净（有文件被占用，或者里面后来多了链接）就先拆掉里面的链接再删一次，绝不用会跟进链接的 Remove-Item -Recurse
+function Remove-MovedOriginal([string]$dir) {
+    if (-not (Test-CmdPathOk $dir) -or (IsLink $dir)) { return $false }
+    foreach ($pass in 1, 2) {
+        if ($pass -eq 2) { if (-not (Test-Path -LiteralPath $dir)) { break }; [void](Remove-LinksInside $dir) }
+        & "$sys32\cmd.exe" /c rd /s /q "\\?\$dir" 2>$null | Out-Null
+    }
+    return -not (Test-Path -LiteralPath $dir)
+}
+# 上次没做完的搬家：$how = finish（按记录接着做完）或 undo（撤回到搬之前的样子）。返回 @{ Ok; Msg }。
+# C 盘那个位置已经有了新的内容（软件重新建了文件夹并写了东西）时两样都不做，告诉用户数据在哪
+function Resume-Move($j, [string]$how) {
+    $res = @{ Ok = $false; Msg = '' }
+    $src = [string]$j.Src; $dst = [string]$j.Dst; $bak = [string]$j.Bak
+    $cp = if ($j.Cp) { [string]$j.Cp } else { '/COPY:DAT' }
+    if (-not (Test-CmdPathOk $src) -or -not (Test-CmdPathOk $dst) -or ($bak -and -not (Test-CmdPathOk $bak))) { $res.Msg = (T '路径里有 % 或引号，为了不删错地方，没法在这里处理'); return $res }
+    $step = Get-JournalStep $j
+    $st = Get-PlaceState $src
+    $busy = (T "{0} 又有了新的内容（多半是软件重新建的），所以没有动。原来的数据在 {1}，副本在 {2}。先退出那个软件，把两边对比一下再决定") -f $src, $(if ($bak) { $bak } else { $src }), $dst
+    $log = { param($what) OpLog '搬运' $what $src $res.Msg }
+    if ($j.Kind -eq 'move') {
+        if ($step -eq 'done') { Clear-MoveStep $src; $res.Ok = $true; $res.Msg = (T '已经做完了'); return $res }
+        if ($step -eq 'copying') {
+            Clear-MoveStep $src; $res.Ok = $true
+            $res.Msg = (T "{0} 没动过。复制了一部分的副本在 {1}，再搬这一项时会接着复制；不需要的话，可以在「搬家管理」里删掉这份副本") -f $src, $dst
+            & $log (T '没做完的搬家：C 盘没动过'); return $res
+        }
+        if ($step -eq 'cleanup' -and $how -eq 'undo') { $how = 'finish' }   # 旧文件夹已经删了一部分，撤回不了；数据都在目标盘上，接着删完
+        if ($step -eq 'renamed') {
+            if ($st -eq 'data') { $res.Msg = $busy; & $log (T '没做完的搬家：没动'); return $res }
+            if ($st -eq 'empty') { try { [IO.Directory]::Delete($src, $false) } catch { $res.Msg = $busy; return $res } }
+            if ($how -eq 'undo') {
+                try { [IO.Directory]::Move($bak, $src) } catch { $res.Msg = (T "没能把 {0} 改回 {1}：{2}") -f $bak, $src, $_.Exception.Message; & $log (T '撤回没做完的搬家失败'); return $res }
+                Clear-MoveStep $src; $res.Ok = $true
+                $res.Msg = (T "已撤回：{0} 恢复成搬之前的样子。复制到 {1} 的副本还在，再搬时会用上") -f $src, $dst
+                & $log (T '撤回没做完的搬家'); return $res
+            }
+            & "$sys32\cmd.exe" /c mklink /J "$src" "$dst" | Out-Null
+            if (-not (IsLink $src)) { $res.Msg = (T "建链接失败，没改；数据在 {0}") -f $bak; & $log (T '接着做完搬家失败'); return $res }
+            $j.Step = 'linked'; [void](Set-MoveStep $j); $step = 'linked'; $st = 'link'
+        }
+        if ($step -eq 'linked' -or $step -eq 'cleanup') {
+            $lt = LinkTarget $src
+            if ($st -ne 'link' -or ($lt -and $lt.TrimEnd('\') -ine $dst.TrimEnd('\'))) { $res.Msg = (T "{0} 现在不是指向 {1} 的链接，没动。数据在 {2}") -f $src, $dst, $bak; return $res }
+            if ($step -eq 'linked' -and $how -eq 'undo') {
+                $newer = Get-ExtraCount $dst $bak
+                & "$sys32\cmd.exe" /c rmdir "$src" 2>$null | Out-Null
+                if (Test-Path -LiteralPath $src) { $res.Msg = (T 'C 盘上的链接拆不掉（可能被占用），没改'); return $res }
+                try { [IO.Directory]::Move($bak, $src) } catch {
+                    & "$sys32\cmd.exe" /c mklink /J "$src" "$dst" | Out-Null
+                    $res.Msg = (T "没能把 {0} 改回 {1}，已恢复成链接：{2}") -f $bak, $src, $_.Exception.Message; & $log (T '撤回没做完的搬家失败'); return $res
+                }
+                Clear-MoveStep $src; $res.Ok = $true
+                $res.Msg = (T "已撤回：{0} 恢复成搬之前的样子。目标盘上的副本 {1} 还在") -f $src, $dst
+                if ($newer -gt 0) { $res.Msg += ((T "，里面有 {0} 个文件比 C 盘上的新（链接期间写的），留在那里") -f $newer) }
+                & $log (T '撤回没做完的搬家'); return $res
+            }
+            if ($step -eq 'linked') {
+                # 改名之后才写进去的文件补复制过去，核对 C 盘旧文件夹里没有一个文件是目标盘上没有或比它新的，才删旧文件夹
+                & "$sys32\robocopy.exe" "$bak" "$dst" /E /XO $cp /R:1 /W:1 /XJ /NFL /NDL /NJH /NJS /NP | Out-Null
+                if ($LASTEXITCODE -ge 8) { $res.Msg = (T "补复制没成功（robocopy 代码 {0}），C 盘上的旧文件夹先保留：{1}") -f $LASTEXITCODE, $bak; & $log (T '接着做完搬家失败'); return $res }
+                $left = Get-ExtraCount $bak $dst
+                if ($left -ne 0) { $res.Msg = (T "核对不一致：{0} 里有 {1} 个文件在目标盘上没有，先保留") -f $bak, $left; & $log (T '接着做完搬家失败'); return $res }
+                $j.Step = 'cleanup'; [void](Set-MoveStep $j)
+            }
+            if (-not (Remove-MovedOriginal $bak)) { $res.Msg = (T "已搬好，但 C 盘上的旧文件夹没删干净（可能有文件被占用），过后可以再试：{0}") -f $bak; & $log (T '接着做完搬家：旧文件夹没删干净'); return $res }
+            Clear-MoveStep $src; $res.Ok = $true; $script:movedTargets = $null
+            $res.Msg = (T "已做完：{0} 的数据在 {1}，C 盘上的旧文件夹已删") -f $src, $dst
+            & $log (T '接着做完搬家'); return $res
+        }
+    } else {
+        if ($step -eq 'done') { Clear-MoveStep $src; $res.Ok = $true; $res.Msg = (T '已经做完了'); return $res }
+        if ($step -eq 'copying') {
+            $r = @{}; Undo-MoveBackCopy $bak ($j.Fresh -eq 'True') $dst $src $r
+            Clear-MoveStep $src; $res.Ok = $true; $res.Msg = $r.Msg; return $res
+        }
+        if ($step -eq 'unlinked') {
+            if ($st -eq 'data' -or $st -eq 'link') { $res.Msg = $busy; return $res }
+            if ($st -eq 'empty') { try { [IO.Directory]::Delete($src, $false) } catch { $res.Msg = $busy; return $res } }
+            if ($how -eq 'undo') {
+                & "$sys32\cmd.exe" /c mklink /J "$src" "$dst" | Out-Null
+                if (-not (IsLink $src)) { $res.Msg = (T "建链接失败，没改；复制回来的数据在 {0}") -f $bak; return $res }
+                $r = @{}; Undo-MoveBackCopy $bak ($j.Fresh -eq 'True') $dst $src $r
+                Clear-MoveStep $src; $res.Ok = $true; $res.Msg = (T "已撤回：{0} 又是指向 {1} 的链接") -f $src, $dst
+                & $log (T '撤回没做完的搬回'); return $res
+            }
+            try { [IO.Directory]::Move($bak, $src) } catch { $res.Msg = (T "没能把 {0} 改回 {1}：{2}") -f $bak, $src, $_.Exception.Message; return $res }
+            $j.Step = 'swapped'; [void](Set-MoveStep $j); $step = 'swapped'
+        }
+        if ($step -eq 'swapped' -or $step -eq 'cleanup') {
+            if ($how -eq 'undo' -and $step -eq 'swapped') {
+                Clear-MoveStep $src; $res.Ok = $true; $res.Msg = (T "{0} 已经在 C 盘上了；目标盘上的 {1} 留着没删，确认不需要的话可以自己删") -f $src, $dst
+                & $log (T '没做完的搬回：保留目标盘上的那份'); return $res
+            }
+            if ($step -eq 'swapped') {
+                & "$sys32\robocopy.exe" "$dst" "$src" /E /XO /COPY:DAT /R:1 /W:1 /XJ /NFL /NDL /NJH /NJS /NP | Out-Null
+                if ($LASTEXITCODE -ge 8 -or -not (Test-OurMoveCopy $src $dst) -or (Get-ExtraCount $dst $src) -ne 0) {
+                    Clear-MoveStep $src; $res.Ok = $true; $res.Msg = (T "已搬回 C 盘；目标盘上的 {0} 先保留，确认不需要的话可以自己删") -f $dst
+                    foreach ($root in (All-MoveRoots)) { Remove-MoveMapEntry $root $src }
+                    & $log (T '接着做完搬回：保留目标盘上的那份'); return $res
+                }
+                $j.Step = 'cleanup'; [void](Set-MoveStep $j)
+            }
+            if (-not (Remove-MovedOriginal $dst)) { $res.Msg = (T "已搬回，但目标盘上的旧副本没删干净：{0}") -f $dst; return $res }
+            foreach ($root in (All-MoveRoots)) { Remove-MoveMapEntry $root $src }
+            Clear-MoveStep $src; $res.Ok = $true; $script:movedTargets = $null
+            $res.Msg = (T "已做完：{0} 搬回了 C 盘，目标盘上的那份已删") -f $src
+            & $log (T '接着做完搬回'); return $res
+        }
+    }
+    $res.Msg = (T '记录看不懂，没动'); return $res
+}
 function Remove-MoveMapEntry([string]$root, [string]$src) {
     $f = MoveMapFile $root
     if (-not (Test-Path -LiteralPath $f)) { return }
@@ -6241,43 +6442,53 @@ function Invoke-MoveBack($rec, $res) {
     if (Test-Path -LiteralPath $tmp) { try { [IO.Directory]::Move($tmp, ("{0}_{1:yyyyMMddHHmmss}" -f $tmp, (Get-Date))) } catch {} }
     $tmpFresh = -not (Test-Path -LiteralPath $tmp)   # 是这次新建的，里面只有这次复制回来的东西
     New-Item -ItemType Directory -Path $tmp -Force | Out-Null
+    $jr = @{ Kind = 'back'; Src = $src; Dst = $dst; Bak = $tmp; Cp = '/COPY:DAT'; Fresh = [string]$tmpFresh; Step = 'copying' }; [void](Set-MoveStep $jr)
     SetP @{ MovePhase = 'copy'; SubKind = 'copy'; SubTotal = [double]$bytes; SubBase = [double]0; SubDone = [double]0; SubStart = (Get-Date); DestDrive = $env:SystemDrive; DestFree0 = $free; Detail = "$dst  ->  $src" }
-    $rc = Invoke-Tool "$sys32\robocopy.exe" @($dst, $tmp, '/E', '/COPY:DAT', '/DCOPY:DAT', '/R:2', '/W:2', '/NDL', '/NJH', '/NJS', '/NP', '/BYTES', '/XJ') '' 0
-    if ($rc.Cancelled) { Undo-MoveBackCopy $tmp $tmpFresh $dst $src $res; return }
+    $rcArgs = @($dst, $tmp, '/E', '/COPY:DAT', '/DCOPY:DAT', '/R:2', '/W:2', '/NDL', '/NJH', '/NJS', '/NP', '/BYTES', '/XJ')
+    $rc = Invoke-Tool "$sys32\robocopy.exe" $rcArgs '' 0
+    if ($rc.Cancelled) { Undo-MoveBackCopy $tmp $tmpFresh $dst $src $res; Clear-MoveStep $src; return }
     if ($rc.Code -ge 8 -or $rc.Code -lt 0) { $res.Msg = ((T "复制回 C 盘失败（robocopy 代码 {0}），什么都没改，复制了一半的临时文件夹在 {1}") -f $rc.Code, $tmp); OpLog '搬运' (T '搬回 C 盘失败') $src $res.Msg; return }
     SetP @{ MovePhase = 'verify'; SubKind = 'measure'; SubStart = (Get-Date); Detail = (T '核对两边是否一致') }
-    $tc = DirCount $tmp; $b2 = [double]$tc.Bytes; $f2 = [long]$tc.Files
-    if ((Stopping) -or $tc.Cancelled) { Undo-MoveBackCopy $tmp $tmpFresh $dst $src $res; return }
-    if ($f2 -lt $files -or [math]::Abs($b2 - $bytes) -gt [math]::Max([double]16MB, [double]$bytes * 0.001)) {
+    # 个数和大小一个都不能差；差一点多半是复制时还有程序在写：再补复制一遍、再数一次
+    $dc = DirCount $dst; $tc = DirCount $tmp
+    if (-not (Stopping) -and -not (Test-SameCount $dc $tc)) { & "$sys32\robocopy.exe" @rcArgs | Out-Null; $dc = DirCount $dst; $tc = DirCount $tmp }
+    $bytes = [double]$dc.Bytes; $files = [long]$dc.Files; $b2 = [double]$tc.Bytes; $f2 = [long]$tc.Files
+    if ((Stopping) -or $tc.Cancelled -or $dc.Cancelled) { Undo-MoveBackCopy $tmp $tmpFresh $dst $src $res; Clear-MoveStep $src; return }
+    if (-not (Test-SameCount $dc $tc)) {
         $res.Msg = (T "核对不一致（目标盘 {0:N0} 个文件，复制回来 {1:N0} 个），什么都没改") -f $files, $f2; OpLog '搬运' (T '搬回 C 盘失败') $src $res.Msg; return
     }
     Set-CanCancel $false   # 拆链接、换回文件夹、删目标盘上的那份：不能停在一半
     SetP @{ MovePhase = 'link'; SubKind = 'action'; SubStart = (Get-Date); Detail = (T '拆掉链接，换回真正的文件夹') }
     & "$sys32\cmd.exe" /c rmdir "$src" 2>$null | Out-Null
     if (Test-Path -LiteralPath $src) { $res.Msg = ((T "C 盘上的链接拆不掉（可能被占用），什么都没改；复制回来的数据在 {0}") -f $tmp); OpLog '搬运' (T '搬回 C 盘失败') $src $res.Msg; return }
+    $jr.Step = 'unlinked'; [void](Set-MoveStep $jr)
     try { [IO.Directory]::Move($tmp, $src) }
     catch {
         & "$sys32\cmd.exe" /c mklink /J "$src" "$dst" | Out-Null
+        if (IsLink $src) { Clear-MoveStep $src }
         $res.Msg = ((T "换回文件夹失败，已恢复原来的链接；复制回来的数据在 {0}") -f $tmp); OpLog '搬运' (T '搬回 C 盘失败') $src $res.Msg; return
     }
+    $jr.Step = 'swapped'; [void](Set-MoveStep $jr)
     OpLog '搬运' (T '搬回 C 盘') "$dst → $src" ((T "{0:N0} 个文件，{1}，已核对") -f $files, (GB $bytes))
     & "$sys32\robocopy.exe" "$dst" "$src" /E /XO /COPY:DAT /R:1 /W:1 /XJ /NFL /NDL /NJH /NJS /NP | Out-Null
     if ($LASTEXITCODE -ge 8) {
         $res.Ok = $true; $res.Bytes = $bytes; $res.Msg = ((T "已搬回 C 盘，但有几个最后写入的文件没补复制过来，目标盘上的那份先保留：{0}") -f $dst)
         OpLog '搬运' (T '搬回后保留目标盘副本') $dst $res.Msg
         foreach ($root in (All-MoveRoots)) { Remove-MoveMapEntry $root $src }
-        $script:movedTargets = $null; SetP @{ MovePhase = 'done' }; return
+        Clear-MoveStep $src; $script:movedTargets = $null; SetP @{ MovePhase = 'done' }; return
     }
     if (-not (Test-OurMoveCopy $src $dst)) {
         $res.Msg = ((T "已搬回 C 盘。{0} 不是本工具搬过去的（或者还有别的地方链接着它），没有删；确认不需要的话可以自己删") -f $dst)
         OpLog '搬运' (T '搬回后保留目标盘上的文件夹') $dst $res.Msg
     } else {
         SetP @{ MovePhase = 'cleanup'; SubKind = 'action'; SubStart = (Get-Date); Detail = (T '删除目标盘上的那份') }
+        $jr.Step = 'cleanup'; [void](Set-MoveStep $jr)
         if (Test-CmdPathOk $dst) { & "$sys32\cmd.exe" /c rd /s /q "\\?\$dst" 2>$null | Out-Null }
         if (Test-Path -LiteralPath $dst) { $res.Msg = ((T "已搬回，但目标盘上的旧副本没删干净：{0}") -f $dst) }
         else { OpLog '删除' (T '搬回后删除目标盘上的旧副本') $dst (GB $bytes) }
     }
     foreach ($root in (All-MoveRoots)) { Remove-MoveMapEntry $root $src }
+    if (-not (Test-Path -LiteralPath $dst) -or -not (Test-OurMoveCopy $src $dst)) { Clear-MoveStep $src }   # 目标盘那份没删干净时记录留着，下次打开可以接着删
     $script:movedTargets = $null
     $res.Ok = $true; $res.Bytes = $bytes
     SetP @{ MovePhase = 'done' }
@@ -6615,7 +6826,7 @@ function Install-TaskExe {
         $tmp = $dst + '.new'
         [IO.File]::Copy($src, $tmp, $true)
         if ((Get-FileHash -LiteralPath $tmp -Algorithm SHA256).Hash -ne $h) { [IO.File]::Delete($tmp); return @{ Err = (T '复制后核对不一致，没有改') } }
-        if (Test-Path -LiteralPath $dst) { [IO.File]::Replace($tmp, $dst, $null) } else { [IO.File]::Move($tmp, $dst) }
+        if (Test-Path -LiteralPath $dst) { [IO.File]::Replace($tmp, $dst, [NullString]::Value) } else { [IO.File]::Move($tmp, $dst) }   # $null 会被当成空字符串
         OpLog '系统设置' (T '复制本工具给定时任务用') $dst ((T "来自 {0}") -f $src)
         return @{ Path = $dst }
     } catch { return @{ Err = ((T "没能把本工具复制到 {0}：{1}") -f $dir, $_.Exception.Message) } }
@@ -7268,6 +7479,57 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+有的没做成	Some of it did not work
+处理好了	Done
+接着做完	Finish it
+撤回	Undo
+上次搬家或搬回 C 盘时中途停了（比如关机、断电、程序被关掉）。每一步都有记录，数据都还在，没有删。\n\n「接着做完」按原来的计划做完；「撤回」恢复成搬之前的样子（已经删了一部分旧文件夹的，只能接着做完）。先退出下面这些文件夹所属的软件，再选。	A move to or from C: stopped halfway last time (for example the PC was shut down, lost power or ClearC was closed). Every step was recorded, and all your data is still there; nothing was deleted.\n\n"Finish it" completes the original plan. "Undo" puts things back the way they were before the move (if part of the old folder was already deleted, it can only be finished). Quit the apps these folders belong to first, then choose.
+接着做完上次的搬家	Finish the last move
+撤回上次没做完的搬家	Undo the unfinished move
+两边差一点，补复制一遍再核对	The two sides differ slightly; copying again and re-checking
+  没能写下搬家进度（{0}）：断电的话，下次打开要按 *.moved_backup 找	  Could not write the move progress ({0}). If the power goes off, look for *.moved_backup next time
+{0}：复制到 {1} 时停了，C 盘上的原文件夹没动	{0}: stopped while copying to {1}; the original folder on C: was not touched
+{0}：原文件夹已改名为 {1}，还没换成链接	{0}: the original folder was renamed to {1} but not replaced by a link yet
+{0}：已换成指向 {1} 的链接，C 盘上的旧文件夹 {2} 还没删	{0}: now a link to {1}; the old folder {2} on C: is not deleted yet
+{0}：已搬好，删 C 盘上的旧文件夹 {1} 时停了	{0}: moved; stopped while deleting the old folder {1} on C:
+{0}：搬回 C 盘时复制到一半，C 盘上的链接没动	{0}: stopped halfway while copying back to C:; the link on C: was not touched
+{0}：搬回时链接已拆掉，复制回来的数据在 {1}	{0}: the link was removed while moving back; the copied data is in {1}
+{0}：已搬回 C 盘，目标盘上的 {1} 还没删	{0}: moved back to C:; {1} on the other drive is not deleted yet
+{0}：已搬回 C 盘，删目标盘上的 {1} 时停了	{0}: moved back to C:; stopped while deleting {1} on the other drive
+{0}：已经做完了	{0}: already finished
+路径里有 % 或引号，为了不删错地方，没法在这里处理	The path contains % or quotes, so it is not handled here to avoid deleting the wrong place
+{0} 又有了新的内容（多半是软件重新建的），所以没有动。原来的数据在 {1}，副本在 {2}。先退出那个软件，把两边对比一下再决定	{0} has new content again (most likely the app recreated it), so nothing was changed. The original data is in {1} and the copy in {2}. Quit that app and compare both before deciding
+已经做完了	Already finished
+{0} 没动过。复制了一部分的副本在 {1}，再搬这一项时会接着复制；不需要的话，可以在「搬家管理」里删掉这份副本	{0} was not touched. The partial copy is in {1}; moving this item again continues from it. If you no longer need it, delete the copy in Move manager
+没做完的搬家：C 盘没动过	Unfinished move: C: was not touched
+没做完的搬家：没动	Unfinished move: left as it is
+没能把 {0} 改回 {1}：{2}	Could not rename {0} back to {1}: {2}
+撤回没做完的搬家失败	Undoing the unfinished move failed
+已撤回：{0} 恢复成搬之前的样子。复制到 {1} 的副本还在，再搬时会用上	Undone: {0} is back the way it was. The copy in {1} is kept and will be reused next time
+撤回没做完的搬家	Undid the unfinished move
+建链接失败，没改；数据在 {0}	Could not create the link; nothing changed. The data is in {0}
+接着做完搬家失败	Finishing the move failed
+{0} 现在不是指向 {1} 的链接，没动。数据在 {2}	{0} is not a link to {1} now, so nothing was changed. The data is in {2}
+C 盘上的链接拆不掉（可能被占用），没改	The link on C: could not be removed (it may be in use); nothing changed
+没能把 {0} 改回 {1}，已恢复成链接：{2}	Could not rename {0} back to {1}; the link was restored: {2}
+已撤回：{0} 恢复成搬之前的样子。目标盘上的副本 {1} 还在	Undone: {0} is back the way it was. The copy {1} on the other drive is kept
+，里面有 {0} 个文件比 C 盘上的新（链接期间写的），留在那里	; {0} files in it are newer than on C: (written while linked) and stay there
+补复制没成功（robocopy 代码 {0}），C 盘上的旧文件夹先保留：{1}	Copying the last files failed (robocopy code {0}); the old folder on C: is kept: {1}
+核对不一致：{0} 里有 {1} 个文件在目标盘上没有，先保留	Check failed: {1} files in {0} are not on the other drive, so it is kept
+已搬好，但 C 盘上的旧文件夹没删干净（可能有文件被占用），过后可以再试：{0}	Moved, but the old folder on C: was not fully deleted (a file may be in use). You can try again later: {0}
+接着做完搬家：旧文件夹没删干净	Finished the move: the old folder was not fully deleted
+已做完：{0} 的数据在 {1}，C 盘上的旧文件夹已删	Finished: the data of {0} is in {1}; the old folder on C: was deleted
+接着做完搬家	Finished the unfinished move
+建链接失败，没改；复制回来的数据在 {0}	Could not create the link; nothing changed. The copied data is in {0}
+已撤回：{0} 又是指向 {1} 的链接	Undone: {0} is a link to {1} again
+撤回没做完的搬回	Undid the unfinished move back
+{0} 已经在 C 盘上了；目标盘上的 {1} 留着没删，确认不需要的话可以自己删	{0} is on C: already; {1} on the other drive is kept. Delete it yourself if you are sure you do not need it
+没做完的搬回：保留目标盘上的那份	Unfinished move back: kept the copy on the other drive
+已搬回 C 盘；目标盘上的 {0} 先保留，确认不需要的话可以自己删	Moved back to C:; {0} on the other drive is kept. Delete it yourself if you are sure you do not need it
+接着做完搬回：保留目标盘上的那份	Finished the move back: kept the copy on the other drive
+已做完：{0} 搬回了 C 盘，目标盘上的那份已删	Finished: {0} is back on C: and the copy on the other drive was deleted
+接着做完搬回	Finished the unfinished move back
+记录看不懂，没动	The record could not be read, so nothing was changed
 没删：	Not deleted: 
 没能放进回收站（代码 {0}）：可能文件正被占用、回收站放不下，或者在提示里选了取消。没有删	Could not move it to the Recycle Bin (code {0}): a file may be in use, the Recycle Bin may be too small, or the prompt was cancelled. Nothing was deleted
 旧系统 Windows.old	Old Windows installation (Windows.old)
@@ -23040,6 +23302,13 @@ $timer.Add_Tick({
             if ($x) { $script:pendingDialog = @{ Title = (T '已标记为仅在线'); Kind = 'done'; Text = ((T "{0} 个文件（{1}）已改成仅在线{2}。OneDrive 会在后台释放本地空间，要等它同步一会儿。") -f $x.Done, (Fmt $x.Bytes), $(if ($x.Fail) { ((T "，{0} 个没改成（可能正被占用）") -f $x.Fail) } else { '' })) } }
             $script:odWanted = $true
         }
+        elseif ($sync.Mode -eq 'moveresume') {
+            $x = @($sync.ResumeRes)
+            End-Op (T '完成')
+            $script:movedTargets = $null
+            $bad = @($x | Where-Object { -not $_.Ok })
+            $script:pendingDialog = @{ Title = $(if ($bad.Count) { (T '有的没做成') } else { (T '处理好了') }); Kind = $(if ($bad.Count) { 'warn' } else { 'done' }); Text = (@($x | ForEach-Object { $_.Msg }) -join "`n`n") }
+        }
         elseif ($sync.Mode -eq 'aclfix') {
             $x = $sync.AclRes
             End-Op (T '完成')
@@ -23577,6 +23846,26 @@ $sync.AclRes = Repair-MovedAccess $arg.Items
 '@ @{ Items = $l }
 }
 function Show-HalfMoves {
+    # 有进度记录的：说清楚停在哪一步，可以接着做完或撤回
+    $js = @(); try { $js = @(Get-MoveJournal) } catch {}
+    if ($js.Count -gt 0) {
+        if ($script:worker) { return }
+        $items = @($js | ForEach-Object { Get-JournalText $_ })
+        Write-LogFile ((T '发现上次没做完的搬家：') + ($items -join (T '；')))
+        $fin = T '接着做完'; $undo = T '撤回'
+        $ans = Show-Sheet -Kind warn -Title (T '有上次没做完的搬家') -Text (T "上次搬家或搬回 C 盘时中途停了（比如关机、断电、程序被关掉）。每一步都有记录，数据都还在，没有删。`n`n「接着做完」按原来的计划做完；「撤回」恢复成搬之前的样子（已经删了一部分旧文件夹的，只能接着做完）。先退出下面这些文件夹所属的软件，再选。") `
+            -Items $items -Buttons @((T '以后再说'), $undo, $fin) -Primary $fin -Cancel (T '以后再说')
+        if ($ans -ne $fin -and $ans -ne $undo) { return }
+        $sync.Mode = 'moveresume'; $sync.ResumeRes = $null
+        Start-Op $(if ($ans -eq $fin) { (T '接着做完上次的搬家') } else { (T '撤回上次没做完的搬家') }) -NoCard; UI-Busy $true
+        Start-Worker @'
+$out = @()
+foreach ($x in $arg.Items) { $r = Resume-Move $x $arg.How; $out += @{ Ok = $r.Ok; Msg = $r.Msg }; Log ("  " + $r.Msg) }
+$sync.ResumeRes = $out
+'@ @{ Items = $js; How = $(if ($ans -eq $fin) { 'finish' } else { 'undo' }) }
+        return
+    }
+    # 没有记录的（以前的版本留下的）：只能告诉用户数据在哪
     $h = @(); try { $h = @(Find-HalfMoves) } catch { return }
     if ($h.Count -eq 0) { return }
     $items = @($h | ForEach-Object { if ($_.Kind -eq '.moved_backup') { (T "{0} 的数据在 {1}") -f $_.Src, $_.Bak } else { (T "{0}：搬回时复制回来的数据在 {1}") -f $_.Src, $_.Bak } })
