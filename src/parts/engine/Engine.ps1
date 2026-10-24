@@ -2248,6 +2248,18 @@ $script:settingsFile = Join-Path $script:appDir 'settings.txt'
 $script:historyFile  = Join-Path $script:appDir 'history.txt'
 $script:snapDir      = Join-Path $script:appDir '空间快照'
 
+# 同一时间只做一件会改东西的事：界面里删除、搬家、改设置时拿着这把锁，定时的自动清理拿不到就跳过这一次；
+# 自动清理在跑时，界面里要开始这类操作也要等它做完。锁本身出问题（极少见）时不拦着
+$script:busyMutex = $null; $script:busyHeld = $false
+function Enter-BusyLock {
+    if ($script:busyHeld) { return $true }
+    try {
+        if (-not $script:busyMutex) { $script:busyMutex = New-Object System.Threading.Mutex($false, 'Local\ClearC-Busy') }
+        $script:busyHeld = $script:busyMutex.WaitOne(0)
+    } catch [System.Threading.AbandonedMutexException] { $script:busyHeld = $true } catch { $script:busyHeld = $true }
+    return $script:busyHeld
+}
+function Exit-BusyLock { if ($script:busyHeld -and $script:busyMutex) { try { $script:busyMutex.ReleaseMutex() } catch {} }; $script:busyHeld = $false }
 # 设置文件读不出来（被别的程序占着、坏了）时记下来：这时不知道你排除了哪些文件夹，清理一律不删
 $script:settingsBad = $false
 # 设置文件的全部行；没有这个文件返回空数组，有但读不出（重试几次以后）返回 $null

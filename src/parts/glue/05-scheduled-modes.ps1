@@ -145,6 +145,7 @@ if ($script:mode -match '(?i)/selftest') {
     return
 }
 if ($script:mode -match '(?i)/autoclean') {
+    if (-not (Enter-BusyLock)) { OpLog '删除' (T '这次自动清理跳过：本工具的窗口里正在删除或搬家') '' (T '下次到时间再做'); $global:CLEANC_UI_SHOWN = $true; return }
     [void](Prune-OpLog (Get-LogMonths))
     $r = Invoke-AutoClean
     Add-History
@@ -157,4 +158,21 @@ if ($script:mode -match '(?i)/autoclean') {
 # ============================================================
 # 界面
 # ============================================================
+# 只开一个窗口：已经开着的话，把那个窗口拉到前面，这一个直接退出（两个窗口同时删、同时搬会互相打架）
+$script:uiMutex = $null
+if (-not $script:uiTest) {
+    $first = $true
+    try { $script:uiMutex = [System.Threading.Mutex]::new($true, 'Local\ClearC-UI', [ref]$first) } catch { $first = $true }
+    if (-not $first) {
+        try {
+            foreach ($p in @(Get-Process -Name ([Diagnostics.Process]::GetCurrentProcess().ProcessName) -ErrorAction SilentlyContinue)) {
+                if ($p.Id -ne $PID -and $p.MainWindowHandle -ne [IntPtr]::Zero) { [Microsoft.VisualBasic.Interaction]::AppActivate($p.Id); break }
+            }
+        } catch {}
+        $global:CLEANC_UI_SHOWN = $true
+        return
+    }
+}
+# 重新打开本工具（换外观、换语言）之前先放开：不然新开的那个以为已经有窗口开着，直接退出
+function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex() } catch {}; try { $script:uiMutex.Dispose() } catch {}; $script:uiMutex = $null } }
 [xml]$xaml = @"

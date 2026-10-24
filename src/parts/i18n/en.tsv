@@ -156,6 +156,11 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+这次自动清理跳过：本工具的窗口里正在删除或搬家	Skipped this scheduled cleanup: the ClearC window was deleting or moving things
+下次到时间再做	It will run next time
+没有开始	Not started
+后台的自动清理正在运行	The scheduled cleanup is running
+定时的自动清理正在后台清理缓存，通常一两分钟就做完。等它做完再试一次。	The scheduled cleanup is clearing caches in the background; it usually takes a minute or two. Try again when it is done.
   跳过（设置文件读不出来，不知道你排除了哪些文件夹）：{0}	  Skipped (the settings file could not be read, so the excluded folders are unknown): {0}
 跳过：设置文件读不出来	Skipped: the settings file could not be read
 改成只有我能打开	Only I can open them

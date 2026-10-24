@@ -34,6 +34,7 @@ $timer.Add_Tick({
 
     if ($script:worker -and $script:worker.Handle.IsCompleted) {
         $w = $script:worker; $script:worker = $null
+        Exit-BusyLock
         $script:movedTargets = $null
         try { $w.PS.EndInvoke($w.Handle) | Out-Null } catch { UI-Log ((T "后台出错：{0}") -f $($_.Exception.Message)) }
         foreach ($er in @($w.PS.Streams.Error | Select-Object -First 5)) { UI-Log ((T "后台出错：{0}") -f $er) }
@@ -41,7 +42,7 @@ $timer.Add_Tick({
         [DirStat]::Cancel = $false
         if ($sync.WasCancelled) { UI-Log (T '已中途取消。') }
         # 删过、搬过东西以后，逐个扫描得到的旧树不再拿来用（读文件表的结果靠变更日志更新）
-        if (@('scan', 'movescan', 'apps', 'map', 'movesize', 'dup', 'update', 'startup', 'winget', 'odinfo', 'csanalyze', 'leftovers', 'recent') -notcontains [string]$sync.Mode) { [DiskMap]::Invalidate() }
+        if ($script:readOnlyModes -notcontains [string]$sync.Mode) { [DiskMap]::Invalidate() }
 
         if ($sync.Mode -eq 'scan') {
             if ($sync.WasCancelled -or -not $sync.Sizes) {
@@ -611,6 +612,7 @@ $timer.Start()
 
 # 重新打开本工具（换语言、换外观后）
 function Restart-App {
+    Exit-UiLock
     try {
         if ($env:CLEANC_SELF -and (Test-Path -LiteralPath $env:CLEANC_SELF)) { Start-Process -FilePath $env:CLEANC_SELF }
         elseif ($script:selfScript) { Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList ('-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}"' -f $script:selfScript) }
@@ -710,6 +712,7 @@ function Request-Lang {
     if ((Show-Sheet -Title $t -Text $x -Buttons @($no, $ok) -Primary $ok -Cancel $no) -ne $ok) { return $false }
     Set-Setting 'Lang' $to
     OpLog '系统设置' (T '切换界面语言') $to ''
+    Exit-UiLock
     try {
         if ($env:CLEANC_SELF -and (Test-Path -LiteralPath $env:CLEANC_SELF)) { Start-Process -FilePath $env:CLEANC_SELF }
         elseif ($script:selfScript) { Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList ('-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}"' -f $script:selfScript) }

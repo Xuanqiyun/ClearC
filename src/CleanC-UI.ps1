@@ -5748,6 +5748,18 @@ $script:settingsFile = Join-Path $script:appDir 'settings.txt'
 $script:historyFile  = Join-Path $script:appDir 'history.txt'
 $script:snapDir      = Join-Path $script:appDir '空间快照'
 
+# 同一时间只做一件会改东西的事：界面里删除、搬家、改设置时拿着这把锁，定时的自动清理拿不到就跳过这一次；
+# 自动清理在跑时，界面里要开始这类操作也要等它做完。锁本身出问题（极少见）时不拦着
+$script:busyMutex = $null; $script:busyHeld = $false
+function Enter-BusyLock {
+    if ($script:busyHeld) { return $true }
+    try {
+        if (-not $script:busyMutex) { $script:busyMutex = New-Object System.Threading.Mutex($false, 'Local\ClearC-Busy') }
+        $script:busyHeld = $script:busyMutex.WaitOne(0)
+    } catch [System.Threading.AbandonedMutexException] { $script:busyHeld = $true } catch { $script:busyHeld = $true }
+    return $script:busyHeld
+}
+function Exit-BusyLock { if ($script:busyHeld -and $script:busyMutex) { try { $script:busyMutex.ReleaseMutex() } catch {} }; $script:busyHeld = $false }
 # 设置文件读不出来（被别的程序占着、坏了）时记下来：这时不知道你排除了哪些文件夹，清理一律不删
 $script:settingsBad = $false
 # 设置文件的全部行；没有这个文件返回空数组，有但读不出（重试几次以后）返回 $null
@@ -7143,6 +7155,11 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+这次自动清理跳过：本工具的窗口里正在删除或搬家	Skipped this scheduled cleanup: the ClearC window was deleting or moving things
+下次到时间再做	It will run next time
+没有开始	Not started
+后台的自动清理正在运行	The scheduled cleanup is running
+定时的自动清理正在后台清理缓存，通常一两分钟就做完。等它做完再试一次。	The scheduled cleanup is clearing caches in the background; it usually takes a minute or two. Try again when it is done.
   跳过（设置文件读不出来，不知道你排除了哪些文件夹）：{0}	  Skipped (the settings file could not be read, so the excluded folders are unknown): {0}
 跳过：设置文件读不出来	Skipped: the settings file could not be read
 改成只有我能打开	Only I can open them
@@ -10534,6 +10551,7 @@ if ($script:mode -match '(?i)/selftest') {
     return
 }
 if ($script:mode -match '(?i)/autoclean') {
+    if (-not (Enter-BusyLock)) { OpLog '删除' (T '这次自动清理跳过：本工具的窗口里正在删除或搬家') '' (T '下次到时间再做'); $global:CLEANC_UI_SHOWN = $true; return }
     [void](Prune-OpLog (Get-LogMonths))
     $r = Invoke-AutoClean
     Add-History
@@ -10546,6 +10564,23 @@ if ($script:mode -match '(?i)/autoclean') {
 # ============================================================
 # 界面
 # ============================================================
+# 只开一个窗口：已经开着的话，把那个窗口拉到前面，这一个直接退出（两个窗口同时删、同时搬会互相打架）
+$script:uiMutex = $null
+if (-not $script:uiTest) {
+    $first = $true
+    try { $script:uiMutex = [System.Threading.Mutex]::new($true, 'Local\ClearC-UI', [ref]$first) } catch { $first = $true }
+    if (-not $first) {
+        try {
+            foreach ($p in @(Get-Process -Name ([Diagnostics.Process]::GetCurrentProcess().ProcessName) -ErrorAction SilentlyContinue)) {
+                if ($p.Id -ne $PID -and $p.MainWindowHandle -ne [IntPtr]::Zero) { [Microsoft.VisualBasic.Interaction]::AppActivate($p.Id); break }
+            }
+        } catch {}
+        $global:CLEANC_UI_SHOWN = $true
+        return
+    }
+}
+# 重新打开本工具（换外观、换语言）之前先放开：不然新开的那个以为已经有窗口开着，直接退出
+function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex() } catch {}; try { $script:uiMutex.Dispose() } catch {}; $script:uiMutex = $null } }
 [xml]$xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -15706,7 +15741,15 @@ function UI-Busy($b) {
     Update-CandSel
 }
 
+# 只读、只统计的后台：不用拿锁，做完也不用把旧的目录树作废
+$script:readOnlyModes = @('scan', 'movescan', 'apps', 'map', 'movesize', 'dup', 'update', 'startup', 'winget', 'odinfo', 'csanalyze', 'leftovers', 'recent', 'similar', 'selftest')
 function Start-Worker([string]$code, $arg) {
+    # 会改东西的后台（删除、搬家、改设置……）先拿锁：定时的自动清理正在后台跑时，等它做完再开始
+    if ($script:readOnlyModes -notcontains [string]$sync.Mode -and -not (Enter-BusyLock)) {
+        UI-Busy $false; End-Op (T '没有开始')
+        Show-Sheet -Kind warn -Title (T '后台的自动清理正在运行') -Text (T '定时的自动清理正在后台清理缓存，通常一两分钟就做完。等它做完再试一次。') | Out-Null
+        return
+    }
     $sync.Cancel = $false; $sync.WasCancelled = $false; Set-CanCancel $true
     [DirStat]::Cancel = $false; [DupFinder]::Cancel = $false; [DiskMap]::Cancel = $false
     $rs = [runspacefactory]::CreateRunspace(); $rs.ApartmentState = 'STA'; $rs.ThreadOptions = 'ReuseThread'; $rs.Open()
@@ -22613,6 +22656,7 @@ $timer.Add_Tick({
 
     if ($script:worker -and $script:worker.Handle.IsCompleted) {
         $w = $script:worker; $script:worker = $null
+        Exit-BusyLock
         $script:movedTargets = $null
         try { $w.PS.EndInvoke($w.Handle) | Out-Null } catch { UI-Log ((T "后台出错：{0}") -f $($_.Exception.Message)) }
         foreach ($er in @($w.PS.Streams.Error | Select-Object -First 5)) { UI-Log ((T "后台出错：{0}") -f $er) }
@@ -22620,7 +22664,7 @@ $timer.Add_Tick({
         [DirStat]::Cancel = $false
         if ($sync.WasCancelled) { UI-Log (T '已中途取消。') }
         # 删过、搬过东西以后，逐个扫描得到的旧树不再拿来用（读文件表的结果靠变更日志更新）
-        if (@('scan', 'movescan', 'apps', 'map', 'movesize', 'dup', 'update', 'startup', 'winget', 'odinfo', 'csanalyze', 'leftovers', 'recent') -notcontains [string]$sync.Mode) { [DiskMap]::Invalidate() }
+        if ($script:readOnlyModes -notcontains [string]$sync.Mode) { [DiskMap]::Invalidate() }
 
         if ($sync.Mode -eq 'scan') {
             if ($sync.WasCancelled -or -not $sync.Sizes) {
@@ -23190,6 +23234,7 @@ $timer.Start()
 
 # 重新打开本工具（换语言、换外观后）
 function Restart-App {
+    Exit-UiLock
     try {
         if ($env:CLEANC_SELF -and (Test-Path -LiteralPath $env:CLEANC_SELF)) { Start-Process -FilePath $env:CLEANC_SELF }
         elseif ($script:selfScript) { Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList ('-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}"' -f $script:selfScript) }
@@ -23289,6 +23334,7 @@ function Request-Lang {
     if ((Show-Sheet -Title $t -Text $x -Buttons @($no, $ok) -Primary $ok -Cancel $no) -ne $ok) { return $false }
     Set-Setting 'Lang' $to
     OpLog '系统设置' (T '切换界面语言') $to ''
+    Exit-UiLock
     try {
         if ($env:CLEANC_SELF -and (Test-Path -LiteralPath $env:CLEANC_SELF)) { Start-Process -FilePath $env:CLEANC_SELF }
         elseif ($script:selfScript) { Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList ('-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}"' -f $script:selfScript) }

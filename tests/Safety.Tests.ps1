@@ -432,6 +432,20 @@ try { & {
     try { $script:settingsBad = $false; Remove-Contents2 @((Join-Path $T 'keepme')) '' $false } finally { $lock.Close() }
     Check 'OPS-2 cleanup deletes nothing while the exclusion list cannot be read' (Test-Path (Join-Path $kd 'a.tmp'))
     $script:settingsBad = $false; Set-Setting 'Exclude' ''
+    # ============ 11. 同一时间只做一件会改东西的事（3.6 运维评审） ============
+    $script:busyHeld = $false
+    Check 'OPS-1 the busy lock can be taken and given back' ((Enter-BusyLock) -and $script:busyHeld)
+    $other = [powershell]::Create(); $null = $other.AddScript('$m = New-Object System.Threading.Mutex($false, "Local\ClearC-Busy"); $m.WaitOne(0)')
+    $theirs = @($other.Invoke())[0]; $other.Dispose()
+    Check 'OPS-1 while it is held, another thread (the scheduled cleanup) cannot take it' ($theirs -eq $false)
+    Exit-BusyLock
+    $other = [powershell]::Create(); $null = $other.AddScript('$m = New-Object System.Threading.Mutex($false, "Local\ClearC-Busy"); $r = $m.WaitOne(0); if ($r) { $m.ReleaseMutex() }; $r')
+    $theirs = @($other.Invoke())[0]; $other.Dispose()
+    Check 'OPS-1 after it is given back, others can take it' ($theirs -eq $true -and -not $script:busyHeld)
+    $ac = [regex]::Match($src, "(?s)if \(\`$script:mode -match '\(\?i\)/autoclean'\) \{.*?\r?\n\}").Value
+    Check 'OPS-1 the scheduled cleanup skips its run while the window is changing things' ($ac -match 'Enter-BusyLock' -and $ac.IndexOf('Enter-BusyLock') -lt $ac.IndexOf('Invoke-AutoClean'))
+    $sw = [regex]::Match($src, '(?s)function Start-Worker\(.*?\r?\n\}').Value
+    Check 'OPS-1 every worker that changes things takes the busy lock first; only one window opens' ($sw -match 'Enter-BusyLock' -and $src -match "Local\\ClearC-UI")
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue

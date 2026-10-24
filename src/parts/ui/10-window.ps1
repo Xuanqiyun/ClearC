@@ -942,7 +942,15 @@ function UI-Busy($b) {
     Update-CandSel
 }
 
+# 只读、只统计的后台：不用拿锁，做完也不用把旧的目录树作废
+$script:readOnlyModes = @('scan', 'movescan', 'apps', 'map', 'movesize', 'dup', 'update', 'startup', 'winget', 'odinfo', 'csanalyze', 'leftovers', 'recent', 'similar', 'selftest')
 function Start-Worker([string]$code, $arg) {
+    # 会改东西的后台（删除、搬家、改设置……）先拿锁：定时的自动清理正在后台跑时，等它做完再开始
+    if ($script:readOnlyModes -notcontains [string]$sync.Mode -and -not (Enter-BusyLock)) {
+        UI-Busy $false; End-Op (T '没有开始')
+        Show-Sheet -Kind warn -Title (T '后台的自动清理正在运行') -Text (T '定时的自动清理正在后台清理缓存，通常一两分钟就做完。等它做完再试一次。') | Out-Null
+        return
+    }
     $sync.Cancel = $false; $sync.WasCancelled = $false; Set-CanCancel $true
     [DirStat]::Cancel = $false; [DupFinder]::Cancel = $false; [DiskMap]::Cancel = $false
     $rs = [runspacefactory]::CreateRunspace(); $rs.ApartmentState = 'STA'; $rs.ThreadOptions = 'ReuseThread'; $rs.Open()
