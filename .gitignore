@@ -2,3 +2,5 @@ out/
 build/obj/
 build/refasm/
 *.exe
+build/refasm
+__pycache__/
