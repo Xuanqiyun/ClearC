@@ -744,6 +744,9 @@ try { & {
     # ============ 41. 输完管理员密码马上有反应：先显示一个「正在打开」的小窗口（3.6 体验评审） ============
     $sp = $src.IndexOf('function Show-Splash'); $call = $src.IndexOf('Show-Splash' + [Environment]::NewLine); if ($call -lt 0) { $call = $src.IndexOf("Show-Splash`n") }
     Check 'UX-13 a small "opening" window shows right after WPF loads, before the slow part, and only for the normal window (not scheduled runs)' ($sp -gt 0 -and $src.IndexOf('Show-Splash', $sp + 20) -lt $src.IndexOf('if (-not (''RowItem'' -as [type]))') -and [regex]::Match($src, '(?s)function Show-Splash.*?\r?\n\}').Value -match 'CLEANC_ARGS' -and [regex]::Match($src, '(?s)\$win\.Add_ContentRendered\(\{.*?\r?\n\}\)').Value -match 'Close-Splash')
+    # ============ 42. 软件列表显示软件自己的图标（3.6 体验评审） ============
+    Check 'UX-15 the app list reads each app''s own icon (DisplayIcon), a few at a time, and keeps the letter when there is none' ($engineText -match 'IconFile = ' -and $src -match '(?s)function Get-AppIconImage.*?ExtractAssociatedIcon.*?CreateBitmapSourceFromHIcon' -and $src -match '<Image Source="\{Binding IconImage\}"' -and $src -match 'function Start-AppIcons' -and $src -match 'public object IconImage')
+    Check 'UX-15 the icon path is only read from the app''s own registry entry and only from exe, dll or ico files' ([regex]::Match($src, '(?s)function Get-AppIconImage.*?\r?\n\}').Value -match '\\\.\(exe\|dll\|ico\)\$')
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue
