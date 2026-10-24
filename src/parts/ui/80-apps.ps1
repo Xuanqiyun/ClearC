@@ -431,7 +431,7 @@ function Set-StartRow($r, [bool]$on, [switch]$Quiet) {
         }
     } catch {
         if ($Quiet) { return ((T "{0}：{1}") -f $r.Name, $_.Exception.Message) }
-        Show-Sheet -Kind warn -Title $(if ($on) { (T '没启用成') } else { (T '没禁用成') }) -Text $_.Exception.Message | Out-Null; return
+        Show-Sheet -Kind warn -Title $(if ($on) { (T '没启用成') } else { (T '没禁用成') }) -Text (Get-FriendlyError $_) | Out-Null; return
     }
     $r.Enabled = $on
     $what = switch ($r.Kind) { 'startup' { if ($on) { (T '启用开机启动项') } else { (T '禁用开机启动项') } } 'task' { if ($on) { (T '启用计划任务') } else { (T '禁用计划任务') } } default { if ($on) { (T '启用右键菜单扩展') } else { (T '禁用右键菜单扩展') } } }
@@ -737,7 +737,7 @@ function Start-WingetUpgrade([string]$id, [string]$name = '') {
         Start-Process -FilePath "$env:SystemRoot\System32\cmd.exe" -ArgumentList ('/k ' + $cmd)
         OpLog '系统设置' (T '用 winget 升级软件') $(if ($id) { $id } elseif ($name) { $name } else { (T '全部') }) $cmd
         UI-Log ((T "已在终端里开始升级：{0}") -f $cmd)
-    } catch { Show-Sheet -Kind warn -Title (T '打不开终端') -Text $_.Exception.Message | Out-Null }
+    } catch { Show-Sheet -Kind warn -Title (T '打不开终端') -Text (Get-FriendlyError $_) | Out-Null }
 }
 $ctl.BtnAppsUpdates.Add_Click({ Start-WingetCheck })
 

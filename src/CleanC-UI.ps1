@@ -6995,6 +6995,23 @@ function Get-TaskRunInfo([string]$name) {
         return (Format-TaskRunInfo $info.LastRunTime ([long]$info.LastTaskResult) $info.NextRunTime)
     } catch { return '' }
 }
+# 出错时给人看的话：先说是什么情况、下一步怎么办，系统的原话放在最后（反馈问题时用得上）。$err 可以是异常、错误记录或一句话
+function Get-FriendlyError($err) {
+    $ex = if ($err -is [System.Management.Automation.ErrorRecord]) { $err.Exception } elseif ($err -is [Exception]) { $err } else { $null }
+    while ($ex -and $ex.InnerException -and ($ex -is [System.Management.Automation.MethodInvocationException] -or $ex -is [System.Reflection.TargetInvocationException])) { $ex = $ex.InnerException }
+    $msg = if ($ex) { [string]$ex.Message } else { [string]$err }
+    $hr = if ($ex) { $ex.HResult } else { 0 }
+    $tip = ''
+    if ($ex -is [UnauthorizedAccessException] -or $hr -eq -2147024891) { $tip = (T '没有权限：这个文件或设置被系统保护，或者正被别的程序占着。关掉相关的程序再试；还不行就重启电脑后再试。') }
+    elseif ($hr -eq -2147024864 -or $hr -eq -2147024863) { $tip = (T '文件正被别的程序使用：关掉打开着它的程序（包括右下角托盘里的）再试。') }
+    elseif ($ex -is [IO.FileNotFoundException] -or $ex -is [IO.DirectoryNotFoundException] -or $hr -eq -2147024894 -or $hr -eq -2147024893) { $tip = (T '找不到这个文件或文件夹：它可能已经被删了、改名了或者搬走了。刷新一下再看。') }
+    elseif ($hr -eq -2147024784 -or $hr -eq -2147024857) { $tip = (T '磁盘空间不够：先在别处腾出一点空间再试。') }
+    elseif ($ex -is [IO.PathTooLongException] -or $hr -eq -2147024690) { $tip = (T '路径太长：把这个文件夹挪到浅一点的位置，或者给它起个短一点的名字再试。') }
+    elseif ($ex -is [TimeoutException]) { $tip = (T '等了太久没有回应：过一会儿再试。') }
+    else { $tip = (T '没做成。可以再试一次；还不行的话，在「帮助」→「反馈和新版本」里复制诊断信息，提交问题时附上。') }
+    if (-not $msg) { return $tip }
+    return ($tip + "`n`n" + (T '系统的原话：') + $msg)
+}
 # 打开网页、文本文件、报告：交给资源管理器去开。本工具以管理员身份运行，直接开的话浏览器、记事本也是管理员身份，
 # 网页里的下载、记事本里的「另存为」都带着管理员权限。资源管理器把它交给当前登录用户的桌面，用普通权限打开
 function Open-AsUser([string]$target) {
@@ -7757,6 +7774,14 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+没有权限：这个文件或设置被系统保护，或者正被别的程序占着。关掉相关的程序再试；还不行就重启电脑后再试。	No permission: the file or setting is protected by Windows or held by another program. Close the related programs and try again; if that does not help, restart the PC and try again.
+文件正被别的程序使用：关掉打开着它的程序（包括右下角托盘里的）再试。	The file is in use by another program: close the program that has it open (including from the system tray) and try again.
+找不到这个文件或文件夹：它可能已经被删了、改名了或者搬走了。刷新一下再看。	The file or folder cannot be found: it may have been deleted, renamed or moved. Refresh and look again.
+磁盘空间不够：先在别处腾出一点空间再试。	Not enough disk space: free some space first and try again.
+路径太长：把这个文件夹挪到浅一点的位置，或者给它起个短一点的名字再试。	The path is too long: move the folder higher up or give it a shorter name, then try again.
+等了太久没有回应：过一会儿再试。	No response for too long: try again in a while.
+没做成。可以再试一次；还不行的话，在「帮助」→「反馈和新版本」里复制诊断信息，提交问题时附上。	That did not work. You can try again; if it keeps failing, copy the diagnostic information under Help → Feedback and updates and attach it when you report the problem.
+系统的原话：	Message from Windows: 
 核对这个文件	Check this file
 本工具没有代码签名。把下面这串 SHA256 和 GitHub 发布页上写的对比，一样就说明你下载的 exe 没被改过。	ClearC is not code-signed. Compare the SHA256 below with the one on the GitHub release page; if they match, the exe you downloaded has not been changed.
 复制 SHA256	Copy SHA256
@@ -19505,7 +19530,7 @@ $ctl.BtnMapReport.Add_Click({
     if (-not $dlg.ShowDialog($win)) { return }
     $win.Cursor = [System.Windows.Input.Cursors]::Wait
     try { $html = New-MapReport; [IO.File]::WriteAllText($dlg.FileName, $html, (New-Object Text.UTF8Encoding $true)) }
-    catch { $win.Cursor = $null; Show-Sheet -Kind warn -Title (T '没能保存') -Text $_.Exception.Message | Out-Null; return }
+    catch { $win.Cursor = $null; Show-Sheet -Kind warn -Title (T '没能保存') -Text (Get-FriendlyError $_) | Out-Null; return }
     finally { $win.Cursor = $null }
     UI-Log ((T "空间地图：报告已保存到 {0}") -f $dlg.FileName)
     $ans = Show-Sheet -Kind done -Title (T '报告已保存') -Text ((T "{0}`n`n用浏览器打开就能看；想要 PDF，在浏览器里按 Ctrl+P，打印机选「另存为 PDF」。") -f $dlg.FileName) -Buttons @((T '打开所在位置'), (T '打开报告')) -Primary (T '打开报告') -Cancel (T '打开所在位置')
@@ -19535,7 +19560,7 @@ $ctl.BtnMapExport.Add_Click({
         }
     }
     try { [IO.File]::WriteAllLines($dlg.FileName, $lines.ToArray(), (New-Object Text.UTF8Encoding $true)) }
-    catch { Show-Sheet -Kind warn -Title (T '没能保存') -Text $_.Exception.Message | Out-Null; return }
+    catch { Show-Sheet -Kind warn -Title (T '没能保存') -Text (Get-FriendlyError $_) | Out-Null; return }
     UI-Log ((T "空间地图：已导出 {0} 行到 {1}") -f $list.Count, $dlg.FileName)
     $ans = Show-Sheet -Kind done -Title (T '已导出') -Text ((T "{0:N0} 行，已保存到：`n{1}") -f $list.Count, $dlg.FileName) -Buttons @((T '打开所在位置'), (T '好')) -Primary (T '好') -Cancel (T '好')
     if ($ans -eq (T '打开所在位置')) { Open-Location $dlg.FileName }
@@ -20721,7 +20746,7 @@ function Invoke-FixStep([string]$id, [switch]$Quiet) {
                     $ans = Show-Sheet -Title (T '打开快速启动？') -Text (T '会重新打开快速启动：「关机」变成半休眠，下次开机快几秒。') -Buttons @((T '取消'), (T '打开')) -Primary (T '打开') -Cancel (T '取消')
                     if ($ans -ne (T '打开')) { return }
                 }
-                try { New-RestorePointIfWanted (T '快速启动'); Set-FastStartup ($cur -ne 'on'); UI-Log $(if ($cur -eq 'on') { (T '已关闭快速启动') } else { (T '已打开快速启动') }) } catch { Show-Sheet -Kind warn -Title (T '没能改') -Text $_.Exception.Message | Out-Null }
+                try { New-RestorePointIfWanted (T '快速启动'); Set-FastStartup ($cur -ne 'on'); UI-Log $(if ($cur -eq 'on') { (T '已关闭快速启动') } else { (T '已打开快速启动') }) } catch { Show-Sheet -Kind warn -Title (T '没能改') -Text (Get-FriendlyError $_) | Out-Null }
                 Refresh-FixState
             }
         }
@@ -20741,7 +20766,7 @@ function Invoke-FixStep([string]$id, [switch]$Quiet) {
         elseif ($s.Exe) { Start-Process -FilePath $s.Exe }
         if ($s.Kind -in 'fix', 'check') { OpLog '系统设置' $name '' $(if ($s.Cmd) { $s.Cmd } else { $s.Exe }) }
         UI-Log ((T "已打开：{0}") -f $name)
-    } catch { Show-Sheet -Kind warn -Title ((T '没能打开：{0}') -f $name) -Text $_.Exception.Message | Out-Null }
+    } catch { Show-Sheet -Kind warn -Title ((T '没能打开：{0}') -f $name) -Text (Get-FriendlyError $_) | Out-Null }
 }
 foreach ($ic in @($ctl.HealthVerdicts, $ctl.FixRec, $ctl.FixDetail)) {
     $ic.AddHandler([System.Windows.Controls.Button]::ClickEvent, [System.Windows.RoutedEventHandler]{ param($s, $e) $b = $e.OriginalSource; if ($b -is [System.Windows.Controls.Button] -and $b.Tag -is [string] -and $b.Tag) { $t = [string]$b.Tag; if ($t.StartsWith('plan:')) { Invoke-RepairPlan $t.Substring(5) } else { Invoke-FixStep $t } } })
@@ -20793,7 +20818,7 @@ function Start-DiagPack {
 $ctl.BtnDiagPack.Add_Click({ Start-DiagPack })
 $ctl.BtnCopyReport.Add_Click({
     if (-not $script:healthData) { return }
-    try { [System.Windows.Clipboard]::SetText((Get-HealthReportText $script:healthData)); UI-Log (T '诊断报告已复制，可以直接粘贴') ; $ctl.HealthNote.Text = (T '诊断报告已复制，可以直接粘贴给别人。') } catch { Show-Sheet -Kind warn -Title (T '没能复制') -Text $_.Exception.Message | Out-Null }
+    try { [System.Windows.Clipboard]::SetText((Get-HealthReportText $script:healthData)); UI-Log (T '诊断报告已复制，可以直接粘贴') ; $ctl.HealthNote.Text = (T '诊断报告已复制，可以直接粘贴给别人。') } catch { Show-Sheet -Kind warn -Title (T '没能复制') -Text (Get-FriendlyError $_) | Out-Null }
 })
 Show-Fixes $null
 # 活动监控：后台线程每 3 秒采一次样，把结果放进共享表；界面每秒看一眼
@@ -21021,7 +21046,7 @@ foreach ($b in @($ctl.BtnDumpSmall, $ctl.BtnDumpAuto)) {
         $x = if ($small) { (T '以后蓝屏只保存 256 KB 的小内存转储（C:\Windows\Minidump），够看出是哪个驱动出的问题，不再生成几个 GB 的 MEMORY.DMP。') } else { (T '恢复 Windows 默认的「自动」：蓝屏时可能生成和内存差不多大的 MEMORY.DMP。') }
         $btn = (T '好')
         if ((Show-Sheet -Title $t -Text $x -Buttons @((T '取消'), $btn) -Primary $btn -Cancel (T '取消')) -ne $btn) { return }
-        try { Set-CrashDumpMode $(if ($small) { 3 } else { 7 }) } catch { Show-Sheet -Kind warn -Title (T '没改成') -Text $_.Exception.Message | Out-Null; return }
+        try { Set-CrashDumpMode $(if ($small) { 3 } else { 7 }) } catch { Show-Sheet -Kind warn -Title (T '没改成') -Text (Get-FriendlyError $_) | Out-Null; return }
         OpLog '系统设置' (T '蓝屏转储类型') $(if ($small) { (T '小内存转储') } else { (T '自动') }) ''
         Load-Save
     })
@@ -21040,13 +21065,13 @@ $ctl.BtnTmpMove.Add_Click({
         New-Item -ItemType Directory -Path $p -Force | Out-Null
         $mk = Join-Path $p '.cleanc-temp'; [IO.File]::WriteAllText($mk, (T '腾挪 ClearC 建的临时文件夹：有这个文件，清理时才会把它当临时文件夹清。')); try { (Get-Item -LiteralPath $mk -Force).Attributes = 'Hidden' } catch {}
         Set-UserTemp $p
-    } catch { Show-Sheet -Kind warn -Title (T '没改成') -Text $_.Exception.Message | Out-Null; return }
+    } catch { Show-Sheet -Kind warn -Title (T '没改成') -Text (Get-FriendlyError $_) | Out-Null; return }
     OpLog '系统设置' (T '临时文件夹位置') $p ''
     Load-Save
 })
 $ctl.BtnTmpAuto.Add_Click({
     if ((Show-Sheet -Title (T '临时文件夹恢复默认？') -Text (T '改回 C 盘用户目录里的 AppData\Local\Temp。注销再登录后对所有程序生效。') -Buttons @((T '取消'), (T '恢复')) -Primary (T '恢复') -Cancel (T '取消')) -ne (T '恢复')) { return }
-    try { Set-UserTemp '' } catch { Show-Sheet -Kind warn -Title (T '没改成') -Text $_.Exception.Message | Out-Null; return }
+    try { Set-UserTemp '' } catch { Show-Sheet -Kind warn -Title (T '没改成') -Text (Get-FriendlyError $_) | Out-Null; return }
     OpLog '系统设置' (T '临时文件夹位置') (T '系统默认') ''
     Load-Save
 })
@@ -21098,7 +21123,7 @@ function Show-RestoreInfo($r) {
         else { (T "当前：{0} 个还原点和卷影副本，占 {1}，最多可以用到 {2}") -f $r.Count, (Fmt $r.Used), $(if ($r.Unbounded -or $r.Max -le 0) { (T '没有上限') } else { Fmt $r.Max }) }
 }
 $ctl.BtnRestoreOpen.Add_Click({
-    try { Start-Process -FilePath "$env:SystemRoot\System32\SystemPropertiesProtection.exe" } catch { Show-Sheet -Kind warn -Title (T '打不开系统保护设置') -Text $_.Exception.Message | Out-Null }
+    try { Start-Process -FilePath "$env:SystemRoot\System32\SystemPropertiesProtection.exe" } catch { Show-Sheet -Kind warn -Title (T '打不开系统保护设置') -Text (Get-FriendlyError $_) | Out-Null }
 })
 $ctl.BtnGoDup.Add_Click({ Show-Page 'dup' })
 foreach ($b in @($ctl.BtnCosOn, $ctl.BtnCosOff)) {
@@ -21636,7 +21661,7 @@ function Set-StartRow($r, [bool]$on, [switch]$Quiet) {
         }
     } catch {
         if ($Quiet) { return ((T "{0}：{1}") -f $r.Name, $_.Exception.Message) }
-        Show-Sheet -Kind warn -Title $(if ($on) { (T '没启用成') } else { (T '没禁用成') }) -Text $_.Exception.Message | Out-Null; return
+        Show-Sheet -Kind warn -Title $(if ($on) { (T '没启用成') } else { (T '没禁用成') }) -Text (Get-FriendlyError $_) | Out-Null; return
     }
     $r.Enabled = $on
     $what = switch ($r.Kind) { 'startup' { if ($on) { (T '启用开机启动项') } else { (T '禁用开机启动项') } } 'task' { if ($on) { (T '启用计划任务') } else { (T '禁用计划任务') } } default { if ($on) { (T '启用右键菜单扩展') } else { (T '禁用右键菜单扩展') } } }
@@ -21942,7 +21967,7 @@ function Start-WingetUpgrade([string]$id, [string]$name = '') {
         Start-Process -FilePath "$env:SystemRoot\System32\cmd.exe" -ArgumentList ('/k ' + $cmd)
         OpLog '系统设置' (T '用 winget 升级软件') $(if ($id) { $id } elseif ($name) { $name } else { (T '全部') }) $cmd
         UI-Log ((T "已在终端里开始升级：{0}") -f $cmd)
-    } catch { Show-Sheet -Kind warn -Title (T '打不开终端') -Text $_.Exception.Message | Out-Null }
+    } catch { Show-Sheet -Kind warn -Title (T '打不开终端') -Text (Get-FriendlyError $_) | Out-Null }
 }
 $ctl.BtnAppsUpdates.Add_Click({ Start-WingetCheck })
 
