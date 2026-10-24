@@ -155,7 +155,8 @@ public class DiskCard {
     public string Letter { get; set; }
     public bool Sel { get; set; }
     public string Model { get; set; }
-    public string UsedText { get; set; }
+    public string UsedText { get; set; }    // 已用 / 共 · 百分比
+    public string FreeText { get; set; }    // 剩多少，写在右边
     public double UsedPct { get; set; }
     public double BarW { get; set; }        // 用量条已用部分的宽度（像素）
     public string TempText { get; set; }

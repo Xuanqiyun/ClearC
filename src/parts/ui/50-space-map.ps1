@@ -7,7 +7,8 @@ function Fill-MapDrives {
     $ctl.MapDrive.Items.Clear()
     foreach ($d in (Fixed-Drives)) {
         $it = New-Object System.Windows.Controls.ComboBoxItem
-        $it.Content = (T "{0}  已用 {1} / 共 {2}") -f $d.Name.TrimEnd('\'), (Fmt ($d.TotalSize - $d.AvailableFreeSpace)), (Fmt $d.TotalSize)
+        # 只写盘符：用了多少、剩多少写在下面每块盘的卡片上，这里不再写一遍
+        $it.Content = $d.Name.TrimEnd('\') + $(if ($d.Name -ieq ($env:SystemDrive + '\')) { '  ' + (T '系统盘') } else { '' })
         $it.Tag = $d.RootDirectory.FullName
         [void]$ctl.MapDrive.Items.Add($it)
         if ($it.Tag -ieq $keep) { $ctl.MapDrive.SelectedItem = $it }
@@ -81,12 +82,12 @@ function Show-DiskHealth($list) {
         $c = New-Object DiskCard
         $c.Letter = [string]$h.Drive
         $c.Model = if ($h.Ok -and $h.Model) { $h.Model + $(if ($h.Media) { ' · ' + $h.Media } else { '' }) } else { (T '读不到型号和健康信息') }
-        $used = [double]0; $total = [double]0
-        try { $di = New-Object System.IO.DriveInfo ([string]$h.Drive + '\'); $total = [double]$di.TotalSize; $used = $total - [double]$di.AvailableFreeSpace } catch {}
-        $pct = if ($total -gt 0) { 100.0 * $used / $total } else { 0 }
+        $u = Get-DriveUse ([string]$h.Drive + '\')
+        $used = $u.Used; $total = $u.Total; $pct = $u.Pct
         $dw = [double]$win.Resources['DcCardW']; if ($dw -lt 100) { $dw = 300 }
         $c.UsedPct = $pct; $c.BarW = [math]::Round(($dw - 34) * $pct / 100.0)
-        $c.UsedText = (T "已用 {0} / 共 {1}（{2:N0}%），剩 {3}") -f (Fmt $used), (Fmt $total), $pct, (Fmt ($total - $used))
+        $c.UsedText = (T "已用 {0} / {1} · {2:N0}%") -f (Fmt $used), (Fmt $total), $pct
+        $c.FreeText = (T "剩 {0}") -f (Fmt $u.Free)
         $c.BarBrush = if ($pct -ge 95) { '#FF3B30' } elseif ($pct -ge 85) { '#FF9F0A' } else { '#0071E3' }
         $worst = 0   # 0 绿 1 橙 2 红
         if ($h.Ok -and $h.Health) {
@@ -124,6 +125,15 @@ function Show-DiskHealth($list) {
     Update-MapCardSel
     $ctl.MapHealthNote.Visibility = if ($col.Count -gt 0) { 'Collapsed' } else { 'Visible' }
     if ($col.Count -eq 0) { $ctl.MapHealthNote.Text = (T '读不到磁盘的健康信息（型号、磨损、温度）') }
+    Update-MapOvHead
+}
+# 磁盘卡片显示着这块盘时，下面的概览就不再写一遍「已用多少 / 共多少」；卡片不显示（设置里关了、读不到）时才写
+function Update-MapOvHead {
+    if (-not $script:mapRoot) { return }
+    $drive = ''; try { $drive = $script:mapRoot.FullPath().TrimEnd('\') } catch {}
+    $shown = $false
+    if ($ctl.MapHealthBox.Visibility -eq 'Visible') { foreach ($c in @($ctl.MapHealth.ItemsSource)) { if ($c -and ([string]$c.Letter).TrimEnd('\') -ieq $drive) { $shown = $true } } }
+    $ctl.MapOvHead.Visibility = if ($shown) { 'Collapsed' } else { 'Visible' }
 }
 # 选中的盘：卡片描边跟着下拉框走
 function Update-MapCardSel {
@@ -337,7 +347,9 @@ function Show-MapLevel($node) {
     Restore-MapKeep $keep
     $ctl.MapPath.Text = $path
     Show-MapCrumbs $node
-    $ctl.MapInfo.Text = (T "这一层共 {0}，{1:N0} 个文件{2}") -f (Fmt $node.Size), $node.Files, $(if ($script:mapScanAt) { (T " · 扫描于 {0:HH:mm}（{1}）") -f $script:mapScanAt, $script:mapHow } else { '' })
+    $scanNote = if ($script:mapScanAt) { (T " · 扫描于 {0:HH:mm}（{1}）") -f $script:mapScanAt, $script:mapHow } else { '' }
+    # 在盘的最上一层不写「这一层共多少」：按文件大小加起来的数和盘的已用空间对不上（硬链接、压缩、文件表），上面卡片写的才是已用
+    $ctl.MapInfo.Text = if ($node.Parent) { (T "这一层共 {0}，{1:N0} 个文件{2}") -f (Fmt $node.Size), $node.Files, $scanNote } else { (T "{0:N0} 个文件{1}") -f $node.Files, $scanNote }
     if ($script:mapView -eq 'tree') { $ctl.MapInfo.Text += $(if (Test-CheckMode) { (T ' · 点方块在下面的列表里找到这一行，勾上的方块会描边；双击进入') } else { (T ' · 点方块就是选中下面列表里的那一行，列表里选中的方块会描边；双击进入') }) }
     $ctl.BtnMapAcct.Visibility = if ($script:mapRoot -and $script:mapRoot.HasDisk -and (Get-Mode) -ge 2) { 'Visible' } else { 'Collapsed' }
     $ctl.BtnMapUp.IsEnabled = ($null -ne $node.Parent)
@@ -505,8 +517,8 @@ function Show-MapOverview {
     if (-not $r -or ($script:mapView -ne 'dirs' -and $script:mapView -ne 'tree' -and $script:mapView -ne 'types')) { $ctl.MapOverview.Visibility = 'Collapsed'; return }
     $drive = $r.FullPath()
     if ($drive.Length -ne 3 -or $drive[1] -ne ':') { $ctl.MapOverview.Visibility = 'Collapsed'; return }
-    $total = [double]0; $used = [double]0; $free = [double]0
-    try { $di = New-Object System.IO.DriveInfo $drive; $total = [double]$di.TotalSize; $free = [double]$di.AvailableFreeSpace; $used = $total - $di.TotalFreeSpace } catch {}
+    $u = Get-DriveUse $drive
+    $total = $u.Total; $used = $u.Used; $free = $u.Free
     if ($total -le 0) { $ctl.MapOverview.Visibility = 'Collapsed'; return }
     $sz = { param($n) if ($n) { if ($r.HasDisk) { [double]$n.Disk } else { [double]$n.Size } } else { [double]0 } }
     $sys = [double]0
@@ -527,20 +539,37 @@ function Show-MapOverview {
     }
     $other = [math]::Max([double]0, $used - $sys - $users)
     $sys = [math]::Max([double]0, $sys - $cache * 0.3); $users = [math]::Max([double]0, $users - $cache * 0.7)   # 缓存大多在个人目录（AppData），少数在 Windows 和 ProgramData 里
-    $ctl.MapOvTitle.Text = (T "{0} {1}") -f $drive.TrimEnd('\'), $(if ($drive -ieq ($env:SystemDrive + '\')) { (T '系统盘') } else { '' })
+    # 几类加起来不能比这块盘的已用空间还多：系统文件夹里的硬链接（WinSxS 等）在几个文件夹里各算一次，按比例缩回到已用空间
+    $sum = $sys + $users + $cache + $other
+    if ($sum -gt $used -and $sum -gt 0) { $f = $used / $sum; $sys *= $f; $users *= $f; $cache *= $f; $other *= $f }
+    # 卡片不显示这块盘时才用得上的总量那一行
+    $ctl.MapOvTitle.Text = ((T "{0} {1}") -f $drive.TrimEnd('\'), $(if ($drive -ieq ($env:SystemDrive + '\')) { (T '系统盘') } else { '' })) + '  ·  ' + ((T "剩 {0}") -f (Fmt $free))
     $ctl.MapOvUsed.Text = "{0} / {1}" -f (Fmt $used), (Fmt $total)
-    $ctl.MapOvPct.Text = "{0:N1}%" -f (100.0 * $used / $total)
-    $parts = @(@((T '系统与软件'), $sys, '#3B82F6'), @((T '个人文件'), $users, '#E0A731'), @((T '可清理的缓存'), $cache, '#3FA37E'), @((T '其他'), $other, '#8E8E93'), @((T '剩余空间'), $free, '#9B6FD6'))
-    for ($i = 0; $i -lt 5; $i++) { $ctl.MapOvBar.ColumnDefinitions[$i].Width = New-Object System.Windows.GridLength ([math]::Max([double]0, $parts[$i][1])), ([System.Windows.GridUnitType]::Star) }
+    $ctl.MapOvPct.Text = "{0:N0}%" -f $u.Pct
+    Update-MapOvHead
+    $parts = @(@((T '系统与软件'), $sys, '#3B82F6'), @((T '个人文件'), $users, '#E0A731'), @((T '可清理的缓存'), $cache, '#3FA37E'), @((T '其他'), $other, '#8E8E93'))
+    for ($i = 0; $i -lt 4; $i++) { $ctl.MapOvBar.ColumnDefinitions[$i].Width = New-Object System.Windows.GridLength ([math]::Max([double]0, $parts[$i][1])), ([System.Windows.GridUnitType]::Star) }
+    # 条的两头是圆的：圆角给有内容的第一段和最后一段，段与段之间留 1 像素的缝
+    $on = @(for ($i = 0; $i -lt 4; $i++) { if ($parts[$i][1] -gt 0) { $i } })
+    for ($i = 0; $i -lt 4; $i++) {
+        $b = $ctl.MapOvBar.Children[$i]
+        $first = ($on.Count -gt 0 -and $i -eq $on[0]); $last = ($on.Count -gt 0 -and $i -eq $on[-1])
+        $b.CornerRadius = New-Object System.Windows.CornerRadius $(if ($first) { 5 } else { 0 }), $(if ($last) { 5 } else { 0 }), $(if ($last) { 5 } else { 0 }), $(if ($first) { 5 } else { 0 })
+        $b.Margin = New-Object System.Windows.Thickness 0, 0, $(if ($last) { 0 } else { 1 }), 0
+    }
     $ctl.MapOvLegend.Children.Clear()
-    for ($i = 0; $i -lt 5; $i++) {
-        if ($parts[$i][1] -le 0 -and $i -ne 4) { continue }
-        $sp = New-Object System.Windows.Controls.StackPanel; $sp.Orientation = 'Horizontal'; $sp.Margin = New-Object System.Windows.Thickness 0, 0, 18, 2
-        $dot = New-Object System.Windows.Controls.Border; $dot.Width = 9; $dot.Height = 9; $dot.CornerRadius = New-Object System.Windows.CornerRadius 4.5; $dot.Background = Brush $parts[$i][2] 'b'; $dot.VerticalAlignment = 'Center'; $dot.Margin = New-Object System.Windows.Thickness 0, 0, 6, 0
-        $tb = New-Object System.Windows.Controls.TextBlock; $tb.Text = "{0} {1}" -f $parts[$i][0], (Fmt $parts[$i][1]); $tb.FontSize = 12; $tb.Foreground = Brush '#6E6E73'; $tb.VerticalAlignment = 'Center'
+    foreach ($p in $parts) {
+        if ($p[1] -le 0) { continue }
+        $sp = New-Object System.Windows.Controls.StackPanel; $sp.Orientation = 'Horizontal'; $sp.Margin = New-Object System.Windows.Thickness 0, 0, 22, 4
+        $dot = New-Object System.Windows.Controls.Border; $dot.Width = 9; $dot.Height = 9; $dot.CornerRadius = New-Object System.Windows.CornerRadius 4.5; $dot.Background = Brush $p[2] 'b'; $dot.VerticalAlignment = 'Center'; $dot.Margin = New-Object System.Windows.Thickness 0, 0, 7, 0
+        # 名称灰色，大小深色加粗：一眼看到数
+        $tb = New-Object System.Windows.Controls.TextBlock; $tb.FontSize = 12; $tb.VerticalAlignment = 'Center'
+        $r1 = New-Object System.Windows.Documents.Run ([string]$p[0]); $r1.Foreground = Brush '#6E6E73'
+        $r2 = New-Object System.Windows.Documents.Run ('  ' + (Fmt $p[1])); $r2.Foreground = Brush '#1D1D1F'; $r2.FontWeight = 'SemiBold'
+        [void]$tb.Inlines.Add($r1); [void]$tb.Inlines.Add($r2)
         [void]$sp.Children.Add($dot); [void]$sp.Children.Add($tb); [void]$ctl.MapOvLegend.Children.Add($sp)
     }
-    $ctl.MapOverview.ToolTip = (T '系统与软件：Windows、Program Files、ProgramData 等；个人文件：Users；可清理的缓存：清理页「安全清理」里的那些目录（估算）；其他：页面文件、休眠文件、文件表等不在上面几类里的。剩余空间按 Windows 报告的算。')
+    $ctl.MapOverview.ToolTip = (T '按文件夹估算。系统与软件：Windows、Program Files、ProgramData 等；个人文件：Users；可清理的缓存：清理页「安全清理」里的那些目录；其他：页面文件、休眠文件、文件表等不在上面几类里的。几类加起来按这块盘的已用空间算：硬链接在几个文件夹里各算一次的，按比例缩回。')
     if ($script:worthKey -ne $key) { $script:worthKey = $key; Show-MapWorth }
     $ctl.MapOverview.Visibility = 'Visible'
 }

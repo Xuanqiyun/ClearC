@@ -26,13 +26,55 @@
     <FontFamily x:Key="Icons">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
 
     <!-- ===== 文字 ===== -->
+    <!-- 换行的文字按字号给行距（约 1.5 倍），几行中文读起来不挤：12 号 19、13 号 21、13.5 号 21、14 号 22、15 号 23。
+         只管会换行的文字：一行的标签不加，免得和旁边的按钮、图标对不齐；自己写了行距的照旧 -->
+    <Style x:Key="TextBase" TargetType="TextBlock">
+      <Style.Triggers>
+        <MultiTrigger>
+          <MultiTrigger.Conditions>
+            <Condition Property="TextWrapping" Value="Wrap"/>
+            <Condition Property="FontSize" Value="12"/>
+          </MultiTrigger.Conditions>
+          <Setter Property="LineHeight" Value="19"/>
+        </MultiTrigger>
+        <MultiTrigger>
+          <MultiTrigger.Conditions>
+            <Condition Property="TextWrapping" Value="Wrap"/>
+            <Condition Property="FontSize" Value="13"/>
+          </MultiTrigger.Conditions>
+          <Setter Property="LineHeight" Value="21"/>
+        </MultiTrigger>
+        <MultiTrigger>
+          <MultiTrigger.Conditions>
+            <Condition Property="TextWrapping" Value="Wrap"/>
+            <Condition Property="FontSize" Value="13.5"/>
+          </MultiTrigger.Conditions>
+          <Setter Property="LineHeight" Value="21"/>
+        </MultiTrigger>
+        <MultiTrigger>
+          <MultiTrigger.Conditions>
+            <Condition Property="TextWrapping" Value="Wrap"/>
+            <Condition Property="FontSize" Value="14"/>
+          </MultiTrigger.Conditions>
+          <Setter Property="LineHeight" Value="22"/>
+        </MultiTrigger>
+        <MultiTrigger>
+          <MultiTrigger.Conditions>
+            <Condition Property="TextWrapping" Value="Wrap"/>
+            <Condition Property="FontSize" Value="15"/>
+          </MultiTrigger.Conditions>
+          <Setter Property="LineHeight" Value="23"/>
+        </MultiTrigger>
+      </Style.Triggers>
+    </Style>
+    <Style TargetType="TextBlock" BasedOn="{StaticResource TextBase}"/>
     <Style x:Key="PageTitle" TargetType="TextBlock">
       <Setter Property="FontSize" Value="26"/>
       <Setter Property="FontWeight" Value="SemiBold"/>
       <Setter Property="Foreground" Value="#1D1D1F"/>
       <Setter Property="TextOptions.TextFormattingMode" Value="Ideal"/>
     </Style>
-    <Style x:Key="PageSub" TargetType="TextBlock">
+    <Style x:Key="PageSub" TargetType="TextBlock" BasedOn="{StaticResource TextBase}">
       <Setter Property="FontSize" Value="13"/>
       <Setter Property="Foreground" Value="#6E6E73"/>
       <Setter Property="Margin" Value="0,5,0,0"/>
@@ -40,28 +82,28 @@
       <Setter Property="Visibility" Value="{DynamicResource SubVis}"/>
     </Style>
     <!-- 设置页：每一项的名字和说明 -->
-    <Style x:Key="SetName" TargetType="TextBlock">
+    <Style x:Key="SetName" TargetType="TextBlock" BasedOn="{StaticResource TextBase}">
       <Setter Property="FontSize" Value="13.5"/>
       <Setter Property="Foreground" Value="#1D1D1F"/>
     </Style>
-    <Style x:Key="SetNote" TargetType="TextBlock">
+    <Style x:Key="SetNote" TargetType="TextBlock" BasedOn="{StaticResource TextBase}">
       <Setter Property="FontSize" Value="12"/>
       <Setter Property="Foreground" Value="#6E6E73"/>
       <Setter Property="TextWrapping" Value="Wrap"/>
       <Setter Property="LineHeight" Value="18"/>
       <Setter Property="Margin" Value="0,3,0,0"/>
     </Style>
-    <Style x:Key="SectionTitle" TargetType="TextBlock">
+    <Style x:Key="SectionTitle" TargetType="TextBlock" BasedOn="{StaticResource TextBase}">
       <Setter Property="FontSize" Value="13"/>
       <Setter Property="FontWeight" Value="SemiBold"/>
       <Setter Property="Foreground" Value="#1D1D1F"/>
     </Style>
-    <Style x:Key="RowLabel" TargetType="TextBlock">
+    <Style x:Key="RowLabel" TargetType="TextBlock" BasedOn="{StaticResource TextBase}">
       <Setter Property="Foreground" Value="#1D1D1F"/>
       <Setter Property="Margin" Value="0,6,0,0"/>
       <Setter Property="VerticalAlignment" Value="Top"/>
     </Style>
-    <Style x:Key="Caption" TargetType="TextBlock">
+    <Style x:Key="Caption" TargetType="TextBlock" BasedOn="{StaticResource TextBase}">
       <Setter Property="FontSize" Value="12"/>
       <Setter Property="Foreground" Value="#6E6E73"/>
       <Setter Property="VerticalAlignment" Value="Center"/>
@@ -1755,7 +1797,7 @@
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top" Margin="16,4,0,0">
           <CheckBox x:Name="MapFast" Content="快速扫描" IsChecked="True" VerticalAlignment="Center" Margin="0,0,14,0"
                     ToolTip="直接读取 NTFS 的文件表（MFT），比逐个文件夹查看快得多。少数安全软件对直接读盘会提示，可以关掉，改为逐个文件夹扫描。清理、搬家、软件管理统计大小时也按这个设置。"/>
-          <ComboBox x:Name="MapDrive" Width="200" Margin="0,0,8,0"/>
+          <ComboBox x:Name="MapDrive" Width="130" Margin="0,0,8,0"/>
           <Button x:Name="BtnMapStop" Content="停止" Margin="0,0,8,0" IsEnabled="False"/>
           <Button x:Name="BtnMapScan" Content="扫描" Style="{StaticResource Primary}" Padding="20,6"/>
         </StackPanel>
@@ -1779,12 +1821,15 @@
                         <TextBlock DockPanel.Dock="Left" Text="{Binding Letter}" FontSize="17" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0"/>
                         <TextBlock Text="{Binding Model}" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
                       </DockPanel>
-                      <Grid Margin="0,8,0,0" Height="6">
+                      <Grid Margin="0,10,0,0" Height="6">
                         <Border Background="#EBEBF0" CornerRadius="3"/>
                         <Border Background="{Binding BarBrush}" CornerRadius="3" HorizontalAlignment="Left" Width="{Binding BarW}"/>
                       </Grid>
-                      <TextBlock Text="{Binding UsedText}" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
-                      <WrapPanel Margin="0,8,0,0">
+                      <DockPanel Margin="0,7,0,0">
+                        <TextBlock DockPanel.Dock="Right" Text="{Binding FreeText}" FontSize="12" FontWeight="SemiBold" Foreground="#1D1D1F" Margin="12,0,0,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="{Binding UsedText}" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis"/>
+                      </DockPanel>
+                      <WrapPanel Margin="0,10,0,0">
                         <Border Background="{Binding HealthBg}" CornerRadius="6" Padding="7,2" Margin="0,0,6,4"><TextBlock Text="{Binding HealthText}" FontSize="12" FontWeight="SemiBold" Foreground="{Binding HealthFg}"/></Border>
                         <Border x:Name="TempChip" Background="{Binding TempBg}" CornerRadius="6" Padding="7,2" Margin="0,0,6,4"><TextBlock Text="{Binding TempText}" FontSize="12" FontWeight="SemiBold" Foreground="{Binding TempFg}"/></Border>
                         <Border x:Name="WearChip" Background="{Binding WearBg}" CornerRadius="6" Padding="7,2" Margin="0,0,6,4"><TextBlock Text="{Binding WearText}" FontSize="12" FontWeight="SemiBold" Foreground="{Binding WearFg}"/></Border>
@@ -1924,10 +1969,11 @@
             <RowDefinition Height="0"/>
             <RowDefinition Height="*"/>
           </Grid.RowDefinitions>
-          <!-- 概览：这块盘用了多少，系统、个人文件、缓存各占多少（扫描后才有） -->
+          <!-- 概览：已用的空间里系统、个人文件、缓存各占多少（扫描后才有）。上面的磁盘卡片已经写着这块盘用了多少、剩多少，
+               所以「已用 / 共多少」那一行只在卡片不显示这块盘时出现（设置里关了卡片、读不到健康信息） -->
           <Border x:Name="MapOverview" Grid.Row="0" Margin="18,6,18,8" Visibility="Collapsed">
             <StackPanel>
-              <DockPanel>
+              <DockPanel x:Name="MapOvHead" Margin="0,0,0,12" Visibility="Collapsed">
                 <StackPanel DockPanel.Dock="Right" HorizontalAlignment="Right">
                   <TextBlock Text="已使用" Style="{StaticResource Caption}" HorizontalAlignment="Right"/>
                   <TextBlock x:Name="MapOvPct" Text="" FontSize="26" FontWeight="SemiBold" HorizontalAlignment="Right"/>
@@ -1937,17 +1983,17 @@
                   <TextBlock x:Name="MapOvUsed" Text="" FontSize="26" FontWeight="SemiBold"/>
                 </StackPanel>
               </DockPanel>
-              <Grid x:Name="MapOvBar" Height="10" Margin="0,8,0,0">
+              <TextBlock x:Name="MapOvWhat" Text="已用的空间里都是什么" FontWeight="SemiBold"/>
+              <Grid x:Name="MapOvBar" Height="10" Margin="0,10,0,0">
                 <Grid.ColumnDefinitions>
-                  <ColumnDefinition Width="1*"/><ColumnDefinition Width="0"/><ColumnDefinition Width="0"/><ColumnDefinition Width="0"/><ColumnDefinition Width="0"/>
+                  <ColumnDefinition Width="1*"/><ColumnDefinition Width="0"/><ColumnDefinition Width="0"/><ColumnDefinition Width="0"/>
                 </Grid.ColumnDefinitions>
-                <Border Grid.Column="0" Background="#3B82F6" CornerRadius="5,0,0,5" Margin="0,0,1,0"/>
-                <Border Grid.Column="1" Background="#E0A731" Margin="0,0,1,0"/>
-                <Border Grid.Column="2" Background="#3FA37E" Margin="0,0,1,0"/>
-                <Border Grid.Column="3" Background="#8E8E93" Margin="0,0,1,0"/>
-                <Border Grid.Column="4" Background="#9B6FD6" CornerRadius="0,5,5,0"/>
+                <Border Grid.Column="0" Background="#3B82F6"/>
+                <Border Grid.Column="1" Background="#E0A731"/>
+                <Border Grid.Column="2" Background="#3FA37E"/>
+                <Border Grid.Column="3" Background="#8E8E93"/>
               </Grid>
-              <WrapPanel x:Name="MapOvLegend" Margin="0,8,0,0"/>
+              <WrapPanel x:Name="MapOvLegend" Margin="0,10,0,0"/>
               <!-- 值得一看：可能用不上、删了能腾出不少空间的大文件夹（缓存、依赖包、构建产物、虚拟环境、临时文件），点一下跳过去看 -->
               <DockPanel x:Name="MapWorthBox" Margin="0,10,0,0" Visibility="Collapsed">
                 <TextBlock DockPanel.Dock="Left" Text="值得一看" FontWeight="SemiBold" VerticalAlignment="Top" Margin="0,4,12,0"

@@ -60,6 +60,16 @@ function Invoke-UiTest {
                 if ($ctl[$script:pageList[$k][0]].Visibility -ne 'Visible') { throw "page $k not visible" }
             }
         }
+        & $step 'wrapped text gets line spacing, one-line labels do not; text spacing follows the screen' {
+            $tb = New-Object System.Windows.Controls.TextBlock; $tb.Style = $win.FindResource('Caption'); $tb.TextWrapping = 'Wrap'
+            if ($tb.LineHeight -ne 19) { throw ('a wrapped caption has line height ' + $tb.LineHeight) }
+            $one = New-Object System.Windows.Controls.TextBlock; $one.Style = $win.FindResource('Caption')
+            if (-not [double]::IsNaN($one.LineHeight)) { throw ('a one-line caption got line height ' + $one.LineHeight) }
+            $ps = [System.Windows.PresentationSource]::FromVisual($win); $sc = if ($ps) { $ps.CompositionTarget.TransformToDevice.M11 } else { 0 }
+            $mode = [System.Windows.Media.TextOptions]::GetTextFormattingMode($win)
+            $L.Add(('  text formatting {0} at DPI scale {1:N2}' -f $mode, $sc))
+            if ($sc -ge 1.2 -and [string]$mode -ne 'Ideal') { throw 'high-DPI screen but text is still snapped to whole pixels' }
+        }
         & $step 'help: contents list on the left, only the picked item on the right' {
             if ($script:helpAtStart) { throw 'the help page was built when the window opened, not on first use' }
             Show-Page 'help'; $win.UpdateLayout()
@@ -365,7 +375,7 @@ function Invoke-UiTest {
             if (-not (& $waitUi { -not $script:dhPs } 60000)) { throw 'disk health did not finish' }
             $cards = @($ctl.MapHealth.ItemsSource)
             if ($cards.Count -eq 0) { throw ('no disk cards; ' + [string]$script:dhErr + ' / direct: ' + (Get-DiskHealth $env:SystemDrive)) }
-            if (-not $cards[0].HealthText -or -not $cards[0].UsedText -or $cards[0].Model -eq (T '读不到型号和健康信息')) { throw ('card not filled: ' + $cards[0].Model + ' / ' + $cards[0].HealthText) }
+            if (-not $cards[0].HealthText -or -not $cards[0].UsedText -or -not $cards[0].FreeText -or $cards[0].Model -eq (T '读不到型号和健康信息')) { throw ('card not filled: ' + $cards[0].Model + ' / ' + $cards[0].HealthText) }
             & $snap $ctl.MapHealthBox 'disk-cards' 2
             $ctl.SetMapHealth.IsChecked = $false; & $click $ctl.SetMapHealth; $win.UpdateLayout()
             $hidden = $ctl.MapHealthBox.Visibility -ne 'Visible'
@@ -1030,6 +1040,11 @@ function Invoke-UiTest {
                 if (-not $script:mapRoot -or [object]::ReferenceEquals($script:mapRoot, $tree)) { throw 'space map has no scan of the drive' }
                 $ctl.OpPanel.Visibility = 'Collapsed'; & $shot 'map'
                 if ($ctl.MapOverview.Visibility -ne 'Visible' -or -not $ctl.MapOvPct.Text) { throw 'drive overview missing' }
+                # 同一个数不写两遍：卡片显示着这块盘时，概览不再写已用 / 共多少；下拉框只写盘符；概览只分已用空间的四类
+                $cardC = @(@($ctl.MapHealth.ItemsSource) | Where-Object { $_ -and ([string]$_.Letter).TrimEnd('\') -ieq $env:SystemDrive })
+                if ($cardC.Count -gt 0 -and $ctl.MapHealthBox.Visibility -eq 'Visible' -and $ctl.MapOvHead.Visibility -ne 'Collapsed') { throw 'the overview repeats the used / total shown on the drive card' }
+                if (@($ctl.MapDrive.Items | Where-Object { [string]$_.Content -match 'GB|TB|MB' }).Count) { throw 'the drive picker repeats the capacity' }
+                if (@($ctl.MapOvLegend.Children).Count -gt 4) { throw 'the overview legend has more than the four kinds of used space' }
                 $ctl.MapViewTree.IsChecked = $true; & $shot 'map-tree'
                 $ctl.MapViewTypes.IsChecked = $true; & $shot 'map-types'
                 if ($ctl.MapList.Items.Count -lt 3) { throw 'type statistics missing for the drive' }

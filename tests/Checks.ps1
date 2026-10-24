@@ -120,6 +120,25 @@ foreach ($c in $ast.FindAll({ param($x) $x -is [System.Management.Automation.Lan
 }
 if (-not $sheetBad) { Ok 'dialog calls use known parameters' }
 
+# 7. 同一页上同一个数只出现一次；文字有行距（3.6.1：空间地图上 C 盘、D 盘的容量出现了三遍）
+$fn = { param($name) [regex]::Match($src, '(?s)function ' + [regex]::Escape($name) + '\b.*?\r?\n\}').Value }
+$fill = & $fn 'Fill-MapDrives'; $card = & $fn 'Show-DiskHealth'; $ov = & $fn 'Show-MapOverview'; $lvl = & $fn 'Show-MapLevel'
+if ($fill -and $fill -notmatch 'Fmt' -and $fill -notmatch '已用') { Ok 'space map: the drive picker shows only the drive (the cards show how full it is)' } else { Bad 'space map: the drive picker repeats used / total that the drive cards already show' }
+if ($card -match '\.FreeText = ' -and $card -notmatch '（\{2:N0\}%），剩') { Ok 'space map: a drive card says used / total / % and free once, without cramped （…）， punctuation' } else { Bad 'space map: drive card text' }
+if ($ov -match 'Update-MapOvHead' -and $src -match '(?s)function Update-MapOvHead.*?MapHealthBox.*?MapOvHead\.Visibility' -and $card -match 'Update-MapOvHead' -and $ov -notmatch "T '剩余空间'") { Ok 'space map: the overview shows what the used space is made of; the used / total headline only when no card shows this drive' } else { Bad 'space map: the overview repeats the used / total / free of the drive card' }
+if ($lvl -match '\$ctl\.MapInfo\.Text = if \(\$node\.Parent\)') { Ok 'space map: at a drive root the info line does not repeat a size next to the drive card' } else { Bad 'space map: the info line at the drive root repeats a size' }
+$du = @('UI-Status', 'Show-DiskHealth', 'Show-MapOverview') | Where-Object { (& $fn $_) -notmatch 'Get-DriveUse' }
+if ($src -match '(?s)function Get-DriveUse' -and -not $du) { Ok 'one way to read how full a drive is (Get-DriveUse) on the cleanup page, the drive cards and the overview' } else { Bad ("these read drive use their own way: {0}" -f ($du -join ', ')) }
+$dc = & $fn 'Fill-DestChoices'
+if ($dc -and $dc -notmatch '已自动选了空闲最多的 \{0\} 盘（剩 \{1\}）') { Ok 'move target: the hint does not repeat the free space shown in the picker' } else { Bad 'move target: the hint repeats the free space of the picked drive' }
+# 换行的文字按字号给行距（约 1.5 倍）：12 号 19、13 号 21、14 号 22；页面说明、小字、设置说明都基于同一个基础样式
+$base = [regex]::Match($xaml, '(?s)<Style x:Key="TextBase" TargetType="TextBlock">.*?</Style>').Value
+$lh = @{}; foreach ($m in [regex]::Matches($base, '(?s)<MultiTrigger>.*?Property="FontSize" Value="([\d.]+)".*?Property="LineHeight" Value="([\d.]+)"')) { $lh[$m.Groups[1].Value] = [double]$m.Groups[2].Value }
+$badLh = @($lh.Keys | Where-Object { $lh[$_] -lt [double]$_ * 1.45 -or $lh[$_] -gt [double]$_ * 1.75 })
+$noBase = @('Caption', 'PageSub', 'SetNote', 'RowLabel') | Where-Object { $xaml -notmatch ('<Style x:Key="' + $_ + '" TargetType="TextBlock" BasedOn="\{StaticResource TextBase\}"') }
+if ($lh.Count -ge 3 -and -not $badLh -and -not $noBase -and $xaml -match '<Style TargetType="TextBlock" BasedOn="\{StaticResource TextBase\}"/>') { Ok ("wrapped text gets about 1.5x line spacing ({0})" -f (($lh.Keys | Sort-Object | ForEach-Object { "$_ → $($lh[$_])" }) -join ', ')) } else { Bad ("line spacing for wrapped text: sizes {0}; off {1}; styles not based on TextBase {2}" -f ($lh.Keys -join ','), ($badLh -join ','), ($noBase -join ',')) }
+if ($src -match '(?s)function Set-TextMode.*?TransformToDevice.*?Ideal' -and $src -match 'Set-TextMode \$win') { Ok 'on high-DPI screens text uses ideal glyph spacing (Display mode squeezes or stretches letters to whole pixels)' } else { Bad 'text formatting mode does not follow the screen DPI' }
+
 ""
 if ($fails) { "$fails check(s) failed" } else { "all checks passed" }
 exit $fails
