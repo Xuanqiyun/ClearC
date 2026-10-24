@@ -5648,8 +5648,14 @@ function Invoke-Move($it, $destRoot, $res) {
         if (Stopping) { Log "  $cxNone"; $res.Cancelled = $true; $res.Msgs += $cxNone; break }
         Log ((T "  搬 {0} ({1}) -> {2}") -f $src, (GB $srcBytes), $dst)
         New-Item -ItemType Directory -Path $dst -Force | Out-Null
-        # 搬软件时：目标文件夹先设成和 C 盘上一样的访问权限，再连同每个文件的权限一起复制
-        if ($it.Sddl) { [void](Set-DirAccess $dst ([string]$it.Sddl)) }
+        # 目标文件夹先设成和 C 盘上一样的访问权限：不然它继承目标盘根目录的权限，电脑上的其他账户也能打开
+        # （搬软件时再连同每个文件的权限一起复制）。设不成、其他账户还能打开的就不搬
+        $acc = if ($it.Sddl) { [string]$it.Sddl } else { Get-AccessSddl $src }
+        if ($acc) { [void](Set-DirAccess $dst $acc) }
+        if (-not (Test-OthersCanRead $src) -and (Test-OthersCanRead $dst)) {
+            $m = (T "没能把 {0} 的权限设成和 C 盘上一样，搬过去后电脑上的其他账户也能打开，所以 {1} 不搬，原目录未动") -f $dst, $src
+            Log "  $m"; OpLog '搬运' (T '搬家失败') $src $m; $res.Fail++; $res.Msgs += $m; continue
+        }
         $cp = if ($it.Sddl) { '/COPY:DATS' } else { '/COPY:DAT' }
         Save-MoveMap $dstRoot $src $dst
         $base = [math]::Min([double]$haveBytes, [double]$srcBytes)
@@ -6406,6 +6412,47 @@ function Test-UserWritable([string]$dir) {
         return $false
     } catch { return $true }
 }
+# 文件夹或文件的访问权限（SDDL 里的 D: 部分，包括继承来的），读不到返回空
+function Get-AccessSddl([string]$p) { try { return (Get-Acl -LiteralPath $p).GetSecurityDescriptorSddlForm('Access') } catch { return '' } }
+# 电脑上的其他账户能不能打开它（Users、Authenticated Users、Everyone、Interactive 有读的权限）；读不到权限时当成不能
+function Test-OthersCanRead([string]$p) {
+    try {
+        $acl = Get-Acl -LiteralPath $p
+        foreach ($r in $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
+            if ($r.AccessControlType -ne [Security.AccessControl.AccessControlType]::Allow) { continue }
+            if ($r.PropagationFlags -band [Security.AccessControl.PropagationFlags]::InheritOnly) { continue }
+            if (@('S-1-5-32-545', 'S-1-5-11', 'S-1-1-0', 'S-1-5-4') -notcontains $r.IdentityReference.Value) { continue }
+            if (([int]$r.FileSystemRights -band [int][Security.AccessControl.FileSystemRights]::ReadData) -ne 0) { return $true }
+        }
+    } catch {}
+    return $false
+}
+# 以前的版本搬走的、现在电脑上的其他账户也能打开的文件夹：从用户目录（C:\Users\某人\…）搬走的，
+# 在 C 盘时只有本人、系统和管理员能打开，搬过去后继承了目标盘根目录的权限
+function Find-LooseMoves {
+    $users = (Split-Path $env:USERPROFILE -Parent).TrimEnd('\')
+    $out = @()
+    foreach ($root in (All-MoveRoots)) {
+        foreach ($pr in (Read-MoveMapPairs $root)) {
+            $src = [string]$pr[0]; $dst = [string]$pr[1]
+            if (-not $src.StartsWith($users + '\', [StringComparison]::OrdinalIgnoreCase)) { continue }
+            if (-not (IsLink $src) -or -not (Test-Path -LiteralPath $dst -PathType Container)) { continue }
+            $par = Split-Path $src -Parent
+            if ((Test-OthersCanRead $dst) -and -not (Test-OthersCanRead $par)) { $out += @{ Src = $src; Dst = $dst; Like = $par } }
+        }
+    }
+    return $out
+}
+# 把这些文件夹的权限改成和它们在 C 盘时所在的文件夹一样（里面的文件跟着继承）
+function Repair-MovedAccess($items) {
+    $ok = 0; $bad = @()
+    foreach ($x in @($items)) {
+        $sd = Get-AccessSddl $x.Like
+        if ($sd -and (Set-DirAccess $x.Dst $sd) -and -not (Test-OthersCanRead $x.Dst)) { $ok++; OpLog '系统设置' (T '修正搬走的文件夹的权限') $x.Dst ((T "改成和 {0} 一样") -f $x.Like) }
+        else { $bad += $x.Dst; OpLog '系统设置' (T '没能修正搬走的文件夹的权限') $x.Dst '' }
+    }
+    return @{ Ok = $ok; Bad = $bad }
+}
 # 定时任务运行的那一份 exe：放在 Program Files\ClearC 里，只有管理员能改。任务以最高权限运行，
 # 要是指向下载文件夹这类普通权限就能改的地方，有人换掉那个 exe，到点就能不经确认拿到管理员权限
 function Get-TaskExePath { $pf = [Environment]::GetFolderPath('ProgramFiles'); if (-not $pf) { return '' }; return (Join-Path $pf 'ClearC\ClearC.exe') }
@@ -7077,6 +7124,16 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+改成只有我能打开	Only I can open them
+搬走的文件夹，电脑上的其他账户也能打开	Other accounts on this PC can open your moved folders
+下面这些文件夹是以前的版本搬到其他盘的。在 C 盘时只有你、系统和管理员能打开；搬过去后用的是那块盘的默认权限，这台电脑上的其他账户也能打开、修改。\n\n可以改成和在 C 盘时一样。只改权限，不动里面的文件，文件多的要等一会儿。	An earlier version moved these folders to another drive. On C: only you, the system and administrators could open them; on the other drive they took that drive's default permissions, so other accounts on this PC can open and change them.\n\nThey can be set back to how they were on C:. Only the permissions change, not the files; folders with many files take a while.
+{0} 个文件夹改好了，现在只有你、系统和管理员能打开。	{0} folder(s) fixed. Now only you, the system and administrators can open them.
+{0} 个没改成：{1}	{0} could not be changed: {1}
+权限改好了	Permissions fixed
+没能把 {0} 的权限设成和 C 盘上一样，搬过去后电脑上的其他账户也能打开，所以 {1} 不搬，原目录未动	Could not give {0} the same permissions it had on C:, so other accounts on this PC could open it. {1} was not moved and the original folder is unchanged
+修正搬走的文件夹的权限	Fixed the permissions of a moved folder
+改成和 {0} 一样	Now the same as {0}
+没能修正搬走的文件夹的权限	Could not fix the permissions of a moved folder
 不用开着本工具，也不用设置开机启动。开启后会在 Windows「任务计划程序」里建一个任务（{0}）：每次登录电脑 2 分钟后、以及每天中午 12 点，Windows 会在后台运行一下本工具检查 C 盘，空间够就什么都不显示，查完马上退出。关掉开关就删除这个任务。\n任务运行的是复制到 {1} 的那一份（那里只有管理员能改，别人换不掉它）；两个开关都关掉后这一份会删掉。	ClearC does not need to stay open or start with Windows. Turning this on creates a task in Windows Task Scheduler ({0}): 2 minutes after each sign-in and every day at noon, Windows runs ClearC in the background to check C:. If there is enough space nothing is shown and it exits right away. Turning the switch off deletes the task.\nThe task runs the copy placed in {1} (only administrators can change it, so nobody can swap it); the copy is removed when both switches are off.
 改成从 Program Files 里那一份运行（那里只有管理员能改）	Run the copy in Program Files instead (only administrators can change it)
 Program Files 里那一份不在了，重新复制	The copy in Program Files was missing; copied again
@@ -22747,6 +22804,15 @@ $timer.Add_Tick({
             if ($x) { $script:pendingDialog = @{ Title = (T '已标记为仅在线'); Kind = 'done'; Text = ((T "{0} 个文件（{1}）已改成仅在线{2}。OneDrive 会在后台释放本地空间，要等它同步一会儿。") -f $x.Done, (Fmt $x.Bytes), $(if ($x.Fail) { ((T "，{0} 个没改成（可能正被占用）") -f $x.Fail) } else { '' })) } }
             $script:odWanted = $true
         }
+        elseif ($sync.Mode -eq 'aclfix') {
+            $x = $sync.AclRes
+            End-Op (T '完成')
+            if ($x) {
+                $t = (T "{0} 个文件夹改好了，现在只有你、系统和管理员能打开。") -f $x.Ok
+                if (@($x.Bad).Count) { $t += "`n" + ((T "{0} 个没改成：{1}") -f @($x.Bad).Count, (@($x.Bad) -join (T '；'))) }
+                $script:pendingDialog = @{ Title = (T '权限改好了'); Kind = $(if (@($x.Bad).Count) { 'warn' } else { 'done' }); Text = $t }
+            }
+        }
         elseif ($sync.Mode -eq 'csanalyze') {
             $x = $sync.CsRes
             End-Op (T '完成')
@@ -23240,7 +23306,7 @@ $win.Add_ContentRendered({
     if ($script:riskShown) { return }
     $script:riskShown = $true
     $script:prefetchTimer.Start()
-    if (Test-Path -LiteralPath $script:riskFile) { Show-HalfMoves; return }
+    if (Test-Path -LiteralPath $script:riskFile) { Show-HalfMoves; Show-LooseMoves; return }
     $ans = Show-Sheet -Kind warn -Title (T '使用前请先阅读安全风险提示') `
         -Text (T "本工具会按你的选择删除或搬移电脑上的文件。删除的文件可能无法恢复，存在资料丢失的风险。`n`n每次删除前，请确认这些资料确实不再需要、删除不会给你带来损失；重要资料请先备份。因使用本工具造成的资料丢失或其他损失，责任由使用者自行承担，开发者不承担责任。`n`n完整说明随时可以在左侧「帮助」里查看。") `
         -Confirm (T '我已阅读并了解上述风险，同意自行承担使用本工具的后果。') -Buttons @((T '退出'), (T '同意并继续')) -Primary (T '同意并继续') -Cancel (T '退出')
@@ -23253,6 +23319,25 @@ $win.Add_ContentRendered({
     Show-HalfMoves
 })
 # 打开时查一下有没有上次没做完的搬家（数据都在，只是要告诉用户在哪）
+# 以前的版本搬走的文件夹，其他账户也能打开：问一次要不要改成和在 C 盘时一样（一个月最多问一次）
+function Show-LooseMoves {
+    if ($script:worker) { return }
+    $l = @(); try { $l = @(Find-LooseMoves) } catch { return }
+    if ($l.Count -eq 0) { return }
+    $key = '{0}|{1:yyyyMM}' -f $l.Count, (Get-Date)
+    if ((Get-Setting 'LooseMovesAsked' '') -eq $key) { return }
+    Set-Setting 'LooseMovesAsked' $key
+    $ok = (T '改成只有我能打开')
+    $ans = Show-Sheet -Kind warn -Title (T '搬走的文件夹，电脑上的其他账户也能打开') `
+        -Text (T "下面这些文件夹是以前的版本搬到其他盘的。在 C 盘时只有你、系统和管理员能打开；搬过去后用的是那块盘的默认权限，这台电脑上的其他账户也能打开、修改。`n`n可以改成和在 C 盘时一样。只改权限，不动里面的文件，文件多的要等一会儿。") `
+        -Items @($l | ForEach-Object { $_.Dst }) -Buttons @((T '以后再说'), $ok) -Primary $ok -Cancel (T '以后再说')
+    if ($ans -ne $ok) { return }
+    $sync.Mode = 'aclfix'; $sync.AclRes = $null
+    Start-Op (T '修正搬走的文件夹的权限') -NoCard; UI-Busy $true
+    Start-Worker @'
+$sync.AclRes = Repair-MovedAccess $arg.Items
+'@ @{ Items = $l }
+}
 function Show-HalfMoves {
     $h = @(); try { $h = @(Find-HalfMoves) } catch { return }
     if ($h.Count -eq 0) { return }

@@ -246,6 +246,15 @@ $timer.Add_Tick({
             if ($x) { $script:pendingDialog = @{ Title = (T '已标记为仅在线'); Kind = 'done'; Text = ((T "{0} 个文件（{1}）已改成仅在线{2}。OneDrive 会在后台释放本地空间，要等它同步一会儿。") -f $x.Done, (Fmt $x.Bytes), $(if ($x.Fail) { ((T "，{0} 个没改成（可能正被占用）") -f $x.Fail) } else { '' })) } }
             $script:odWanted = $true
         }
+        elseif ($sync.Mode -eq 'aclfix') {
+            $x = $sync.AclRes
+            End-Op (T '完成')
+            if ($x) {
+                $t = (T "{0} 个文件夹改好了，现在只有你、系统和管理员能打开。") -f $x.Ok
+                if (@($x.Bad).Count) { $t += "`n" + ((T "{0} 个没改成：{1}") -f @($x.Bad).Count, (@($x.Bad) -join (T '；'))) }
+                $script:pendingDialog = @{ Title = (T '权限改好了'); Kind = $(if (@($x.Bad).Count) { 'warn' } else { 'done' }); Text = $t }
+            }
+        }
         elseif ($sync.Mode -eq 'csanalyze') {
             $x = $sync.CsRes
             End-Op (T '完成')
@@ -739,7 +748,7 @@ $win.Add_ContentRendered({
     if ($script:riskShown) { return }
     $script:riskShown = $true
     $script:prefetchTimer.Start()
-    if (Test-Path -LiteralPath $script:riskFile) { Show-HalfMoves; return }
+    if (Test-Path -LiteralPath $script:riskFile) { Show-HalfMoves; Show-LooseMoves; return }
     $ans = Show-Sheet -Kind warn -Title (T '使用前请先阅读安全风险提示') `
         -Text (T "本工具会按你的选择删除或搬移电脑上的文件。删除的文件可能无法恢复，存在资料丢失的风险。`n`n每次删除前，请确认这些资料确实不再需要、删除不会给你带来损失；重要资料请先备份。因使用本工具造成的资料丢失或其他损失，责任由使用者自行承担，开发者不承担责任。`n`n完整说明随时可以在左侧「帮助」里查看。") `
         -Confirm (T '我已阅读并了解上述风险，同意自行承担使用本工具的后果。') -Buttons @((T '退出'), (T '同意并继续')) -Primary (T '同意并继续') -Cancel (T '退出')
@@ -752,6 +761,25 @@ $win.Add_ContentRendered({
     Show-HalfMoves
 })
 # 打开时查一下有没有上次没做完的搬家（数据都在，只是要告诉用户在哪）
+# 以前的版本搬走的文件夹，其他账户也能打开：问一次要不要改成和在 C 盘时一样（一个月最多问一次）
+function Show-LooseMoves {
+    if ($script:worker) { return }
+    $l = @(); try { $l = @(Find-LooseMoves) } catch { return }
+    if ($l.Count -eq 0) { return }
+    $key = '{0}|{1:yyyyMM}' -f $l.Count, (Get-Date)
+    if ((Get-Setting 'LooseMovesAsked' '') -eq $key) { return }
+    Set-Setting 'LooseMovesAsked' $key
+    $ok = (T '改成只有我能打开')
+    $ans = Show-Sheet -Kind warn -Title (T '搬走的文件夹，电脑上的其他账户也能打开') `
+        -Text (T "下面这些文件夹是以前的版本搬到其他盘的。在 C 盘时只有你、系统和管理员能打开；搬过去后用的是那块盘的默认权限，这台电脑上的其他账户也能打开、修改。`n`n可以改成和在 C 盘时一样。只改权限，不动里面的文件，文件多的要等一会儿。") `
+        -Items @($l | ForEach-Object { $_.Dst }) -Buttons @((T '以后再说'), $ok) -Primary $ok -Cancel (T '以后再说')
+    if ($ans -ne $ok) { return }
+    $sync.Mode = 'aclfix'; $sync.AclRes = $null
+    Start-Op (T '修正搬走的文件夹的权限') -NoCard; UI-Busy $true
+    Start-Worker @'
+$sync.AclRes = Repair-MovedAccess $arg.Items
+'@ @{ Items = $l }
+}
 function Show-HalfMoves {
     $h = @(); try { $h = @(Find-HalfMoves) } catch { return }
     if ($h.Count -eq 0) { return }

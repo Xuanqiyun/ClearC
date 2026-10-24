@@ -302,7 +302,7 @@ try { & {
     Save-MoveMap $hr $hs (Join-Path $hr 'halfsrc')
     Set-Setting 'MoveRoots' $hr
     try { $half = @(Find-HalfMoves) } finally { Set-Setting 'MoveRoots' '' }
-    Check ("an interrupted move (folder left as *.moved_backup) is found at startup ({0})" -f $half.Count) (@($half | Where-Object { $_.Bak -like '*halfsrc.moved_backup' }).Count -eq 1 -and $src -match 'Show-HalfMoves; return')
+    Check ("an interrupted move (folder left as *.moved_backup) is found at startup ({0})" -f $half.Count) (@($half | Where-Object { $_.Bak -like '*halfsrc.moved_backup' }).Count -eq 1 -and $src -match 'Show-HalfMoves; (Show-LooseMoves; )?return')
     # Windows.old、Installer、失效快捷方式、回收站说明
     Check 'Windows.old: takeown skips symbolic links, icacls works on links themselves, links are removed again after taking ownership' ($engineText -match 'takeown\.exe" /F \$p /R /A /D Y /SKIPSL' -and $engineText -match 'icacls\.exe" \$p /grant Administrators:F /T /C /L /Q' -and $engineText -match '\$more = Remove-LinksInside \$p')
     Check 'Installer orphans: nothing is judged when the Windows Installer query fails or the registry has no packages' ($engineText -match 'if \(\$null -eq \$viaApi\) \{ return @\(\) \}   # 接口读不了' -and $engineText -match 'if \(\$fromReg -eq 0\) \{ return @\(\) \}' -and ([regex]::Match($src, '(?s)public static List<string> FromInstaller\(\).*?\r?\n    \}').Value) -match '(?s)CreateInstance\(t\); \} catch \{ return null; \}.*?\} catch \{ return null; \}')
@@ -401,6 +401,18 @@ try { & {
         $acl = Get-Acl -LiteralPath $pub; $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule ((New-Object System.Security.Principal.SecurityIdentifier 'S-1-5-32-545'), 'Modify', 'Allow'))); Set-Acl -LiteralPath $pub -AclObject $acl
         Check 'SEC-2 a folder where Users can write is refused for the task copy' (Test-UserWritable $pub)
     } else { Skip 'SEC-2 folder permission checks' }
+    $mv = [regex]::Match($engineText, '(?s)function Invoke-Move\(.*?\r?\n\}').Value
+    Check 'SEC-3 every move gives the target the same permissions the source had on C: (not only app moves)' ($mv -match '\$acc = if \(\$it\.Sddl\)' -and $mv -match 'Get-AccessSddl \$src' -and $mv -match 'Set-DirAccess \$dst \$acc' -and $mv -match 'Test-OthersCanRead \$dst')
+    if ($win) {
+        $priv = Join-Path $T 'acl-src'; $open = Join-Path $T 'acl-open'; New-Item -ItemType Directory -Force -Path $priv, $open | Out-Null
+        $me = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+        $sp = New-Object System.Security.AccessControl.DirectorySecurity; $sp.SetSecurityDescriptorSddlForm("D:P(A;OICI;FA;;;$me)(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)"); [IO.Directory]::SetAccessControl($priv, $sp)
+        $so = Get-Acl -LiteralPath $open; $so.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule ((New-Object System.Security.Principal.SecurityIdentifier 'S-1-5-32-545'), 'ReadAndExecute', 'ContainerInherit, ObjectInherit', 'None', 'Allow'))); Set-Acl -LiteralPath $open -AclObject $so
+        $kid = Join-Path $open 'WeChat Files'; New-Item -ItemType Directory -Force -Path $kid | Out-Null; [IO.File]::WriteAllText((Join-Path $kid 'msg.db'), 'x')
+        Check 'SEC-3 a folder that inherits Users read is seen as open to other accounts' ((Test-OthersCanRead $kid) -and -not (Test-OthersCanRead $priv))
+        [void](Set-DirAccess $kid (Get-AccessSddl $priv))
+        Check 'SEC-3 after copying the permissions, other accounts can no longer open the folder or the files in it' (-not (Test-OthersCanRead $kid) -and -not (Test-OthersCanRead (Join-Path $kid 'msg.db')))
+    } else { Skip 'SEC-3 permission behaviour' }
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue

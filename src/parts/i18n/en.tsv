@@ -156,6 +156,16 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+改成只有我能打开	Only I can open them
+搬走的文件夹，电脑上的其他账户也能打开	Other accounts on this PC can open your moved folders
+下面这些文件夹是以前的版本搬到其他盘的。在 C 盘时只有你、系统和管理员能打开；搬过去后用的是那块盘的默认权限，这台电脑上的其他账户也能打开、修改。\n\n可以改成和在 C 盘时一样。只改权限，不动里面的文件，文件多的要等一会儿。	An earlier version moved these folders to another drive. On C: only you, the system and administrators could open them; on the other drive they took that drive's default permissions, so other accounts on this PC can open and change them.\n\nThey can be set back to how they were on C:. Only the permissions change, not the files; folders with many files take a while.
+{0} 个文件夹改好了，现在只有你、系统和管理员能打开。	{0} folder(s) fixed. Now only you, the system and administrators can open them.
+{0} 个没改成：{1}	{0} could not be changed: {1}
+权限改好了	Permissions fixed
+没能把 {0} 的权限设成和 C 盘上一样，搬过去后电脑上的其他账户也能打开，所以 {1} 不搬，原目录未动	Could not give {0} the same permissions it had on C:, so other accounts on this PC could open it. {1} was not moved and the original folder is unchanged
+修正搬走的文件夹的权限	Fixed the permissions of a moved folder
+改成和 {0} 一样	Now the same as {0}
+没能修正搬走的文件夹的权限	Could not fix the permissions of a moved folder
 不用开着本工具，也不用设置开机启动。开启后会在 Windows「任务计划程序」里建一个任务（{0}）：每次登录电脑 2 分钟后、以及每天中午 12 点，Windows 会在后台运行一下本工具检查 C 盘，空间够就什么都不显示，查完马上退出。关掉开关就删除这个任务。\n任务运行的是复制到 {1} 的那一份（那里只有管理员能改，别人换不掉它）；两个开关都关掉后这一份会删掉。	ClearC does not need to stay open or start with Windows. Turning this on creates a task in Windows Task Scheduler ({0}): 2 minutes after each sign-in and every day at noon, Windows runs ClearC in the background to check C:. If there is enough space nothing is shown and it exits right away. Turning the switch off deletes the task.\nThe task runs the copy placed in {1} (only administrators can change it, so nobody can swap it); the copy is removed when both switches are off.
 改成从 Program Files 里那一份运行（那里只有管理员能改）	Run the copy in Program Files instead (only administrators can change it)
 Program Files 里那一份不在了，重新复制	The copy in Program Files was missing; copied again
