@@ -3222,6 +3222,14 @@ function Get-DestChoices($drives = $null) {
     }
     return $out.ToArray()
 }
+# 一键清理给目录里的一项选什么：只删不搬（聊天记录这类要搬的在清理页单独一张卡片，用户自己点）；
+# 有代价的（「需确认」一组）和自己加的文件夹一律跳过
+function Get-OneClickAction($it) {
+    if (([string]$it.G).StartsWith('需确认') -or $it.Custom -or $it.Kind -eq 'move') { return (T '跳过') }
+    $want = if ($it.One) { [string]$it.One } else { [string]$it.Def }
+    if ($want -eq (T '搬到其他盘')) { return (T '跳过') }
+    return $want
+}
 # 普通用户能不能往这个文件夹里写（Users、Authenticated Users、Everyone、Interactive 有写入、删除、改权限之类的权限）。
 # 读不到权限就当能写：拿不准的时候不信任它
 function Test-UserWritable([string]$dir) {

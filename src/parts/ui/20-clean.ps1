@@ -247,10 +247,34 @@ function Build-Rows($sizes) {
     $ctl.EmptyClean.Visibility = if ($col.Count -gt 0) { 'Collapsed' } else { 'Visible' }
     if ($col.Count -eq 0) { $ctl.EmptyCleanText.Text = (T 'C 盘上没找到可以清理的东西') }
     Update-CleanOverview
+    Update-ChatCard
     $script:reclaim = $total
     UI-Status
     $ctl.Summary.Text = ((T "共 {0} 项。按当前选择，可释放约 {1}。") -f $col.Count, (GB $total))
 }
+# 聊天记录卡片：一键清理只删不搬，聊天记录占了多少、要不要搬，在这里单独说，按钮只搬这几项
+$script:chatIdx = @()
+function Update-ChatCard {
+    $cat = @{}; foreach ($c in $catalog) { $cat[$c.Idx] = $c }
+    $chat = @($script:rows | Where-Object { $c = $cat[$_.Idx]; $c -and $c.Kind -eq 'move' -and ([string]$c.G).StartsWith('聊天软件') -and $_.Bytes -gt 0 -and $_.Actions -contains (T '搬到其他盘') })
+    $bytes = [double]0; foreach ($r in $chat) { $bytes += $r.Bytes }
+    $script:chatIdx = @($chat | ForEach-Object { $_.Idx })
+    if ($chat.Count -eq 0 -or $bytes -lt 200MB) { $ctl.ChatCard.Visibility = 'Collapsed'; return }
+    $names = @($chat | Sort-Object Bytes -Descending | Select-Object -First 3 | ForEach-Object { (T "{0} {1}") -f $_.Name, (Fmt $_.Bytes) }) -join (T '、')
+    $ctl.ChatCardTitle.Text = (T "聊天记录占了 C 盘 {0}") -f (Fmt $bytes)
+    if (Test-DestOk) {
+        $ctl.ChatCardText.Text = (T "{0}。一键清理只删缓存，不碰它们。搬到 {1} 盘以后，C 盘原位置只留一个链接，聊天记录和文件原样保留，软件照常使用；搬之前要先退出这些聊天软件。") -f $names, (Get-Dest).Substring(0, 1)
+        $ctl.BtnChatMove.Visibility = 'Visible'
+    } else {
+        $ctl.ChatCardText.Text = (T "{0}。一键清理只删缓存，不碰它们。这台电脑没有可以搬去的其他硬盘，接上一块硬盘后可以把它们搬过去。") -f $names
+        $ctl.BtnChatMove.Visibility = 'Collapsed'
+    }
+    $ctl.ChatCard.Visibility = 'Visible'
+}
+$ctl.BtnChatMove.Add_Click({
+    if ($script:worker -or -not $script:chatIdx -or -not $script:rows) { return }
+    Invoke-RunSelected (T '搬走聊天记录') -OnlyMove $script:chatIdx
+})
 
 # 用户在列表里改了某一行的操作，就重算「可释放约多少」
 $script:planSig = ''
@@ -403,6 +427,7 @@ $ctl.DestPick.Add_SelectionChanged({
         $script:destPrev = $ctl.DestPick.SelectedIndex
         $ctl.MovesDest.SelectedIndex = $ctl.DestPick.SelectedIndex
     } finally { $script:destSyncing = $false }
+    if ($script:rows) { Update-ChatCard }   # 卡片上写着搬到哪块盘
 })
 $ctl.BtnDestBrowse.Add_Click({
     $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
@@ -448,12 +473,15 @@ function Get-BusyApps([string[]]$apps) {
     return ,$names
 }
 
-function Invoke-RunSelected([string]$title = (T '执行所选操作')) {
+# $OnlyMove：只搬这几项（聊天记录卡片上的按钮），列表里其他行的选择不管
+function Invoke-RunSelected([string]$title = (T '执行所选操作'), [object[]]$OnlyMove = $null) {
     $plan = @()
     foreach ($r in $script:rows) {
-        if ($r.Action -ne (T '跳过')) {
+        $act = $r.Action
+        if ($OnlyMove) { if ($OnlyMove -notcontains $r.Idx) { continue }; $act = (T '搬到其他盘') }
+        if ($act -ne (T '跳过')) {
             $b = if ($sync.Sizes) { [double]$sync.Sizes[$r.Idx] } else { 0 }
-            $plan += @{ Idx = $r.Idx; Action = $r.Action; Name = $r.Name; Bytes = [math]::Max([double]0, [double]$b); Sig = $(if ($script:rowSig) { [string]$script:rowSig[$r.Idx] } else { '' }) }
+            $plan += @{ Idx = $r.Idx; Action = $act; Name = $r.Name; Bytes = [math]::Max([double]0, [double]$b); Sig = $(if ($script:rowSig) { [string]$script:rowSig[$r.Idx] } else { '' }) }
         }
     }
     if (-not $plan) { Show-Sheet -Title (T '没有选中任何操作') -Text (T '在列表里把要处理的项目选成「删除」或「搬到其他盘」，再点「执行所选操作」。') | Out-Null; return }
@@ -652,10 +680,7 @@ function Show-DeletePreview($items) {
 function Apply-OneClick {
     $cat = @{}; foreach ($it in $catalog) { $cat[$it.Idx] = $it }
     foreach ($r in $script:rows) {
-        $it = $cat[$r.Idx]
-        $want = if ($it.One) { $it.One } else { $it.Def }
-        if (([string]$it.G).StartsWith('需确认') -or $it.Custom) { $want = (T '跳过') }   # 有代价的和自己加的文件夹：一键清理一律不碰
-        if ($want -eq (T '搬到其他盘') -and -not (Test-DestOk)) { $want = (T '跳过') }   # 没有搬家目标：只清理，不让整单失败
+        $want = Get-OneClickAction $cat[$r.Idx]   # 只删不搬；有代价的和自己加的文件夹不碰
         if ($r.Actions -contains $want) { $r.Action = $want }
     }
 }

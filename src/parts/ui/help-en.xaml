@@ -67,7 +67,7 @@
                         <Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0"><TextBlock Text="1" Foreground="White" FontSize="12.5" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                         <StackPanel>
                           <TextBlock Style="{StaticResource HelpLead}" Text="One-click cleanup" Margin="0,1,0,0"/>
-                          <TextBlock Style="{StaticResource HelpBody}"><Run>On "Clean up C:", click "One-click cleanup": caches and temporary files are deleted and chat history moves to the drive with the most free space. Everything is listed for you to confirm first.</Run></TextBlock>
+                          <TextBlock Style="{StaticResource HelpBody}"><Run>On "Clean up C:", click "One-click cleanup": caches and temporary files are deleted; nothing is moved. Everything is listed for you to confirm first. When chat history takes a lot of space, the page shows a separate card; click "Move chat history" there to move it to another drive.</Run></TextBlock>
                         </StackPanel>
                       </DockPanel>
                     </Border>

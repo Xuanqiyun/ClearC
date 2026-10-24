@@ -156,6 +156,16 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+搬走聊天记录…	Move chat history…
+自动扫描，清掉所有安全项和默认选中的缓存、临时文件。只删不搬：聊天记录在下面单独一张卡片里，要搬自己点。不会关闭休眠、不清空回收站，个人文件夹（桌面、文档、下载等）里的东西一律不删。	Scans, then clears all safe items and the caches and temporary files selected by default. It only deletes and never moves: chat history has its own card below; move it there if you want. It never turns off hibernation, never empties the Recycle Bin, and never deletes anything in personal folders (Desktop, Documents, Downloads and so on).
+搬走聊天记录	Move chat history
+聊天记录占了 C 盘 {0}	Chat history takes {0} on C:
+{0}。一键清理只删缓存，不碰它们。搬到 {1} 盘以后，C 盘原位置只留一个链接，聊天记录和文件原样保留，软件照常使用；搬之前要先退出这些聊天软件。	{0}. One-click cleanup only deletes caches and never touches them. After moving them to {1}:, only a link stays on C:; messages and files stay exactly as they are and the apps work as before. Quit these chat apps before moving.
+{0}。一键清理只删缓存，不碰它们。这台电脑没有可以搬去的其他硬盘，接上一块硬盘后可以把它们搬过去。	{0}. One-click cleanup only deletes caches and never touches them. This PC has no other disk to move them to; connect one and you can move them there.
+打开搬家管理	Open Move manager
+有搬走的文件夹找不到了	Some moved folders cannot be found
+下面这些文件夹搬到了其他盘，C 盘上只留了链接，但链接指向的地方现在找不到（那块盘没插着，或者盘符变了）。用到它们的软件现在打不开，聊天软件会像没有记录一样。\n\n把那块盘插上就好；盘符变了的，可以在「搬家管理」里改指向。	These folders were moved to another drive and only a link stays on C:, but the place the link points to cannot be found now (the drive is not connected, or its letter changed). Apps that use them will not open, and chat apps will look as if the history is gone.\n\nConnect that drive again. If its letter changed, point the link to the new place in Move manager.
+{0} → {1}	{0} → {1}
 有的没做成	Some of it did not work
 处理好了	Done
 接着做完	Finish it

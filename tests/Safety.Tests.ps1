@@ -216,7 +216,7 @@ try { & {
     $fl = @($lib | Where-Object { $_.N -like '*found.000*' })[0]
     Check 'chkdsk leftovers match found.??? only and need confirmation' ($fl -and $fl.Confirm -and $fl.Whole -and @($fl.Paths | Where-Object { $_ -match 'found\.\?\?\?$' }).Count -eq 1)
     # 一键清理不碰「需确认」和自己加的
-    Check 'one-click cleanup never selects needs-confirmation or custom items' ($src -match "StartsWith\('需确认'\) -or \`$it\.Custom\) \{ \`$want = \(T '跳过'\) \}")
+    Check 'one-click cleanup never selects needs-confirmation or custom items' ((Get-OneClickAction @{ G = '需确认（有代价）'; Kind = 'cache'; Def = (T '删除') }) -eq (T '跳过') -and (Get-OneClickAction @{ G = '安全清理'; Kind = 'cache'; Def = (T '删除'); Custom = $true }) -eq (T '跳过') -and [regex]::Match($src, '(?s)function Apply-OneClick.*?\r?\n\}').Value -match 'Get-OneClickAction')
     # 行和后台的项对不上就不动
     Check 'item fingerprints tell two custom folders with the same name apart' ((Get-ItemSig @{ N = 'cache'; Paths = @('D:\a\cache') }) -ne (Get-ItemSig @{ N = 'cache'; Paths = @('E:\b\cache') }))
     Check 'the run worker compares each item fingerprint before acting' ($src -match '\(Get-ItemSig \$it\) -ne \$p\.Sig')
@@ -302,7 +302,7 @@ try { & {
     Save-MoveMap $hr $hs (Join-Path $hr 'halfsrc')
     Set-Setting 'MoveRoots' $hr
     try { $half = @(Find-HalfMoves) } finally { Set-Setting 'MoveRoots' '' }
-    Check ("an interrupted move (folder left as *.moved_backup) is found at startup ({0})" -f $half.Count) (@($half | Where-Object { $_.Bak -like '*halfsrc.moved_backup' }).Count -eq 1 -and $src -match 'Show-HalfMoves; (Show-LooseMoves; )?return')
+    Check ("an interrupted move (folder left as *.moved_backup) is found at startup ({0})" -f $half.Count) (@($half | Where-Object { $_.Bak -like '*halfsrc.moved_backup' }).Count -eq 1 -and $src -match 'Show-HalfMoves; (Show-LooseMoves; )?(Show-BrokenMoves; )?return')
     # Windows.old、Installer、失效快捷方式、回收站说明
     Check 'Windows.old: takeown skips symbolic links, icacls works on links themselves, links are removed again after taking ownership' ($engineText -match 'takeown\.exe" /F \$p /R /A /D Y /SKIPSL' -and $engineText -match 'icacls\.exe" \$p /grant Administrators:F /T /C /L /Q' -and $engineText -match '\$more = Remove-LinksInside \$p')
     Check 'Installer orphans: nothing is judged when the Windows Installer query fails or the registry has no packages' ($engineText -match 'if \(\$null -eq \$viaApi\) \{ return @\(\) \}   # 接口读不了' -and $engineText -match 'if \(\$fromReg -eq 0\) \{ return @\(\) \}' -and ([regex]::Match($src, '(?s)public static List<string> FromInstaller\(\).*?\r?\n    \}').Value) -match '(?s)CreateInstance\(t\); \} catch \{ return null; \}.*?\} catch \{ return null; \}')
@@ -602,6 +602,14 @@ try { & {
         } finally { $env:CLEANC_SELF = $old }
     }
     Check 'no File.Replace call passes $null as the backup name' ($src -notmatch 'File\]::Replace\([^\r\n]*,\s*\$null\)')
+    # ============ 18. 一键清理只删不搬；聊天记录单独一张卡片；有搬家记录就能看到搬家管理（3.6 体验评审） ============
+    $cat = @(Get-Catalog)
+    $oc = @($cat | ForEach-Object { @{ It = $_; A = (Get-OneClickAction $_) } })
+    Check 'UX-3 one-click never moves anything (chat records included)' (@($oc | Where-Object { $_.A -eq (T '搬到其他盘') }).Count -eq 0 -and @($oc | Where-Object { $_.It.Kind -eq 'move' -and $_.A -ne (T '跳过') }).Count -eq 0)
+    Check 'UX-3 one-click still deletes the safe caches (so the rule is not "skip everything")' (@($oc | Where-Object { $_.A -eq (T '删除') }).Count -ge 10)
+    $br = [regex]::Match($src, '(?s)function Build-Rows\(.*?\r?\n\}').Value
+    Check 'UX-3 the cleanup page shows a separate chat-records card with its own move button' ($br -match 'Update-ChatCard' -and $src -match 'x:Name="ChatCard"' -and $src -match '(?s)\$ctl\.BtnChatMove\.Add_Click\(\{.*?Invoke-RunSelected .*?-OnlyMove')
+    Check 'UX-3 the move manager is listed in every mode once something has been moved, and broken links are reported at startup' ([regex]::Match($src, '(?s)function Apply-Display.*?\r?\n\}').Value -match '\$script:hasMoves' -and $src -match 'Show-HalfMoves; Show-LooseMoves; Show-BrokenMoves; return' -and $src -match "(?s)function Show-BrokenMoves.*?State -eq 'broken'")
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue

@@ -1354,7 +1354,7 @@
         <DockPanel>
           <Button x:Name="BtnOneClick" DockPanel.Dock="Right" Style="{StaticResource Primary}" Content="一键清理" FontSize="14" Padding="24,9"
                   VerticalAlignment="Center" Margin="28,0,0,0"
-                  ToolTip="自动扫描，清掉所有安全项和默认选中的项目，并把微信、QQ、飞书、钉钉等聊天记录搬到空间最大的其他盘。不会关闭休眠、不清空回收站，个人文件夹（桌面、文档、下载等）里的东西一律不删。"/>
+                  ToolTip="自动扫描，清掉所有安全项和默认选中的缓存、临时文件。只删不搬：聊天记录在下面单独一张卡片里，要搬自己点。不会关闭休眠、不清空回收站，个人文件夹（桌面、文档、下载等）里的东西一律不删。"/>
           <StackPanel>
             <DockPanel>
               <TextBlock x:Name="CapTotal" DockPanel.Dock="Right" Foreground="#86868B" VerticalAlignment="Bottom" Margin="12,0,0,3"/>
@@ -1398,6 +1398,18 @@
           <TextBlock x:Name="DestHint" Style="{StaticResource Caption}" Margin="26,7,0,0" TextWrapping="Wrap"
                      Text="聊天记录等搬到这里，C 盘原位置留一个链接，软件照常使用。"/>
         </StackPanel>
+      </Border>
+
+      <!-- 聊天记录：一键清理只删不搬，所以聊天记录单独一张卡片，要搬就在这里点 -->
+      <Border x:Name="ChatCard" Style="{StaticResource Card}" Padding="18,14" Margin="0,0,0,20" Visibility="Collapsed">
+        <DockPanel>
+          <Button x:Name="BtnChatMove" DockPanel.Dock="Right" Content="搬走聊天记录…" VerticalAlignment="Center" Margin="20,0,0,0"/>
+          <TextBlock Text="&#xE8BD;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Top" Margin="0,1,10,0"/>
+          <StackPanel>
+            <TextBlock x:Name="ChatCardTitle" FontWeight="SemiBold"/>
+            <TextBlock x:Name="ChatCardText" Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"/>
+          </StackPanel>
+        </DockPanel>
       </Border>
 
       <!-- 扫描结果总览：一共几类、每类几项，一眼看出下面还有很多 -->
@@ -3394,7 +3406,7 @@
                         <Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0"><TextBlock Text="1" Foreground="White" FontSize="12.5" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                         <StackPanel>
                           <TextBlock Style="{StaticResource HelpLead}" Text="一键清理" Margin="0,1,0,0"/>
-                          <TextBlock Style="{StaticResource HelpBody}"><Run>在「清理 C 盘」点「一键清理」：删除缓存和临时文件，把聊天记录搬到空间最大的其他盘。开始前会列出全部项目，确认后才做。</Run></TextBlock>
+                          <TextBlock Style="{StaticResource HelpBody}"><Run>在「清理 C 盘」点「一键清理」：删除缓存和临时文件，只删不搬。开始前会列出全部项目，确认后才做。聊天记录占得多时，清理页上有一张单独的卡片，点「搬走聊天记录」才搬到其他盘。</Run></TextBlock>
                         </StackPanel>
                       </DockPanel>
                     </Border>

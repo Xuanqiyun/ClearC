@@ -6750,6 +6750,14 @@ function Get-DestChoices($drives = $null) {
     }
     return $out.ToArray()
 }
+# 一键清理给目录里的一项选什么：只删不搬（聊天记录这类要搬的在清理页单独一张卡片，用户自己点）；
+# 有代价的（「需确认」一组）和自己加的文件夹一律跳过
+function Get-OneClickAction($it) {
+    if (([string]$it.G).StartsWith('需确认') -or $it.Custom -or $it.Kind -eq 'move') { return (T '跳过') }
+    $want = if ($it.One) { [string]$it.One } else { [string]$it.Def }
+    if ($want -eq (T '搬到其他盘')) { return (T '跳过') }
+    return $want
+}
 # 普通用户能不能往这个文件夹里写（Users、Authenticated Users、Everyone、Interactive 有写入、删除、改权限之类的权限）。
 # 读不到权限就当能写：拿不准的时候不信任它
 function Test-UserWritable([string]$dir) {
@@ -7479,6 +7487,16 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+搬走聊天记录…	Move chat history…
+自动扫描，清掉所有安全项和默认选中的缓存、临时文件。只删不搬：聊天记录在下面单独一张卡片里，要搬自己点。不会关闭休眠、不清空回收站，个人文件夹（桌面、文档、下载等）里的东西一律不删。	Scans, then clears all safe items and the caches and temporary files selected by default. It only deletes and never moves: chat history has its own card below; move it there if you want. It never turns off hibernation, never empties the Recycle Bin, and never deletes anything in personal folders (Desktop, Documents, Downloads and so on).
+搬走聊天记录	Move chat history
+聊天记录占了 C 盘 {0}	Chat history takes {0} on C:
+{0}。一键清理只删缓存，不碰它们。搬到 {1} 盘以后，C 盘原位置只留一个链接，聊天记录和文件原样保留，软件照常使用；搬之前要先退出这些聊天软件。	{0}. One-click cleanup only deletes caches and never touches them. After moving them to {1}:, only a link stays on C:; messages and files stay exactly as they are and the apps work as before. Quit these chat apps before moving.
+{0}。一键清理只删缓存，不碰它们。这台电脑没有可以搬去的其他硬盘，接上一块硬盘后可以把它们搬过去。	{0}. One-click cleanup only deletes caches and never touches them. This PC has no other disk to move them to; connect one and you can move them there.
+打开搬家管理	Open Move manager
+有搬走的文件夹找不到了	Some moved folders cannot be found
+下面这些文件夹搬到了其他盘，C 盘上只留了链接，但链接指向的地方现在找不到（那块盘没插着，或者盘符变了）。用到它们的软件现在打不开，聊天软件会像没有记录一样。\n\n把那块盘插上就好；盘符变了的，可以在「搬家管理」里改指向。	These folders were moved to another drive and only a link stays on C:, but the place the link points to cannot be found now (the drive is not connected, or its letter changed). Apps that use them will not open, and chat apps will look as if the history is gone.\n\nConnect that drive again. If its letter changed, point the link to the new place in Move manager.
+{0} → {1}	{0} → {1}
 有的没做成	Some of it did not work
 处理好了	Done
 接着做完	Finish it
@@ -10046,7 +10064,7 @@ $script:helpEnXaml = @'
                         <Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0"><TextBlock Text="1" Foreground="White" FontSize="12.5" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                         <StackPanel>
                           <TextBlock Style="{StaticResource HelpLead}" Text="One-click cleanup" Margin="0,1,0,0"/>
-                          <TextBlock Style="{StaticResource HelpBody}"><Run>On "Clean up C:", click "One-click cleanup": caches and temporary files are deleted and chat history moves to the drive with the most free space. Everything is listed for you to confirm first.</Run></TextBlock>
+                          <TextBlock Style="{StaticResource HelpBody}"><Run>On "Clean up C:", click "One-click cleanup": caches and temporary files are deleted; nothing is moved. Everything is listed for you to confirm first. When chat history takes a lot of space, the page shows a separate card; click "Move chat history" there to move it to another drive.</Run></TextBlock>
                         </StackPanel>
                       </DockPanel>
                     </Border>
@@ -12331,7 +12349,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
         <DockPanel>
           <Button x:Name="BtnOneClick" DockPanel.Dock="Right" Style="{StaticResource Primary}" Content="一键清理" FontSize="14" Padding="24,9"
                   VerticalAlignment="Center" Margin="28,0,0,0"
-                  ToolTip="自动扫描，清掉所有安全项和默认选中的项目，并把微信、QQ、飞书、钉钉等聊天记录搬到空间最大的其他盘。不会关闭休眠、不清空回收站，个人文件夹（桌面、文档、下载等）里的东西一律不删。"/>
+                  ToolTip="自动扫描，清掉所有安全项和默认选中的缓存、临时文件。只删不搬：聊天记录在下面单独一张卡片里，要搬自己点。不会关闭休眠、不清空回收站，个人文件夹（桌面、文档、下载等）里的东西一律不删。"/>
           <StackPanel>
             <DockPanel>
               <TextBlock x:Name="CapTotal" DockPanel.Dock="Right" Foreground="#86868B" VerticalAlignment="Bottom" Margin="12,0,0,3"/>
@@ -12375,6 +12393,18 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
           <TextBlock x:Name="DestHint" Style="{StaticResource Caption}" Margin="26,7,0,0" TextWrapping="Wrap"
                      Text="聊天记录等搬到这里，C 盘原位置留一个链接，软件照常使用。"/>
         </StackPanel>
+      </Border>
+
+      <!-- 聊天记录：一键清理只删不搬，所以聊天记录单独一张卡片，要搬就在这里点 -->
+      <Border x:Name="ChatCard" Style="{StaticResource Card}" Padding="18,14" Margin="0,0,0,20" Visibility="Collapsed">
+        <DockPanel>
+          <Button x:Name="BtnChatMove" DockPanel.Dock="Right" Content="搬走聊天记录…" VerticalAlignment="Center" Margin="20,0,0,0"/>
+          <TextBlock Text="&#xE8BD;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Top" Margin="0,1,10,0"/>
+          <StackPanel>
+            <TextBlock x:Name="ChatCardTitle" FontWeight="SemiBold"/>
+            <TextBlock x:Name="ChatCardText" Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"/>
+          </StackPanel>
+        </DockPanel>
       </Border>
 
       <!-- 扫描结果总览：一共几类、每类几项，一眼看出下面还有很多 -->
@@ -14371,7 +14401,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                         <Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0"><TextBlock Text="1" Foreground="White" FontSize="12.5" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                         <StackPanel>
                           <TextBlock Style="{StaticResource HelpLead}" Text="一键清理" Margin="0,1,0,0"/>
-                          <TextBlock Style="{StaticResource HelpBody}"><Run>在「清理 C 盘」点「一键清理」：删除缓存和临时文件，把聊天记录搬到空间最大的其他盘。开始前会列出全部项目，确认后才做。</Run></TextBlock>
+                          <TextBlock Style="{StaticResource HelpBody}"><Run>在「清理 C 盘」点「一键清理」：删除缓存和临时文件，只删不搬。开始前会列出全部项目，确认后才做。聊天记录占得多时，清理页上有一张单独的卡片，点「搬走聊天记录」才搬到其他盘。</Run></TextBlock>
                         </StackPanel>
                       </DockPanel>
                     </Border>
@@ -15277,7 +15307,7 @@ foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageM
                'BtnLang','BtnLangText','BtnTheme','BtnThemeText','NavHelp','PageHelp','HelpScroll','HelpSections','HelpFaq','HelpNav','HelpPaneStart','HelpPaneFaq','BtnHelpPrev','BtnHelpNext','FeedbackCard','RiskCard','BtnFeedback','BtnGitHub','BtnIssue','BtnCopyDiag','BtnOpenLog','CopyHint','BtnSelfTest','BtnCheckUpdate','MapFast','MapChat',
                'NavClean','NavDup','PageClean','PageDup','AppVer','BtnLog','BtnLogText','BtnLogHide','LogPanel','Dim',
                'CapFree','CapTotal','CapBar','CapReclaim','EmptyClean','EmptyCleanText','EmptyDup','EmptyDupText','SizeCustomRow',
-               'DestPick','BtnDestBrowse','DestHint','BtnOneClick','BtnScan','BtnRun','BtnHogs','Hint','List','CleanMenu','CmOpen','CmOpenAll','CmCopy','Summary','Log',
+               'DestPick','BtnDestBrowse','DestHint','ChatCard','ChatCardTitle','ChatCardText','BtnChatMove','BtnOneClick','BtnScan','BtnRun','BtnHogs','Hint','List','CleanMenu','CmOpen','CmOpenAll','CmCopy','Summary','Log',
                'Roots','BtnAddRoot','BtnDupScan','BtnDupStop',
                'DupFilterCard','DupFilterToggle','DupFilterBody','DTabRoots','DTabType','DTabSize','DTabMode','DTabRootsVal','DTabTypeVal','DTabSizeVal','DTabModeVal','DPaneRoots','DPaneType','DPaneSize','DPaneMode','FilterSummary','TypeChips','TypeReset','ExtraExt','SizeChips',
                'SizeMin','SizeMinUnit','SizeMax','SizeMaxUnit','SizeHint','ModeName','ModeContent','SpeedFast','SpeedExact',
@@ -16403,10 +16433,34 @@ function Build-Rows($sizes) {
     $ctl.EmptyClean.Visibility = if ($col.Count -gt 0) { 'Collapsed' } else { 'Visible' }
     if ($col.Count -eq 0) { $ctl.EmptyCleanText.Text = (T 'C 盘上没找到可以清理的东西') }
     Update-CleanOverview
+    Update-ChatCard
     $script:reclaim = $total
     UI-Status
     $ctl.Summary.Text = ((T "共 {0} 项。按当前选择，可释放约 {1}。") -f $col.Count, (GB $total))
 }
+# 聊天记录卡片：一键清理只删不搬，聊天记录占了多少、要不要搬，在这里单独说，按钮只搬这几项
+$script:chatIdx = @()
+function Update-ChatCard {
+    $cat = @{}; foreach ($c in $catalog) { $cat[$c.Idx] = $c }
+    $chat = @($script:rows | Where-Object { $c = $cat[$_.Idx]; $c -and $c.Kind -eq 'move' -and ([string]$c.G).StartsWith('聊天软件') -and $_.Bytes -gt 0 -and $_.Actions -contains (T '搬到其他盘') })
+    $bytes = [double]0; foreach ($r in $chat) { $bytes += $r.Bytes }
+    $script:chatIdx = @($chat | ForEach-Object { $_.Idx })
+    if ($chat.Count -eq 0 -or $bytes -lt 200MB) { $ctl.ChatCard.Visibility = 'Collapsed'; return }
+    $names = @($chat | Sort-Object Bytes -Descending | Select-Object -First 3 | ForEach-Object { (T "{0} {1}") -f $_.Name, (Fmt $_.Bytes) }) -join (T '、')
+    $ctl.ChatCardTitle.Text = (T "聊天记录占了 C 盘 {0}") -f (Fmt $bytes)
+    if (Test-DestOk) {
+        $ctl.ChatCardText.Text = (T "{0}。一键清理只删缓存，不碰它们。搬到 {1} 盘以后，C 盘原位置只留一个链接，聊天记录和文件原样保留，软件照常使用；搬之前要先退出这些聊天软件。") -f $names, (Get-Dest).Substring(0, 1)
+        $ctl.BtnChatMove.Visibility = 'Visible'
+    } else {
+        $ctl.ChatCardText.Text = (T "{0}。一键清理只删缓存，不碰它们。这台电脑没有可以搬去的其他硬盘，接上一块硬盘后可以把它们搬过去。") -f $names
+        $ctl.BtnChatMove.Visibility = 'Collapsed'
+    }
+    $ctl.ChatCard.Visibility = 'Visible'
+}
+$ctl.BtnChatMove.Add_Click({
+    if ($script:worker -or -not $script:chatIdx -or -not $script:rows) { return }
+    Invoke-RunSelected (T '搬走聊天记录') -OnlyMove $script:chatIdx
+})
 
 # 用户在列表里改了某一行的操作，就重算「可释放约多少」
 $script:planSig = ''
@@ -16559,6 +16613,7 @@ $ctl.DestPick.Add_SelectionChanged({
         $script:destPrev = $ctl.DestPick.SelectedIndex
         $ctl.MovesDest.SelectedIndex = $ctl.DestPick.SelectedIndex
     } finally { $script:destSyncing = $false }
+    if ($script:rows) { Update-ChatCard }   # 卡片上写着搬到哪块盘
 })
 $ctl.BtnDestBrowse.Add_Click({
     $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
@@ -16604,12 +16659,15 @@ function Get-BusyApps([string[]]$apps) {
     return ,$names
 }
 
-function Invoke-RunSelected([string]$title = (T '执行所选操作')) {
+# $OnlyMove：只搬这几项（聊天记录卡片上的按钮），列表里其他行的选择不管
+function Invoke-RunSelected([string]$title = (T '执行所选操作'), [object[]]$OnlyMove = $null) {
     $plan = @()
     foreach ($r in $script:rows) {
-        if ($r.Action -ne (T '跳过')) {
+        $act = $r.Action
+        if ($OnlyMove) { if ($OnlyMove -notcontains $r.Idx) { continue }; $act = (T '搬到其他盘') }
+        if ($act -ne (T '跳过')) {
             $b = if ($sync.Sizes) { [double]$sync.Sizes[$r.Idx] } else { 0 }
-            $plan += @{ Idx = $r.Idx; Action = $r.Action; Name = $r.Name; Bytes = [math]::Max([double]0, [double]$b); Sig = $(if ($script:rowSig) { [string]$script:rowSig[$r.Idx] } else { '' }) }
+            $plan += @{ Idx = $r.Idx; Action = $act; Name = $r.Name; Bytes = [math]::Max([double]0, [double]$b); Sig = $(if ($script:rowSig) { [string]$script:rowSig[$r.Idx] } else { '' }) }
         }
     }
     if (-not $plan) { Show-Sheet -Title (T '没有选中任何操作') -Text (T '在列表里把要处理的项目选成「删除」或「搬到其他盘」，再点「执行所选操作」。') | Out-Null; return }
@@ -16808,10 +16866,7 @@ function Show-DeletePreview($items) {
 function Apply-OneClick {
     $cat = @{}; foreach ($it in $catalog) { $cat[$it.Idx] = $it }
     foreach ($r in $script:rows) {
-        $it = $cat[$r.Idx]
-        $want = if ($it.One) { $it.One } else { $it.Def }
-        if (([string]$it.G).StartsWith('需确认') -or $it.Custom) { $want = (T '跳过') }   # 有代价的和自己加的文件夹：一键清理一律不碰
-        if ($want -eq (T '搬到其他盘') -and -not (Test-DestOk)) { $want = (T '跳过') }   # 没有搬家目标：只清理，不让整单失败
+        $want = Get-OneClickAction $cat[$r.Idx]   # 只删不搬；有代价的和自己加的文件夹不碰
         if ($r.Actions -contains $want) { $r.Action = $want }
     }
 }
@@ -21765,7 +21820,7 @@ function Apply-Mode {
     try { $ctl.SetModeBasic.IsChecked = ($m -eq 0); $ctl.SetModePro.IsChecked = ($m -eq 1); $ctl.SetModeExpert.IsChecked = ($m -eq 2) } finally { $script:setLoading = $false }
     Apply-Display
     # 正在看的页面在这个模式下没有了：回到清理页
-    if ($script:curPage -and $script:pageLvl.ContainsKey($script:curPage) -and $script:pageLvl[$script:curPage] -gt $m) { Show-Page 'clean' }
+    if ($script:curPage -and $script:pageLvl.ContainsKey($script:curPage) -and $script:pageLvl[$script:curPage] -gt $m -and -not ($script:curPage -eq 'moves' -and $script:hasMoves)) { Show-Page 'clean' }
     if ($script:mapRoot) { try { $ctl.BtnMapAcct.Visibility = if ($script:mapRoot.HasDisk -and $m -ge 2) { 'Visible' } else { 'Collapsed' } } catch {} }
 }
 function Set-Mode([string]$mode) {
@@ -21813,7 +21868,7 @@ function Apply-Display {
     $ctl.MapFast.Visibility = & $vis ((Get-Flag 'MapFastBtn') -and $m -ge 2)
     $hp = Get-HiddenSet 'HidePages'
     $show = @{}
-    foreach ($k in $script:optPages.Keys) { $show[$k] = (-not $hp.ContainsKey($k)) -and (-not $script:pageLvl.ContainsKey($k) -or $script:pageLvl[$k] -le $m); $ctl[$script:pageList[$k][1]].Visibility = & $vis $show[$k] }
+    foreach ($k in $script:optPages.Keys) { $show[$k] = (-not $hp.ContainsKey($k)) -and (-not $script:pageLvl.ContainsKey($k) -or $script:pageLvl[$k] -le $m -or ($k -eq 'moves' -and $script:hasMoves)); $ctl[$script:pageList[$k][1]].Visibility = & $vis $show[$k] }
     $ctl.NavHeadManage.Visibility = & $vis ($show['moves'] -or $show['auto'] -or $show['log'])
     $hl = Get-HiddenSet 'HideLinks'
     foreach ($k in $script:optLinks.Keys) { $ctl[$script:optLinks[$k][1]].Visibility = & $vis ((-not $hl.ContainsKey($k)) -and (-not $script:linkLvl.ContainsKey($k) -or $script:linkLvl[$k] -le $m)) }
@@ -22146,6 +22201,15 @@ function Invoke-UiTest {
                 $bad = @($script:rows | Where-Object { $_.Action -ne (T '跳过') -and (([string]$_.Group).StartsWith('需确认') -or ([string]$_.Group).StartsWith('自定义')) })
                 if ($bad.Count) { throw ("one-click picked: {0}" -f (($bad | ForEach-Object { $_.Name }) -join ', ')) }
                 if (@($script:rows | Where-Object { $_.Action -eq (T '删除') -and ([string]$_.Group).StartsWith('安全清理') }).Count -lt 3) { throw 'one-click picked no safe items' }
+                # 一键清理只删不搬；聊天记录大的时候单独一张卡片，小的时候不出现
+                $mv0 = @($script:rows | Where-Object { $_.Action -eq (T '搬到其他盘') })
+                if ($mv0.Count) { throw ("one-click moves: {0}" -f (($mv0 | ForEach-Object { $_.Name }) -join ', ')) }
+                $big = @{}; foreach ($k in $sizes.Keys) { $big[$k] = $sizes[$k] }
+                foreach ($c in $catalog) { if ($c.Kind -eq 'move' -and ([string]$c.G).StartsWith('聊天软件')) { $big[$c.Idx] = [double]300MB } }
+                Build-Rows $big
+                if ($ctl.ChatCard.Visibility -ne 'Visible' -or @($script:chatIdx).Count -lt 1 -or -not $ctl.ChatCardTitle.Text) { throw 'the chat-history card did not show' }
+                Build-Rows $sizes
+                if ($ctl.ChatCard.Visibility -ne 'Collapsed') { throw 'the chat-history card shows for small chat folders' }
                 # 只有 C 盘（没有搬家目标）时：要搬的项默认跳过，一键清理照样清，执行时不会整单放弃
                 $keepDest = $ctl.DestPick.SelectedIndex
                 try {
@@ -23098,6 +23162,10 @@ $timer.Add_Tick({
         if ($sync.WasCancelled) { UI-Log (T '已中途取消。') }
         # 删过、搬过东西以后，逐个扫描得到的旧树不再拿来用（读文件表的结果靠变更日志更新）
         if ($script:readOnlyModes -notcontains [string]$sync.Mode) { [DiskMap]::Invalidate() }
+        # 刚搬过东西（或者搬回来了）：「搬家管理」在普通用户模式下也列出来 / 没有搬走的了就收起来
+        if (@('run', 'appmove', 'movemany', 'moveback', 'moveresume') -contains [string]$sync.Mode) {
+            try { $hm = @(Get-MoveRecords | Where-Object { IsLink ([string]$_.Src) }).Count -gt 0; if ($hm -ne $script:hasMoves) { $script:hasMoves = $hm; Apply-Display } } catch {}
+        }
 
         if ($sync.Mode -eq 'scan') {
             if ($sync.WasCancelled -or -not $sync.Sizes) {
@@ -23813,7 +23881,7 @@ $win.Add_ContentRendered({
     if ($script:riskShown) { return }
     $script:riskShown = $true
     $script:prefetchTimer.Start()
-    if (Test-Path -LiteralPath $script:riskFile) { Show-HalfMoves; Show-LooseMoves; return }
+    if (Test-Path -LiteralPath $script:riskFile) { Show-HalfMoves; Show-LooseMoves; Show-BrokenMoves; return }
     $ans = Show-Sheet -Kind warn -Title (T '使用前请先阅读安全风险提示') `
         -Text (T "本工具会按你的选择删除或搬移电脑上的文件。删除的文件可能无法恢复，存在资料丢失的风险。`n`n每次删除前，请确认这些资料确实不再需要、删除不会给你带来损失；重要资料请先备份。因使用本工具造成的资料丢失或其他损失，责任由使用者自行承担，开发者不承担责任。`n`n完整说明随时可以在左侧「帮助」里查看。") `
         -Confirm (T '我已阅读并了解上述风险，同意自行承担使用本工具的后果。') -Buttons @((T '退出'), (T '同意并继续')) -Primary (T '同意并继续') -Cancel (T '退出')
@@ -23823,7 +23891,7 @@ $win.Add_ContentRendered({
         [IO.File]::WriteAllText($script:riskFile, ((T "{0:yyyy-MM-dd HH:mm:ss}  已同意（版本 {1}）") -f (Get-Date), $script:AppVersion), [Text.Encoding]::UTF8)
     } catch {}
     Write-LogFile (T '用户已同意安全风险提示')
-    Show-HalfMoves
+    Show-HalfMoves; Show-BrokenMoves
 })
 # 打开时查一下有没有上次没做完的搬家（数据都在，只是要告诉用户在哪）
 # 以前的版本搬走的文件夹，其他账户也能打开：问一次要不要改成和在 C 盘时一样（一个月最多问一次）
@@ -23844,6 +23912,25 @@ function Show-LooseMoves {
     Start-Worker @'
 $sync.AclRes = Repair-MovedAccess $arg.Items
 '@ @{ Items = $l }
+}
+# 搬走过东西的（不管什么模式）：左边列出「搬家管理」，搬走的东西在哪、链接好不好都看得到。
+# 链接断了的（目标盘拔了、盘符变了）：打开时说一声，一天最多一次
+$script:hasMoves = $false
+function Show-BrokenMoves {
+    $recs = @(); try { $recs = @(Get-MoveRecords | Where-Object { IsLink ([string]$_.Src) }) } catch { return }
+    $had = $script:hasMoves
+    $script:hasMoves = $recs.Count -gt 0
+    if ($script:hasMoves -ne $had) { Apply-Display }
+    if ($script:worker) { return }
+    $bad = @($recs | Where-Object { (Get-MoveState $_).State -eq 'broken' })
+    if ($bad.Count -eq 0) { return }
+    $key = '{0:yyyyMMdd}|{1}' -f (Get-Date), $bad.Count
+    if ((Get-Setting 'BrokenAsked' '') -eq $key) { return }
+    Set-Setting 'BrokenAsked' $key
+    $go = T '打开搬家管理'
+    $ans = Show-Sheet -Kind warn -Title (T '有搬走的文件夹找不到了') -Text (T "下面这些文件夹搬到了其他盘，C 盘上只留了链接，但链接指向的地方现在找不到（那块盘没插着，或者盘符变了）。用到它们的软件现在打不开，聊天软件会像没有记录一样。`n`n把那块盘插上就好；盘符变了的，可以在「搬家管理」里改指向。") `
+        -Items @($bad | ForEach-Object { (T "{0} → {1}") -f $_.Src, $_.Dst }) -Buttons @((T '知道了'), $go) -Primary $go -Cancel (T '知道了')
+    if ($ans -eq $go) { Show-Page 'moves' }
 }
 function Show-HalfMoves {
     # 有进度记录的：说清楚停在哪一步，可以接着做完或撤回
