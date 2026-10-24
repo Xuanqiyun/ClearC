@@ -103,9 +103,9 @@ try { & {
     $auto = @(Select-AutoCleanItems $cat)
     Check ("auto cleanup picks only safe cache items ({0} items)" -f $auto.Count) ($auto.Count -gt 5 -and @($auto | Where-Object { $_.Tier -ne 'safe' -or $_.Careful -or $_.Custom -or $_.Confirm -or $_.Act -or $_.Whole -or $_.Svc }).Count -eq 0)
     Check 'auto cleanup never includes Windows.old, Recycle Bin, Installer orphans, drivers, event logs' (@($auto | Where-Object { $_.N -match 'Windows\.old|回收站|Installer|驱动|事件日志|Recycle|driver|event log' }).Count -eq 0)
-    Check 'confirm items default to skip' (@($cat | Where-Object { $_.Tier -eq 'confirm' -and $_.Def -ne (T '跳过') }).Count -eq 0)
-    Check 'move-only items (Desktop, Downloads, chat data) have no delete action' (@($cat | Where-Object { ($_.Kind -eq 'move') -and ($_.Actions -contains (T '删除')) }).Count -eq 0)
-    Check 'Desktop and Downloads default to skip' (@($cat | Where-Object { ($_.N -eq (T '桌面') -or $_.N -eq (T '下载')) -and $_.Def -ne (T '跳过') }).Count -eq 0)
+    Check 'confirm items default to skip' (@($cat | Where-Object { $_.Tier -eq 'confirm' -and $_.Def -ne 'skip' }).Count -eq 0)
+    Check 'move-only items (Desktop, Downloads, chat data) have no delete action' (@($cat | Where-Object { ($_.Kind -eq 'move') -and ($_.Actions -contains 'delete') }).Count -eq 0)
+    Check 'Desktop and Downloads default to skip' (@($cat | Where-Object { ($_.N -eq (T '桌面') -or $_.N -eq (T '下载')) -and $_.Def -ne 'skip' }).Count -eq 0)
     # ============ 6. 重复文件：逐字节比对是真的在比 ============
     $f1 = Join-Path $T 'd1.bin'; $f2 = Join-Path $T 'd2.bin'; $f3 = Join-Path $T 'd3.bin'
     $bytes = New-Object byte[] 300000; (New-Object Random 7).NextBytes($bytes)
@@ -119,7 +119,7 @@ try { & {
     # ============ 7b. 审计后补的规则 ============
     # Windows.old：先拆里面的链接再删；不进「一键清理」
     $wo = @($cat | Where-Object { $_.N -eq 'Windows.old' })[0]
-    Check 'Windows.old is never part of one-click cleanup and is removed through Remove-WindowsOld' ($wo -and $wo.One -eq (T '跳过') -and ([string]$wo.Act) -match 'Remove-WindowsOld' -and $src -notmatch "Remove-Item 'C:\\Windows\.old' -Recurse")
+    Check 'Windows.old is never part of one-click cleanup and is removed through Remove-WindowsOld' ($wo -and $wo.One -eq 'skip' -and ([string]$wo.Act) -match 'Remove-WindowsOld' -and $src -notmatch "Remove-Item 'C:\\Windows\.old' -Recurse")
     if ($win) {
         $old = Join-Path $T 'winold'; $live = Join-Path $T 'live'
         New-Item -ItemType Directory -Force -Path (Join-Path $old 'Users\me'), $live | Out-Null
@@ -216,7 +216,7 @@ try { & {
     $fl = @($lib | Where-Object { $_.N -like '*found.000*' })[0]
     Check 'chkdsk leftovers match found.??? only and need confirmation' ($fl -and $fl.Confirm -and $fl.Whole -and @($fl.Paths | Where-Object { $_ -match 'found\.\?\?\?$' }).Count -eq 1)
     # 一键清理不碰「需确认」和自己加的
-    Check 'one-click cleanup never selects needs-confirmation or custom items' ((Get-OneClickAction @{ Tier = 'confirm'; Kind = 'cache'; Def = (T '删除') }) -eq (T '跳过') -and (Get-OneClickAction @{ Tier = 'custom'; Kind = 'cache'; Def = (T '删除'); Custom = $true }) -eq (T '跳过') -and [regex]::Match($src, '(?s)function Apply-OneClick.*?\r?\n\}').Value -match 'Get-OneClickAction')
+    Check 'one-click cleanup never selects needs-confirmation or custom items' ((Get-OneClickAction @{ Tier = 'confirm'; Kind = 'cache'; Def = 'delete' }) -eq 'skip' -and (Get-OneClickAction @{ Tier = 'custom'; Kind = 'cache'; Def = 'delete'; Custom = $true }) -eq 'skip' -and [regex]::Match($src, '(?s)function Apply-OneClick.*?\r?\n\}').Value -match 'Get-OneClickAction')
     # 行和后台的项对不上就不动
     Check 'item fingerprints tell two custom folders with the same name apart' ((Get-ItemSig @{ N = 'cache'; Paths = @('D:\a\cache') }) -ne (Get-ItemSig @{ N = 'cache'; Paths = @('E:\b\cache') }))
     Check 'the run worker compares each item fingerprint before acting' ($src -match '\(Get-ItemSig \$it\) -ne \$p\.Sig')
@@ -608,8 +608,8 @@ try { & {
     # ============ 18. 一键清理只删不搬；聊天记录单独一张卡片；有搬家记录就能看到搬家管理（3.6 体验评审） ============
     $cat = @(Get-Catalog)
     $oc = @($cat | ForEach-Object { @{ It = $_; A = (Get-OneClickAction $_) } })
-    Check 'UX-3 one-click never moves anything (chat records included)' (@($oc | Where-Object { $_.A -eq (T '搬到其他盘') }).Count -eq 0 -and @($oc | Where-Object { $_.It.Kind -eq 'move' -and $_.A -ne (T '跳过') }).Count -eq 0)
-    Check 'UX-3 one-click still deletes the safe caches (so the rule is not "skip everything")' (@($oc | Where-Object { $_.A -eq (T '删除') }).Count -ge 10)
+    Check 'UX-3 one-click never moves anything (chat records included)' (@($oc | Where-Object { $_.A -eq 'move' }).Count -eq 0 -and @($oc | Where-Object { $_.It.Kind -eq 'move' -and $_.A -ne 'skip' }).Count -eq 0)
+    Check 'UX-3 one-click still deletes the safe caches (so the rule is not "skip everything")' (@($oc | Where-Object { $_.A -eq 'delete' }).Count -ge 10)
     $br = [regex]::Match($src, '(?s)function Build-Rows\(.*?\r?\n\}').Value
     Check 'UX-3 the cleanup page shows a separate chat-records card with its own move button' ($br -match 'Update-ChatCard' -and $src -match 'x:Name="ChatCard"' -and $src -match '(?s)\$ctl\.BtnChatMove\.Add_Click\(\{.*?Invoke-RunSelected .*?-OnlyMove')
     Check 'UX-3 the move manager is listed in every mode once something has been moved, and broken links are reported at startup' ([regex]::Match($src, '(?s)function Apply-Display.*?\r?\n\}').Value -match '\$script:hasMoves' -and $src -match 'Show-HalfMoves; Show-LooseMoves; Show-BrokenMoves; return' -and $src -match "(?s)function Show-BrokenMoves.*?State -eq 'broken'")
@@ -796,6 +796,25 @@ try { & {
         Check 'ARC-5 starting a job that is not registered stops right there; a registered one sets the mode' ($threw -and $sync.Mode -eq 'zz' -and (Get-BgJob 'zz').ReadOnly -and (& (Get-BgJob 'zz').Done) -eq 'done' -and $null -eq (Get-BgJob 'nope'))
     }
     $sync.Mode = $savedMode
+    # ============ 47. 清理项的操作用稳定的编号（delete、skip、run、move），只有列表上显示的是翻译后的文字（3.6 架构评审） ============
+    $ids = @('delete', 'skip', 'run', 'move')
+    $catA = @(Get-Catalog)
+    $badAct = @($catA | Where-Object { $ids -notcontains [string]$_.Def -or ($_.One -and $ids -notcontains [string]$_.One) -or @($_.Actions | Where-Object { $ids -notcontains [string]$_ }).Count -gt 0 })
+    Check ("ARC-6 the catalog stores action ids, not the words shown in the list ({0} items, {1} not)" -f $catA.Count, $badAct.Count) ($catA.Count -gt 20 -and $badAct.Count -eq 0)
+    $savedL10n = $script:L10n
+    $script:L10n = New-Object 'System.Collections.Generic.Dictionary[string,string]'
+    foreach ($kv in @(@('删除', 'Delete'), @('跳过', 'Skip'), @('执行', 'Run'), @('搬到其他盘', 'Move to another drive'))) { $script:L10n[$kv[0]] = $kv[1] }
+    $enText = @($ids | ForEach-Object { ActText $_ }); $back = @($enText | ForEach-Object { ActId $_ })
+    $script:L10n = $savedL10n
+    $zhBack = @($ids | ForEach-Object { ActId (ActText $_) })
+    Check ("ARC-6 in English the list shows {0}, and reading the list back gives the same ids (also in Chinese)" -f ($enText -join ' / ')) (($enText -join '|') -eq 'Delete|Skip|Run|Move to another drive' -and ($back -join '|') -eq ($ids -join '|') -and ($zhBack -join '|') -eq ($ids -join '|') -and (ActId 'move') -eq 'move')
+    $oneAll = @($catA | ForEach-Object { Get-OneClickAction $_ } | Sort-Object -Unique)
+    Check ("ARC-6 one-click and the plan totals work on ids ({0})" -f ($oneAll -join ' ')) (@($oneAll | Where-Object { $ids -notcontains $_ }).Count -eq 0 -and $src -match '(?s)function Get-PlanTotals.*?ActId')
+    $cmpWords = [regex]::Matches($src, "-(eq|ne|contains|notcontains) \(T '(删除|跳过|执行|搬到其他盘)'\)")
+    $defWords = [regex]::Matches($src, "\b(Def|One)=\(T '")
+    Check ("ARC-6 no code decides by comparing with the translated action words ({0} comparisons, {1} catalog defaults left)" -f $cmpWords.Count, $defWords.Count) ($cmpWords.Count -eq 0 -and $defWords.Count -eq 0)
+    $sv = [regex]::Match($src, '(?s)function Save-ResumeState.*?\r?\n\}').Value; $rs = [regex]::Match($src, '(?s)function Restore-ResumeState.*?\r?\n\}').Value
+    Check 'ARC-6 the choices kept over a language switch are saved as ids and shown in the new language' ($sv -match 'ActId' -and $rs -match 'ActText' -and [regex]::Match($src, '(?s)function Invoke-RunSelected.*?\r?\n\}').Value -match 'Action = \(ActId ')
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue
