@@ -45,6 +45,10 @@ public class AppRow : INotifyPropertyChanged {
     public bool OnC { get; set; }
     public bool LocReg { get; set; }
     public bool CanMove { get; set; }
+    // 软件自己的图标（WPF 的 ImageSource；这里不引用 WPF，所以是 object）。读到之前、读不到时显示名字的第一个字
+    public string IconFile { get; set; }
+    private object _img; public object IconImage { get { return _img; } set { _img = value; Raise("IconImage"); Raise("HasImage"); } }
+    public bool HasImage { get { return _img != null; } }
     // 在 C 盘上、但不适合搬的原因（带系统服务、微软的软件、应用商店的……）：列表里直接写「不能搬」，鼠标停上去看原因
     public string MoveWhy { get; set; }
     public bool ShowWhy { get { return !string.IsNullOrEmpty(MoveWhy); } }

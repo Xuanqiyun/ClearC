@@ -2719,7 +2719,10 @@
                   </Grid.ColumnDefinitions>
                   <CheckBox Grid.Column="0" IsChecked="{Binding Picked, Mode=TwoWay}" VerticalAlignment="Center" Focusable="False" Cursor="Hand"/>
                   <Border Grid.Column="1" Width="30" Height="30" CornerRadius="8" Background="#EFEFF4" HorizontalAlignment="Left" VerticalAlignment="Center">
-                    <TextBlock Text="{Binding Icon}" FontWeight="SemiBold" Foreground="#636366" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <Grid>
+                      <TextBlock x:Name="AppLetter" Text="{Binding Icon}" FontWeight="SemiBold" Foreground="#636366" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                      <Image Source="{Binding IconImage}" Width="22" Height="22" HorizontalAlignment="Center" VerticalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality"/>
+                    </Grid>
                   </Border>
                   <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="0,0,12,0">
                     <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
@@ -2740,6 +2743,7 @@
                 <DataTemplate.Triggers>
                   <DataTrigger Binding="{Binding CanMove}" Value="False"><Setter TargetName="AppMove" Property="Visibility" Value="Collapsed"/></DataTrigger>
                   <DataTrigger Binding="{Binding ShowWhy}" Value="False"><Setter TargetName="AppNoMove" Property="Visibility" Value="Collapsed"/></DataTrigger>
+                  <DataTrigger Binding="{Binding HasImage}" Value="True"><Setter TargetName="AppLetter" Property="Visibility" Value="Collapsed"/></DataTrigger>
                   <DataTrigger Binding="{Binding HasUpgrade}" Value="True"><Setter TargetName="AppUpgrade" Property="Visibility" Value="Visible"/></DataTrigger>
                 </DataTemplate.Triggers>
               </DataTemplate>

@@ -3337,6 +3337,10 @@ public class AppRow : INotifyPropertyChanged {
     public bool OnC { get; set; }
     public bool LocReg { get; set; }
     public bool CanMove { get; set; }
+    // 软件自己的图标（WPF 的 ImageSource；这里不引用 WPF，所以是 object）。读到之前、读不到时显示名字的第一个字
+    public string IconFile { get; set; }
+    private object _img; public object IconImage { get { return _img; } set { _img = value; Raise("IconImage"); Raise("HasImage"); } }
+    public bool HasImage { get { return _img != null; } }
     // 在 C 盘上、但不适合搬的原因（带系统服务、微软的软件、应用商店的……）：列表里直接写「不能搬」，鼠标停上去看原因
     public string MoveWhy { get; set; }
     public bool ShowWhy { get { return !string.IsNullOrEmpty(MoveWhy); } }
@@ -6771,7 +6775,8 @@ function Get-InstalledApps([switch]$NoStore) {
                 if ($ic -and (Test-Path -LiteralPath $ic -PathType Leaf)) { $loc = Split-Path $ic -Parent }
             }
             [void]$out.Add(@{ Name = $name; Publisher = [string]$p.Publisher; Version = [string]$p.DisplayVersion; Date = [string]$p.InstallDate
-                Location = $loc; LocReg = $locReg; Est = [double]$p.EstimatedSize * 1KB; Uninstall = [string]$p.UninstallString; Kind = 'desktop'; Package = '' })
+                Location = $loc; LocReg = $locReg; Est = [double]$p.EstimatedSize * 1KB; Uninstall = [string]$p.UninstallString; Kind = 'desktop'; Package = ''
+                IconFile = ([string]$p.DisplayIcon) })
         }
     }
     if ($NoStore) { return ,$out }
@@ -14086,7 +14091,10 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                   </Grid.ColumnDefinitions>
                   <CheckBox Grid.Column="0" IsChecked="{Binding Picked, Mode=TwoWay}" VerticalAlignment="Center" Focusable="False" Cursor="Hand"/>
                   <Border Grid.Column="1" Width="30" Height="30" CornerRadius="8" Background="#EFEFF4" HorizontalAlignment="Left" VerticalAlignment="Center">
-                    <TextBlock Text="{Binding Icon}" FontWeight="SemiBold" Foreground="#636366" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <Grid>
+                      <TextBlock x:Name="AppLetter" Text="{Binding Icon}" FontWeight="SemiBold" Foreground="#636366" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                      <Image Source="{Binding IconImage}" Width="22" Height="22" HorizontalAlignment="Center" VerticalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality"/>
+                    </Grid>
                   </Border>
                   <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="0,0,12,0">
                     <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
@@ -14107,6 +14115,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                 <DataTemplate.Triggers>
                   <DataTrigger Binding="{Binding CanMove}" Value="False"><Setter TargetName="AppMove" Property="Visibility" Value="Collapsed"/></DataTrigger>
                   <DataTrigger Binding="{Binding ShowWhy}" Value="False"><Setter TargetName="AppNoMove" Property="Visibility" Value="Collapsed"/></DataTrigger>
+                  <DataTrigger Binding="{Binding HasImage}" Value="True"><Setter TargetName="AppLetter" Property="Visibility" Value="Collapsed"/></DataTrigger>
                   <DataTrigger Binding="{Binding HasUpgrade}" Value="True"><Setter TargetName="AppUpgrade" Property="Visibility" Value="Visible"/></DataTrigger>
                 </DataTemplate.Triggers>
               </DataTemplate>
@@ -21269,6 +21278,7 @@ function Build-AppRows($list) {
         $r.Name = $a.Name; $r.Publisher = $a.Publisher; $r.Version = $a.Version; $r.Location = $a.Location; $r.Uninstall = $a.Uninstall
         $r.Kind = $a.Kind; $r.PackageName = $a.Package; $r.Size = [long]$a.Size
         $r.Icon = if ($a.Name) { $a.Name.Substring(0, 1).ToUpper() } else { '?' }
+        $r.IconFile = [string]$a.IconFile
         $r.SizeText = if ($a.Size -gt 0) { $(if ($a.Measured) { '' } else { (T '约 ') }) + (Fmt $a.Size) } else { '—' }
         $r.OnC = (-not $a.Location) -or $a.Location.StartsWith($env:SystemDrive, [StringComparison]::OrdinalIgnoreCase)
         $r.LocReg = [bool]$a.LocReg
@@ -21294,6 +21304,44 @@ function Build-AppRows($list) {
     }
     $script:appRows = $rows
     Filter-Apps
+    Start-AppIcons
+}
+# 软件自己的图标：注册表里登记的 DisplayIcon（「路径,序号」），只认 exe、dll、ico 文件，读第一个图标。
+# 同一个文件只读一次；在界面线程上一次读十几个，不让列表卡住
+$script:iconCache = @{}
+function Get-AppIconImage([string]$spec) {
+    if (-not $spec) { return $null }
+    $f = [Environment]::ExpandEnvironmentVariables(($spec -split ',')[0].Trim().Trim('"'))
+    if ($f -notmatch '(?i)\.(exe|dll|ico)$') { return $null }
+    $k = $f.ToLowerInvariant()
+    if ($script:iconCache.ContainsKey($k)) { return $script:iconCache[$k] }
+    $img = $null
+    try {
+        if (Test-Path -LiteralPath $f -PathType Leaf) {
+            Add-Type -AssemblyName System.Drawing -ErrorAction SilentlyContinue
+            $ic = [System.Drawing.Icon]::ExtractAssociatedIcon($f)
+            if ($ic) {
+                try { $img = [System.Windows.Interop.Imaging]::CreateBitmapSourceFromHIcon($ic.Handle, [System.Windows.Int32Rect]::Empty, [System.Windows.Media.Imaging.BitmapSizeOptions]::FromEmptyOptions()); $img.Freeze() } finally { $ic.Dispose() }
+            }
+        }
+    } catch { $img = $null }
+    $script:iconCache[$k] = $img
+    return $img
+}
+$script:iconTimer = $null
+function Start-AppIcons {
+    $script:iconQueue = New-Object System.Collections.Queue
+    foreach ($r in @($script:appRows)) { if ($r.IconFile -and -not $r.IconImage) { $script:iconQueue.Enqueue($r) } }
+    if ($script:iconQueue.Count -eq 0) { return }
+    if (-not $script:iconTimer) {
+        $script:iconTimer = New-Object System.Windows.Threading.DispatcherTimer
+        $script:iconTimer.Interval = [TimeSpan]::FromMilliseconds(30)
+        $script:iconTimer.Add_Tick({
+            for ($n = 0; $n -lt 12 -and $script:iconQueue.Count -gt 0; $n++) { $r = $script:iconQueue.Dequeue(); $im = Get-AppIconImage $r.IconFile; if ($im) { $r.IconImage = $im } }
+            if ($script:iconQueue.Count -eq 0) { $this.Stop() }
+        })
+    }
+    $script:iconTimer.Start()
 }
 # 软件整个搬到其他盘
 function Start-AppMove($r) {
