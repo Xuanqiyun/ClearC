@@ -206,6 +206,17 @@ function Invoke-UiTest {
                 $bad = @($script:rows | Where-Object { $_.Action -ne (T '跳过') -and (([string]$_.Group).StartsWith('需确认') -or ([string]$_.Group).StartsWith('自定义')) })
                 if ($bad.Count) { throw ("one-click picked: {0}" -f (($bad | ForEach-Object { $_.Name }) -join ', ')) }
                 if (@($script:rows | Where-Object { $_.Action -eq (T '删除') -and ([string]$_.Group).StartsWith('安全清理') }).Count -lt 3) { throw 'one-click picked no safe items' }
+                # 只有 C 盘（没有搬家目标）时：要搬的项默认跳过，一键清理照样清，执行时不会整单放弃
+                $keepDest = $ctl.DestPick.SelectedIndex
+                try {
+                    $ctl.DestPick.SelectedIndex = -1
+                    Build-Rows $sizes; Apply-OneClick
+                    $mv = @($script:rows | Where-Object { $_.Action -eq (T '搬到其他盘') })
+                    if ($mv.Count) { throw ("without a target, one-click still moves: {0}" -f (($mv | ForEach-Object { $_.Name }) -join ', ')) }
+                    if (@($script:rows | Where-Object { $_.Action -eq (T '删除') }).Count -lt 3) { throw 'without a target, one-click deletes nothing' }
+                    $chat = @($script:rows | Where-Object { @($_.Actions) -contains (T '搬到其他盘') })[0]
+                    if ($chat) { $chat.Action = (T '搬到其他盘'); $n0 = $script:uiSheets.Count; Invoke-RunSelected; if ($script:worker -or $script:uiSheets.Count -ne $n0 + 1 -or $script:uiSheets[-1] -notmatch [regex]::Escape((T '没有可用的搬家目标'))) { throw 'a run without a target did not offer to delete only' } }
+                } finally { $ctl.DestPick.SelectedIndex = $keepDest; Build-Rows $sizes }
                 foreach ($r in $script:rows) { $it = @($catalog | Where-Object { $_.Idx -eq $r.Idx })[0]; if ((Get-ItemSig $it) -ne $script:rowSig[$r.Idx]) { throw ("fingerprint mismatch: {0}" -f $r.Name) } }
                 Save-CleanList 'CustomClean' @($d2)
                 if ($script:rows -or $sync.Sizes) { throw 'old scan rows still usable after the list changed' }

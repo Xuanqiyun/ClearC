@@ -220,6 +220,7 @@ function Build-Rows($sizes) {
     $total = [double]0
     $seen = @{}
     $mode = Get-Mode
+    $noDest = -not (Test-DestOk)   # 只有 C 盘、或者选的盘拔掉了：要搬的项默认跳过，其余照常清
     foreach ($it in $catalog) {
         $b = $sizes[$it.Idx]
         if (-not $b) { continue }
@@ -227,6 +228,7 @@ function Build-Rows($sizes) {
         $r = New-Object RowItem
         $script:rowSig[$it.Idx] = Get-ItemSig $it
         $r.Idx = $it.Idx; $r.Group = $it.G; $r.Name = $it.N; $r.Note = $it.Note; $r.Actions = $it.Actions; $r.Action = $it.Def
+        if ($noDest -and $it.Def -eq (T '搬到其他盘')) { $r.Action = (T '跳过'); $r.Status = (T '没有可以搬去的其他硬盘，先跳过'); $r.StatusBrush = '#86868B' }
         # 组名「安全清理（缓存、临时文件……）」拆成标题和说明两行显示
         $gt = T ([string]$it.G)
         $gp = $gt.Split([char]0xFF08, 2); if ($gp.Count -lt 2) { $gp = $gt.Split([char]'(', 2) }
@@ -235,7 +237,7 @@ function Build-Rows($sizes) {
         $r.First = -not $seen.ContainsKey($it.G); $seen[$it.G] = $true
         $r.SizeText = if ($b -lt 0) { (T '运行后知道') } else { Fmt $b }
         $r.Bytes = [double]$b
-        if ($b -gt 0 -and $it.Def -ne (T '跳过')) { $total += $b }
+        if ($b -gt 0 -and $r.Action -ne (T '跳过')) { $total += $b }
         $col.Add($r)
     }
     $script:rows = $col
@@ -346,6 +348,8 @@ function Fill-DestChoices([string]$keep) {
     Sync-MovesDest
 }
 function Get-Dest { $i = $ctl.DestPick.SelectedItem; if ($i) { [string]$i.Tag } else { '' } }
+# 有没有能用的搬家目标（选了一块盘，而且这块盘现在插着）
+function Test-DestOk { $d = Get-Dest; return [bool]($d -and $d.Length -ge 3 -and (Test-Path -LiteralPath $d.Substring(0, 3))) }
 # 「搬家管理」页也有一个搬家目标下拉框，和这里的是同一个选择
 $script:destSyncing = $false
 function Sync-MovesDest {
@@ -424,7 +428,18 @@ function Invoke-RunSelected([string]$title = (T '执行所选操作')) {
     $moves = @($plan | Where-Object { $_.Action -eq (T '搬到其他盘') })
     $moveBytes = [double]0; foreach ($x in $moves) { $moveBytes += $x.Bytes }
     if ($moves) {
-        if (-not $dest -or -not (Test-Path ($dest.Substring(0, 3)))) { Show-Sheet -Kind warn -Title (T '没有可用的搬家目标') -Text (T '请在「搬家目标」里选一个 C 盘以外的本机硬盘。') | Out-Null; return }
+        if (-not (Test-DestOk)) {
+            # 找不到搬家目标：不要整单放弃，问一下要不要先只做删除，要搬的这几项留着不动
+            $only = (T '只做删除')
+            $rest = @($plan | Where-Object { $_.Action -ne (T '搬到其他盘') })
+            $btns = if ($rest.Count) { @((T '取消'), $only) } else { @((T '好')) }
+            $ans = Show-Sheet -Kind warn -Title (T '没有可用的搬家目标') -Text ((T "要搬的 {0} 项找不到可以搬去的其他硬盘（这台电脑只有 C 盘，或者选的盘拔掉了）。可以在「搬家目标」里换一块盘；也可以先只做删除，这几项留着不动。") -f $moves.Count) -Items @($moves | ForEach-Object { $_.Name }) -Buttons $btns -Primary $btns[-1] -Cancel $btns[0]
+            if ($ans -ne $only) { return }
+            foreach ($r in $script:rows) { if ($r.Action -eq (T '搬到其他盘')) { $r.Action = (T '跳过') } }
+            $plan = $rest; $moves = @(); $moveBytes = [double]0
+        }
+    }
+    if ($moves) {
         $destFree = DriveFree ($dest.Substring(0, 2))
         # 上次没搬完留下的副本会直接接着用，只补差异；这种情况下由搬家时逐个文件夹核对空间
         $reuseAny = $false
@@ -606,6 +621,7 @@ function Apply-OneClick {
         $it = $cat[$r.Idx]
         $want = if ($it.One) { $it.One } else { $it.Def }
         if (([string]$it.G).StartsWith('需确认') -or $it.Custom) { $want = (T '跳过') }   # 有代价的和自己加的文件夹：一键清理一律不碰
+        if ($want -eq (T '搬到其他盘') -and -not (Test-DestOk)) { $want = (T '跳过') }   # 没有搬家目标：只清理，不让整单失败
         if ($r.Actions -contains $want) { $r.Action = $want }
     }
 }
