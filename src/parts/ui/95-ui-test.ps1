@@ -526,6 +526,15 @@ function Invoke-UiTest {
             if ($ctl.List.Items.Count -lt 1 -or $bad -gt 0) { throw 'first tab does not show only the first group' }
             $ctl.CleanTabs.Children[1].IsChecked = $true; $win.UpdateLayout()
             if (@(@($ctl.List.Items) | Where-Object { $_.GroupTitle -ne $groups[1] }).Count -gt 0 -or $ctl.List.Items.Count -ne $script:cleanGroups.Cnt[$groups[1]]) { throw 'second tab does not show the second group' }
+            # 选项卡上写着「选了几项 / 一共几项」；「这一类全部跳过」只动这一类，再点一次恢复默认
+            $mine = @($script:rows | Where-Object { $_.GroupTitle -eq $groups[1] }); $keepAct = @($mine | ForEach-Object { $_.Action })
+            $other = @($script:rows | Where-Object { $_.GroupTitle -ne $groups[1] } | ForEach-Object { $_.Action }) -join '|'
+            & $click $ctl.BtnCleanSkipTab; $win.UpdateLayout()
+            if (@($mine | Where-Object { $_.Action -ne (T '跳过') }).Count) { throw 'skip-this-tab left rows selected' }
+            if ((@($script:rows | Where-Object { $_.GroupTitle -ne $groups[1] } | ForEach-Object { $_.Action }) -join '|') -ne $other) { throw 'skip-this-tab changed other tabs' }
+            if ([string]$script:cleanBadge[$groups[1]].Text -ne ('0/{0}' -f $mine.Count)) { throw ('tab badge shows "{0}"' -f $script:cleanBadge[$groups[1]].Text) }
+            & $click $ctl.BtnCleanSkipTab; $win.UpdateLayout()
+            if ((@($mine | ForEach-Object { $_.Action }) -join '|') -ne ($keepAct -join '|')) { throw 'clicking again did not restore the defaults' }
             # 表头「大小」：从大到小；只看「跳过」以后还是按大小排
             $bs = @(Find-Buttons $ctl.CleanHead | Where-Object { [string]$_.Tag -eq 'List|size' })[0]
             if (-not $bs) { throw 'size header button not found' }

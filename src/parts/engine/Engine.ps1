@@ -3319,6 +3319,22 @@ function Open-AsUser([string]$target) {
     if (-not $target) { return $false }
     try { Start-Process -FilePath "$env:SystemRoot\explorer.exe" -ArgumentList ('"{0}"' -f $target.Replace('"', '')); return $true } catch { return $false }
 }
+# 清理页按当前选择的合计：N 选了几项，Del 删除（和「执行」）能腾出多少，Move 要搬走多少；Groups 每个选项卡选了几项、一共几项
+function Get-PlanTotals($rows, $sizes) {
+    $out = @{ N = 0; Del = [double]0; Move = [double]0; Groups = @{} }
+    $skip = T '跳过'; $mv = T '搬到其他盘'
+    foreach ($r in $rows) {
+        $g = [string]$r.GroupTitle
+        if (-not $out.Groups.ContainsKey($g)) { $out.Groups[$g] = @{ Sel = 0; Cnt = 0 } }
+        $out.Groups[$g].Cnt++
+        if ([string]$r.Action -eq $skip) { continue }
+        $out.N++; $out.Groups[$g].Sel++
+        $b = if ($sizes) { [double]$sizes[$r.Idx] } else { [double]0 }
+        if ($b -le 0) { continue }
+        if ([string]$r.Action -eq $mv) { $out.Move += $b } else { $out.Del += $b }
+    }
+    return $out
+}
 # 一键清理给目录里的一项选什么：只删不搬（聊天记录这类要搬的在清理页单独一张卡片，用户自己点）；
 # 有代价的（「需确认」一组）和自己加的文件夹一律跳过
 function Get-OneClickAction($it) {
