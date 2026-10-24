@@ -3405,6 +3405,32 @@ function Get-FriendlyError($err) {
     if (-not $msg) { return $tip }
     return ($tip + "`n`n" + (T '系统的原话：') + $msg)
 }
+# 换外观、换语言要重开：重开前把在看的页面、清理页的扫描结果（大小、每一行的指纹、选的操作）记下来，重开后读一次就删掉。
+# 只认刚刚写的（$maxAge 秒内），不是重开留下的就不管
+function Write-ResumeData([string]$path, [string]$page, $sizes, $sigs, $acts) {
+    try {
+        $L = New-Object System.Collections.Generic.List[string]
+        $L.Add("Page`t$page")
+        foreach ($k in @($sizes.Keys)) { $L.Add(("Size`t{0}`t{1}`t{2}`t{3}" -f $k, [double]$sizes[$k], ([string]$sigs[$k] -replace "[`t`r`n]", ' '), [string]$acts[$k])) }
+        [IO.File]::WriteAllLines($path, [string[]]$L, (New-Object System.Text.UTF8Encoding $true))
+    } catch {}
+}
+function Read-ResumeData([string]$path, [int]$maxAge = 120) {
+    if (-not [IO.File]::Exists($path)) { return $null }
+    $r = $null
+    try {
+        if (((Get-Date) - [IO.File]::GetLastWriteTime($path)).TotalSeconds -le $maxAge) {
+            $r = @{ Page = ''; Sizes = @{}; Sigs = @{}; Acts = @{} }
+            foreach ($l in [IO.File]::ReadAllLines($path, [Text.Encoding]::UTF8)) {
+                $p = $l.Split("`t")
+                if ($p[0] -eq 'Page') { $r.Page = $p[1] }
+                elseif ($p[0] -eq 'Size' -and $p.Count -ge 5) { $i = [int]$p[1]; $r.Sizes[$i] = [double]$p[2]; $r.Sigs[$i] = $p[3]; if ($p[4]) { $r.Acts[$i] = $p[4] } }
+            }
+        }
+    } catch { $r = $null }
+    try { [IO.File]::Delete($path) } catch {}
+    return $r
+}
 # 打开网页、文本文件、报告：交给资源管理器去开。本工具以管理员身份运行，直接开的话浏览器、记事本也是管理员身份，
 # 网页里的下载、记事本里的「另存为」都带着管理员权限。资源管理器把它交给当前登录用户的桌面，用普通权限打开
 function Open-AsUser([string]$target) {

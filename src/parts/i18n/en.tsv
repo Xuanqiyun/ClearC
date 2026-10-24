@@ -156,6 +156,7 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+重开前的扫描结果已经恢复；要最新的数字，点「扫描」	The scan results from before the restart are back; click "Scan" for fresh numbers
 没有权限：这个文件或设置被系统保护，或者正被别的程序占着。关掉相关的程序再试；还不行就重启电脑后再试。	No permission: the file or setting is protected by Windows or held by another program. Close the related programs and try again; if that does not help, restart the PC and try again.
 文件正被别的程序使用：关掉打开着它的程序（包括右下角托盘里的）再试。	The file is in use by another program: close the program that has it open (including from the system tray) and try again.
 找不到这个文件或文件夹：它可能已经被删了、改名了或者搬走了。刷新一下再看。	The file or folder cannot be found: it may have been deleted, renamed or moved. Refresh and look again.

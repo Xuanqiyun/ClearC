@@ -483,6 +483,7 @@ try { & {
         'Remove-TaskExeIfUnused' = 2  # Program Files\ClearC 里本工具自己的副本
         'Set-Setting'           = 1   # 设置文件的临时文件
         'Rotate-RunLog'         = 1   # 本工具自己最旧的那份运行记录
+        'Read-ResumeData'       = 1   # 重开时用过一次的「回到原来的页面」记录
         'Test-AppDirWritable'   = 1   # 试写本工具文件夹时写的小文件
         'Prune-OpLog'           = 1   # 一年前的操作日志
         'Update-Growth'         = 2   # 本工具自己的空间快照
@@ -754,6 +755,15 @@ try { & {
     $e4 = Get-FriendlyError 'something odd'
     Check 'UX-14 common errors are put into words with a next step (no permission, file in use, not found), the original message stays at the end' ($e1 -ne $e2 -and $e2 -ne $e3 -and $e1 -match 'Access to the path is denied' -and $e1.IndexOf('Access to the path') -gt 10 -and $e4 -match 'something odd')
     Check 'UX-14 the dialogs that used to show the raw system message use it' ($src -notmatch '-Text \$_\.Exception\.Message' -and ([regex]::Matches($src, 'Get-FriendlyError \$_')).Count -ge 11)
+    # ============ 44. 换外观、换语言重开后，回到原来的页面和扫描结果（3.6 体验评审） ============
+    $rf = Join-Path $T 'resume.txt'
+    Write-ResumeData $rf 'moves' @{ 3 = 100MB; 7 = 5GB } @{ 3 = 'sig3'; 7 = 'sig7' } @{ 3 = (T '删除'); 7 = (T '跳过') }
+    $rd = Read-ResumeData $rf 120
+    Check 'UX-12 the page, the scan sizes, their fingerprints and the choices survive the restart, and the file is used only once' ($rd.Page -eq 'moves' -and $rd.Sizes[7] -eq 5GB -and $rd.Sigs[3] -eq 'sig3' -and $rd.Acts[7] -eq (T '跳过') -and -not (Test-Path -LiteralPath $rf))
+    Write-ResumeData $rf 'clean' @{} @{} @{}
+    $old = (Get-Date).AddMinutes(-10); (Get-Item -LiteralPath $rf).LastWriteTime = $old
+    Check 'UX-12 an old resume file (not from a restart just now) is ignored' ($null -eq (Read-ResumeData $rf 120))
+    Check 'UX-12 both restarts save the state and the window restores it (only rows whose fingerprint still matches)' (([regex]::Matches($src, 'Save-ResumeState')).Count -ge 3 -and $src -match '(?s)function Restore-ResumeState.*?Get-ItemSig.*?Build-Rows' -and $src -match 'Restore-ResumeState; if \(-not \(Show-AccountMismatch\)\)')
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue
