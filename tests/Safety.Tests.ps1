@@ -852,6 +852,39 @@ try { & {
     $early = @($calls | Where-Object { $_.Name -match '^\.add_' -and $_.Text -match '^\$ctl\.(\w+)\.' -and $hn -contains $Matches[1] -and (Fn $_) -ne 'Initialize-HelpPage' } | ForEach-Object { $_.Text.Substring(0, [math]::Min(40, $_.Text.Length)) })
     $sp = [regex]::Match($src, '(?s)function Show-Page\(.*?\r?\n\}').Value
     Check ("ARC-10 help controls get their handlers when the help page is built, not at startup ({0} names; early: {1})" -f $hn.Count, ($early -join ' | ')) ($hn.Count -ge 15 -and $early.Count -eq 0 -and $sp -match "'help'\s*\{[^}]*Initialize-HelpPage" -and $src -match '(?s)function Initialize-HelpPage.*?DynamicResource|(?s)function Initialize-HelpPage.*?XamlReader\]::Parse')
+    # ============ 50. 核心规则搬进 C#（路径规则、搬家进度的状态机），和原来 PowerShell 的写法逐个组合对一遍（3.6 架构评审） ============
+    # 原来 Get-JournalStep 里的判断，原样留在这里当参照
+    $refStep = {
+        param($kind, $step, $st, $bakThere, $dstThere)
+        if ($kind -eq 'move') {
+            if ($step -eq 'copying' -and $bakThere -and ($st -eq 'none' -or $st -eq 'empty')) { $step = 'renamed' }
+            if ($step -eq 'renamed' -and $st -eq 'link') { $step = 'linked' }
+            if (($step -eq 'linked' -or $step -eq 'cleanup') -and -not $bakThere -and $st -eq 'link') { $step = 'done' }
+        } else {
+            if ($step -eq 'copying' -and $bakThere -and ($st -eq 'none' -or $st -eq 'empty')) { $step = 'unlinked' }
+            if ($step -eq 'unlinked' -and -not $bakThere -and $st -eq 'data') { $step = 'swapped' }
+            if (($step -eq 'swapped' -or $step -eq 'cleanup') -and -not $dstThere) { $step = 'done' }
+        }
+        $step
+    }
+    $coreOk = [bool]('ClearCCore.MoveSteps' -as [type])
+    $nComb = 0; $nDiff = 0
+    if ($coreOk) {
+        foreach ($kind in 'move', 'back', 'Move') { foreach ($step in 'copying', 'renamed', 'linked', 'cleanup', 'unlinked', 'swapped', 'done', '', 'Copying') { foreach ($st in 'none', 'link', 'empty', 'data') { foreach ($b in $true, $false) { foreach ($d in $true, $false) {
+            $nComb++
+            if ([string]([ClearCCore.MoveSteps]::Reconcile($kind, $step, $st, $b, $d)) -cne [string](& $refStep $kind $step $st $b $d)) { $nDiff++ }
+        } } } } }
+    }
+    Check ("ARC-11 the move-journal state machine in C# gives the same step as before for every combination ({0} combinations, {1} differ)" -f $nComb, $nDiff) ($coreOk -and $nComb -eq 432 -and $nDiff -eq 0)
+    $rx = '^[A-Za-z]:\\(\$Recycle\.Bin|System Volume Information|Recovery|EFI|Boot|Config\.Msi|\$WinREAgent)(\\|$)'
+    $sysP = @('C:\$Recycle.Bin', 'D:\$RECYCLE.BIN\S-1-5\x', 'E:\System Volume Information', 'C:\Recovery\x', 'C:\RecoveryX', 'C:\EFI', 'c:\boot\bcd', 'C:\Bootcamp', 'C:\Config.Msi', 'C:\$WinREAgent\x', 'C:\Users\x\Recovery', '\\server\share\EFI', 'C:\', '1:\EFI')
+    $sysDiff = @(if ($coreOk) { $sysP | Where-Object { [ClearCCore.PathRules]::IsDriveSystemFolder($_) -ne ($_ -match $rx) } })
+    $under = @(@('C:\Windows', 'C:\Windows', $true), @('c:\windows\System32', 'C:\Windows', $true), @('C:\WindowsApps', 'C:\Windows', $false), @('C:\Windows\', 'C:\Windows', $true), @('C:\Program Files (x86)\x', 'C:\Program Files', $false), @('D:\Windows', 'C:\Windows', $false), @('', 'C:\Windows', $false))
+    $underDiff = @(if ($coreOk) { $under | Where-Object { [ClearCCore.PathRules]::IsUnder($_[0], $_[1]) -ne $_[2] } })
+    $cmdOk = $coreOk -and [ClearCCore.PathRules]::CmdPathOk('C:\x\cache') -and -not [ClearCCore.PathRules]::CmdPathOk('C:\x\%USERNAME%') -and -not [ClearCCore.PathRules]::CmdPathOk('C:\a"b') -and [ClearCCore.PathRules]::CmdPathOk($null)
+    Check ("ARC-11 the path rules in C#: drive-root system folders, ""is under"" (C:\WindowsApps is not under C:\Windows), paths safe for cmd ({0} / {1} differ)" -f $sysDiff.Count, $underDiff.Count) ($coreOk -and $sysDiff.Count -eq 0 -and $underDiff.Count -eq 0 -and $cmdOk)
+    $gjs = [regex]::Match($engineText, '(?s)function Get-JournalStep.*?\r?\n\}').Value; $gdb = [regex]::Match($engineText, '(?s)function Get-DeleteBlock.*?\r?\n\}').Value
+    Check 'ARC-11 the engine uses the C# rules (journal step, delete block, cmd paths)' ($gjs -match '\[ClearCCore\.MoveSteps\]::Reconcile' -and $gdb -match '\[ClearCCore\.PathRules\]::IsDriveSystemFolder' -and $gdb -match '\[ClearCCore\.PathRules\]::IsUnder' -and $engineText -match 'function Test-CmdPathOk\(\[string\]\$p\) \{ return \[ClearCCore\.PathRules\]::CmdPathOk')
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue

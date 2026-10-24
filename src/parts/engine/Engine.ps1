@@ -285,7 +285,7 @@ function Test-Personal([string]$path) {
 }
 
 # cmd 会把命令行里的 %名字%（比如 %USERNAME%）换成变量的值，路径里带 % 时删的就是另一个地方：这种路径不交给 cmd
-function Test-CmdPathOk([string]$p) { return -not ($p.Contains('%') -or $p.Contains('"')) }
+function Test-CmdPathOk([string]$p) { return [ClearCCore.PathRules]::CmdPathOk($p) }
 # 「放进回收站」会不会真的进回收站。网络位置、U 盘、光盘没有回收站；组策略关了回收站；这块盘的回收站设成了
 # 「直接删除」；这一项比这块盘的回收站还大。这几种情况系统会改成永久删除，弹不弹提示要看调用方式（后台批量调用时不一定弹），
 # 所以先在这里判断：判断不行就不删，绝不让「放进回收站」悄悄变成永久删除。返回空表示可以
@@ -2564,10 +2564,10 @@ function Get-DeleteBlock([string]$path, [switch]$Leftover) {
     if ($full.Length -le 2) { return (T '整块磁盘不能删') }
     if (Test-Personal $full) { return (T 'C 盘个人文件夹（桌面、文档、下载、图片、视频、音乐等）里的东西不删') }
     # 任何一块盘根下的这些文件夹：回收站（所有用户的）、还原点、恢复分区的东西、启动文件
-    if ($full -match '^[A-Za-z]:\\(\$Recycle\.Bin|System Volume Information|Recovery|EFI|Boot|Config\.Msi|\$WinREAgent)(\\|$)') { return (T '系统文件夹，删了 Windows 可能出问题') }
+    if ([ClearCCore.PathRules]::IsDriveSystemFolder($full)) { return (T '系统文件夹，删了 Windows 可能出问题') }
     $sd = $env:SystemDrive
     foreach ($d in @($env:SystemRoot, "$sd\System Volume Information", "$sd\`$Recycle.Bin", "$sd\Recovery", "$sd\Boot", "$sd\EFI", "$sd\Config.Msi", "$sd\Documents and Settings", "$sd\ProgramData\Microsoft")) {
-        if ($full -ieq $d -or $full.StartsWith("$d\", [StringComparison]::OrdinalIgnoreCase)) { return (T '系统文件夹，删了 Windows 可能出问题') }
+        if ([ClearCCore.PathRules]::IsUnder($full, $d)) { return (T '系统文件夹，删了 Windows 可能出问题') }
     }
     foreach ($pf in @("$sd\Program Files", "$sd\Program Files (x86)")) {
         if ($full -ieq $pf) { return (T '程序总文件夹不能删') }
@@ -2707,18 +2707,9 @@ function Get-PlaceState([string]$p) {
 # 记录里写的那一步，和磁盘上实际的样子对一下：写记录前一刻断电时，实际可能已经多做了一步
 function Get-JournalStep($j) {
     $st = Get-PlaceState ([string]$j.Src)
-    $bakThere = $j.Bak -and (Test-Path -LiteralPath ([string]$j.Bak))
-    $step = [string]$j.Step
-    if ($j.Kind -eq 'move') {
-        if ($step -eq 'copying' -and $bakThere -and ($st -eq 'none' -or $st -eq 'empty')) { $step = 'renamed' }
-        if ($step -eq 'renamed' -and $st -eq 'link') { $step = 'linked' }
-        if (($step -eq 'linked' -or $step -eq 'cleanup') -and -not $bakThere -and $st -eq 'link') { $step = 'done' }
-    } else {
-        if ($step -eq 'copying' -and $bakThere -and ($st -eq 'none' -or $st -eq 'empty')) { $step = 'unlinked' }
-        if ($step -eq 'unlinked' -and -not $bakThere -and $st -eq 'data') { $step = 'swapped' }
-        if (($step -eq 'swapped' -or $step -eq 'cleanup') -and -not (Test-Path -LiteralPath ([string]$j.Dst))) { $step = 'done' }
-    }
-    return $step
+    $bakThere = [bool]($j.Bak -and (Test-Path -LiteralPath ([string]$j.Bak)))
+    $dstThere = [bool]($j.Dst -and (Test-Path -LiteralPath ([string]$j.Dst)))
+    return [ClearCCore.MoveSteps]::Reconcile([string]$j.Kind, [string]$j.Step, $st, $bakThere, $dstThere)   # 怎么判断见 C# 里的说明
 }
 # 给人看的一句：停在了哪一步
 function Get-JournalText($j) {
