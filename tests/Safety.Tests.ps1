@@ -738,6 +738,9 @@ try { & {
     Check 'SEC-10 before exporting, one sheet lists what goes in (dumps, logs, computer and user names) and offers to leave the dumps out; the file name has no computer name' ($sd.IndexOf('Show-Sheet') -lt $sd.IndexOf('SaveFileDialog') -and $sd -match "T '不带转储导出'" -and $sd -notmatch 'COMPUTERNAME' -and $sd -match 'NoDumps')
     # ============ 39. 「反馈和新版本」里显示本机 exe 的 SHA256，可以和发布页对比（3.6 安全评审） ============
     Check 'SEC-9 the help shows the SHA256 of this exe so it can be compared with the release page' ($src -match 'x:Name="SelfHash"' -and $src -match 'x:Name="BtnCopyHash"' -and $src -match '(?s)function Show-SelfHash.*?Get-FileHash -LiteralPath \$env:CLEANC_SELF -Algorithm SHA256')
+    # ============ 40. 照片指纹的 C# 用到时才编译，不拖慢每次启动（3.6 架构评审） ============
+    $top = $src.Substring(0, $src.IndexOf("`$engine = @'"))
+    Check 'ARC-8 the photo-hash code is not compiled at startup, only when similar photos are searched' ($top -notmatch "(?m)^if \(-not \('PhotoHash' -as \[type\]\)\)" -and $src -match '(?s)function Initialize-PhotoHash.*?Add-Type -TypeDefinition \$script:photoCode' -and [regex]::Match($src, "(?s)if \(-not \(Initialize-PhotoHash\)\)").Success)
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue

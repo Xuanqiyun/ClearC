@@ -3564,7 +3564,12 @@ public static class PhotoHash {
     static void Union(int[] p, int a, int b) { a = Find(p, a); b = Find(p, b); if (a != b) p[b] = a; }
 }
 '@
-if (-not ('PhotoHash' -as [type])) { try { Add-Type -TypeDefinition $script:photoCode -ReferencedAssemblies PresentationCore, WindowsBase, System.Xaml -ErrorAction Stop } catch { Write-LogFile ('photo hash: ' + $_.Exception.Message) } }
+# 照片指纹要引用 WPF 现场编译，要一两秒：只在第一次找相似照片时编（以前每次启动都编）
+function Initialize-PhotoHash {
+    if ('PhotoHash' -as [type]) { return $true }
+    try { Add-Type -TypeDefinition $script:photoCode -ReferencedAssemblies PresentationCore, WindowsBase, System.Xaml -ErrorAction Stop; return $true }
+    catch { Write-LogFile ('photo hash: ' + $_.Exception.Message); return $false }
+}
 
 $script:tPrep = $script:startClock.Elapsed.TotalSeconds
 
@@ -17817,7 +17822,7 @@ $ctl.ModeSimilar.Add_Checked({ $ctl.SimilarRow.Visibility = 'Visible'; Update-Fi
 $ctl.ModeSimilar.Add_Unchecked({ $ctl.SimilarRow.Visibility = 'Collapsed'; Update-FilterSummary })
 $script:dupSimilar = $false
 function Start-SimilarScan([string[]]$paths, $range) {
-    if (-not ('PhotoHash' -as [type])) { Show-Sheet -Kind warn -Title (T '这台电脑上用不了相似照片') -Text (T '图片解码组件没有加载成功（运行记录里有原因）。') | Out-Null; return }
+    if (-not (Initialize-PhotoHash)) { Show-Sheet -Kind warn -Title (T '这台电脑上用不了相似照片') -Text (T '图片解码组件没有加载成功（运行记录里有原因）。') | Out-Null; return }
     $dist = if ($ctl.SimStrict.IsChecked) { 4 } elseif ($ctl.SimLoose.IsChecked) { 12 } else { 8 }
     $script:dupRows = $null; $script:dupByGroup = @{}; $ctl.DupList.ItemsSource = $null
     $ctl.EmptyDup.Visibility = 'Visible'; $ctl.EmptyDupText.Text = (T '正在找照片…')
@@ -23325,7 +23330,7 @@ function Invoke-UiTest {
             }
         }
         & $step 'similar photos and keep rules' {
-            if (-not ('PhotoHash' -as [type])) { throw 'PhotoHash did not compile' }
+            if (-not (Initialize-PhotoHash)) { throw 'PhotoHash did not compile' }
             # 放在临时文件夹里：本工具自己的文件夹（appDir）在重复文件里是删不得的，勾不上
             $d = Join-Path ([IO.Path]::GetTempPath()) ('clearc-uitest-photos-' + [guid]::NewGuid().ToString('N').Substring(0, 6)); New-Item -ItemType Directory -Path "$d\sub" -Force | Out-Null
             # 画三张图：渐变图、它的缩小版（相似）、另一张方格图（不相似）
