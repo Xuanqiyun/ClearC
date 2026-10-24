@@ -401,6 +401,7 @@ public class HealthCard {
     public List<HealthChip> Chips { get; set; }
     public List<string> Lines { get; set; }
     public double BarW { get; set; }
+    public double BarPct { get; set; }      // 用量条按百分之几画（卡片变宽时重新算 BarW）
     public bool HasBar { get; set; }
     string _bar; public string BarBrush { get { return Theme.B(_bar); } set { _bar = value; } }
     public HealthCard() { Chips = new List<HealthChip>(); Lines = new List<string>(); }
@@ -451,6 +452,9 @@ public class VerdictRow {
 public class FixStepRow {
     public string Id { get; set; }
     public string Name { get; set; }
+    public string Title { get; set; }
+    public string Act { get; set; }
+    public string No { get; set; }
     public string Desc { get; set; }
     public string Tag { get; set; }
     public bool Enabled { get; set; }

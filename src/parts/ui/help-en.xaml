@@ -6,7 +6,7 @@
         <TextBlock Style="{StaticResource PageSub}" Text="How to use ClearC, what it never touches, and how to report problems."/>
       </StackPanel>
       <Grid Grid.Row="1">
-        <Grid.ColumnDefinitions><ColumnDefinition Width="214"/><ColumnDefinition Width="*" MaxWidth="900"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
+        <Grid.ColumnDefinitions><ColumnDefinition Width="214"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
         <Border Grid.Column="0" Style="{StaticResource Card}" Padding="8,0,8,10" Margin="0,0,16,0" VerticalAlignment="Top">
           <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
             <StackPanel x:Name="HelpNav">
@@ -61,10 +61,8 @@
               <Border Style="{StaticResource Card}" Padding="36,30,36,36" Margin="0,20,0,0">
                 <StackPanel>
                   <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE768;" FontFamily="{StaticResource Icons}" FontSize="19" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,1,12,0"/><TextBlock Text="Getting started" Style="{StaticResource HelpHead}"/></StackPanel>
-                  <Grid Margin="0,20,0,0">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                    <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource HelpTile}">
+                  <Grid Tag="cols:230:12:12:4" Margin="0,20,0,0">
+                    <Border Style="{StaticResource HelpTile}">
                       <DockPanel>
                         <Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0"><TextBlock Text="1" Foreground="White" FontSize="12.5" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                         <StackPanel>
@@ -73,7 +71,7 @@
                         </StackPanel>
                       </DockPanel>
                     </Border>
-                    <Border Grid.Row="0" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <DockPanel>
                         <Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0"><TextBlock Text="2" Foreground="White" FontSize="12.5" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                         <StackPanel>
@@ -82,7 +80,7 @@
                         </StackPanel>
                       </DockPanel>
                     </Border>
-                    <Border Grid.Row="2" Grid.Column="0" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <DockPanel>
                         <Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0"><TextBlock Text="3" Foreground="White" FontSize="12.5" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                         <StackPanel>
@@ -91,7 +89,7 @@
                         </StackPanel>
                       </DockPanel>
                     </Border>
-                    <Border Grid.Row="2" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <DockPanel>
                         <Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0"><TextBlock Text="4" Foreground="White" FontSize="12.5" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                         <StackPanel>
@@ -116,48 +114,58 @@
                   </DockPanel>
                   <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
                   <TextBlock Text="Scan results" Style="{StaticResource HelpGroup}" Margin="0,22,0,0"/>
-                  <Grid Margin="0,14,0,0">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="140"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                    <Border Grid.Row="0" Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="Safe to clean" FontSize="13" Foreground="#1D7A35" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,16"><Run>Caches, temporary files and logs. Apps rebuild them automatically.</Run></TextBlock>
-                    <Border Grid.Row="1" Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="Careful cleanup" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,16"><Run>Browser caches, thumbnails, shader and download caches. They are generated again, so the first start is a little slower.</Run></TextBlock>
-                    <Border Grid.Row="2" Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="Needs confirmation" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,16"><Run>Items that come at a cost, skipped by default. After deleting Windows.old, for example, you can no longer go back to the previous Windows.</Run></TextBlock>
-                    <Border Grid.Row="3" Style="{StaticResource HelpPill}" Background="#E8F1FC"><TextBlock Text="Move only" FontSize="13" Foreground="#0B5CAD" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="3" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,16"><Run>Chat history and other large folders. They can't be deleted, only moved to another drive as a whole.</Run></TextBlock>
-                    <Border Grid.Row="4" Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="Protected" FontSize="13" Foreground="#1D7A35" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="4" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Personal folders, system folders and app installation folders are never touched.</Run></TextBlock>
+                  <Grid Tag="cols:400:40:16:2" Margin="0,14,0,0">
+                    <DockPanel>
+                      <Border DockPanel.Dock="Left" Width="140" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="Safe to clean" FontSize="13" Foreground="#1D7A35" TextWrapping="Wrap"/></Border></Border>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Caches, temporary files and logs. Apps rebuild them automatically.</Run></TextBlock>
+                    </DockPanel>
+                    <DockPanel>
+                      <Border DockPanel.Dock="Left" Width="140" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="Careful cleanup" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border></Border>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Browser caches, thumbnails, shader and download caches. They are generated again, so the first start is a little slower.</Run></TextBlock>
+                    </DockPanel>
+                    <DockPanel>
+                      <Border DockPanel.Dock="Left" Width="140" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="Needs confirmation" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border></Border>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Items that come at a cost, skipped by default. After deleting Windows.old, for example, you can no longer go back to the previous Windows.</Run></TextBlock>
+                    </DockPanel>
+                    <DockPanel>
+                      <Border DockPanel.Dock="Left" Width="140" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#E8F1FC"><TextBlock Text="Move only" FontSize="13" Foreground="#0B5CAD" TextWrapping="Wrap"/></Border></Border>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Chat history and other large folders. They can't be deleted, only moved to another drive as a whole.</Run></TextBlock>
+                    </DockPanel>
+                    <DockPanel>
+                      <Border DockPanel.Dock="Left" Width="140" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="Protected" FontSize="13" Foreground="#1D7A35" TextWrapping="Wrap"/></Border></Border>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Personal folders, system folders and app installation folders are never touched.</Run></TextBlock>
+                    </DockPanel>
                   </Grid>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="See the list before deleting"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>When you confirm, click "View file list" to see which files will be deleted; the full list can be saved as a text file.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Recycle Bin first"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Turn this on under "Cleanup list" in Settings and files deleted by a manual cleanup go to the Recycle Bin, so mistakes can be undone. Anything that can't go there is not deleted, and the log says why.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Open the location"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Double-click a row to open its folder; right-click to copy the path.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Which caches are cleaned"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Windows' temporary files, update cache and logs, the caches of common browsers, game launchers and apps, and the download caches of developer tools. Only caches: never cookies, history, passwords or settings.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Items that need confirmation"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Windows.old, the Recycle Bin, orphaned Windows Installer packages, old driver packages, broken shortcuts, event logs and more. Skipped by default; read the description before selecting them.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Your own folders"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Under "Cleanup list" in Settings, add folders to clean or to exclude. For added folders only the contents are deleted; the folder itself stays.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Quick scans"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Folder sizes are read straight from the file table of C:, so a scan usually takes a few seconds. When deleting, every item is checked again.</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,26,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="See the list before deleting"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>When you confirm, click "View file list" to see which files will be deleted; the full list can be saved as a text file.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Recycle Bin first"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Turn this on under "Cleanup list" in Settings and files deleted by a manual cleanup go to the Recycle Bin, so mistakes can be undone. Anything that can't go there is not deleted, and the log says why.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Open the location"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Double-click a row to open its folder; right-click to copy the path.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Which caches are cleaned"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Windows' temporary files, update cache and logs, the caches of common browsers, game launchers and apps, and the download caches of developer tools. Only caches: never cookies, history, passwords or settings.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Items that need confirmation"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Windows.old, the Recycle Bin, orphaned Windows Installer packages, old driver packages, broken shortcuts, event logs and more. Skipped by default; read the description before selecting them.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Your own folders"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Under "Cleanup list" in Settings, add folders to clean or to exclude. For added folders only the contents are deleted; the folder itself stays.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Quick scans"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Folder sizes are read straight from the file table of C:, so a scan usually takes a few seconds. When deleting, every item is checked again.</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                   <Border Background="#EFF8F1" BorderBrush="#CFE9D6" BorderThickness="1" CornerRadius="12" Padding="18,16,22,17" Margin="0,26,0,0">
                     <DockPanel>
                       <TextBlock DockPanel.Dock="Left" Text="&#xEA18;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#248A3D" VerticalAlignment="Top" Margin="0,3,14,0"/>
@@ -168,10 +176,12 @@
                     </DockPanel>
                   </Border>
                   <TextBlock Text="Moving chat history" Style="{StaticResource HelpGroup}" Margin="0,40,0,0"/>
-                  <StackPanel Margin="0,14,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Supported apps"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>WeChat, QQ, WeCom, Tencent Meeting, Feishu, DingTalk, Telegram, Discord, Slack, Signal, LINE, Viber, KakaoTalk and Zoom. For Store versions, use "Move" under Apps in Windows Settings.</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,14,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Supported apps"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>WeChat, QQ, WeCom, Tencent Meeting, Feishu, DingTalk, Telegram, Discord, Slack, Signal, LINE, Viber, KakaoTalk and Zoom. For Store versions, use "Move" under Apps in Windows Settings.</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                   <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="How a move works"/>
                     <WrapPanel Margin="0,12,0,0">
@@ -187,10 +197,12 @@
                     </WrapPanel>
                     <TextBlock Style="{StaticResource HelpBody}" Margin="0,4,0,0"><Run>The app keeps reading and writing at the original location; no settings change. If the copy doesn't match, the original folder is not deleted.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Target drive"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>The local drive with the most free space is chosen; you can pick another drive or a folder. Network drives, cloud drives and USB sticks can't be used.</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,26,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Target drive"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>The local drive with the most free space is chosen; you can pick another drive or a folder. Network drives, cloud drives and USB sticks can't be used.</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                   <Border Background="#FFF8EC" BorderBrush="#F5E1BC" BorderThickness="1" CornerRadius="12" Padding="18,16,22,17" Margin="0,26,0,0">
                     <DockPanel>
                       <TextBlock DockPanel.Dock="Left" Text="&#xE7BA;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#B25E00" VerticalAlignment="Top" Margin="0,3,14,0"/>
@@ -213,31 +225,35 @@
                   </DockPanel>
                   <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
                   <TextBlock Text="Searching" Style="{StaticResource HelpGroup}" Margin="0,22,0,0"/>
-                  <StackPanel Margin="0,14,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Locations and criteria"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Choose where to look, the file types and the size. System, app and development folders are skipped automatically.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="What counts as a duplicate"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>By default both the name and the content must match; with "Content only", names may differ. Content must match byte for byte.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Fast or full comparison"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>"Fast" samples large files and verifies them byte for byte before deleting; "Full comparison" reads every file completely.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Similar photos"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Finds photos that look the same, such as different resolutions or recompressed copies. Similar is not identical: nothing is checked automatically, and they can only go to the Recycle Bin or an archive.</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,14,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Locations and criteria"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Choose where to look, the file types and the size. System, app and development folders are skipped automatically.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="What counts as a duplicate"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>By default both the name and the content must match; with "Content only", names may differ. Content must match byte for byte.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Fast or full comparison"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>"Fast" samples large files and verifies them byte for byte before deleting; "Full comparison" reads every file completely.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Similar photos"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Finds photos that look the same, such as different resolutions or recompressed copies. Similar is not identical: nothing is checked automatically, and they can only go to the Recycle Bin or an archive.</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                   <TextBlock Text="Handling the results" Style="{StaticResource HelpGroup}" Margin="0,40,0,0"/>
-                  <StackPanel Margin="0,14,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Which copy to keep"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>By default the newest copy in each group is kept. You can also keep the oldest, the one outside C:, the one in a chosen folder, or check them yourself.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Delete, archive or merge"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Files go to the Recycle Bin by default, so they can be restored. You can also move the extra copies to an archive folder, or "Merge into one copy": every location keeps its file, but the space is used once.</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,14,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Which copy to keep"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>By default the newest copy in each group is kept. You can also keep the oldest, the one outside C:, the one in a chosen folder, or check them yourself.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Delete, archive or merge"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Files go to the Recycle Bin by default, so they can be restored. You can also move the extra copies to an archive folder, or "Merge into one copy": every location keeps its file, but the space is used once.</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                   <Border Background="#EFF8F1" BorderBrush="#CFE9D6" BorderThickness="1" CornerRadius="12" Padding="18,16,22,17" Margin="0,26,0,0">
                     <DockPanel>
                       <TextBlock DockPanel.Dock="Left" Text="&#xEA18;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#248A3D" VerticalAlignment="Top" Margin="0,3,14,0"/>
@@ -259,82 +275,80 @@
                     </StackPanel>
                   </DockPanel>
                   <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
-                  <Grid Margin="0,18,0,0">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                    <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource HelpTile}">
+                  <Grid Tag="cols:280:12:12:3" Margin="0,18,0,0">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="CompactOS"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Compresses the Windows system files, usually saving 2 to 4 GB with no effect on use.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Grid.Row="0" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Page file"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Moves pagefile.sys to another drive; takes effect after a restart.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Grid.Row="2" Grid.Column="0" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Hibernation file"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Keeping only Fast Startup halves it; turning hibernation off removes it.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Grid.Row="2" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Restore points"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Shows how much they take; adjust them in Windows' System Protection. ClearC never deletes restore points.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Grid.Row="4" Grid.Column="0" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Compress folders"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>NTFS compression: files work as usual but take less space. Good for documents and old projects.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Grid.Row="4" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Virtual disks"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Compacts WSL and Docker disks; emulators and virtual machines can be moved as a whole.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Grid.Row="6" Grid.Column="0" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Merge duplicates"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Duplicates on the same drive take up space only once. Good for photos and videos you no longer edit.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Grid.Row="6" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="OneDrive online-only"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Local copies become cloud-only and download when opened.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Grid.Row="8" Grid.Column="0" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Reserved storage"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Gives back the roughly 7 GB Windows keeps for updates; can be turned back on at any time.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Grid.Row="8" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Component store"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Lets Windows work out how much WinSxS can free before you decide to clean it up.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Grid.Row="10" Grid.Column="0" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Small crash dumps"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Blue screens write a 256 KB dump instead of a multi-GB file.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Grid.Row="10" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Temp folder"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Moves TEMP to another drive; takes effect after signing out and in.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Grid.Row="12" Grid.Column="0" Grid.ColumnSpan="3" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Move WSL"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Moves a whole distribution with wsl --manage --move; needs WSL 2.5 or later.</Run></TextBlock>
@@ -354,60 +368,66 @@
                   </DockPanel>
                   <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
                   <TextBlock Text="Scanning" Style="{StaticResource HelpGroup}" Margin="0,22,0,0"/>
-                  <StackPanel Margin="0,14,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Scan a drive"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Choose a drive and click "Scan", or click a drive card at the top. Scanning only looks; nothing is changed.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Fast scan"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>NTFS drives are read straight from the file table, so hundreds of thousands of files take seconds. If that isn't possible, folders are scanned one by one.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Drive overview"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>After a whole drive is scanned, the top shows how the used space splits into system and apps, personal files, caches you can clean, and other.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Worth a look"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Lists large folders such as caches, packages, build output and temporary files; click one to go there. They are recognized by name only, so look before deleting.</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,14,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Scan a drive"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Choose a drive and click "Scan", or click a drive card at the top. Scanning only looks; nothing is changed.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Fast scan"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>NTFS drives are read straight from the file table, so hundreds of thousands of files take seconds. If that isn't possible, folders are scanned one by one.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Drive overview"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>After a whole drive is scanned, the top shows how the used space splits into system and apps, personal files, caches you can clean, and other.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Worth a look"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Lists large folders such as caches, packages, build output and temporary files; click one to go there. They are recognized by name only, so look before deleting.</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                   <TextBlock Text="Browsing" Style="{StaticResource HelpGroup}" Margin="0,40,0,0"/>
-                  <StackPanel Margin="0,14,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Look inside"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Double-click a folder to open it. Use the mouse side buttons or Alt+← and Alt+→ to go back and forward, and click any level of the path.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Treemap"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>The bigger the block, the more space it takes. The colour shows what a folder holds; hatched blocks are caches whose space can be had back.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Find files"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Search files of 1 MB or more by size, age, type and name, or only the large files inside chat apps.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="By type"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Splits every file on the drive into ten kinds, such as videos, pictures, documents and archives, and shows how much each takes.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Recent changes and Since last scan"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>"Recent changes" lists the folders with the most new or rewritten files in the last few days; "Since last scan" finds the folders that grew and where the extra space went.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Export"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Save the list as CSV, or the whole drive as a web page report.</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,14,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Look inside"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Double-click a folder to open it. Use the mouse side buttons or Alt+← and Alt+→ to go back and forward, and click any level of the path.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Treemap"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>The bigger the block, the more space it takes. The colour shows what a folder holds; hatched blocks are caches whose space can be had back.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Find files"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Search files of 1 MB or more by size, age, type and name, or only the large files inside chat apps.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="By type"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Splits every file on the drive into ten kinds, such as videos, pictures, documents and archives, and shows how much each takes.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Recent changes and Since last scan"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>"Recent changes" lists the folders with the most new or rewritten files in the last few days; "Since last scan" finds the folders that grew and where the extra space went.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Export"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Save the list as CSV, or the whole drive as a web page report.</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                   <TextBlock Text="Selecting and deleting" Style="{StaticResource HelpGroup}" Margin="0,40,0,0"/>
-                  <StackPanel Margin="0,14,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Check boxes"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Click the box in front of a row; hold the left or right mouse button and drag to check a run of rows. The boxes can be turned off in Settings.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Delete list"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Collect what to delete from different folders first; the bar underneath keeps showing roughly how much space the drive will have afterwards. Review it, then delete everything at once.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Delete"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Move to the Recycle Bin or delete permanently; both ask first. You are warned when a folder is a git repository.</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,14,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Check boxes"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Only a click on the box in front of a row checks it; a click elsewhere on the row does not. Hold the left or right mouse button and drag to check a run of rows. The boxes can be turned off in Settings.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Delete list"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Collect what to delete from different folders first; the bar underneath keeps showing roughly how much space the drive will have afterwards. Review it, then delete everything at once.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Delete"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Move to the Recycle Bin or delete permanently; both ask first. You are warned when a folder is a git repository.</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                   <Border Background="#F5F5F7" BorderBrush="#E5E5EA" BorderThickness="1" CornerRadius="12" Padding="18,16,22,17" Margin="0,26,0,0">
                     <DockPanel>
                       <TextBlock DockPanel.Dock="Left" Text="&#xE72E;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#6E6E73" VerticalAlignment="Top" Margin="0,3,14,0"/>
@@ -417,10 +437,12 @@
                       </StackPanel>
                     </DockPanel>
                   </Border>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Size on disk"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>With the fast scan, compressed and cloud-only files show what they really take, as do hard links. "Space breakdown" explains why the used space differs from adding up file sizes.</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,26,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Size on disk"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>With the fast scan, compressed and cloud-only files show what they really take, as do hard links. "Space breakdown" explains why the used space differs from adding up file sizes.</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                 </StackPanel>
               </Border>
               <Border x:Name="HelpSec4" Style="{StaticResource Card}" Padding="36,30,36,36" Visibility="Collapsed">
@@ -433,35 +455,39 @@
                     </StackPanel>
                   </DockPanel>
                   <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
-                  <StackPanel Margin="0,18,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="App list"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>All installed apps, largest first. Search by name, or show only the apps on C:.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Several at once"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Tick several apps or drag over rows with the left mouse button. Uninstalling opens each app's own uninstaller in turn.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Uninstall and leftovers"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>After uninstalling, click "Check leftovers" to find folders left behind and move them to the Recycle Bin.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Move to another drive"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Moves an app installed on C: to another drive as a whole; shortcuts, uninstalling and updates keep working. Apps with services or drivers, Microsoft's own apps and a few others aren't suited to moving, and ClearC says why.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Check for updates"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Uses winget, which comes with Windows, and upgrades in a terminal. ClearC only goes online when you click it.</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,18,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="App list"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>All installed apps, largest first. Search by name, or show only the apps on C:.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Several at once"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Tick several apps or drag over rows with the left mouse button. Uninstalling opens each app's own uninstaller in turn.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Uninstall and leftovers"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>After uninstalling, click "Check leftovers" to find folders left behind and move them to the Recycle Bin.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Move to another drive"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Moves an app installed on C: to another drive as a whole; shortcuts, uninstalling and updates keep working. Apps with services or drivers, Microsoft's own apps and a few others aren't suited to moving, and ClearC says why.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Check for updates"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Uses winget, which comes with Windows, and upgrades in a terminal. ClearC only goes online when you click it.</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                   <TextBlock Text="Startup and extensions" Style="{StaticResource HelpGroup}" Margin="0,40,0,0"/>
-                  <StackPanel Margin="0,14,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Startup, scheduled tasks, context menu"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Third-party startup items, scheduled tasks and context menu extensions. Disabling deletes nothing and can be undone at any time.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Leftover folders"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Finds folders uninstalled apps may have left behind. It is only a guess, so open them first, then move them to the Recycle Bin.</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,14,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Startup, scheduled tasks, context menu"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Third-party startup items, scheduled tasks and context menu extensions. Disabling deletes nothing and can be undone at any time.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Leftover folders"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Finds folders uninstalled apps may have left behind. It is only a guess, so open them first, then move them to the Recycle Bin.</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                 </StackPanel>
               </Border>
               <Border x:Name="HelpSec5" Style="{StaticResource Card}" Padding="36,30,36,36" Visibility="Collapsed">
@@ -474,30 +500,32 @@
                     </StackPanel>
                   </DockPanel>
                   <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
-                  <StackPanel Margin="0,18,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Hardware"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>The state of the CPU, memory, drives, battery, graphics and Windows, marked green, amber or red; anything that can't be read says so. It is read in the background after ClearC opens.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Boot time"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>How long recent starts took, and which programs slowed them down.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Blue screens and crashes"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Reads the crash dumps together with the event logs and drive health and gives a diagnosis, each with "Fix as suggested" and "Things to do yourself".</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Diagnostics package"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Packs the dumps, logs and system information into one zip to send to someone who can help. It includes the computer name and installed apps, so only share it with people you trust.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Common fixes"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Proven fixes listed by problem, all built from Windows' own commands and run in a visible window. Anything that changes the system explains itself and asks first.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Activity monitor"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Checks every 3 seconds how much CPU, memory and disk writing each program uses, to find what is slowing the PC down.</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,18,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Hardware"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>The state of the CPU, memory, drives, battery, graphics and Windows, marked green, amber or red; anything that can't be read says so. It is read in the background after ClearC opens.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Boot time"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>How long recent starts took, and which programs slowed them down.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Blue screens and crashes"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Reads the crash dumps together with the event logs and drive health and gives a diagnosis, each with "Fix as suggested" and "Things to do yourself".</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Diagnostics package"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Packs the dumps, logs and system information into one zip to send to someone who can help. It includes the computer name and installed apps, so only share it with people you trust.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Common fixes"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Proven fixes listed by problem, all built from Windows' own commands and run in a visible window. Anything that changes the system explains itself and asks first.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Activity monitor"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Checks every 3 seconds how much CPU, memory and disk writing each program uses, to find what is slowing the PC down.</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                   <Border Background="#EFF8F1" BorderBrush="#CFE9D6" BorderThickness="1" CornerRadius="12" Padding="18,16,22,17" Margin="0,26,0,0">
                     <DockPanel>
                       <TextBlock DockPanel.Dock="Left" Text="&#xEA18;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#248A3D" VerticalAlignment="Top" Margin="0,3,14,0"/>
@@ -519,24 +547,30 @@
                     </StackPanel>
                   </DockPanel>
                   <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
-                  <StackPanel Margin="0,18,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Can be moved"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Chat history, apps and large folders on C: that can still be moved. Tick them, choose the target drive and click "Move to another drive".</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Apps not suited to moving"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Listed separately, each with the reason.</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,18,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Can be moved"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Chat history, apps and large folders on C: that can still be moved. Tick them, choose the target drive and click "Move to another drive". Hold the left mouse button and drag over rows to tick several at once.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Apps not suited to moving"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Listed separately, each with the reason.</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                   <TextBlock Text="Moved" Style="{StaticResource HelpGroup}" Margin="0,40,0,0"/>
-                  <Grid Margin="0,14,0,0">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                    <Border Grid.Row="0" Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="OK" FontSize="13" Foreground="#1D7A35" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,16"><Run>The data is on the target drive and C: keeps only a link. You can move it back to C: whenever you like.</Run></TextBlock>
-                    <Border Grid.Row="1" Style="{StaticResource HelpPill}" Background="#FDEBEC"><TextBlock Text="Broken link" FontSize="13" Foreground="#C0101C" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,16"><Run>The target drive isn't connected or its letter changed. Plug it back in, or repair the link.</Run></TextBlock>
-                    <Border Grid.Row="2" Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="Unfinished" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>The original folder is still there and the target drive has a copy. Move it again, or delete the extra copy.</Run></TextBlock>
+                  <Grid Tag="cols:400:40:16:2" Margin="0,14,0,0">
+                    <DockPanel>
+                      <Border DockPanel.Dock="Left" Width="110" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="OK" FontSize="13" Foreground="#1D7A35" TextWrapping="Wrap"/></Border></Border>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>The data is on the target drive and C: keeps only a link. You can move it back to C: whenever you like.</Run></TextBlock>
+                    </DockPanel>
+                    <DockPanel>
+                      <Border DockPanel.Dock="Left" Width="110" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#FDEBEC"><TextBlock Text="Broken link" FontSize="13" Foreground="#C0101C" TextWrapping="Wrap"/></Border></Border>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>The target drive isn't connected or its letter changed. Plug it back in, or repair the link.</Run></TextBlock>
+                    </DockPanel>
+                    <DockPanel>
+                      <Border DockPanel.Dock="Left" Width="110" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="Unfinished" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border></Border>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>The original folder is still there and the target drive has a copy. Move it again, or delete the extra copy.</Run></TextBlock>
+                    </DockPanel>
                   </Grid>
                 </StackPanel>
               </Border>
@@ -550,22 +584,24 @@
                     </StackPanel>
                   </DockPanel>
                   <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
-                  <StackPanel Margin="0,18,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Low space alert"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>A notice at the bottom right when C: drops below the amount you set, at most once a day.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Junk alert"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>A notice when temporary files and caches grow past the size you set. It only counts; nothing is deleted.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Scheduled cleanup"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Cleans temporary files, caches and logs every week or every day. Personal folders are never touched, and nothing is moved.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Space history"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Records the free space on C: each day as a 30-day bar chart.</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,18,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Low space alert"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>A notice at the bottom right when C: drops below the amount you set, at most once a day.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Junk alert"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>A notice when temporary files and caches grow past the size you set. It only counts; nothing is deleted.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Scheduled cleanup"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Cleans temporary files, caches and logs every week or every day. Personal folders are never touched, and nothing is moved.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Space history"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Records the free space on C: each day as a 30-day bar chart.</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                   <Border Background="#EEF5FD" BorderBrush="#D2E3FA" BorderThickness="1" CornerRadius="12" Padding="18,16,22,17" Margin="0,26,0,0">
                     <DockPanel>
                       <TextBlock DockPanel.Dock="Left" Text="&#xE946;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Top" Margin="0,3,14,0"/>
@@ -587,18 +623,20 @@
                     </StackPanel>
                   </DockPanel>
                   <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
-                  <StackPanel Margin="0,18,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="What is recorded"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Every delete, move, merge, compression, uninstall and system setting change: when, what, on which folder and the result.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Finding entries"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Filter by category, time and keyword. The logs are plain text files, one per month.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="How long"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Half a year by default, and you can change it. Older entries are removed automatically.</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,18,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="What is recorded"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Every delete, move, merge, compression, uninstall and system setting change: when, what, on which folder and the result.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Finding entries"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Filter by category, time and keyword. The logs are plain text files, one per month.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="How long"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Half a year by default, and you can change it. Older entries are removed automatically.</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                 </StackPanel>
               </Border>
               <Border x:Name="HelpSec9" Style="{StaticResource Card}" Padding="36,30,36,36" Visibility="Collapsed">
@@ -611,29 +649,31 @@
                     </StackPanel>
                   </DockPanel>
                   <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
-                  <StackPanel Margin="0,18,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Mode"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Decides how many features the window shows. Change it at any time without losing settings or records.</Run></TextBlock>
-                    <DockPanel Margin="0,10,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="20" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#8E8E93"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Home user</Run><Run>: Clean up C:, Save space, Space map, Apps, System health and Help.</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,7,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="20" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#8E8E93"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Engineer</Run><Run>: adds Duplicates, Moved folders, Reminders, the Activity log and the advanced features on each page.</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,7,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="20" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#8E8E93"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Developer and IT</Run><Run>: everything.</Run></TextBlock></DockPanel>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Appearance and language"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Light, dark or follow Windows; Chinese or English. ClearC reopens after you change them.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="What the window shows"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Pages, buttons and descriptions you don't use can be hidden and brought back at any time.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Scanning and duplicates"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Fast scan reads the file table directly; the duplicate search can make way for other programs so it doesn't slow down what you are using.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Cleanup list"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Send deleted files to the Recycle Bin first, and add folders to clean or to exclude.</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,18,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Mode"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Decides how many features the window shows. Change it at any time without losing settings or records.</Run></TextBlock>
+                      <DockPanel Margin="0,10,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="20" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#8E8E93"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Home user</Run><Run>: Clean up C:, Save space, Space map, Apps, System health and Help.</Run></TextBlock></DockPanel>
+                      <DockPanel Margin="0,7,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="20" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#8E8E93"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Engineer</Run><Run>: adds Duplicates, Moved folders, Reminders, the Activity log and the advanced features on each page.</Run></TextBlock></DockPanel>
+                      <DockPanel Margin="0,7,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="20" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#8E8E93"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Developer and IT</Run><Run>: everything.</Run></TextBlock></DockPanel>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Appearance and language"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Light, dark or follow Windows; Chinese or English. ClearC reopens after you change them.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="What the window shows"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Pages, buttons and descriptions you don't use can be hidden and brought back at any time.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Scanning and duplicates"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Fast scan reads the file table directly; the duplicate search can make way for other programs so it doesn't slow down what you are using.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Cleanup list"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Send deleted files to the Recycle Bin first, and add folders to clean or to exclude.</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                 </StackPanel>
               </Border>
             </StackPanel>

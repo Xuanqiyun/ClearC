@@ -1,5 +1,13 @@
 # 更新记录
 
+## 3.5.2
+- **窗口拉宽、最大化时内容跟着铺开**：帮助、省空间、自动提醒、设置、系统健康各页去掉了最大宽度，卡片占满整页；帮助里一组说明、方块和标签按宽度排成一到三列，窄了自动退回一列；活动监控、重复文件、操作日志、和上次比这几个表格的宽列（程序、位置、对象、文件夹）分到多出来的宽度；空间地图的磁盘卡片、系统健康的硬件卡片一起排满一排，用量条跟着卡片变长；空间变化的柱子铺满整个宽度。正文一行最长 860，太长读着累。
+- **常见问题修复重新排版**：每一步一张卡片，左边是第几步，中间是这一步做什么和说明，右边一个按钮（运行、打开、查看；点了会先问的带省略号）；顶上用三个标签说明「只看」「会改动」「要重启」，代替原来的一大段说明；左边问题列表加宽、行距加大。
+- **可以搬的：按住鼠标左键上下拖**，拖过的行一起勾上（从勾着的行开始拖就一起取消），拖到列表外自动滚动；按在方框和按钮上照常用，不能搬的行不动。
+- **空间地图：点行的其他地方不会勾上**：复选框模式下连点两下文件不再把它勾上；方块图下面的列表也一样只认方框；点方块只是在列表里找到它（描蓝边），按住 Ctrl 点才勾上；「按类型」「最近改动」的行不显示方框。
+- **选择外观用缩略图**：左下角「外观」和设置里的外观都改成三张小窗口的预览（浅色、深色、跟随系统一半一半），点一张再点「应用」。
+- The window layout now adapts to wide and maximized windows: pages fill the width, help items flow into up to three columns, wide table columns take the extra space and cards fill each row. The repair tab shows each step as a card with its number, description and one button. Dragging with the left button ticks several items in "Can be moved". In the space map a click away from the check box no longer ticks a row. The appearance choice shows picture previews.
+
 ## 3.5.1
 - **帮助的文字重写**：每一节开头一句话说清做什么，每一条一两句；去掉描述界面本身的话（「点哪一项右边只显示那一项」这类）和内部细节，安全提示保留。常见问题也一样精简。
 - **帮助的排版**：标题、小标题、正文分得更清楚：节标题 20、条目标题 15、正文 14，行高 24，条目之间空 26，小标题改成灰色、上面多留空；卡片四周留白更大；圆点、提示框、标签、方块的间距一起调。

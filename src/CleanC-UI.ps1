@@ -6,7 +6,7 @@
 param()
 
 $ErrorActionPreference = 'SilentlyContinue'
-$script:AppVersion = '3.5.1'
+$script:AppVersion = '3.5.2'
 $script:AppBuildStamp = ''   # 构建 exe 时由 build 脚本填上构建时间（UTC）：写进诊断信息和运行记录，反馈问题时好对上是哪一次构建的
 $script:startClock = [Diagnostics.Stopwatch]::StartNew()   # 记下启动各阶段用了多久，写进运行记录
 
@@ -3128,6 +3128,7 @@ public class HealthCard {
     public List<HealthChip> Chips { get; set; }
     public List<string> Lines { get; set; }
     public double BarW { get; set; }
+    public double BarPct { get; set; }      // 用量条按百分之几画（卡片变宽时重新算 BarW）
     public bool HasBar { get; set; }
     string _bar; public string BarBrush { get { return Theme.B(_bar); } set { _bar = value; } }
     public HealthCard() { Chips = new List<HealthChip>(); Lines = new List<string>(); }
@@ -3178,6 +3179,9 @@ public class VerdictRow {
 public class FixStepRow {
     public string Id { get; set; }
     public string Name { get; set; }
+    public string Title { get; set; }
+    public string Act { get; set; }
+    public string No { get; set; }
     public string Desc { get; set; }
     public string Tag { get; set; }
     public bool Enabled { get; set; }
@@ -7022,6 +7026,16 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+深色适合在暗的环境里用；跟随系统会照 Windows 设置里「选择应用模式」来。换了以后本工具会关闭，再自动打开。	Dark suits dim surroundings; Follow Windows uses the "Choose your app mode" setting in Windows. After a change ClearC closes and opens again.
+应用	Apply
+ · 点方块在下面的列表里找到这一行，勾上的方块会描边；双击进入	 · Clicking a block finds its row in the list below; checked rows get an outline; double-click to enter
+左边选遇到的问题，右边的修法从轻到重排，从上往下试。都是 Windows 自带的命令，在看得见的窗口里运行。	Pick a problem on the left. The fixes on the right go from the lightest to the heaviest, so try them from the top. They are all Windows commands and run in a window you can see.
+不改任何东西	Changes nothing
+先说明要改什么，能撤销的写明怎么撤销	Says first what will change, and how to undo it
+重启后才生效	Takes effect after a restart
+运行	Run
+导出	Export
+查看步骤	See steps
 决定界面上有多少功能。换模式不会丢任何设置和记录。	Decides how many features the window shows. Switching keeps all settings and records.
 跟随系统时照 Windows 的「选择应用模式」。更改后本工具会重新打开。	Follow Windows uses its "Choose your app mode" setting. ClearC reopens after a change.
 更改后本工具会重新打开。	ClearC reopens after a change.
@@ -9421,7 +9435,7 @@ $script:helpEnXaml = @'
         <TextBlock Style="{StaticResource PageSub}" Text="How to use ClearC, what it never touches, and how to report problems."/>
       </StackPanel>
       <Grid Grid.Row="1">
-        <Grid.ColumnDefinitions><ColumnDefinition Width="214"/><ColumnDefinition Width="*" MaxWidth="900"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
+        <Grid.ColumnDefinitions><ColumnDefinition Width="214"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
         <Border Grid.Column="0" Style="{StaticResource Card}" Padding="8,0,8,10" Margin="0,0,16,0" VerticalAlignment="Top">
           <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
             <StackPanel x:Name="HelpNav">
@@ -9476,10 +9490,8 @@ $script:helpEnXaml = @'
               <Border Style="{StaticResource Card}" Padding="36,30,36,36" Margin="0,20,0,0">
                 <StackPanel>
                   <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE768;" FontFamily="{StaticResource Icons}" FontSize="19" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,1,12,0"/><TextBlock Text="Getting started" Style="{StaticResource HelpHead}"/></StackPanel>
-                  <Grid Margin="0,20,0,0">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                    <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource HelpTile}">
+                  <Grid Tag="cols:230:12:12:4" Margin="0,20,0,0">
+                    <Border Style="{StaticResource HelpTile}">
                       <DockPanel>
                         <Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0"><TextBlock Text="1" Foreground="White" FontSize="12.5" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                         <StackPanel>
@@ -9488,7 +9500,7 @@ $script:helpEnXaml = @'
                         </StackPanel>
                       </DockPanel>
                     </Border>
-                    <Border Grid.Row="0" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <DockPanel>
                         <Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0"><TextBlock Text="2" Foreground="White" FontSize="12.5" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                         <StackPanel>
@@ -9497,7 +9509,7 @@ $script:helpEnXaml = @'
                         </StackPanel>
                       </DockPanel>
                     </Border>
-                    <Border Grid.Row="2" Grid.Column="0" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <DockPanel>
                         <Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0"><TextBlock Text="3" Foreground="White" FontSize="12.5" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                         <StackPanel>
@@ -9506,7 +9518,7 @@ $script:helpEnXaml = @'
                         </StackPanel>
                       </DockPanel>
                     </Border>
-                    <Border Grid.Row="2" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <DockPanel>
                         <Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0"><TextBlock Text="4" Foreground="White" FontSize="12.5" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                         <StackPanel>
@@ -9531,48 +9543,58 @@ $script:helpEnXaml = @'
                   </DockPanel>
                   <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
                   <TextBlock Text="Scan results" Style="{StaticResource HelpGroup}" Margin="0,22,0,0"/>
-                  <Grid Margin="0,14,0,0">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="140"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                    <Border Grid.Row="0" Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="Safe to clean" FontSize="13" Foreground="#1D7A35" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,16"><Run>Caches, temporary files and logs. Apps rebuild them automatically.</Run></TextBlock>
-                    <Border Grid.Row="1" Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="Careful cleanup" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,16"><Run>Browser caches, thumbnails, shader and download caches. They are generated again, so the first start is a little slower.</Run></TextBlock>
-                    <Border Grid.Row="2" Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="Needs confirmation" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,16"><Run>Items that come at a cost, skipped by default. After deleting Windows.old, for example, you can no longer go back to the previous Windows.</Run></TextBlock>
-                    <Border Grid.Row="3" Style="{StaticResource HelpPill}" Background="#E8F1FC"><TextBlock Text="Move only" FontSize="13" Foreground="#0B5CAD" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="3" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,16"><Run>Chat history and other large folders. They can't be deleted, only moved to another drive as a whole.</Run></TextBlock>
-                    <Border Grid.Row="4" Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="Protected" FontSize="13" Foreground="#1D7A35" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="4" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>Personal folders, system folders and app installation folders are never touched.</Run></TextBlock>
+                  <Grid Tag="cols:400:40:16:2" Margin="0,14,0,0">
+                    <DockPanel>
+                      <Border DockPanel.Dock="Left" Width="140" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="Safe to clean" FontSize="13" Foreground="#1D7A35" TextWrapping="Wrap"/></Border></Border>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Caches, temporary files and logs. Apps rebuild them automatically.</Run></TextBlock>
+                    </DockPanel>
+                    <DockPanel>
+                      <Border DockPanel.Dock="Left" Width="140" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="Careful cleanup" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border></Border>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Browser caches, thumbnails, shader and download caches. They are generated again, so the first start is a little slower.</Run></TextBlock>
+                    </DockPanel>
+                    <DockPanel>
+                      <Border DockPanel.Dock="Left" Width="140" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="Needs confirmation" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border></Border>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Items that come at a cost, skipped by default. After deleting Windows.old, for example, you can no longer go back to the previous Windows.</Run></TextBlock>
+                    </DockPanel>
+                    <DockPanel>
+                      <Border DockPanel.Dock="Left" Width="140" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#E8F1FC"><TextBlock Text="Move only" FontSize="13" Foreground="#0B5CAD" TextWrapping="Wrap"/></Border></Border>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Chat history and other large folders. They can't be deleted, only moved to another drive as a whole.</Run></TextBlock>
+                    </DockPanel>
+                    <DockPanel>
+                      <Border DockPanel.Dock="Left" Width="140" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="Protected" FontSize="13" Foreground="#1D7A35" TextWrapping="Wrap"/></Border></Border>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Personal folders, system folders and app installation folders are never touched.</Run></TextBlock>
+                    </DockPanel>
                   </Grid>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="See the list before deleting"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>When you confirm, click "View file list" to see which files will be deleted; the full list can be saved as a text file.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Recycle Bin first"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Turn this on under "Cleanup list" in Settings and files deleted by a manual cleanup go to the Recycle Bin, so mistakes can be undone. Anything that can't go there is not deleted, and the log says why.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Open the location"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Double-click a row to open its folder; right-click to copy the path.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Which caches are cleaned"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Windows' temporary files, update cache and logs, the caches of common browsers, game launchers and apps, and the download caches of developer tools. Only caches: never cookies, history, passwords or settings.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Items that need confirmation"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Windows.old, the Recycle Bin, orphaned Windows Installer packages, old driver packages, broken shortcuts, event logs and more. Skipped by default; read the description before selecting them.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Your own folders"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Under "Cleanup list" in Settings, add folders to clean or to exclude. For added folders only the contents are deleted; the folder itself stays.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Quick scans"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Folder sizes are read straight from the file table of C:, so a scan usually takes a few seconds. When deleting, every item is checked again.</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,26,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="See the list before deleting"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>When you confirm, click "View file list" to see which files will be deleted; the full list can be saved as a text file.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Recycle Bin first"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Turn this on under "Cleanup list" in Settings and files deleted by a manual cleanup go to the Recycle Bin, so mistakes can be undone. Anything that can't go there is not deleted, and the log says why.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Open the location"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Double-click a row to open its folder; right-click to copy the path.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Which caches are cleaned"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Windows' temporary files, update cache and logs, the caches of common browsers, game launchers and apps, and the download caches of developer tools. Only caches: never cookies, history, passwords or settings.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Items that need confirmation"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Windows.old, the Recycle Bin, orphaned Windows Installer packages, old driver packages, broken shortcuts, event logs and more. Skipped by default; read the description before selecting them.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Your own folders"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Under "Cleanup list" in Settings, add folders to clean or to exclude. For added folders only the contents are deleted; the folder itself stays.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Quick scans"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Folder sizes are read straight from the file table of C:, so a scan usually takes a few seconds. When deleting, every item is checked again.</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                   <Border Background="#EFF8F1" BorderBrush="#CFE9D6" BorderThickness="1" CornerRadius="12" Padding="18,16,22,17" Margin="0,26,0,0">
                     <DockPanel>
                       <TextBlock DockPanel.Dock="Left" Text="&#xEA18;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#248A3D" VerticalAlignment="Top" Margin="0,3,14,0"/>
@@ -9583,10 +9605,12 @@ $script:helpEnXaml = @'
                     </DockPanel>
                   </Border>
                   <TextBlock Text="Moving chat history" Style="{StaticResource HelpGroup}" Margin="0,40,0,0"/>
-                  <StackPanel Margin="0,14,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Supported apps"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>WeChat, QQ, WeCom, Tencent Meeting, Feishu, DingTalk, Telegram, Discord, Slack, Signal, LINE, Viber, KakaoTalk and Zoom. For Store versions, use "Move" under Apps in Windows Settings.</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,14,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Supported apps"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>WeChat, QQ, WeCom, Tencent Meeting, Feishu, DingTalk, Telegram, Discord, Slack, Signal, LINE, Viber, KakaoTalk and Zoom. For Store versions, use "Move" under Apps in Windows Settings.</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                   <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="How a move works"/>
                     <WrapPanel Margin="0,12,0,0">
@@ -9602,10 +9626,12 @@ $script:helpEnXaml = @'
                     </WrapPanel>
                     <TextBlock Style="{StaticResource HelpBody}" Margin="0,4,0,0"><Run>The app keeps reading and writing at the original location; no settings change. If the copy doesn't match, the original folder is not deleted.</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Target drive"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>The local drive with the most free space is chosen; you can pick another drive or a folder. Network drives, cloud drives and USB sticks can't be used.</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,26,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Target drive"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>The local drive with the most free space is chosen; you can pick another drive or a folder. Network drives, cloud drives and USB sticks can't be used.</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                   <Border Background="#FFF8EC" BorderBrush="#F5E1BC" BorderThickness="1" CornerRadius="12" Padding="18,16,22,17" Margin="0,26,0,0">
                     <DockPanel>
                       <TextBlock DockPanel.Dock="Left" Text="&#xE7BA;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#B25E00" VerticalAlignment="Top" Margin="0,3,14,0"/>
@@ -9628,31 +9654,35 @@ $script:helpEnXaml = @'
                   </DockPanel>
                   <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
                   <TextBlock Text="Searching" Style="{StaticResource HelpGroup}" Margin="0,22,0,0"/>
-                  <StackPanel Margin="0,14,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Locations and criteria"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Choose where to look, the file types and the size. System, app and development folders are skipped automatically.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="What counts as a duplicate"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>By default both the name and the content must match; with "Content only", names may differ. Content must match byte for byte.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Fast or full comparison"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>"Fast" samples large files and verifies them byte for byte before deleting; "Full comparison" reads every file completely.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Similar photos"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Finds photos that look the same, such as different resolutions or recompressed copies. Similar is not identical: nothing is checked automatically, and they can only go to the Recycle Bin or an archive.</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,14,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Locations and criteria"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Choose where to look, the file types and the size. System, app and development folders are skipped automatically.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="What counts as a duplicate"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>By default both the name and the content must match; with "Content only", names may differ. Content must match byte for byte.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Fast or full comparison"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>"Fast" samples large files and verifies them byte for byte before deleting; "Full comparison" reads every file completely.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Similar photos"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Finds photos that look the same, such as different resolutions or recompressed copies. Similar is not identical: nothing is checked automatically, and they can only go to the Recycle Bin or an archive.</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                   <TextBlock Text="Handling the results" Style="{StaticResource HelpGroup}" Margin="0,40,0,0"/>
-                  <StackPanel Margin="0,14,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Which copy to keep"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>By default the newest copy in each group is kept. You can also keep the oldest, the one outside C:, the one in a chosen folder, or check them yourself.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Delete, archive or merge"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Files go to the Recycle Bin by default, so they can be restored. You can also move the extra copies to an archive folder, or "Merge into one copy": every location keeps its file, but the space is used once.</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,14,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Which copy to keep"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>By default the newest copy in each group is kept. You can also keep the oldest, the one outside C:, the one in a chosen folder, or check them yourself.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Delete, archive or merge"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Files go to the Recycle Bin by default, so they can be restored. You can also move the extra copies to an archive folder, or "Merge into one copy": every location keeps its file, but the space is used once.</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                   <Border Background="#EFF8F1" BorderBrush="#CFE9D6" BorderThickness="1" CornerRadius="12" Padding="18,16,22,17" Margin="0,26,0,0">
                     <DockPanel>
                       <TextBlock DockPanel.Dock="Left" Text="&#xEA18;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#248A3D" VerticalAlignment="Top" Margin="0,3,14,0"/>
@@ -9674,82 +9704,80 @@ $script:helpEnXaml = @'
                     </StackPanel>
                   </DockPanel>
                   <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
-                  <Grid Margin="0,18,0,0">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                    <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource HelpTile}">
+                  <Grid Tag="cols:280:12:12:3" Margin="0,18,0,0">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="CompactOS"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Compresses the Windows system files, usually saving 2 to 4 GB with no effect on use.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Grid.Row="0" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Page file"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Moves pagefile.sys to another drive; takes effect after a restart.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Grid.Row="2" Grid.Column="0" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Hibernation file"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Keeping only Fast Startup halves it; turning hibernation off removes it.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Grid.Row="2" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Restore points"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Shows how much they take; adjust them in Windows' System Protection. ClearC never deletes restore points.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Grid.Row="4" Grid.Column="0" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Compress folders"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>NTFS compression: files work as usual but take less space. Good for documents and old projects.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Grid.Row="4" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Virtual disks"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Compacts WSL and Docker disks; emulators and virtual machines can be moved as a whole.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Grid.Row="6" Grid.Column="0" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Merge duplicates"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Duplicates on the same drive take up space only once. Good for photos and videos you no longer edit.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Grid.Row="6" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="OneDrive online-only"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Local copies become cloud-only and download when opened.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Grid.Row="8" Grid.Column="0" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Reserved storage"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Gives back the roughly 7 GB Windows keeps for updates; can be turned back on at any time.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Grid.Row="8" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Component store"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Lets Windows work out how much WinSxS can free before you decide to clean it up.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Grid.Row="10" Grid.Column="0" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Small crash dumps"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Blue screens write a 256 KB dump instead of a multi-GB file.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Grid.Row="10" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Temp folder"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Moves TEMP to another drive; takes effect after signing out and in.</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Grid.Row="12" Grid.Column="0" Grid.ColumnSpan="3" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Move WSL"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>Moves a whole distribution with wsl --manage --move; needs WSL 2.5 or later.</Run></TextBlock>
@@ -9769,60 +9797,66 @@ $script:helpEnXaml = @'
                   </DockPanel>
                   <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
                   <TextBlock Text="Scanning" Style="{StaticResource HelpGroup}" Margin="0,22,0,0"/>
-                  <StackPanel Margin="0,14,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Scan a drive"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Choose a drive and click "Scan", or click a drive card at the top. Scanning only looks; nothing is changed.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Fast scan"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>NTFS drives are read straight from the file table, so hundreds of thousands of files take seconds. If that isn't possible, folders are scanned one by one.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Drive overview"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>After a whole drive is scanned, the top shows how the used space splits into system and apps, personal files, caches you can clean, and other.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Worth a look"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Lists large folders such as caches, packages, build output and temporary files; click one to go there. They are recognized by name only, so look before deleting.</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,14,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Scan a drive"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Choose a drive and click "Scan", or click a drive card at the top. Scanning only looks; nothing is changed.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Fast scan"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>NTFS drives are read straight from the file table, so hundreds of thousands of files take seconds. If that isn't possible, folders are scanned one by one.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Drive overview"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>After a whole drive is scanned, the top shows how the used space splits into system and apps, personal files, caches you can clean, and other.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Worth a look"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Lists large folders such as caches, packages, build output and temporary files; click one to go there. They are recognized by name only, so look before deleting.</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                   <TextBlock Text="Browsing" Style="{StaticResource HelpGroup}" Margin="0,40,0,0"/>
-                  <StackPanel Margin="0,14,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Look inside"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Double-click a folder to open it. Use the mouse side buttons or Alt+← and Alt+→ to go back and forward, and click any level of the path.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Treemap"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>The bigger the block, the more space it takes. The colour shows what a folder holds; hatched blocks are caches whose space can be had back.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Find files"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Search files of 1 MB or more by size, age, type and name, or only the large files inside chat apps.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="By type"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Splits every file on the drive into ten kinds, such as videos, pictures, documents and archives, and shows how much each takes.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Recent changes and Since last scan"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>"Recent changes" lists the folders with the most new or rewritten files in the last few days; "Since last scan" finds the folders that grew and where the extra space went.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Export"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Save the list as CSV, or the whole drive as a web page report.</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,14,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Look inside"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Double-click a folder to open it. Use the mouse side buttons or Alt+← and Alt+→ to go back and forward, and click any level of the path.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Treemap"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>The bigger the block, the more space it takes. The colour shows what a folder holds; hatched blocks are caches whose space can be had back.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Find files"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Search files of 1 MB or more by size, age, type and name, or only the large files inside chat apps.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="By type"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Splits every file on the drive into ten kinds, such as videos, pictures, documents and archives, and shows how much each takes.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Recent changes and Since last scan"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>"Recent changes" lists the folders with the most new or rewritten files in the last few days; "Since last scan" finds the folders that grew and where the extra space went.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Export"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Save the list as CSV, or the whole drive as a web page report.</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                   <TextBlock Text="Selecting and deleting" Style="{StaticResource HelpGroup}" Margin="0,40,0,0"/>
-                  <StackPanel Margin="0,14,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Check boxes"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Click the box in front of a row; hold the left or right mouse button and drag to check a run of rows. The boxes can be turned off in Settings.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Delete list"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Collect what to delete from different folders first; the bar underneath keeps showing roughly how much space the drive will have afterwards. Review it, then delete everything at once.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Delete"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Move to the Recycle Bin or delete permanently; both ask first. You are warned when a folder is a git repository.</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,14,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Check boxes"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Only a click on the box in front of a row checks it; a click elsewhere on the row does not. Hold the left or right mouse button and drag to check a run of rows. The boxes can be turned off in Settings.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Delete list"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Collect what to delete from different folders first; the bar underneath keeps showing roughly how much space the drive will have afterwards. Review it, then delete everything at once.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Delete"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Move to the Recycle Bin or delete permanently; both ask first. You are warned when a folder is a git repository.</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                   <Border Background="#F5F5F7" BorderBrush="#E5E5EA" BorderThickness="1" CornerRadius="12" Padding="18,16,22,17" Margin="0,26,0,0">
                     <DockPanel>
                       <TextBlock DockPanel.Dock="Left" Text="&#xE72E;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#6E6E73" VerticalAlignment="Top" Margin="0,3,14,0"/>
@@ -9832,10 +9866,12 @@ $script:helpEnXaml = @'
                       </StackPanel>
                     </DockPanel>
                   </Border>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Size on disk"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>With the fast scan, compressed and cloud-only files show what they really take, as do hard links. "Space breakdown" explains why the used space differs from adding up file sizes.</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,26,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Size on disk"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>With the fast scan, compressed and cloud-only files show what they really take, as do hard links. "Space breakdown" explains why the used space differs from adding up file sizes.</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                 </StackPanel>
               </Border>
               <Border x:Name="HelpSec4" Style="{StaticResource Card}" Padding="36,30,36,36" Visibility="Collapsed">
@@ -9848,35 +9884,39 @@ $script:helpEnXaml = @'
                     </StackPanel>
                   </DockPanel>
                   <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
-                  <StackPanel Margin="0,18,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="App list"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>All installed apps, largest first. Search by name, or show only the apps on C:.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Several at once"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Tick several apps or drag over rows with the left mouse button. Uninstalling opens each app's own uninstaller in turn.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Uninstall and leftovers"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>After uninstalling, click "Check leftovers" to find folders left behind and move them to the Recycle Bin.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Move to another drive"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Moves an app installed on C: to another drive as a whole; shortcuts, uninstalling and updates keep working. Apps with services or drivers, Microsoft's own apps and a few others aren't suited to moving, and ClearC says why.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Check for updates"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Uses winget, which comes with Windows, and upgrades in a terminal. ClearC only goes online when you click it.</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,18,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="App list"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>All installed apps, largest first. Search by name, or show only the apps on C:.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Several at once"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Tick several apps or drag over rows with the left mouse button. Uninstalling opens each app's own uninstaller in turn.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Uninstall and leftovers"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>After uninstalling, click "Check leftovers" to find folders left behind and move them to the Recycle Bin.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Move to another drive"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Moves an app installed on C: to another drive as a whole; shortcuts, uninstalling and updates keep working. Apps with services or drivers, Microsoft's own apps and a few others aren't suited to moving, and ClearC says why.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Check for updates"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Uses winget, which comes with Windows, and upgrades in a terminal. ClearC only goes online when you click it.</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                   <TextBlock Text="Startup and extensions" Style="{StaticResource HelpGroup}" Margin="0,40,0,0"/>
-                  <StackPanel Margin="0,14,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Startup, scheduled tasks, context menu"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Third-party startup items, scheduled tasks and context menu extensions. Disabling deletes nothing and can be undone at any time.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Leftover folders"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Finds folders uninstalled apps may have left behind. It is only a guess, so open them first, then move them to the Recycle Bin.</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,14,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Startup, scheduled tasks, context menu"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Third-party startup items, scheduled tasks and context menu extensions. Disabling deletes nothing and can be undone at any time.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Leftover folders"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Finds folders uninstalled apps may have left behind. It is only a guess, so open them first, then move them to the Recycle Bin.</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                 </StackPanel>
               </Border>
               <Border x:Name="HelpSec5" Style="{StaticResource Card}" Padding="36,30,36,36" Visibility="Collapsed">
@@ -9889,30 +9929,32 @@ $script:helpEnXaml = @'
                     </StackPanel>
                   </DockPanel>
                   <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
-                  <StackPanel Margin="0,18,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Hardware"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>The state of the CPU, memory, drives, battery, graphics and Windows, marked green, amber or red; anything that can't be read says so. It is read in the background after ClearC opens.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Boot time"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>How long recent starts took, and which programs slowed them down.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Blue screens and crashes"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Reads the crash dumps together with the event logs and drive health and gives a diagnosis, each with "Fix as suggested" and "Things to do yourself".</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Diagnostics package"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Packs the dumps, logs and system information into one zip to send to someone who can help. It includes the computer name and installed apps, so only share it with people you trust.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Common fixes"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Proven fixes listed by problem, all built from Windows' own commands and run in a visible window. Anything that changes the system explains itself and asks first.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Activity monitor"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Checks every 3 seconds how much CPU, memory and disk writing each program uses, to find what is slowing the PC down.</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,18,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Hardware"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>The state of the CPU, memory, drives, battery, graphics and Windows, marked green, amber or red; anything that can't be read says so. It is read in the background after ClearC opens.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Boot time"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>How long recent starts took, and which programs slowed them down.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Blue screens and crashes"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Reads the crash dumps together with the event logs and drive health and gives a diagnosis, each with "Fix as suggested" and "Things to do yourself".</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Diagnostics package"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Packs the dumps, logs and system information into one zip to send to someone who can help. It includes the computer name and installed apps, so only share it with people you trust.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Common fixes"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Proven fixes listed by problem, all built from Windows' own commands and run in a visible window. Anything that changes the system explains itself and asks first.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Activity monitor"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Checks every 3 seconds how much CPU, memory and disk writing each program uses, to find what is slowing the PC down.</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                   <Border Background="#EFF8F1" BorderBrush="#CFE9D6" BorderThickness="1" CornerRadius="12" Padding="18,16,22,17" Margin="0,26,0,0">
                     <DockPanel>
                       <TextBlock DockPanel.Dock="Left" Text="&#xEA18;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#248A3D" VerticalAlignment="Top" Margin="0,3,14,0"/>
@@ -9934,24 +9976,30 @@ $script:helpEnXaml = @'
                     </StackPanel>
                   </DockPanel>
                   <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
-                  <StackPanel Margin="0,18,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Can be moved"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Chat history, apps and large folders on C: that can still be moved. Tick them, choose the target drive and click "Move to another drive".</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Apps not suited to moving"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Listed separately, each with the reason.</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,18,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Can be moved"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Chat history, apps and large folders on C: that can still be moved. Tick them, choose the target drive and click "Move to another drive". Hold the left mouse button and drag over rows to tick several at once.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Apps not suited to moving"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Listed separately, each with the reason.</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                   <TextBlock Text="Moved" Style="{StaticResource HelpGroup}" Margin="0,40,0,0"/>
-                  <Grid Margin="0,14,0,0">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                    <Border Grid.Row="0" Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="OK" FontSize="13" Foreground="#1D7A35" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,16"><Run>The data is on the target drive and C: keeps only a link. You can move it back to C: whenever you like.</Run></TextBlock>
-                    <Border Grid.Row="1" Style="{StaticResource HelpPill}" Background="#FDEBEC"><TextBlock Text="Broken link" FontSize="13" Foreground="#C0101C" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,16"><Run>The target drive isn't connected or its letter changed. Plug it back in, or repair the link.</Run></TextBlock>
-                    <Border Grid.Row="2" Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="Unfinished" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>The original folder is still there and the target drive has a copy. Move it again, or delete the extra copy.</Run></TextBlock>
+                  <Grid Tag="cols:400:40:16:2" Margin="0,14,0,0">
+                    <DockPanel>
+                      <Border DockPanel.Dock="Left" Width="110" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="OK" FontSize="13" Foreground="#1D7A35" TextWrapping="Wrap"/></Border></Border>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>The data is on the target drive and C: keeps only a link. You can move it back to C: whenever you like.</Run></TextBlock>
+                    </DockPanel>
+                    <DockPanel>
+                      <Border DockPanel.Dock="Left" Width="110" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#FDEBEC"><TextBlock Text="Broken link" FontSize="13" Foreground="#C0101C" TextWrapping="Wrap"/></Border></Border>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>The target drive isn't connected or its letter changed. Plug it back in, or repair the link.</Run></TextBlock>
+                    </DockPanel>
+                    <DockPanel>
+                      <Border DockPanel.Dock="Left" Width="110" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="Unfinished" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border></Border>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>The original folder is still there and the target drive has a copy. Move it again, or delete the extra copy.</Run></TextBlock>
+                    </DockPanel>
                   </Grid>
                 </StackPanel>
               </Border>
@@ -9965,22 +10013,24 @@ $script:helpEnXaml = @'
                     </StackPanel>
                   </DockPanel>
                   <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
-                  <StackPanel Margin="0,18,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Low space alert"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>A notice at the bottom right when C: drops below the amount you set, at most once a day.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Junk alert"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>A notice when temporary files and caches grow past the size you set. It only counts; nothing is deleted.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Scheduled cleanup"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Cleans temporary files, caches and logs every week or every day. Personal folders are never touched, and nothing is moved.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Space history"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Records the free space on C: each day as a 30-day bar chart.</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,18,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Low space alert"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>A notice at the bottom right when C: drops below the amount you set, at most once a day.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Junk alert"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>A notice when temporary files and caches grow past the size you set. It only counts; nothing is deleted.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Scheduled cleanup"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Cleans temporary files, caches and logs every week or every day. Personal folders are never touched, and nothing is moved.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Space history"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Records the free space on C: each day as a 30-day bar chart.</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                   <Border Background="#EEF5FD" BorderBrush="#D2E3FA" BorderThickness="1" CornerRadius="12" Padding="18,16,22,17" Margin="0,26,0,0">
                     <DockPanel>
                       <TextBlock DockPanel.Dock="Left" Text="&#xE946;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Top" Margin="0,3,14,0"/>
@@ -10002,18 +10052,20 @@ $script:helpEnXaml = @'
                     </StackPanel>
                   </DockPanel>
                   <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
-                  <StackPanel Margin="0,18,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="What is recorded"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Every delete, move, merge, compression, uninstall and system setting change: when, what, on which folder and the result.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Finding entries"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Filter by category, time and keyword. The logs are plain text files, one per month.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="How long"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Half a year by default, and you can change it. Older entries are removed automatically.</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,18,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="What is recorded"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Every delete, move, merge, compression, uninstall and system setting change: when, what, on which folder and the result.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Finding entries"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Filter by category, time and keyword. The logs are plain text files, one per month.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="How long"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Half a year by default, and you can change it. Older entries are removed automatically.</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                 </StackPanel>
               </Border>
               <Border x:Name="HelpSec9" Style="{StaticResource Card}" Padding="36,30,36,36" Visibility="Collapsed">
@@ -10026,29 +10078,31 @@ $script:helpEnXaml = @'
                     </StackPanel>
                   </DockPanel>
                   <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
-                  <StackPanel Margin="0,18,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Mode"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Decides how many features the window shows. Change it at any time without losing settings or records.</Run></TextBlock>
-                    <DockPanel Margin="0,10,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="20" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#8E8E93"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Home user</Run><Run>: Clean up C:, Save space, Space map, Apps, System health and Help.</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,7,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="20" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#8E8E93"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Engineer</Run><Run>: adds Duplicates, Moved folders, Reminders, the Activity log and the advanced features on each page.</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,7,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="20" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#8E8E93"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Developer and IT</Run><Run>: everything.</Run></TextBlock></DockPanel>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Appearance and language"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Light, dark or follow Windows; Chinese or English. ClearC reopens after you change them.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="What the window shows"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Pages, buttons and descriptions you don't use can be hidden and brought back at any time.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Scanning and duplicates"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Fast scan reads the file table directly; the duplicate search can make way for other programs so it doesn't slow down what you are using.</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="Cleanup list"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Send deleted files to the Recycle Bin first, and add folders to clean or to exclude.</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,18,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Mode"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Decides how many features the window shows. Change it at any time without losing settings or records.</Run></TextBlock>
+                      <DockPanel Margin="0,10,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="20" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#8E8E93"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Home user</Run><Run>: Clean up C:, Save space, Space map, Apps, System health and Help.</Run></TextBlock></DockPanel>
+                      <DockPanel Margin="0,7,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="20" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#8E8E93"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Engineer</Run><Run>: adds Duplicates, Moved folders, Reminders, the Activity log and the advanced features on each page.</Run></TextBlock></DockPanel>
+                      <DockPanel Margin="0,7,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="20" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#8E8E93"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">Developer and IT</Run><Run>: everything.</Run></TextBlock></DockPanel>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Appearance and language"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Light, dark or follow Windows; Chinese or English. ClearC reopens after you change them.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="What the window shows"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Pages, buttons and descriptions you don't use can be hidden and brought back at any time.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Scanning and duplicates"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Fast scan reads the file table directly; the duplicate search can make way for other programs so it doesn't slow down what you are using.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Cleanup list"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Send deleted files to the Recycle Bin first, and add folders to clean or to exclude.</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                 </StackPanel>
               </Border>
             </StackPanel>
@@ -10840,6 +10894,41 @@ if ($script:mode -match '(?i)/autoclean') {
       <Setter Property="Margin" Value="10,0,0,3"/>
     </Style>
     <!-- ===== 分段控件（单选） ===== -->
+    <!-- 外观选择：每种外观一张缩略图（浅色、深色、跟随系统），下面写名字；选中的那张描蓝边 -->
+    <Style x:Key="ThemeCard" TargetType="RadioButton">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Margin" Value="0,0,16,0"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="RadioButton">
+            <ContentPresenter Margin="0" Cursor="Hand"/>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="ThemePic" TargetType="Border">
+      <Setter Property="Width" Value="120"/>
+      <Setter Property="Height" Value="80"/>
+      <Setter Property="CornerRadius" Value="12"/>
+      <Setter Property="BorderThickness" Value="2"/>
+      <Setter Property="Padding" Value="2"/>
+      <Setter Property="BorderBrush" Value="#E5E5EA"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Style.Triggers>
+        <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=RadioButton}}" Value="True"><Setter Property="BorderBrush" Value="#C7C7CC"/></DataTrigger>
+        <DataTrigger Binding="{Binding IsChecked, RelativeSource={RelativeSource AncestorType=RadioButton}}" Value="True"><Setter Property="BorderBrush" Value="#0071E3"/></DataTrigger>
+      </Style.Triggers>
+    </Style>
+    <Style x:Key="ThemeLbl" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="12.5"/>
+      <Setter Property="Foreground" Value="#3A3A3C"/>
+      <Setter Property="HorizontalAlignment" Value="Center"/>
+      <Setter Property="Margin" Value="0,8,0,0"/>
+      <Style.Triggers>
+        <DataTrigger Binding="{Binding IsChecked, RelativeSource={RelativeSource AncestorType=RadioButton}}" Value="True"><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Foreground" Value="#0066CC"/></DataTrigger>
+      </Style.Triggers>
+    </Style>
     <Style x:Key="Seg" TargetType="RadioButton">
       <Setter Property="Foreground" Value="#1D1D1F"/>
       <Setter Property="FontSize" Value="12.5"/>
@@ -11482,6 +11571,8 @@ if ($script:mode -match '(?i)/autoclean') {
       <Setter Property="Foreground" Value="#3A3A3C"/>
       <Setter Property="TextWrapping" Value="Wrap"/>
       <Setter Property="LineHeight" Value="21"/>
+      <Setter Property="MaxWidth" Value="860"/>
+      <Setter Property="HorizontalAlignment" Value="Left"/>
     </Style>
     <!-- 系统健康里的一条记录（事件、拖慢开机的程序、驱动）：第一行加粗，详细说明在下面一行，右边是次数和时间，行与行之间一条细线 -->
     <DataTemplate x:Key="NoteRowTpl">
@@ -11535,7 +11626,7 @@ if ($script:mode -match '(?i)/autoclean') {
           <ColumnDefinition Width="Auto" SharedSizeGroup="MapPct"/>
         </Grid.ColumnDefinitions>
         <!-- 项目复选框：和这一行是否选中绑在一起，点它只增减这一行，不影响其他已选的行 -->
-        <CheckBox Grid.Column="0" Visibility="{DynamicResource MapCkVis}" Focusable="False" VerticalAlignment="Center" Margin="0,0,12,0" Cursor="Hand"
+        <CheckBox x:Name="Ck" Grid.Column="0" Visibility="{DynamicResource MapCkVis}" Focusable="False" VerticalAlignment="Center" Margin="0,0,12,0" Cursor="Hand"
                   IsChecked="{Binding IsSelected, Mode=TwoWay, RelativeSource={RelativeSource AncestorType=ListViewItem}}"/>
         <TextBlock Grid.Column="1" Text="{Binding Glyph}" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="{Binding GlyphBrush}" VerticalAlignment="Center"/>
         <StackPanel Grid.Column="2" Margin="0,0,14,0" VerticalAlignment="Center">
@@ -11558,6 +11649,8 @@ if ($script:mode -match '(?i)/autoclean') {
       <DataTemplate.Triggers>
         <DataTrigger Binding="{Binding Locked}" Value="True"><Setter TargetName="Lk" Property="Visibility" Value="Visible"/></DataTrigger>
         <DataTrigger Binding="{Binding Marked}" Value="True"><Setter TargetName="Mk" Property="Visibility" Value="Visible"/></DataTrigger>
+        <DataTrigger Binding="{Binding Kind}" Value="type"><Setter TargetName="Ck" Property="Visibility" Value="Collapsed"/></DataTrigger>
+        <DataTrigger Binding="{Binding Kind}" Value="recent"><Setter TargetName="Ck" Property="Visibility" Value="Collapsed"/></DataTrigger>
       </DataTemplate.Triggers>
     </DataTemplate>
   </Window.Resources>
@@ -12062,7 +12155,7 @@ if ($script:mode -match '(?i)/autoclean') {
             <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
             <ItemsControl.ItemTemplate>
               <DataTemplate>
-                <Border x:Name="DcCard" Style="{StaticResource Card}" Width="300" Margin="0,0,12,8" Padding="0" Cursor="Hand" ToolTip="{Binding Tip}" Tag="{Binding}">
+                <Border x:Name="DcCard" Style="{StaticResource Card}" Width="{DynamicResource DcCardW}" Margin="0,0,12,8" Padding="0" Cursor="Hand" ToolTip="{Binding Tip}" Tag="{Binding}">
                   <DockPanel>
                     <Border DockPanel.Dock="Left" Width="5" Background="{Binding Stripe}" CornerRadius="12,0,0,12"/>
                     <StackPanel Margin="14,10,14,10">
@@ -12130,7 +12223,7 @@ if ($script:mode -match '(?i)/autoclean') {
           <StackPanel VerticalAlignment="Center">
             <!-- 路径上的每一层都能点，点哪一层回到哪一层 -->
             <StackPanel x:Name="MapCrumbs" Orientation="Horizontal" Visibility="Collapsed" ClipToBounds="True"/>
-            <TextBlock x:Name="MapPath" Text="还没有扫描" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" MaxWidth="560" HorizontalAlignment="Left"/>
+            <TextBlock x:Name="MapPath" Text="还没有扫描" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" HorizontalAlignment="Left"/>
             <DockPanel>
               <Button x:Name="BtnMapAcct" DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="空间明细" FontSize="12" Padding="10,0,2,0" VerticalAlignment="Center" Visibility="Collapsed"
                       ToolTip="已用空间都花在哪：文件实际占用、文件表（MFT）、硬链接、压缩和稀疏文件，以及为什么和按文件大小相加对不上"/>
@@ -12351,7 +12444,7 @@ if ($script:mode -match '(?i)/autoclean') {
         </StackPanel>
       </DockPanel>
       <Grid Grid.Row="1">
-        <Grid.ColumnDefinitions><ColumnDefinition Width="214"/><ColumnDefinition Width="*" MaxWidth="900"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
+        <Grid.ColumnDefinitions><ColumnDefinition Width="214"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
         <Border Grid.Column="0" Style="{StaticResource Card}" Padding="8,0,8,10" Margin="0,0,16,0" VerticalAlignment="Top">
           <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
             <StackPanel x:Name="SaveNav">
@@ -12637,7 +12730,7 @@ if ($script:mode -match '(?i)/autoclean') {
           </StackPanel>
         </ScrollViewer>
         <ScrollViewer x:Name="HealthViewBoot" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
-          <StackPanel MaxWidth="1280" HorizontalAlignment="Left" Margin="0,0,6,14">
+          <StackPanel Margin="0,0,6,14">
           <!-- 开机 -->
           <Border x:Name="HealthCardBoot" Style="{StaticResource Card}" Padding="24,20">
             <StackPanel>
@@ -12652,8 +12745,7 @@ if ($script:mode -match '(?i)/autoclean') {
         </ScrollViewer>
         <!-- 蓝屏和崩溃：再分三个小选项卡（诊断结论 / 蓝屏记录 / 相关事件和驱动），各自滚动，不用一路滚到底 -->
         <Grid x:Name="HealthViewCrash" Visibility="Collapsed">
-          <Grid.ColumnDefinitions><ColumnDefinition Width="*" MaxWidth="1280"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
-          <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
           <Border Grid.Row="0" BorderBrush="#E5E5EA" BorderThickness="0,0,0,1" Margin="0,0,6,12">
             <StackPanel Orientation="Horizontal">
               <RadioButton x:Name="CTabVerdict" GroupName="ctab" Content="诊断结论" IsChecked="True" Style="{StaticResource SubTab}"/>
@@ -12762,54 +12854,72 @@ if ($script:mode -match '(?i)/autoclean') {
           </StackPanel>
           </ScrollViewer>
         </Grid>
-        <!-- 常见问题修复：左边选问题，右边只显示这个问题的修法 -->
+        <!-- 常见问题修复：左边选问题，右边是这个问题的修法：一步一张卡片，从轻到重往下排，按钮在每张卡片右边 -->
         <Grid x:Name="HealthViewFix" Visibility="Collapsed" Margin="0,0,6,10">
-          <Grid.ColumnDefinitions><ColumnDefinition Width="*" MaxWidth="1280"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
           <Border x:Name="HealthCardFix" Style="{StaticResource Card}" Padding="0">
             <DockPanel>
-              <StackPanel DockPanel.Dock="Top" Margin="24,18,24,0">
-                <TextBlock Text="常见问题修复" Style="{StaticResource CardHead}"/>
-                <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,0" Text="左边选遇到的问题，右边是对应的修法，从上往下、从轻到重地试。「只看」不改任何东西；「会改动」点了会先说明要改什么，能撤销的写明怎么撤销；「要重启」重启后才生效。用的都是 Windows 自带的命令，在看得见的窗口里运行。"/>
-                <Border x:Name="FixRecBox" Background="#E3EEFF" CornerRadius="10" Padding="16,12" Margin="0,12,0,0" Visibility="Collapsed">
+              <StackPanel DockPanel.Dock="Top" Margin="28,22,28,0">
+                <TextBlock Text="常见问题修复" Style="{StaticResource CardHead}" FontSize="17"/>
+                <TextBlock Style="{StaticResource Body}" Foreground="#6E6E73" Margin="0,6,0,0" Text="左边选遇到的问题，右边的修法从轻到重排，从上往下试。都是 Windows 自带的命令，在看得见的窗口里运行。"/>
+                <WrapPanel Margin="0,14,0,0">
+                  <StackPanel Orientation="Horizontal" Margin="0,0,28,6">
+                    <Border Background="#E5F4E9" CornerRadius="6" Padding="8,2,8,3" VerticalAlignment="Center"><TextBlock Text="只看" FontSize="11.5" FontWeight="SemiBold" Foreground="#1D7A35"/></Border>
+                    <TextBlock Text="不改任何东西" Style="{StaticResource Caption}" Foreground="#6E6E73" Margin="8,0,0,0"/>
+                  </StackPanel>
+                  <StackPanel Orientation="Horizontal" Margin="0,0,28,6">
+                    <Border Background="#FFF1DB" CornerRadius="6" Padding="8,2,8,3" VerticalAlignment="Center"><TextBlock Text="会改动" FontSize="11.5" FontWeight="SemiBold" Foreground="#995700"/></Border>
+                    <TextBlock Text="先说明要改什么，能撤销的写明怎么撤销" Style="{StaticResource Caption}" Foreground="#6E6E73" Margin="8,0,0,0"/>
+                  </StackPanel>
+                  <StackPanel Orientation="Horizontal" Margin="0,0,28,6">
+                    <Border Background="#FDEBEC" CornerRadius="6" Padding="8,2,8,3" VerticalAlignment="Center"><TextBlock Text="要重启" FontSize="11.5" FontWeight="SemiBold" Foreground="#C0101C"/></Border>
+                    <TextBlock Text="重启后才生效" Style="{StaticResource Caption}" Foreground="#6E6E73" Margin="8,0,0,0"/>
+                  </StackPanel>
+                </WrapPanel>
+                <Border x:Name="FixRecBox" Background="#E3EEFF" CornerRadius="12" Padding="18,14,18,8" Margin="0,14,0,0" Visibility="Collapsed">
                   <StackPanel>
                     <TextBlock x:Name="FixRecHead" Text="根据这台电脑的蓝屏诊断，建议先做" FontWeight="SemiBold" Foreground="#0A5BC4"/>
-                    <ItemsControl x:Name="FixRec" Margin="0,8,0,0">
+                    <ItemsControl x:Name="FixRec" Margin="0,10,0,0">
                       <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                       <ItemsControl.ItemTemplate><DataTemplate><Button Content="{Binding Name}" Tag="{Binding Id}" ToolTip="{Binding Tip}" IsEnabled="{Binding Enabled}" Style="{StaticResource Small}" Margin="0,0,8,6"/></DataTemplate></ItemsControl.ItemTemplate>
                     </ItemsControl>
                   </StackPanel>
                 </Border>
               </StackPanel>
-              <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="24,10,24,14" Text="这里的修复不删除任何文件、不结束任何程序、不装驱动；Windows 更新组件是改名留底，硬盘省电和快速启动随时能改回来。系统还原、内存诊断、设备管理器是 Windows 自己的工具，里面每一步都由你确认。每次运行都记在操作日志里。"/>
-              <Grid Margin="0,14,0,0">
-                <Grid.ColumnDefinitions><ColumnDefinition Width="230"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+              <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Caption}" TextWrapping="Wrap" LineHeight="19" Margin="28,12,28,16" Text="这里的修复不删除任何文件、不结束任何程序、不装驱动；Windows 更新组件是改名留底，硬盘省电和快速启动随时能改回来。系统还原、内存诊断、设备管理器是 Windows 自己的工具，里面每一步都由你确认。每次运行都记在操作日志里。"/>
+              <Grid Margin="0,20,0,0">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="260"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                 <Border Grid.Column="0" BorderBrush="#E5E5EA" BorderThickness="0,1,1,1">
-                  <ListBox x:Name="FixGroups" Background="Transparent" BorderThickness="0" Padding="10,8" ItemContainerStyle="{StaticResource NavItem}"
+                  <ListBox x:Name="FixGroups" Background="Transparent" BorderThickness="0" Padding="12,12" ItemContainerStyle="{StaticResource NavItem}"
                            ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                    <ListBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Title}" TextWrapping="Wrap" FontWeight="SemiBold"/></DataTemplate></ListBox.ItemTemplate>
+                    <ListBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Title}" TextWrapping="Wrap" LineHeight="20" Margin="2,2,2,2"/></DataTemplate></ListBox.ItemTemplate>
                   </ListBox>
                 </Border>
                 <Border Grid.Column="1" BorderBrush="#E5E5EA" BorderThickness="0,1,0,1">
                   <ScrollViewer x:Name="FixDetailScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
-                    <ContentControl x:Name="FixDetail" Content="{Binding SelectedItem, ElementName=FixGroups}" Margin="22,14,18,16" Focusable="False">
+                    <ContentControl x:Name="FixDetail" Content="{Binding SelectedItem, ElementName=FixGroups}" Margin="32,24,28,20" Focusable="False">
                       <ContentControl.ContentTemplate>
                         <DataTemplate>
-                          <StackPanel Grid.IsSharedSizeScope="True">
-                            <TextBlock Text="{Binding Title}" FontSize="16" TextWrapping="Wrap"/>
-                            <TextBlock Text="{Binding Desc}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,8"/>
+                          <StackPanel>
+                            <TextBlock Text="{Binding Title}" FontSize="20" FontWeight="SemiBold" TextWrapping="Wrap" TextOptions.TextFormattingMode="Ideal"/>
+                            <TextBlock Text="{Binding Desc}" Style="{StaticResource Body}" FontSize="14" LineHeight="23" Foreground="#424245" Margin="0,8,0,22"/>
                             <ItemsControl ItemsSource="{Binding Steps}">
                               <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                  <Grid Margin="0,8,0,0">
-                                    <Grid.ColumnDefinitions>
-                                      <ColumnDefinition Width="Auto" SharedSizeGroup="FixBtn"/>
-                                      <ColumnDefinition Width="Auto" SharedSizeGroup="FixTag"/>
-                                      <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <Button Grid.Column="0" Content="{Binding Name}" Tag="{Binding Id}" IsEnabled="{Binding Enabled}" ToolTip="{Binding Desc}" Style="{StaticResource Small}" HorizontalAlignment="Stretch" VerticalAlignment="Top"/>
-                                    <Border Grid.Column="1" Background="{Binding TagBg}" CornerRadius="6" Padding="7,2" Margin="10,3,0,0" VerticalAlignment="Top"><TextBlock Text="{Binding Tag}" FontSize="11.5" Foreground="{Binding TagFg}" HorizontalAlignment="Center"/></Border>
-                                    <TextBlock Grid.Column="2" Text="{Binding Desc}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="10,4,0,0"/>
-                                  </Grid>
+                                  <Border Background="#F7F7F9" CornerRadius="12" Padding="18,16,18,16" Margin="0,0,0,12">
+                                    <DockPanel>
+                                      <Button DockPanel.Dock="Right" Content="{Binding Act}" Tag="{Binding Id}" IsEnabled="{Binding Enabled}" Style="{StaticResource Secondary}" Padding="16,6" MinWidth="84" VerticalAlignment="Center" Margin="24,0,0,0"/>
+                                      <Border DockPanel.Dock="Left" Width="26" Height="26" CornerRadius="13" Background="#E8E8ED" VerticalAlignment="Top" Margin="0,0,14,0">
+                                        <TextBlock Text="{Binding No}" FontSize="12.5" FontWeight="SemiBold" Foreground="#3A3A3C" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                      </Border>
+                                      <StackPanel VerticalAlignment="Center">
+                                        <WrapPanel>
+                                          <TextBlock Text="{Binding Title}" FontSize="14.5" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,2,10,0"/>
+                                          <Border Background="{Binding TagBg}" CornerRadius="6" Padding="8,2,8,3" VerticalAlignment="Center" Margin="0,2,0,0"><TextBlock Text="{Binding Tag}" FontSize="11.5" FontWeight="SemiBold" Foreground="{Binding TagFg}"/></Border>
+                                        </WrapPanel>
+                                        <TextBlock Text="{Binding Desc}" Style="{StaticResource Body}" Foreground="#6E6E73" Margin="0,6,0,0"/>
+                                      </StackPanel>
+                                    </DockPanel>
+                                  </Border>
                                 </DataTemplate>
                               </ItemsControl.ItemTemplate>
                             </ItemsControl>
@@ -12826,8 +12936,7 @@ if ($script:mode -match '(?i)/autoclean') {
 
         <!-- 活动监控：表格占满这一页，表格自己滚动；点列名（CPU、内存、写入速度……）按那一列从高到低排 -->
         <Grid x:Name="HealthViewMon" Visibility="Collapsed" Margin="0,0,6,10">
-          <Grid.ColumnDefinitions><ColumnDefinition Width="*" MaxWidth="1280"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
-          <Border x:Name="HealthCardMon" Style="{StaticResource Card}" Padding="24,18,24,14">
+                    <Border x:Name="HealthCardMon" Style="{StaticResource Card}" Padding="24,18,24,14">
             <DockPanel>
               <DockPanel DockPanel.Dock="Top">
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top" Margin="20,0,0,0">
@@ -12860,7 +12969,7 @@ if ($script:mode -match '(?i)/autoclean') {
           </Border>
         </Grid>
         <ScrollViewer x:Name="HealthViewEvents" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
-          <StackPanel MaxWidth="1280" HorizontalAlignment="Left" Margin="0,0,6,14">
+          <StackPanel Margin="0,0,6,14">
           <!-- Windows 事件 -->
           <Border x:Name="HealthCardEvents" Style="{StaticResource Card}" Padding="24,20">
             <StackPanel>
@@ -13222,11 +13331,9 @@ if ($script:mode -match '(?i)/autoclean') {
         </Border>
       </WrapPanel>
       <Grid Grid.Row="1">
-        <Grid.ColumnDefinitions><ColumnDefinition Width="*" MaxWidth="900"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
         <TextBlock Style="{StaticResource PageSub}" TextWrapping="Wrap" Text="C 盘快满时提醒你，定期自动清理缓存。默认都关着。"/>
       </Grid>
       <Grid Grid.Row="2" Margin="0,18,0,0">
-        <Grid.ColumnDefinitions><ColumnDefinition Width="*" MaxWidth="900"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
         <ScrollViewer x:Name="AutoViewRemind" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
           <StackPanel Margin="0,0,6,14">
             <Border Style="{StaticResource Card}" Padding="24,20">
@@ -13283,11 +13390,12 @@ if ($script:mode -match '(?i)/autoclean') {
                 <TextBlock Text="C 盘空间变化" Style="{StaticResource CardHead}"/>
                 <TextBlock x:Name="HistInfo" Style="{StaticResource Caption}" Margin="0,4,0,12" TextWrapping="Wrap"/>
                 <Border Height="220" BorderBrush="#E5E5EA" BorderThickness="0,0,0,1">
+                  <!-- 柱子平均铺满整个宽度：窗口拉宽时柱子之间的空隙跟着变大，柱子最宽 28 -->
                   <ItemsControl x:Name="HistChart" VerticalAlignment="Bottom">
-                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Rows="1"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                       <DataTemplate>
-                        <Border Width="16" Height="{Binding H}" Background="{Binding Fill}" CornerRadius="4,4,0,0" Margin="2,0" VerticalAlignment="Bottom" ToolTip="{Binding Tip}"/>
+                        <Border MaxWidth="28" Height="{Binding H}" Background="{Binding Fill}" CornerRadius="4,4,0,0" Margin="2,0" VerticalAlignment="Bottom" ToolTip="{Binding Tip}"/>
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
                   </ItemsControl>
@@ -13400,7 +13508,6 @@ if ($script:mode -match '(?i)/autoclean') {
     <Grid x:Name="PageSettings" Grid.Column="1" Grid.Row="0" Visibility="Collapsed" Margin="30,24,30,14">
       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
       <Grid Grid.Row="0" Margin="0,0,0,16">
-        <Grid.ColumnDefinitions><ColumnDefinition Width="*" MaxWidth="1130"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
       <DockPanel>
         <Button x:Name="BtnSetReset" DockPanel.Dock="Right" Content="恢复默认显示" VerticalAlignment="Top" Margin="16,4,0,0"
                 ToolTip="页面、按钮、列和说明全部恢复成默认显示。外观、语言和扫描设置不变"/>
@@ -13411,7 +13518,7 @@ if ($script:mode -match '(?i)/autoclean') {
       </DockPanel>
       </Grid>
       <Grid Grid.Row="1">
-        <Grid.ColumnDefinitions><ColumnDefinition Width="214"/><ColumnDefinition Width="*" MaxWidth="900"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
+        <Grid.ColumnDefinitions><ColumnDefinition Width="214"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
         <Border Grid.Column="0" Style="{StaticResource Card}" Padding="8,0,8,10" Margin="0,0,16,0" VerticalAlignment="Top">
           <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
             <StackPanel>
@@ -13447,20 +13554,20 @@ if ($script:mode -match '(?i)/autoclean') {
             <Border x:Name="SetCardLook" Style="{StaticResource Card}" Padding="24,20" Margin="0" Visibility="Collapsed">
               <StackPanel>
                 <TextBlock Text="外观和语言" Style="{StaticResource CardHead}"/>
-                <DockPanel Margin="0,14,0,0">
-                  <Border DockPanel.Dock="Right" Style="{StaticResource SegBox}" VerticalAlignment="Center" Margin="20,0,0,0">
-                    <StackPanel Orientation="Horizontal">
-                      <RadioButton x:Name="SetThemeLight" GroupName="settheme" Content="浅色" Style="{StaticResource Seg}"/>
-                      <RadioButton x:Name="SetThemeDark" GroupName="settheme" Content="深色" Style="{StaticResource Seg}"/>
-                      <RadioButton x:Name="SetThemeSystem" GroupName="settheme" Content="跟随系统" Style="{StaticResource Seg}"/>
-                    </StackPanel>
-                  </Border>
-                  <StackPanel VerticalAlignment="Center">
-                    <TextBlock Text="外观" Style="{StaticResource SetName}"/>
-                    <TextBlock Style="{StaticResource SetNote}" Text="跟随系统时照 Windows 的「选择应用模式」。更改后本工具会重新打开。"/>
-                  </StackPanel>
-                </DockPanel>
-                <DockPanel Margin="0,16,0,0">
+                <TextBlock Text="外观" Style="{StaticResource SetName}" Margin="0,14,0,0"/>
+                <TextBlock Style="{StaticResource SetNote}" Text="跟随系统时照 Windows 的「选择应用模式」。更改后本工具会重新打开。"/>
+                <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                  <RadioButton x:Name="SetThemeLight" GroupName="settheme" Style="{StaticResource ThemeCard}">
+                    <StackPanel><Border x:Name="SetThemeLightPic" Style="{StaticResource ThemePic}"/><TextBlock Text="浅色" Style="{StaticResource ThemeLbl}"/></StackPanel>
+                  </RadioButton>
+                  <RadioButton x:Name="SetThemeDark" GroupName="settheme" Style="{StaticResource ThemeCard}">
+                    <StackPanel><Border x:Name="SetThemeDarkPic" Style="{StaticResource ThemePic}"/><TextBlock Text="深色" Style="{StaticResource ThemeLbl}"/></StackPanel>
+                  </RadioButton>
+                  <RadioButton x:Name="SetThemeSystem" GroupName="settheme" Style="{StaticResource ThemeCard}">
+                    <StackPanel><Border x:Name="SetThemeSystemPic" Style="{StaticResource ThemePic}"/><TextBlock Text="跟随系统" Style="{StaticResource ThemeLbl}"/></StackPanel>
+                  </RadioButton>
+                </StackPanel>
+                <DockPanel Margin="0,22,0,0">
                   <Border DockPanel.Dock="Right" Style="{StaticResource SegBox}" VerticalAlignment="Center" Margin="20,0,0,0">
                     <StackPanel Orientation="Horizontal">
                       <RadioButton x:Name="SetLangZh" GroupName="setlang" Style="{StaticResource Seg}"/>
@@ -13635,7 +13742,7 @@ if ($script:mode -match '(?i)/autoclean') {
         <TextBlock Style="{StaticResource PageSub}" Text="怎么用，哪些东西不会动，以及怎么反馈问题。"/>
       </StackPanel>
       <Grid Grid.Row="1">
-        <Grid.ColumnDefinitions><ColumnDefinition Width="214"/><ColumnDefinition Width="*" MaxWidth="900"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
+        <Grid.ColumnDefinitions><ColumnDefinition Width="214"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
         <Border Grid.Column="0" Style="{StaticResource Card}" Padding="8,0,8,10" Margin="0,0,16,0" VerticalAlignment="Top">
           <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
             <StackPanel x:Name="HelpNav">
@@ -13690,10 +13797,8 @@ if ($script:mode -match '(?i)/autoclean') {
               <Border Style="{StaticResource Card}" Padding="36,30,36,36" Margin="0,20,0,0">
                 <StackPanel>
                   <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE768;" FontFamily="{StaticResource Icons}" FontSize="19" Foreground="#0071E3" VerticalAlignment="Center" Margin="0,1,12,0"/><TextBlock Text="快速上手" Style="{StaticResource HelpHead}"/></StackPanel>
-                  <Grid Margin="0,20,0,0">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                    <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource HelpTile}">
+                  <Grid Tag="cols:230:12:12:4" Margin="0,20,0,0">
+                    <Border Style="{StaticResource HelpTile}">
                       <DockPanel>
                         <Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0"><TextBlock Text="1" Foreground="White" FontSize="12.5" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                         <StackPanel>
@@ -13702,7 +13807,7 @@ if ($script:mode -match '(?i)/autoclean') {
                         </StackPanel>
                       </DockPanel>
                     </Border>
-                    <Border Grid.Row="0" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <DockPanel>
                         <Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0"><TextBlock Text="2" Foreground="White" FontSize="12.5" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                         <StackPanel>
@@ -13711,7 +13816,7 @@ if ($script:mode -match '(?i)/autoclean') {
                         </StackPanel>
                       </DockPanel>
                     </Border>
-                    <Border Grid.Row="2" Grid.Column="0" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <DockPanel>
                         <Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0"><TextBlock Text="3" Foreground="White" FontSize="12.5" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                         <StackPanel>
@@ -13720,7 +13825,7 @@ if ($script:mode -match '(?i)/autoclean') {
                         </StackPanel>
                       </DockPanel>
                     </Border>
-                    <Border Grid.Row="2" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <DockPanel>
                         <Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0"><TextBlock Text="4" Foreground="White" FontSize="12.5" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                         <StackPanel>
@@ -13745,48 +13850,58 @@ if ($script:mode -match '(?i)/autoclean') {
                   </DockPanel>
                   <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
                   <TextBlock Text="扫描结果" Style="{StaticResource HelpGroup}" Margin="0,22,0,0"/>
-                  <Grid Margin="0,14,0,0">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="104"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                    <Border Grid.Row="0" Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="安全清理" FontSize="13" Foreground="#1D7A35" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,16"><Run>缓存、临时文件和日志。删了软件会自动重建。</Run></TextBlock>
-                    <Border Grid.Row="1" Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="谨慎清理" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,16"><Run>浏览器缓存、缩略图、着色器和下载缓存。删了要重新生成，第一次打开会慢一点。</Run></TextBlock>
-                    <Border Grid.Row="2" Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="需确认" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,16"><Run>有代价的项目，默认跳过。比如删掉 Windows.old 后，不能再退回旧系统。</Run></TextBlock>
-                    <Border Grid.Row="3" Style="{StaticResource HelpPill}" Background="#E8F1FC"><TextBlock Text="只能搬走" FontSize="13" Foreground="#0B5CAD" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="3" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,16"><Run>聊天记录和其他大文件夹。不能删，只能整体搬到其他盘。</Run></TextBlock>
-                    <Border Grid.Row="4" Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="受保护" FontSize="13" Foreground="#1D7A35" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="4" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>个人文件夹、系统文件夹和软件的安装文件夹，任何清理都不碰。</Run></TextBlock>
+                  <Grid Tag="cols:400:40:16:2" Margin="0,14,0,0">
+                    <DockPanel>
+                      <Border DockPanel.Dock="Left" Width="104" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="安全清理" FontSize="13" Foreground="#1D7A35" TextWrapping="Wrap"/></Border></Border>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>缓存、临时文件和日志。删了软件会自动重建。</Run></TextBlock>
+                    </DockPanel>
+                    <DockPanel>
+                      <Border DockPanel.Dock="Left" Width="104" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="谨慎清理" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border></Border>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>浏览器缓存、缩略图、着色器和下载缓存。删了要重新生成，第一次打开会慢一点。</Run></TextBlock>
+                    </DockPanel>
+                    <DockPanel>
+                      <Border DockPanel.Dock="Left" Width="104" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="需确认" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border></Border>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>有代价的项目，默认跳过。比如删掉 Windows.old 后，不能再退回旧系统。</Run></TextBlock>
+                    </DockPanel>
+                    <DockPanel>
+                      <Border DockPanel.Dock="Left" Width="104" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#E8F1FC"><TextBlock Text="只能搬走" FontSize="13" Foreground="#0B5CAD" TextWrapping="Wrap"/></Border></Border>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>聊天记录和其他大文件夹。不能删，只能整体搬到其他盘。</Run></TextBlock>
+                    </DockPanel>
+                    <DockPanel>
+                      <Border DockPanel.Dock="Left" Width="104" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="受保护" FontSize="13" Foreground="#1D7A35" TextWrapping="Wrap"/></Border></Border>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>个人文件夹、系统文件夹和软件的安装文件夹，任何清理都不碰。</Run></TextBlock>
+                    </DockPanel>
                   </Grid>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="删除前看清单"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>确认时点「看文件清单」，可以看到会删掉哪些文件，完整清单能存成文本文件。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="先放进回收站"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>在设置的「清理列表」里打开后，手动清理删掉的文件先进回收站，删错了能恢复。放不进回收站的不会删，日志里写明原因。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="打开所在位置"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>双击一行，打开它所在的文件夹；右键可以复制路径。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="清理哪些缓存"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Windows 的临时文件、更新缓存和日志，常见浏览器、游戏平台和软件的缓存，以及开发工具的下载缓存。只删缓存，不碰 Cookie、历史记录、密码和设置。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="需确认的项目"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>Windows.old、回收站、Windows Installer 孤儿安装包、旧版驱动包、失效的快捷方式和事件日志等。默认跳过，看清说明再选。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="自己加文件夹"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>在设置的「清理列表」里添加要清理或要排除的文件夹。添加的文件夹只清里面的东西，文件夹本身保留。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="扫描很快"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>文件夹大小直接从 C 盘的文件表里读，一般几秒钟就扫完。真正删除时，每一项都会重新检查。</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,26,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="删除前看清单"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>确认时点「看文件清单」，可以看到会删掉哪些文件，完整清单能存成文本文件。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="先放进回收站"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>在设置的「清理列表」里打开后，手动清理删掉的文件先进回收站，删错了能恢复。放不进回收站的不会删，日志里写明原因。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="打开所在位置"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>双击一行，打开它所在的文件夹；右键可以复制路径。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="清理哪些缓存"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Windows 的临时文件、更新缓存和日志，常见浏览器、游戏平台和软件的缓存，以及开发工具的下载缓存。只删缓存，不碰 Cookie、历史记录、密码和设置。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="需确认的项目"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Windows.old、回收站、Windows Installer 孤儿安装包、旧版驱动包、失效的快捷方式和事件日志等。默认跳过，看清说明再选。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="自己加文件夹"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>在设置的「清理列表」里添加要清理或要排除的文件夹。添加的文件夹只清里面的东西，文件夹本身保留。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="扫描很快"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>文件夹大小直接从 C 盘的文件表里读，一般几秒钟就扫完。真正删除时，每一项都会重新检查。</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                   <Border Background="#EFF8F1" BorderBrush="#CFE9D6" BorderThickness="1" CornerRadius="12" Padding="18,16,22,17" Margin="0,26,0,0">
                     <DockPanel>
                       <TextBlock DockPanel.Dock="Left" Text="&#xEA18;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#248A3D" VerticalAlignment="Top" Margin="0,3,14,0"/>
@@ -13797,10 +13912,12 @@ if ($script:mode -match '(?i)/autoclean') {
                     </DockPanel>
                   </Border>
                   <TextBlock Text="搬聊天记录" Style="{StaticResource HelpGroup}" Margin="0,40,0,0"/>
-                  <StackPanel Margin="0,14,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="支持的软件"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>微信、QQ、企业微信、腾讯会议、飞书、钉钉、Telegram、Discord、Slack、Signal、LINE、Viber、KakaoTalk 和 Zoom。应用商店版请在 Windows 设置的「应用」里用「移动」。</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,14,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="支持的软件"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>微信、QQ、企业微信、腾讯会议、飞书、钉钉、Telegram、Discord、Slack、Signal、LINE、Viber、KakaoTalk 和 Zoom。应用商店版请在 Windows 设置的「应用」里用「移动」。</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                   <StackPanel Margin="0,26,0,0">
                     <TextBlock Style="{StaticResource HelpLead}" Text="搬的过程"/>
                     <WrapPanel Margin="0,12,0,0">
@@ -13816,10 +13933,12 @@ if ($script:mode -match '(?i)/autoclean') {
                     </WrapPanel>
                     <TextBlock Style="{StaticResource HelpBody}" Margin="0,4,0,0"><Run>软件照常从原来的位置读写，不用改设置。核对不一致时，不会删除原文件夹。</Run></TextBlock>
                   </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="目标盘"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>默认选空闲最多的本机硬盘，也可以换一块盘或选一个文件夹。网络盘、网盘和 U 盘不行。</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,26,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="目标盘"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>默认选空闲最多的本机硬盘，也可以换一块盘或选一个文件夹。网络盘、网盘和 U 盘不行。</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                   <Border Background="#FFF8EC" BorderBrush="#F5E1BC" BorderThickness="1" CornerRadius="12" Padding="18,16,22,17" Margin="0,26,0,0">
                     <DockPanel>
                       <TextBlock DockPanel.Dock="Left" Text="&#xE7BA;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#B25E00" VerticalAlignment="Top" Margin="0,3,14,0"/>
@@ -13842,31 +13961,35 @@ if ($script:mode -match '(?i)/autoclean') {
                   </DockPanel>
                   <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
                   <TextBlock Text="查找" Style="{StaticResource HelpGroup}" Margin="0,22,0,0"/>
-                  <StackPanel Margin="0,14,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="位置和条件"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>选好查找位置、文件类型和大小。系统、软件和开发环境的文件夹会自动跳过。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="怎样算重复"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>默认名字和内容都要相同；选「只看内容」时，名字不同也算。内容都要逐字节相同。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="快速和完整比对"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>「快速」对大文件只抽样比对，删除前再逐字节核对；「完整比对」每个文件都读完。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="相似照片"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>找看起来一样的照片，比如不同分辨率或重新压缩过的。相似不等于相同，不会自动勾选，只能放进回收站或归档。</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,14,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="位置和条件"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>选好查找位置、文件类型和大小。系统、软件和开发环境的文件夹会自动跳过。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="怎样算重复"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>默认名字和内容都要相同；选「只看内容」时，名字不同也算。内容都要逐字节相同。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="快速和完整比对"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>「快速」对大文件只抽样比对，删除前再逐字节核对；「完整比对」每个文件都读完。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="相似照片"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>找看起来一样的照片，比如不同分辨率或重新压缩过的。相似不等于相同，不会自动勾选，只能放进回收站或归档。</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                   <TextBlock Text="处理" Style="{StaticResource HelpGroup}" Margin="0,40,0,0"/>
-                  <StackPanel Margin="0,14,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="留哪一份"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>默认每组留最新的一份。也可以留最早的、留 C 盘以外的、留某个文件夹里的，或者自己勾选。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="删除、归档或合并"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>默认放进回收站，能恢复。也可以把多余的归档到一个文件夹，或者「合并为一份」：每个位置的文件都还在，只占一份空间。</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,14,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="留哪一份"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>默认每组留最新的一份。也可以留最早的、留 C 盘以外的、留某个文件夹里的，或者自己勾选。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="删除、归档或合并"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>默认放进回收站，能恢复。也可以把多余的归档到一个文件夹，或者「合并为一份」：每个位置的文件都还在，只占一份空间。</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                   <Border Background="#EFF8F1" BorderBrush="#CFE9D6" BorderThickness="1" CornerRadius="12" Padding="18,16,22,17" Margin="0,26,0,0">
                     <DockPanel>
                       <TextBlock DockPanel.Dock="Left" Text="&#xEA18;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#248A3D" VerticalAlignment="Top" Margin="0,3,14,0"/>
@@ -13888,82 +14011,80 @@ if ($script:mode -match '(?i)/autoclean') {
                     </StackPanel>
                   </DockPanel>
                   <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
-                  <Grid Margin="0,18,0,0">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                    <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource HelpTile}">
+                  <Grid Tag="cols:280:12:12:3" Margin="0,18,0,0">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="系统压缩"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>压缩 Windows 系统文件，通常省 2 到 4 GB，不影响使用。</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Grid.Row="0" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="页面文件"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>把 pagefile.sys 移到其他盘，重启后生效。</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Grid.Row="2" Grid.Column="0" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="休眠文件"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>只留快速启动能缩小一半；关闭休眠会删掉它。</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Grid.Row="2" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="系统还原点"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>看还原点占了多少，到 Windows 的系统保护里调整。本工具不删还原点。</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Grid.Row="4" Grid.Column="0" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="压缩文件夹"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>NTFS 压缩。文件照常使用，只是占得少，适合文档和旧项目。</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Grid.Row="4" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="虚拟磁盘"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>压缩 WSL、Docker 的虚拟磁盘；模拟器和虚拟机可以整个搬走。</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Grid.Row="6" Grid.Column="0" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="合并重复文件"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>同一块盘上的重复文件只占一份空间，适合不再修改的照片和视频。</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Grid.Row="6" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="OneDrive 仅在线"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>本地副本改成只在云端，打开时再下载。</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Grid.Row="8" Grid.Column="0" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="保留的存储"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>把 Windows 为更新预留的约 7 GB 还给你，随时能恢复。</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Grid.Row="8" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="组件存储分析"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>让 Windows 算一下 WinSxS 能回收多少，再决定要不要清理。</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Grid.Row="10" Grid.Column="0" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="蓝屏小转储"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>蓝屏时只存 256 KB 的小转储，不再生成几 GB 的文件。</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Grid.Row="10" Grid.Column="2" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="临时文件夹"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>把 TEMP 改到其他盘，注销再登录后生效。</Run></TextBlock>
                       </StackPanel>
                     </Border>
-                    <Border Grid.Row="12" Grid.Column="0" Grid.ColumnSpan="3" Style="{StaticResource HelpTile}">
+                    <Border Style="{StaticResource HelpTile}">
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="WSL 搬到其他盘"/>
                         <TextBlock Style="{StaticResource HelpBody}"><Run>用 wsl --manage --move 搬走整个发行版，需要 WSL 2.5 以上。</Run></TextBlock>
@@ -13983,60 +14104,66 @@ if ($script:mode -match '(?i)/autoclean') {
                   </DockPanel>
                   <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
                   <TextBlock Text="扫描" Style="{StaticResource HelpGroup}" Margin="0,22,0,0"/>
-                  <StackPanel Margin="0,14,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="扫描一块盘"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>选一块盘点「扫描」，或者点上方的盘卡片。只是查看，不改动任何东西。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="快速扫描"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>NTFS 盘直接读文件表，几十万个文件几秒钟就扫完；读不了时自动改为逐个文件夹扫描。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="盘的概览"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>扫完整块盘后，上方显示已用空间里系统与软件、个人文件、可清理的缓存和其他各占多少。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="值得一看"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>列出缓存、依赖包、构建产物和临时文件这类大文件夹，点一下就过去。只按名字判断，删之前先看看。</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,14,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="扫描一块盘"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>选一块盘点「扫描」，或者点上方的盘卡片。只是查看，不改动任何东西。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="快速扫描"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>NTFS 盘直接读文件表，几十万个文件几秒钟就扫完；读不了时自动改为逐个文件夹扫描。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="盘的概览"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>扫完整块盘后，上方显示已用空间里系统与软件、个人文件、可清理的缓存和其他各占多少。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="值得一看"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>列出缓存、依赖包、构建产物和临时文件这类大文件夹，点一下就过去。只按名字判断，删之前先看看。</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                   <TextBlock Text="浏览" Style="{StaticResource HelpGroup}" Margin="0,40,0,0"/>
-                  <StackPanel Margin="0,14,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="往里看"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>双击文件夹进入下一层。后退、前进可以用鼠标侧键或 Alt+←、Alt+→，路径上的每一层都能点。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="方块图"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>方块越大，占得越多。颜色表示文件夹里是哪一类东西，带斜线的是删了能腾出空间的缓存。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="找文件"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>在 1 MB 以上的文件里，按大小、修改时间、类型和名称找。也可以只看聊天软件里的大文件。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="按类型"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>把全盘文件按视频、图片、文档、压缩包等分成十类，看每类占多少。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="最近改动、和上次比"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>「最近改动」列出这几天新建、改写文件最多的文件夹；「和上次比」找出变大的文件夹，说明多出的空间主要在哪。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="导出"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>把列表导出成 CSV，或把整块盘的情况存成网页报告。</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,14,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="往里看"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>双击文件夹进入下一层。后退、前进可以用鼠标侧键或 Alt+←、Alt+→，路径上的每一层都能点。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="方块图"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>方块越大，占得越多。颜色表示文件夹里是哪一类东西，带斜线的是删了能腾出空间的缓存。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="找文件"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>在 1 MB 以上的文件里，按大小、修改时间、类型和名称找。也可以只看聊天软件里的大文件。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="按类型"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>把全盘文件按视频、图片、文档、压缩包等分成十类，看每类占多少。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="最近改动、和上次比"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>「最近改动」列出这几天新建、改写文件最多的文件夹；「和上次比」找出变大的文件夹，说明多出的空间主要在哪。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="导出"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>把列表导出成 CSV，或把整块盘的情况存成网页报告。</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                   <TextBlock Text="选中和删除" Style="{StaticResource HelpGroup}" Margin="0,40,0,0"/>
-                  <StackPanel Margin="0,14,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="勾选"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>点行前面的方框勾选；按住鼠标左键或右键上下拖，一次勾上连着的几行。方框可以在设置里关掉。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="待删清单"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>在不同文件夹里挑好要删的，先放进待删清单，下面会一直显示删完以后大约还剩多少空间。看过再一起删。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="删除"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>可以移到回收站，也可以永久删除，都要先确认。要删的是 git 仓库时会提醒你。</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,14,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="勾选"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>只有点行前面的方框才会勾上，点行的其他地方不会。按住鼠标左键或右键上下拖，一次勾上连着的几行。方框可以在设置里关掉。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="待删清单"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>在不同文件夹里挑好要删的，先放进待删清单，下面会一直显示删完以后大约还剩多少空间。看过再一起删。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="删除"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>可以移到回收站，也可以永久删除，都要先确认。要删的是 git 仓库时会提醒你。</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                   <Border Background="#F5F5F7" BorderBrush="#E5E5EA" BorderThickness="1" CornerRadius="12" Padding="18,16,22,17" Margin="0,26,0,0">
                     <DockPanel>
                       <TextBlock DockPanel.Dock="Left" Text="&#xE72E;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#6E6E73" VerticalAlignment="Top" Margin="0,3,14,0"/>
@@ -14046,10 +14173,12 @@ if ($script:mode -match '(?i)/autoclean') {
                       </StackPanel>
                     </DockPanel>
                   </Border>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="实际占用"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>快速扫描时会注明压缩和只在云端的文件实际占多少，以及硬链接。「空间明细」说明已用空间为什么和文件大小相加对不上。</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,26,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="实际占用"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>快速扫描时会注明压缩和只在云端的文件实际占多少，以及硬链接。「空间明细」说明已用空间为什么和文件大小相加对不上。</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                 </StackPanel>
               </Border>
               <Border x:Name="HelpSec4" Style="{StaticResource Card}" Padding="36,30,36,36" Visibility="Collapsed">
@@ -14062,35 +14191,39 @@ if ($script:mode -match '(?i)/autoclean') {
                     </StackPanel>
                   </DockPanel>
                   <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
-                  <StackPanel Margin="0,18,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="软件列表"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>按占用空间从大到小列出所有软件，可以搜索，也可以只看装在 C 盘的。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="一次处理几个"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>勾选几个，或按住鼠标左键拖选。卸载时会依次打开每个软件自己的卸载程序。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="卸载和残留"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>卸载后点「检查残留」，找出留下的文件夹，确认后移到回收站。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="搬到其他盘"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>把装在 C 盘的软件整个搬到其他盘，快捷方式、卸载和更新照常可用。带服务或驱动的、微软自己的软件等不适合搬，会写明原因。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="检查新版本"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>用 Windows 自带的 winget 查新版本，在终端里升级。只在你点的时候联网。</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,18,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="软件列表"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>按占用空间从大到小列出所有软件，可以搜索，也可以只看装在 C 盘的。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="一次处理几个"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>勾选几个，或按住鼠标左键拖选。卸载时会依次打开每个软件自己的卸载程序。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="卸载和残留"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>卸载后点「检查残留」，找出留下的文件夹，确认后移到回收站。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="搬到其他盘"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>把装在 C 盘的软件整个搬到其他盘，快捷方式、卸载和更新照常可用。带服务或驱动的、微软自己的软件等不适合搬，会写明原因。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="检查新版本"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>用 Windows 自带的 winget 查新版本，在终端里升级。只在你点的时候联网。</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                   <TextBlock Text="启动项和扩展" Style="{StaticResource HelpGroup}" Margin="0,40,0,0"/>
-                  <StackPanel Margin="0,14,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="开机启动、计划任务、右键菜单"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>列出第三方的启动项、计划任务和右键菜单扩展。禁用不删除任何东西，随时可以重新启用。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="残留文件夹"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>找已卸载软件可能留下的文件夹。只是猜测，先打开看看，再移到回收站。</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,14,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="开机启动、计划任务、右键菜单"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>列出第三方的启动项、计划任务和右键菜单扩展。禁用不删除任何东西，随时可以重新启用。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="残留文件夹"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>找已卸载软件可能留下的文件夹。只是猜测，先打开看看，再移到回收站。</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                 </StackPanel>
               </Border>
               <Border x:Name="HelpSec5" Style="{StaticResource Card}" Padding="36,30,36,36" Visibility="Collapsed">
@@ -14103,30 +14236,32 @@ if ($script:mode -match '(?i)/autoclean') {
                     </StackPanel>
                   </DockPanel>
                   <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
-                  <StackPanel Margin="0,18,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="硬件"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>CPU、内存、硬盘、电池、显卡和 Windows 的状态，按绿、橙、红标出，读不到的写明读不到。打开本工具后会在后台先读好。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="开机用时"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>最近几次开机用了多久，以及拖慢开机的程序。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="蓝屏和崩溃"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>解析蓝屏转储，结合事件日志和硬盘健康给出诊断结论。每条结论下面有「按建议处理」和「需要你自己做的」。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="诊断包"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>把转储、日志和系统信息打成一个 zip，发给能帮你的人。里面有电脑名和装过的软件，只发给信任的人。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="常见问题修复"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>按问题列出常用的修法，都是 Windows 自带的命令，在看得见的窗口里运行。会改动系统的先说明，再由你确认。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="活动监控"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>每 3 秒看一次各程序的 CPU、内存和磁盘写入，找出是谁在拖慢电脑。</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,18,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="硬件"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>CPU、内存、硬盘、电池、显卡和 Windows 的状态，按绿、橙、红标出，读不到的写明读不到。打开本工具后会在后台先读好。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="开机用时"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>最近几次开机用了多久，以及拖慢开机的程序。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="蓝屏和崩溃"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>解析蓝屏转储，结合事件日志和硬盘健康给出诊断结论。每条结论下面有「按建议处理」和「需要你自己做的」。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="诊断包"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>把转储、日志和系统信息打成一个 zip，发给能帮你的人。里面有电脑名和装过的软件，只发给信任的人。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="常见问题修复"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>按问题列出常用的修法，都是 Windows 自带的命令，在看得见的窗口里运行。会改动系统的先说明，再由你确认。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="活动监控"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>每 3 秒看一次各程序的 CPU、内存和磁盘写入，找出是谁在拖慢电脑。</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                   <Border Background="#EFF8F1" BorderBrush="#CFE9D6" BorderThickness="1" CornerRadius="12" Padding="18,16,22,17" Margin="0,26,0,0">
                     <DockPanel>
                       <TextBlock DockPanel.Dock="Left" Text="&#xEA18;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#248A3D" VerticalAlignment="Top" Margin="0,3,14,0"/>
@@ -14148,24 +14283,30 @@ if ($script:mode -match '(?i)/autoclean') {
                     </StackPanel>
                   </DockPanel>
                   <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
-                  <StackPanel Margin="0,18,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="可以搬的"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>列出 C 盘上还能搬走的聊天记录、软件和大文件夹。勾选后选好目标盘，点「搬到其他盘」。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="不适合搬的软件"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>单独列出，并写明原因。</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,18,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="可以搬的"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>列出 C 盘上还能搬走的聊天记录、软件和大文件夹。勾选后选好目标盘，点「搬到其他盘」。按住鼠标左键上下拖，一次勾上连着的几行。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="不适合搬的软件"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>单独列出，并写明原因。</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                   <TextBlock Text="已经搬走的" Style="{StaticResource HelpGroup}" Margin="0,40,0,0"/>
-                  <Grid Margin="0,14,0,0">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="88"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                    <Border Grid.Row="0" Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="正常" FontSize="13" Foreground="#1D7A35" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,16"><Run>数据在目标盘上，C 盘只留一个链接。需要时可以搬回 C 盘。</Run></TextBlock>
-                    <Border Grid.Row="1" Style="{StaticResource HelpPill}" Background="#FDEBEC"><TextBlock Text="链接断了" FontSize="13" Foreground="#C0101C" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,16"><Run>目标盘没插着，或者盘符变了。插回去就好，也可以修复链接。</Run></TextBlock>
-                    <Border Grid.Row="2" Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="没搬完" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border>
-                    <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource HelpBody}" Margin="0,0,0,0"><Run>原文件夹还在，目标盘上有一份副本。可以再搬一次，或删掉多余的副本。</Run></TextBlock>
+                  <Grid Tag="cols:400:40:16:2" Margin="0,14,0,0">
+                    <DockPanel>
+                      <Border DockPanel.Dock="Left" Width="88" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#E5F4E9"><TextBlock Text="正常" FontSize="13" Foreground="#1D7A35" TextWrapping="Wrap"/></Border></Border>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>数据在目标盘上，C 盘只留一个链接。需要时可以搬回 C 盘。</Run></TextBlock>
+                    </DockPanel>
+                    <DockPanel>
+                      <Border DockPanel.Dock="Left" Width="88" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#FDEBEC"><TextBlock Text="链接断了" FontSize="13" Foreground="#C0101C" TextWrapping="Wrap"/></Border></Border>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>目标盘没插着，或者盘符变了。插回去就好，也可以修复链接。</Run></TextBlock>
+                    </DockPanel>
+                    <DockPanel>
+                      <Border DockPanel.Dock="Left" Width="88" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="没搬完" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border></Border>
+                      <TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>原文件夹还在，目标盘上有一份副本。可以再搬一次，或删掉多余的副本。</Run></TextBlock>
+                    </DockPanel>
                   </Grid>
                 </StackPanel>
               </Border>
@@ -14179,22 +14320,24 @@ if ($script:mode -match '(?i)/autoclean') {
                     </StackPanel>
                   </DockPanel>
                   <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
-                  <StackPanel Margin="0,18,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="空间不足提醒"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>C 盘低于你设定的值时，在屏幕右下角提醒，每天最多一次。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="垃圾提醒"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>临时文件和缓存超过你设定的大小时提醒。只统计，不删除。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="定期自动清理"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>每周或每天自动清一次临时文件、缓存和日志。不碰个人文件夹，也不搬家。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="空间变化"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>记下每天 C 盘的剩余空间，画成最近 30 天的柱状图。</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,18,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="空间不足提醒"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>C 盘低于你设定的值时，在屏幕右下角提醒，每天最多一次。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="垃圾提醒"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>临时文件和缓存超过你设定的大小时提醒。只统计，不删除。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="定期自动清理"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>每周或每天自动清一次临时文件、缓存和日志。不碰个人文件夹，也不搬家。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="空间变化"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>记下每天 C 盘的剩余空间，画成最近 30 天的柱状图。</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                   <Border Background="#EEF5FD" BorderBrush="#D2E3FA" BorderThickness="1" CornerRadius="12" Padding="18,16,22,17" Margin="0,26,0,0">
                     <DockPanel>
                       <TextBlock DockPanel.Dock="Left" Text="&#xE946;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Top" Margin="0,3,14,0"/>
@@ -14216,18 +14359,20 @@ if ($script:mode -match '(?i)/autoclean') {
                     </StackPanel>
                   </DockPanel>
                   <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
-                  <StackPanel Margin="0,18,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="记什么"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>每次删除、搬家、合并、压缩、卸载和系统设置的改动：时间、做了什么、对哪个文件夹、结果如何。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="查找"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>按类别、时间和关键字查找。日志是普通的文本文件，每月一个。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="保存多久"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>默认半年，可以改。超过保存时间的记录会自动删除。</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,18,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="记什么"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>每次删除、搬家、合并、压缩、卸载和系统设置的改动：时间、做了什么、对哪个文件夹、结果如何。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="查找"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>按类别、时间和关键字查找。日志是普通的文本文件，每月一个。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="保存多久"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>默认半年，可以改。超过保存时间的记录会自动删除。</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                 </StackPanel>
               </Border>
               <Border x:Name="HelpSec9" Style="{StaticResource Card}" Padding="36,30,36,36" Visibility="Collapsed">
@@ -14240,29 +14385,31 @@ if ($script:mode -match '(?i)/autoclean') {
                     </StackPanel>
                   </DockPanel>
                   <Border Height="1" Background="#EDEDF0" Margin="0,24,0,6"/>
-                  <StackPanel Margin="0,18,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="使用模式"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>决定界面上有多少功能。随时可以换，不会丢任何设置和记录。</Run></TextBlock>
-                    <DockPanel Margin="0,10,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="20" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#8E8E93"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">普通用户</Run><Run>：清理 C 盘、省空间、空间地图、软件管理、系统健康和帮助。</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,7,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="20" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#8E8E93"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">工程师</Run><Run>：再加上重复文件、搬家管理、自动提醒、操作日志，以及各页的进阶功能。</Run></TextBlock></DockPanel>
-                    <DockPanel Margin="0,7,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="20" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#8E8E93"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">开发者和 IT</Run><Run>：全部功能。</Run></TextBlock></DockPanel>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="外观和语言"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>浅色、深色或跟随系统；中文或 English。更改后本工具会重新打开。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="界面上显示什么"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>用不上的页面、按钮和说明都可以关掉，随时能恢复。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="扫描和查重"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>快速扫描直接读文件表；查重复文件时可以让着其他程序，不拖慢正在用的软件。</Run></TextBlock>
-                  </StackPanel>
-                  <StackPanel Margin="0,26,0,0">
-                    <TextBlock Style="{StaticResource HelpLead}" Text="清理列表"/>
-                    <TextBlock Style="{StaticResource HelpBody}"><Run>删除时先放进回收站，以及添加要清理或要排除的文件夹。</Run></TextBlock>
-                  </StackPanel>
+                  <Grid Tag="cols:330:44:26:3" Margin="0,18,0,0">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="使用模式"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>决定界面上有多少功能。随时可以换，不会丢任何设置和记录。</Run></TextBlock>
+                      <DockPanel Margin="0,10,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="20" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#8E8E93"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">普通用户</Run><Run>：清理 C 盘、省空间、空间地图、软件管理、系统健康和帮助。</Run></TextBlock></DockPanel>
+                      <DockPanel Margin="0,7,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="20" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#8E8E93"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">工程师</Run><Run>：再加上重复文件、搬家管理、自动提醒、操作日志，以及各页的进阶功能。</Run></TextBlock></DockPanel>
+                      <DockPanel Margin="0,7,0,0"><TextBlock DockPanel.Dock="Left" Text="•" Width="20" Style="{StaticResource HelpBody}" Margin="2,0,0,0" Foreground="#8E8E93"/><TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run FontWeight="SemiBold" Foreground="#1D1D1F">开发者和 IT</Run><Run>：全部功能。</Run></TextBlock></DockPanel>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="外观和语言"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>浅色、深色或跟随系统；中文或 English。更改后本工具会重新打开。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="界面上显示什么"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>用不上的页面、按钮和说明都可以关掉，随时能恢复。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="扫描和查重"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>快速扫描直接读文件表；查重复文件时可以让着其他程序，不拖慢正在用的软件。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="清理列表"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>删除时先放进回收站，以及添加要清理或要排除的文件夹。</Run></TextBlock>
+                    </StackPanel>
+                  </Grid>
                 </StackPanel>
               </Border>
             </StackPanel>
@@ -14499,6 +14646,7 @@ $script:sheetXaml = @'
           <TextBlock x:Name="SList" LineHeight="22" TextWrapping="Wrap"/>
         </ScrollViewer>
       </Border>
+      <ContentControl x:Name="SExtra" Margin="0,20,0,4" Visibility="Collapsed" Focusable="False" IsTabStop="False"/>
       <Border x:Name="SAckBox" Margin="0,16,0,0" Background="#FFF6F6" BorderBrush="#F3C4C8" BorderThickness="1" CornerRadius="9" Padding="12,10" Visibility="Collapsed">
         <CheckBox x:Name="SAck" VerticalContentAlignment="Top">
           <TextBlock x:Name="SAckText" TextWrapping="Wrap" Foreground="#1D1D1F" LineHeight="20"/>
@@ -14578,6 +14726,84 @@ foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageM
 # 右键菜单不在窗口的元素树里：万一按名字找不到，就从菜单里一个个取
 if (-not $ctl.MmDelete -and $ctl.MapList.ContextMenu) { $ctl.MapMenu = $ctl.MapList.ContextMenu; foreach ($it in $ctl.MapMenu.Items) { if ($it.Name) { $ctl[$it.Name] = $it } } }
 if (-not $ctl.CmOpen -and $ctl.List.ContextMenu) { $ctl.CleanMenu = $ctl.List.ContextMenu; foreach ($it in $ctl.CleanMenu.Items) { if ($it.Name) { $ctl[$it.Name] = $it } } }
+
+# ---------- 自适应排版：窗口拉宽（最大化）时一排多放几列，表格的宽列分到多出来的宽度；窗口窄了退回一列 ----------
+# XAML 里写 Tag="cols:最小列宽:列间距:行间距[:最多几列]" 的 Grid：里面的元素按顺序排进几列等宽的列，一行排满再换行
+function Update-AutoCols($g) {
+    $c = $g.Tag; if ($c -isnot [hashtable]) { return }
+    $kids = New-Object System.Collections.Generic.List[object]; $vis = New-Object System.Text.StringBuilder; $i = 0
+    foreach ($k in $g.Children) { if ($k.Visibility -ne [System.Windows.Visibility]::Collapsed) { $kids.Add($k); [void]$vis.Append($i).Append(',') }; $i++ }
+    $w = [double]$g.ActualWidth
+    $n = [int][math]::Floor(($w + $c.Gap) / ($c.Min + $c.Gap))
+    $n = [math]::Max(1, [math]::Min($n, [int]$c.Max))
+    $sig = '{0}|{1}' -f $n, $vis.ToString()
+    if ($c.Sig -eq $sig) { return }
+    $c.Sig = $sig; $c.Cols = $n
+    $g.ColumnDefinitions.Clear(); $g.RowDefinitions.Clear()
+    for ($j = 0; $j -lt $n; $j++) {
+        if ($j -gt 0) { $gd = New-Object System.Windows.Controls.ColumnDefinition; $gd.Width = New-Object System.Windows.GridLength ([double]$c.Gap); $g.ColumnDefinitions.Add($gd) }
+        $cd = New-Object System.Windows.Controls.ColumnDefinition; $cd.Width = New-Object System.Windows.GridLength 1, ([System.Windows.GridUnitType]::Star); $g.ColumnDefinitions.Add($cd)
+    }
+    $rows = [int][math]::Max(1, [math]::Ceiling($kids.Count / [double]$n))
+    for ($r = 0; $r -lt $rows; $r++) {
+        if ($r -gt 0) { $gr = New-Object System.Windows.Controls.RowDefinition; $gr.Height = New-Object System.Windows.GridLength ([double]$c.RowGap); $g.RowDefinitions.Add($gr) }
+        $rd = New-Object System.Windows.Controls.RowDefinition; $rd.Height = [System.Windows.GridLength]::Auto; $g.RowDefinitions.Add($rd)
+    }
+    for ($k = 0; $k -lt $kids.Count; $k++) {
+        [System.Windows.Controls.Grid]::SetColumn($kids[$k], [int](($k % $n) * 2))
+        [System.Windows.Controls.Grid]::SetRow($kids[$k], [int]([math]::Floor($k / $n) * 2))
+    }
+}
+function Register-AutoCols($root) {
+    if (-not $root) { return }
+    $dpd = [System.ComponentModel.DependencyPropertyDescriptor]::FromProperty([System.Windows.UIElement]::VisibilityProperty, [System.Windows.UIElement])
+    $q = New-Object System.Collections.Queue; $q.Enqueue($root)
+    while ($q.Count -gt 0) {
+        $v = $q.Dequeue()
+        if ($v -is [System.Windows.Controls.Grid] -and $v.Tag -is [string] -and $v.Tag -match '^cols:(\d+):(\d+):(\d+)(?::(\d+))?$') {
+            $v.Tag = @{ Min = [double]$Matches[1]; Gap = [double]$Matches[2]; RowGap = [double]$Matches[3]; Max = $(if ($Matches[4]) { [int]$Matches[4] } else { 4 }); Sig = ''; Cols = 1 }
+            $v.Add_SizeChanged({ param($s, $e) if ($e.WidthChanged) { Update-AutoCols $s } })
+            # 里面某一项显示、隐藏了：重新排
+            foreach ($k in $v.Children) { $dpd.AddValueChanged($k, [EventHandler]{ param($s, $e) $p = [System.Windows.LogicalTreeHelper]::GetParent($s); if ($p -is [System.Windows.Controls.Grid]) { Update-AutoCols $p } }) }
+            Update-AutoCols $v
+            [void]$script:autoColGrids.Add($v)
+        }
+        foreach ($c in [System.Windows.LogicalTreeHelper]::GetChildren($v)) { if ($c -is [System.Windows.DependencyObject]) { $q.Enqueue($c) } }
+    }
+}
+$script:autoColGrids = New-Object System.Collections.ArrayList
+foreach ($n in 'PageHelp', 'PageHealth', 'PageSettings') { Register-AutoCols $ctl[$n] }
+# 表格（GridView）：窗口变宽时，多出来的宽度按权重分给名称、路径这类列，其余列宽度不变；窗口窄了回到原来的宽度
+$script:gridFill = @{}
+function Update-GridFill($lv) {
+    $f = $script:gridFill[[string]$lv.Name]; if (-not $f) { return }
+    if (-not $f.Sv) { $f.Sv = Find-Visual $lv ([System.Windows.Controls.ScrollViewer]) }
+    $sv = $f.Sv
+    $avail = if ($sv -and $sv.ViewportWidth -gt 0) { [double]$sv.ViewportWidth } else { [double]$lv.ActualWidth - [System.Windows.SystemParameters]::VerticalScrollBarWidth }
+    $avail = [math]::Floor($avail - 8)   # 留一点余地，不然正好顶到边上会冒出横向滚动条
+    if ($avail -le 0 -or [math]::Abs($avail - $f.Last) -lt 1) { return }
+    $f.Last = $avail
+    $sum = [double]0; foreach ($b in $f.Base) { $sum += $b }
+    $wsum = [double]0; foreach ($x in $f.W) { $wsum += $x }
+    $extra = [math]::Max([double]0, $avail - $sum)
+    $cols = $lv.View.Columns
+    for ($i = 0; $i -lt $cols.Count -and $i -lt $f.Base.Count; $i++) {
+        $want = [double]$f.Base[$i]
+        if ($wsum -gt 0 -and $i -lt $f.W.Count) { $want += [math]::Floor($extra * [double]$f.W[$i] / $wsum) }
+        if ([math]::Abs([double]$cols[$i].Width - $want) -ge 1) { $cols[$i].Width = $want }
+    }
+}
+function Register-GridFill($lv, [double[]]$weights) {
+    if (-not $lv -or $lv.View -isnot [System.Windows.Controls.GridView]) { return }
+    $script:gridFill[[string]$lv.Name] = @{ Base = [double[]]@($lv.View.Columns | ForEach-Object { [double]$_.Width }); W = $weights; Last = -1; Sv = $null }
+    $lv.Add_SizeChanged({ param($s, $e) if ($e.WidthChanged) { Update-GridFill $s } })
+    # 出现、去掉竖滚动条时可用的宽度会变
+    $lv.AddHandler([System.Windows.Controls.ScrollViewer]::ScrollChangedEvent, [System.Windows.Controls.ScrollChangedEventHandler]{ param($s, $e) if ($e.ViewportWidthChange -ne 0) { Update-GridFill $s } })
+}
+Register-GridFill $ctl.MonList @(3, 0, 0, 0, 1, 0)        # 程序、本次监控写入
+Register-GridFill $ctl.DupList @(0, 3, 0, 1, 0)           # 位置、注意
+Register-GridFill $ctl.MapGrow @(1, 0, 0, 0)              # 文件夹
+Register-GridFill $ctl.LogList @(0, 0, 1, 2, 1.5)         # 操作、对象、详情
 
 # ---------- 列表排序：点表头按这一列排，再点一下反过来；切换筛选、数据刷新以后还按原来的排 ----------
 # 每个列表一份配置：Cols 是「表头的键 → 按哪个属性排、是不是数字」（数字第一次点从大到小，文字从 A 到 Z）；
@@ -14870,7 +15096,7 @@ $ctl.BtnLogHide.Add_Click({ Set-LogVisible $false })
 #   Kind：info 蓝色信息 / warn 橙色提醒 / danger 红色删除 / done 绿色完成
 function Show-Sheet {
     param([string]$Title, [string]$Text = '', [string[]]$Items = $null, [string[]]$Buttons = @((T '好')),
-          [string]$Primary = '', [string]$Cancel = '', [string]$Kind = 'info', [string]$Confirm = '')
+          [string]$Primary = '', [string]$Cancel = '', [string]$Kind = 'info', [string]$Confirm = '', $Extra = $null)
     if (-not $Primary) { $Primary = $Buttons[-1] }
     if (-not $Cancel)  { $Cancel = $Buttons[0] }
     if ($script:uiTest) { $script:uiSheets.Add(("{0}`n{1}" -f $Title, $Text)); return $Cancel }   # 界面自测：不弹对话框，当作点了取消
@@ -14897,6 +15123,7 @@ function Show-Sheet {
     $sw.FindName('SIconBg').Fill = New-Brush $lk[2] 'b'
     $sw.FindName('STitle').Text = $Title
     $st = $sw.FindName('SText'); $st.Text = $Text; if (-not $Text) { $st.Visibility = 'Collapsed' }
+    if ($Extra) { $xc = $sw.FindName('SExtra'); $xc.Content = $Extra; $xc.Visibility = 'Visible' }
     if ($Items) {
         $sw.FindName('SListBox').Visibility = 'Visible'
         $sw.FindName('SList').Text = (($Items | ForEach-Object { if ([string]$_ -match '^[✓!✗·…]') { [string]$_ } else { "•  $_" } }) -join "`n")
@@ -16710,7 +16937,8 @@ function Show-DiskHealth($list) {
         $used = [double]0; $total = [double]0
         try { $di = New-Object System.IO.DriveInfo ([string]$h.Drive + '\'); $total = [double]$di.TotalSize; $used = $total - [double]$di.AvailableFreeSpace } catch {}
         $pct = if ($total -gt 0) { 100.0 * $used / $total } else { 0 }
-        $c.UsedPct = $pct; $c.BarW = [math]::Round(266.0 * $pct / 100.0)
+        $dw = [double]$win.Resources['DcCardW']; if ($dw -lt 100) { $dw = 300 }
+        $c.UsedPct = $pct; $c.BarW = [math]::Round(($dw - 34) * $pct / 100.0)
         $c.UsedText = (T "已用 {0} / 共 {1}（{2:N0}%），剩 {3}") -f (Fmt $used), (Fmt $total), $pct, (Fmt ($total - $used))
         $c.BarBrush = if ($pct -ge 95) { '#FF3B30' } elseif ($pct -ge 85) { '#FF9F0A' } else { '#0071E3' }
         $worst = 0   # 0 绿 1 橙 2 红
@@ -16745,6 +16973,7 @@ function Show-DiskHealth($list) {
         $col.Add($c)
     }
     $ctl.MapHealth.ItemsSource = $col
+    Update-DcCardW
     Update-MapCardSel
     $ctl.MapHealthNote.Visibility = if ($col.Count -gt 0) { 'Collapsed' } else { 'Visible' }
     if ($col.Count -eq 0) { $ctl.MapHealthNote.Text = (T '读不到磁盘的健康信息（型号、磨损、温度）') }
@@ -16938,7 +17167,7 @@ function Show-MapLevel($node) {
     $ctl.MapPath.Text = $path
     Show-MapCrumbs $node
     $ctl.MapInfo.Text = (T "这一层共 {0}，{1:N0} 个文件{2}") -f (Fmt $node.Size), $node.Files, $(if ($script:mapScanAt) { (T " · 扫描于 {0:HH:mm}（{1}）") -f $script:mapScanAt, $script:mapHow } else { '' })
-    if ($script:mapView -eq 'tree') { $ctl.MapInfo.Text += (T ' · 点方块就是选中下面列表里的那一行，列表里选中的方块会描边；双击进入') }
+    if ($script:mapView -eq 'tree') { $ctl.MapInfo.Text += $(if (Test-CheckMode) { (T ' · 点方块在下面的列表里找到这一行，勾上的方块会描边；双击进入') } else { (T ' · 点方块就是选中下面列表里的那一行，列表里选中的方块会描边；双击进入') }) }
     $ctl.BtnMapAcct.Visibility = if ($script:mapRoot -and $script:mapRoot.HasDisk -and (Get-Mode) -ge 2) { 'Visible' } else { 'Collapsed' }
     $ctl.BtnMapUp.IsEnabled = ($null -ne $node.Parent)
     $ctl.BtnMapBack.IsEnabled = $script:mapBack.Count -gt 0; $ctl.BtnMapFwd.IsEnabled = $script:mapFwd.Count -gt 0
@@ -17276,6 +17505,7 @@ function Draw-MapTree {
                 # 点方块 = 在下面的列表里选中这一行（按住 Ctrl 可以多选），列表滚到它那里；列表选中的变化再把方块描上边
                 $ctrl = ([System.Windows.Input.Keyboard]::Modifiers -band [System.Windows.Input.ModifierKeys]::Control) -ne 0
                 if ($ctrl) { if ($ctl.MapList.SelectedItems.Contains($r)) { $ctl.MapList.SelectedItems.Remove($r) } else { [void]$ctl.MapList.SelectedItems.Add($r) } }
+                elseif (Test-CheckMode) { $script:treeFocus = $r; Sync-TreeSel }
                 else { $ctl.MapList.SelectedItems.Clear(); $ctl.MapList.SelectedItem = $r }
                 try { $ctl.MapList.ScrollIntoView($r) } catch {}
                 $e.Handled = $true
@@ -17299,10 +17529,10 @@ function Draw-MapTree {
 function Sync-TreeSel {
     if ($script:mapView -ne 'tree') { return }
     $sel = @{}; foreach ($x in @($ctl.MapList.SelectedItems)) { $sel[[System.Runtime.CompilerServices.RuntimeHelpers]::GetHashCode($x)] = $true }
-    $on = Brush '#1D1D1F' 'd'; $off = Brush '#00000000'
+    $on = Brush '#1D1D1F' 'd'; $off = Brush '#00000000'; $fo = Brush '#0071E3' 'd'
     foreach ($b in @($ctl.MapTree.Children)) {
         $r = $b.Tag
-        $b.BorderBrush = if ($r -and $sel.ContainsKey([System.Runtime.CompilerServices.RuntimeHelpers]::GetHashCode($r))) { $on } else { $off }
+        $b.BorderBrush = if ($r -and $sel.ContainsKey([System.Runtime.CompilerServices.RuntimeHelpers]::GetHashCode($r))) { $on } elseif ($r -and [object]::ReferenceEquals($r, $script:treeFocus)) { $fo } else { $off }
     }
 }
 $ctl.MapTree.Add_SizeChanged({ if ($script:mapView -eq 'tree') { Draw-MapTree } })
@@ -17765,8 +17995,8 @@ function Test-InCheckBox($lv, $el) {
 # 复选框模式（设置里开着「项目复选框」）：只有点方框才选中、取消。单击行的其他地方不选，双击文件夹照常往里点；
 # 按住鼠标上下拖是把拖过的行勾上（加在已勾的上面）；Ctrl 点照常加上或去掉一行；Shift 点是把上次勾的那一行到这一行都勾上；
 # 键盘上下键只移动焦点，空格勾上或取消；Esc 全部取消
-$script:tickAnchor = -1; $script:kbRow = -1; $script:lastPress = $null
-function Test-CheckMode { $win.Resources['MapCkVis'] -eq [System.Windows.Visibility]::Visible -and ($script:mapView -eq 'dirs' -or $script:mapView -eq 'files') }
+$script:tickAnchor = -1; $script:kbRow = -1; $script:lastPress = $null; $script:treeFocus = $null
+function Test-CheckMode { $win.Resources['MapCkVis'] -eq [System.Windows.Visibility]::Visible -and ($script:mapView -eq 'dirs' -or $script:mapView -eq 'files' -or $script:mapView -eq 'tree') }
 function Add-MapRange([int]$from, [int]$to) {
     $lv = $ctl.MapList; $n = $lv.Items.Count
     if ($to -lt 0 -or $to -ge $n) { return }
@@ -17837,8 +18067,9 @@ function Begin-RowDrag($s, $e, [string]$button) {
                                         [math]::Abs($pt.X - $lp.X) -le 6 -and [math]::Abs($pt.Y - $lp.Y) -le 6)
         $script:lastPress = if ($dbl) { $null } else { @{ Row = $row; Ts = $e.Timestamp; X = $pt.X; Y = $pt.Y } }
         if ($dbl) {
-            if (Enter-MapRow $row) { $e.Handled = $true }
-            elseif ($row -and $row.IsDir) { Write-LogFile ((T "空间地图：双击的「{0}」进不去（扫描结果里没有它的下一层）") -f $row.Name) }
+            if (Enter-MapRow $row) { $e.Handled = $true; return }
+            if ($row -and $row.IsDir) { Write-LogFile ((T "空间地图：双击的「{0}」进不去（扫描结果里没有它的下一层）") -f $row.Name) }
+            if (Test-CheckMode) { $e.Handled = $true; try { if (-not $s.IsKeyboardFocusWithin) { [void]$s.Focus() } } catch {} }
             return
         }
     }
@@ -18588,6 +18819,93 @@ $ctl.CandList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickE
     if (-not ($b -is [System.Windows.Controls.Button]) -or -not ($b.Tag -is [CandRow])) { return }
     if ($b.Name -eq 'CandOpen') { Open-Location $b.Tag.Location }
 })
+# 按住鼠标左键上下拖：拖过的行一起勾上（从没勾的行开始拖）或一起取消（从勾着的行开始拖），像在资源管理器里拉框；
+# 按在方框、「打开」按钮、滚动条上照常用；拖到列表上面或下面会自动滚动；不能搬的行不动
+$script:cdrag = $null
+$script:cdragTimer = New-Object System.Windows.Threading.DispatcherTimer
+$script:cdragTimer.Interval = [TimeSpan]::FromMilliseconds(50)
+# 纵坐标 y 处是哪一行（返回这一行的数据；分组标题、空白处返回 $null）
+function Get-CandRowAt([double]$y) {
+    $lv = $ctl.CandList; $h = [double]$lv.ActualHeight; if ($h -le 4) { return $null }
+    $yy = [math]::Min([math]::Max($y, 2.0), $h - 2.0)
+    foreach ($dy in 0, -4, 4) {
+        $hit = $lv.InputHitTest((New-Object System.Windows.Point ([math]::Max(40.0, [double]$lv.ActualWidth / 2)), ($yy + $dy)))
+        if ($hit -is [System.Windows.DependencyObject]) {
+            $c = $null; try { $c = [System.Windows.Controls.ItemsControl]::ContainerFromElement($lv, $hit) } catch {}
+            if ($c -is [System.Windows.Controls.ListViewItem]) { return $c.Content }
+        }
+    }
+    return $null
+}
+function Get-CandIndex($items, $row) { for ($k = 0; $k -lt $items.Count; $k++) { if ([object]::ReferenceEquals($items[$k], $row)) { return $k } }; return -1 }
+function Set-CandRange($d, $row) {
+    if (-not $row) { return }
+    $i = Get-CandIndex $d.Items $row
+    if ($i -lt 0 -or $i -eq $d.Cur) { return }
+    $a = [math]::Min($d.Anchor, $i); $b = [math]::Max($d.Anchor, $i)
+    for ($k = 0; $k -lt $d.Items.Count; $k++) {
+        $r = $d.Items[$k]; if (-not $r.CanMove) { continue }
+        $want = if ($k -ge $a -and $k -le $b) { [bool]$d.Want } else { [bool]$d.Snap[$k] }
+        if ([bool]$r.Checked -ne $want) { $r.Checked = $want }
+    }
+    $d.Cur = $i
+    Update-CandSel
+}
+function Stop-CandDrag {
+    $d = $script:cdrag; $script:cdrag = $null
+    $script:cdragTimer.Stop()
+    if ($d -and $d.Cap -and $d.Cap.IsMouseCaptured) { $d.Cap.ReleaseMouseCapture() }
+}
+$ctl.CandList.Add_PreviewMouseLeftButtonDown({
+    param($s, $e)
+    Stop-CandDrag
+    $src = $e.OriginalSource
+    if ($src -isnot [System.Windows.DependencyObject]) { return }
+    try {
+        for ($v = $src; $v -and -not [object]::ReferenceEquals($v, $s); $v = [System.Windows.Media.VisualTreeHelper]::GetParent($v)) {
+            if ($v -is [System.Windows.Controls.Primitives.ButtonBase] -or $v -is [System.Windows.Controls.Primitives.ScrollBar]) { return }   # 方框、按钮、滚动条照常用
+            if ($v -is [System.Windows.Controls.ListViewItem]) { break }
+        }
+    } catch { return }
+    $c = $null; try { $c = [System.Windows.Controls.ItemsControl]::ContainerFromElement($s, $src) } catch {}
+    if ($c -isnot [System.Windows.Controls.ListViewItem]) { return }
+    $r = $c.Content; if (-not $r -or -not $r.CanMove) { return }
+    $items = [object[]]@($s.Items)
+    $script:cdrag = @{ Items = $items; Anchor = (Get-CandIndex $items $r); Cur = (Get-CandIndex $items $r); Moved = $false; Want = -not [bool]$r.Checked; Snap = $null; Cap = $null }
+})
+$ctl.CandList.Add_PreviewMouseMove({
+    param($s, $e)
+    $d = $script:cdrag
+    if (-not $d) { return }
+    if ($e.LeftButton -ne [System.Windows.Input.MouseButtonState]::Pressed) { Stop-CandDrag; return }
+    $r = Get-CandRowAt ($e.GetPosition($s).Y)
+    if (-not $d.Moved) {
+        if (-not $r -or (Get-CandIndex $d.Items $r) -eq $d.Anchor) { return }
+        $d.Moved = $true
+        $d.Snap = [bool[]]@($d.Items | ForEach-Object { [bool]$_.Checked })
+        # 鼠标交给列表里的滚动区：拖到列表外面也收得到；起点这一行先跟着变
+        $d.Cap = Find-Visual $s ([System.Windows.Controls.ScrollViewer]); if (-not $d.Cap) { $d.Cap = $s }
+        [void]$d.Cap.CaptureMouse()
+        $a = $d.Items[$d.Anchor]; if ([bool]$a.Checked -ne [bool]$d.Want) { $a.Checked = [bool]$d.Want }
+        $script:cdragTimer.Start()
+    }
+    Set-CandRange $d $r
+})
+$ctl.CandList.Add_PreviewMouseLeftButtonUp({ if ($script:cdrag) { Stop-CandDrag } })
+$ctl.CandList.Add_LostMouseCapture({ param($s, $e) $d = $script:cdrag; if ($d -and $d.Moved -and $d.Cap -and [object]::ReferenceEquals($e.OriginalSource, $d.Cap)) { $script:cdrag = $null; $script:cdragTimer.Stop() } })
+$script:cdragTimer.Add_Tick({
+    $d = $script:cdrag
+    if (-not $d -or -not $d.Moved) { $script:cdragTimer.Stop(); return }
+    if ([System.Windows.Input.Mouse]::LeftButton -ne [System.Windows.Input.MouseButtonState]::Pressed) { Stop-CandDrag; return }
+    $lv = $ctl.CandList; $y = [System.Windows.Input.Mouse]::GetPosition($lv).Y; $h = [double]$lv.ActualHeight
+    if ($y -ge 0 -and $y -le $h) { return }
+    $sv = $d.Cap; if ($sv -isnot [System.Windows.Controls.ScrollViewer]) { return }
+    $over = if ($y -lt 0) { -$y } else { $y - $h }
+    $steps = [math]::Min(4, 1 + [int][math]::Floor($over / 30))
+    for ($k = 0; $k -lt $steps; $k++) { if ($y -lt 0) { $sv.LineUp() } else { $sv.LineDown() } }
+    $lv.UpdateLayout()
+    Set-CandRange $d (Get-CandRowAt $y)
+})
 $ctl.BtnCandMove.Add_Click({ Start-MoveMany })
 
 # 勾选的一起搬：先确认（列出每一项、要关掉的软件），再逐项复制、核对、换成链接
@@ -18767,14 +19085,37 @@ $script:hcGreen = @('#1D7A35', '#E5F4E9'); $script:hcAmber = @('#995700', '#FFF1
 function New-Chip([string]$text, $tier) { $c = New-Object HealthChip; $c.Text = $text; $c.Fg = $tier[0]; $c.Bg = $tier[1]; return $c }
 function New-HealthCard([string]$title, [string]$sub, $tier) { $c = New-Object HealthCard; $c.Title = $title; $c.Sub = $sub; $c.Stripe = $tier[0]; $c.BarBrush = $tier[0]; return $c }
 function Tier-Worst($a, $b) { $rank = @{ ($script:hcGrey[0]) = 0; ($script:hcGreen[0]) = 1; ($script:hcBlue[0]) = 1; ($script:hcAmber[0]) = 2; ($script:hcRed[0]) = 3 }; if ($rank[$b[0]] -gt $rank[$a[0]]) { $b } else { $a } }
+# 空间地图上每块盘一张卡片：卡片一起排满这一排（每张至少 280、最多 560），盘多了就换行
+$win.Resources['DcCardW'] = [double]300
+function Update-DcCardW {
+    $w = [double]$ctl.MapHealth.ActualWidth; if ($w -lt 100) { return }
+    $n = @($ctl.MapHealth.ItemsSource).Count; if ($n -lt 1) { $n = 1 }
+    $cols = [math]::Max(1, [math]::Min($n, [math]::Floor(($w + 1) / (280 + 12))))
+    $cw = [math]::Min([double]560, [math]::Floor($w / $cols) - 12)
+    if ([math]::Abs([double]$win.Resources['DcCardW'] - $cw) -lt 1) { return }
+    $win.Resources['DcCardW'] = [double]$cw
+    # 用量条的长度跟着卡片宽度变
+    foreach ($c in @($ctl.MapHealth.ItemsSource)) { if ($c) { $c.BarW = [math]::Round(($cw - 34) * [double]$c.UsedPct / 100.0) } }
+    try { $ctl.MapHealth.Items.Refresh() } catch {}
+}
+$ctl.MapHealth.Add_SizeChanged({ param($s, $e) if ($e.WidthChanged) { Update-DcCardW } })
 # 硬件卡片的宽度跟着这一页的宽度走：每张至少 270，一排能放几张放几张，正好排满（最大化时右边不留空白，也不用往下拉很长）
 $win.Resources['HcCardW'] = [double]290
+# 卡片上的用量条按百分比画：卡片多宽，满格就多长
+function Set-CardBar($card, [double]$pct) {
+    $card.HasBar = $true; $card.BarPct = $pct
+    $card.BarW = [math]::Max(2, ([double]$win.Resources['HcCardW'] - 33) * $pct / 100.0)
+}
 $ctl.HealthCards.Add_SizeChanged({
     param($s, $e)
     $w = [double]$s.ActualWidth; if ($w -lt 100) { return }
     $cols = [math]::Max(1, [math]::Floor(($w + 1) / (270 + 12)))
     $cw = [math]::Floor($w / $cols) - 12
-    if ([math]::Abs([double]$win.Resources['HcCardW'] - $cw) -ge 1) { $win.Resources['HcCardW'] = [double]$cw }
+    if ([math]::Abs([double]$win.Resources['HcCardW'] - $cw) -lt 1) { return }
+    $win.Resources['HcCardW'] = [double]$cw
+    $any = $false
+    foreach ($c in @($ctl.HealthCards.ItemsSource)) { if ($c -and $c.HasBar) { $c.BarW = [math]::Max(2, ($cw - 33) * [double]$c.BarPct / 100.0); $any = $true } }
+    if ($any) { try { $ctl.HealthCards.Items.Refresh() } catch {} }
 })
 # 事件的说明文字：一行一行合起来，太长的截到 300 字（完整的在鼠标提示里）
 function Shorten-Note([string]$t) {
@@ -18793,7 +19134,7 @@ function Show-Health($r) {
     if ($c.Ok) {
         $tier = $script:hcGreen
         $card = New-HealthCard (T 'CPU') $c.Name $tier
-        if ($c.Load -ge 0) { $card.Chips.Add((New-Chip ((T "负载 {0}%") -f $c.Load) $(if ($c.Load -ge 90) { $script:hcAmber } else { $script:hcGreen }))); $card.HasBar = $true; $card.BarW = [math]::Max(2, 2.5 * $c.Load) }
+        if ($c.Load -ge 0) { $card.Chips.Add((New-Chip ((T "负载 {0}%") -f $c.Load) $(if ($c.Load -ge 90) { $script:hcAmber } else { $script:hcGreen }))); Set-CardBar $card $c.Load }
         if ($c.MaxMHz -gt 0) { $card.Chips.Add((New-Chip ("{0:N1} / {1:N1} GHz" -f ($c.MHz / 1000), ($c.MaxMHz / 1000)) $script:hcBlue)) }
         if ($c.Perf -ge 0) { $t2 = if ($c.Throttle) { $script:hcRed } elseif ($c.Perf -lt 90) { $script:hcAmber } else { $script:hcGreen }; $card.Chips.Add((New-Chip ((T "性能 {0}%") -f $c.Perf) $t2)); $tier = Tier-Worst $tier $t2 }
         if ($c.Temp -ne $null) { $t2 = if ($c.Temp -ge 90) { $script:hcRed } elseif ($c.Temp -ge 75) { $script:hcAmber } else { $script:hcGreen }; $card.Chips.Add((New-Chip ("{0} °C" -f $c.Temp) $t2)); $tier = Tier-Worst $tier $t2; if ($c.TempNote) { $card.Lines.Add($c.TempNote) } }
@@ -18807,7 +19148,7 @@ function Show-Health($r) {
     if ($m.Ok) {
         $tier = switch ($m.Pressure) { 'high' { $script:hcRed } 'mid' { $script:hcAmber } default { $script:hcGreen } }
         $card = New-HealthCard (T '内存') ((T "{0} 已用 {1}，可用 {2}") -f (Fmt $m.Total), (Fmt ($m.Total - $m.Free)), (Fmt $m.Free)) $tier
-        $card.HasBar = $true; $card.BarW = [math]::Max(2, 2.5 * $m.UsedPct)
+        Set-CardBar $card $m.UsedPct
         $card.Chips.Add((New-Chip ((T "已用 {0}%") -f $m.UsedPct) $(if ($m.UsedPct -ge 92) { $script:hcRed } elseif ($m.UsedPct -ge 80) { $script:hcAmber } else { $script:hcGreen })))
         $card.Chips.Add((New-Chip ((T "提交 {0}%") -f $m.CommitPct) $(if ($m.CommitPct -ge 90) { $script:hcRed } elseif ($m.CommitPct -ge 75) { $script:hcAmber } else { $script:hcGreen })))
         if ($m.HardFaults -ge 0) { $card.Chips.Add((New-Chip ((T "硬错误 {0}/秒") -f $m.HardFaults) $(if ($m.HardFaults -ge 100) { $script:hcRed } elseif ($m.HardFaults -ge 20) { $script:hcAmber } else { $script:hcGreen }))) }
@@ -18821,7 +19162,7 @@ function Show-Health($r) {
         $tier = $script:hcGreen
         $sub = if ($d.Model) { [string]$d.Model } else { (T '型号读不到') }
         $card = New-HealthCard ((T "磁盘 {0}") -f $d.Drive) $sub $tier
-        try { $di = New-Object System.IO.DriveInfo ($d.Drive + '\'); $pct = [int][math]::Round(100.0 * ($di.TotalSize - $di.TotalFreeSpace) / [math]::Max([double]1, [double]$di.TotalSize)); $card.HasBar = $true; $card.BarW = [math]::Max(2, 2.5 * $pct); $card.Chips.Add((New-Chip ((T "已用 {0}%") -f $pct) $(if ($pct -ge 95) { $script:hcRed } elseif ($pct -ge 85) { $script:hcAmber } else { $script:hcGreen }))) } catch {}
+        try { $di = New-Object System.IO.DriveInfo ($d.Drive + '\'); $pct = [int][math]::Round(100.0 * ($di.TotalSize - $di.TotalFreeSpace) / [math]::Max([double]1, [double]$di.TotalSize)); Set-CardBar $card $pct; $card.Chips.Add((New-Chip ((T "已用 {0}%") -f $pct) $(if ($pct -ge 95) { $script:hcRed } elseif ($pct -ge 85) { $script:hcAmber } else { $script:hcGreen }))) } catch {}
         if ($d.Ok) {
             $h = [string]$d.Health
             $t2 = if ($h -match 'Healthy|正常|OK') { $script:hcGreen } elseif ($h) { $script:hcRed } else { $script:hcGrey }
@@ -18840,7 +19181,7 @@ function Show-Health($r) {
     if ($b.Present) {
         $tier = $script:hcGreen
         $card = New-HealthCard (T '电池') $b.Status $tier
-        if ($b.Charge -ge 0) { $card.HasBar = $true; $card.BarW = [math]::Max(2, 2.5 * $b.Charge); $card.Chips.Add((New-Chip ((T "电量 {0}%") -f $b.Charge) $script:hcBlue)) }
+        if ($b.Charge -ge 0) { Set-CardBar $card $b.Charge; $card.Chips.Add((New-Chip ((T "电量 {0}%") -f $b.Charge) $script:hcBlue)) }
         if ($b.Design -gt 0 -and $b.Full -gt 0) {
             $pct = [int][math]::Round(100.0 * $b.Full / $b.Design)
             $t2 = if ($pct -lt 60) { $script:hcRed } elseif ($pct -lt 80) { $script:hcAmber } else { $script:hcGreen }
@@ -18855,7 +19196,7 @@ function Show-Health($r) {
     foreach ($g in @($r.Gpu)) {
         if (-not $g.Ok) { $card = New-HealthCard (T '显卡') (T '读不到') $script:hcGrey; $card.Lines.Add($g.Why); $cards.Add($card); continue }
         $card = New-HealthCard (T '显卡') $g.Name $script:hcGreen
-        if ($g.Util -ge 0) { $card.HasBar = $true; $card.BarW = [math]::Max(2, 2.5 * $g.Util); $card.Chips.Add((New-Chip ((T "占用 {0}%") -f $g.Util) $(if ($g.Util -ge 95) { $script:hcAmber } else { $script:hcGreen }))) }
+        if ($g.Util -ge 0) { Set-CardBar $card $g.Util; $card.Chips.Add((New-Chip ((T "占用 {0}%") -f $g.Util) $(if ($g.Util -ge 95) { $script:hcAmber } else { $script:hcGreen }))) }
         if ($g.Vram -gt 0) { $card.Chips.Add((New-Chip ($(if ($g.VramUsed -ge 0) { (T "显存 {0} / {1}") -f (Fmt $g.VramUsed), (Fmt $g.Vram) } else { (T "显存 {0}") -f (Fmt $g.Vram) })) $script:hcBlue)) }
         $card.Chips.Add((New-Chip (T '温度读不到') $script:hcGrey))
         $card.Lines.Add($g.TempWhy)
@@ -18980,6 +19321,12 @@ function New-FixStepRow([string]$id, $st) {
         }
     }
     $row.Tag = $tag; $row.TagFg = $tier[0]; $row.TagBg = $tier[1]
+    # 卡片上：标题是这一步做什么，按钮上写动作；点了会先问一下的，按钮后面带省略号
+    $row.Title = ([string]$row.Name).TrimEnd([char]0x2026)
+    $ask = ([string]$row.Name).EndsWith([string][char]0x2026)
+    $act = switch ($s.Kind) { 'open' { T '打开' } 'go' { T '查看' } default { T '运行' } }
+    switch ($id) { 'diagpack' { $act = (T '导出') } 'vendor' { $act = (T '打开') } 'ahciguide' { $act = (T '查看步骤') } 'diskpowerundo' { $act = (T '恢复') } }
+    $row.Act = if (-not $row.Enabled) { $tag } elseif ($ask) { $act + [char]0x2026 } else { $act }
     return $row
 }
 function New-FixBtn([string]$id, $st) {
@@ -18997,7 +19344,7 @@ function Show-Fixes($st) {
             $s = $c.Steps[$id]; if (-not $s) { continue }
             $show = [int]$s.Lvl -le $m
             if ($id -eq 'diskpowerundo') { $show = ($st -and $st.DiskFix) -or $m -ge [int]$c.Steps['diskpower'].Lvl }   # 改过了就一直能恢复，不管什么模式
-            if ($show) { $g.Steps.Add((New-FixStepRow $id $st)) }
+            if ($show) { $x = New-FixStepRow $id $st; $x.No = [string]($g.Steps.Count + 1); $g.Steps.Add($x) }
         }
         if ($g.Steps.Count -gt 0) { $col.Add($g) }
     }
@@ -21067,6 +21414,64 @@ function Invoke-UiTest {
             $q = @($ctl.HelpFaq.Children)[0]; Select-HelpPane 'faq' -NoRemember; $q.IsExpanded = $true; $win.UpdateLayout(); $q.IsExpanded = $false
             Select-HelpPane $was
         }
+        & $step 'wide window: help items in columns, tables and cards stretch' {
+            $ws = $win.WindowState; $w0 = $win.Width; $h0 = $win.Height
+            try {
+                $win.WindowState = 'Normal'; $win.Width = 1180; $win.Height = 860
+                Show-Page 'help'; Select-HelpPane 's1' -NoRemember; $win.UpdateLayout(); $win.UpdateLayout()
+                $g = @($script:autoColGrids | Where-Object { $_.IsVisible })[0]
+                if (-not $g) { throw 'no column grid in the help item' }
+                $n1 = [int]$g.Tag.Cols; $cw1 = [double]$ctl.HelpScroll.ActualWidth
+                $win.Width = 2100; $win.UpdateLayout(); $win.UpdateLayout()
+                $n2 = [int]$g.Tag.Cols; $cw2 = [double]$ctl.HelpScroll.ActualWidth
+                $L.Add(('  help: {0} column(s) {1:N0} wide at 1180, {2} columns {3:N0} wide at 2100' -f $n1, $cw1, $n2, $cw2))
+                if ($cw2 -lt $cw1 + 700) { throw 'the help pane did not get wider with the window' }
+                if ($n2 -le $n1) { throw 'help items did not spread into more columns' }
+                Show-Page 'health'; Select-HealthTab 'mon'; $win.UpdateLayout(); $win.UpdateLayout()
+                $c0 = [double]$ctl.MonList.View.Columns[0].Width
+                if ($c0 -le 300) { throw ("the monitor table did not stretch (program column {0})" -f $c0) }
+                Select-HealthTab 'fix'; $win.UpdateLayout()
+                if ([double]$ctl.HealthCardFix.ActualWidth -lt 1400) { throw ('repair card only {0:N0} wide' -f $ctl.HealthCardFix.ActualWidth) }
+                Select-HealthTab 'hw'
+                Show-Page 'save'; $win.UpdateLayout()
+                if ([double]$ctl.SaveScroll.ActualWidth -lt 1300) { throw ('save page only {0:N0} wide' -f $ctl.SaveScroll.ActualWidth) }
+                Show-Page 'settings'; $win.UpdateLayout()
+                if ([double]$ctl.SetScroll.ActualWidth -lt 1300) { throw ('settings page only {0:N0} wide' -f $ctl.SetScroll.ActualWidth) }
+                $win.Width = 1180; Show-Page 'health'; Select-HealthTab 'mon'; $win.UpdateLayout(); $win.UpdateLayout()
+                if ([double]$ctl.MonList.View.Columns[0].Width -ge $c0) { throw 'the monitor table did not shrink back' }
+                Select-HealthTab 'hw'
+                Show-Page 'help'; $win.UpdateLayout()
+                if ([int]$g.Tag.Cols -ne $n1) { throw 'help items did not go back to fewer columns' }
+            } finally { $win.Width = $w0; $win.Height = $h0; $win.WindowState = $ws; $win.UpdateLayout() }
+        }
+        & $step 'repair steps are cards with a number, a title and a button' {
+            Show-Fixes (Get-PowerFixState)
+            $g0 = @($ctl.FixGroups.Items)[0]
+            if (-not $g0 -or @($g0.Steps).Count -lt 1) { throw 'no repair steps' }
+            $k = 1; foreach ($s in $g0.Steps) { if ([string]$s.No -ne [string]$k -or -not $s.Title -or -not $s.Act) { throw ("step {0}: No={1} Title={2} Act={3}" -f $k, $s.No, $s.Title, $s.Act) }; if ($s.Title.EndsWith([string][char]0x2026)) { throw 'title still ends with an ellipsis' }; $k++ }
+            $ask = @(@($ctl.FixGroups.Items) | ForEach-Object { @($_.Steps) } | Where-Object { $_.Id -eq 'sfcrepair' })[0]
+            if ($ask -and $ask.Enabled -and -not ([string]$ask.Act).EndsWith([string][char]0x2026)) { throw 'a step that asks first has no ellipsis on its button' }
+        }
+        & $step 'appearance picker shows three previews' {
+            $p = New-ThemePicker 'dark'
+            $rbs = @($p.Children)
+            if ($rbs.Count -ne 3) { throw ('{0} appearance cards' -f $rbs.Count) }
+            if (-not $rbs[1].IsChecked -or $rbs[0].IsChecked) { throw 'the current appearance is not the picked card' }
+            $rbs[2].IsChecked = $true; if ($script:themePick -ne 'system') { throw 'picking a card did not change the choice' }
+            if (@((New-ThemeThumb 'system').Children).Count -ne 2 -or @((New-ThemeThumb 'dark').Children).Count -ne 1) { throw 'preview pictures not drawn' }
+            foreach ($k in 'Light', 'Dark', 'System') { $pic = $win.FindName('SetTheme' + $k + 'Pic'); if (-not $pic -or -not $pic.Child) { throw "settings has no $k preview" } }
+            $script:themePick = $script:themePref
+        }
+        & $step 'dragging over movable items ticks them' {
+            $rows = @(1..5 | ForEach-Object { $r = New-Object CandRow; $r.Name = "uitest $_"; $r.CanMove = ($_ -ne 3); $r })
+            $rows[4].Checked = $true
+            $d = @{ Items = [object[]]$rows; Anchor = 0; Cur = 0; Moved = $true; Want = $true; Snap = [bool[]]@($rows | ForEach-Object { [bool]$_.Checked }); Cap = $null }
+            Set-CandRange $d $rows[3]
+            if (-not $rows[0].Checked -or -not $rows[1].Checked -or $rows[2].Checked -or -not $rows[3].Checked) { throw 'dragging to the 4th row did not tick rows 1, 2 and 4 (3 cannot move)' }
+            Set-CandRange $d $rows[1]
+            if (-not $rows[1].Checked -or $rows[3].Checked -or -not $rows[4].Checked) { throw 'dragging back did not untick, or touched a row outside the drag' }
+            $script:cdrag = $null
+        }
         & $step 'settings page shows the current settings' {
             Show-Page 'settings'
             if (-not $ctl.SetMapCheck.IsChecked -and (Get-Flag 'MapCheck')) { throw 'item check box switch not loaded' }
@@ -21875,15 +22280,24 @@ function Invoke-UiTest {
             $blk = $null; foreach ($b in $ctl.MapTree.Children) { if ([object]::ReferenceEquals($b.Tag, $row)) { $blk = $b } }
             if (-not $blk) { throw 'no block for the first row' }
             if ($blk.BorderBrush.Color.A -eq 0) { throw 'selected row not outlined on the treemap' }
-            # 点第二块：列表里选中的换成它
+            # 点第二块：开着复选框时只在列表里找到它（描蓝边），不勾选；关掉复选框时照 Windows 的做法选中它
             $blk2 = $null; foreach ($b in $ctl.MapTree.Children) { if ($b.Tag -and -not [object]::ReferenceEquals($b.Tag, $row)) { $blk2 = $b; break } }
             if ($blk2) {
-                $ev = New-Object System.Windows.Input.MouseButtonEventArgs ([System.Windows.Input.Mouse]::PrimaryDevice), 0, ([System.Windows.Input.MouseButton]::Left)
-                $ev.RoutedEvent = [System.Windows.UIElement]::MouseLeftButtonDownEvent
-                $blk2.RaiseEvent($ev); $win.UpdateLayout()
-                if (-not [object]::ReferenceEquals($ctl.MapList.SelectedItem, $blk2.Tag)) { throw 'clicking a block did not select the row' }
-                if ($blk.BorderBrush.Color.A -ne 0 -or $blk2.BorderBrush.Color.A -eq 0) { throw 'outline did not move to the clicked block' }
+                $press = { param($b) $ev = New-Object System.Windows.Input.MouseButtonEventArgs ([System.Windows.Input.Mouse]::PrimaryDevice), 0, ([System.Windows.Input.MouseButton]::Left); $ev.RoutedEvent = [System.Windows.UIElement]::MouseLeftButtonDownEvent; $b.RaiseEvent($ev); $win.UpdateLayout() }
+                if (-not (Test-CheckMode)) { throw 'check box mode is off in the treemap' }
+                & $press $blk2
+                if ($ctl.MapList.SelectedItems.Count -ne 1 -or -not [object]::ReferenceEquals($ctl.MapList.SelectedItem, $row)) { throw 'with check boxes a click on a block ticked its row' }
+                if ($blk.BorderBrush.Color.A -eq 0 -or $blk2.BorderBrush.Color.A -eq 0) { throw 'clicked block not marked, or the ticked one lost its outline' }
+                $win.Resources['MapCkVis'] = [System.Windows.Visibility]::Collapsed
+                try {
+                    & $press $blk2
+                    if (-not [object]::ReferenceEquals($ctl.MapList.SelectedItem, $blk2.Tag) -or $ctl.MapList.SelectedItems.Count -ne 1) { throw 'without check boxes clicking a block did not select the row' }
+                    if ($blk.BorderBrush.Color.A -ne 0 -and -not [object]::ReferenceEquals($blk.Tag, $script:treeFocus)) { throw 'outline did not move to the clicked block' }
+                } finally { $win.Resources['MapCkVis'] = [System.Windows.Visibility]::Visible }
             }
+            # 方块图下面的列表、按类型：单击行不勾选；按类型的行没有方框
+            if (-not (Invoke-RowPress 0 'Left' $false $false).Handled) { throw 'a click on a row under the treemap would tick it' }
+            $ctl.MapList.UnselectAll()
             $ctl.MapViewDirs.IsChecked = $true
         }
         if ($env:CLEANC_SHOTS -eq '1') {
@@ -22633,12 +23047,70 @@ function Restart-App {
 }
 # 外观：浅色 / 深色 / 跟随系统
 $script:themeNames = @{ light = (T '浅色'); dark = (T '深色'); system = (T '跟随系统') }
+function Get-RawBrush([string]$hex) { $b = New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color][System.Windows.Media.ColorConverter]::ConvertFromString($hex)); $b.Freeze(); return $b }
+# 一张小窗口：左边侧边栏（选中的一项是蓝色），右边标题和一张卡片
+function New-ThemeLayer([hashtable]$p) {
+    $cv = New-Object System.Windows.Controls.Canvas; $cv.Width = 112; $cv.Height = 72; $cv.Background = Get-RawBrush $p.Bg
+    $add = {
+        param([double]$x, [double]$y, [double]$w, [double]$h, [double]$r, [string]$c, [string]$stroke)
+        $re = New-Object System.Windows.Shapes.Rectangle; $re.Width = $w; $re.Height = $h; $re.RadiusX = $r; $re.RadiusY = $r; $re.Fill = Get-RawBrush $c
+        if ($stroke) { $re.Stroke = Get-RawBrush $stroke; $re.StrokeThickness = 0.8 }
+        [System.Windows.Controls.Canvas]::SetLeft($re, $x); [System.Windows.Controls.Canvas]::SetTop($re, $y); [void]$cv.Children.Add($re)
+    }
+    & $add 0 0 27 72 0 $p.Side ''
+    & $add 5 10 17 5 2.5 $p.Accent ''
+    & $add 5 19 14 4 2 $p.Line ''
+    & $add 5 26 16 4 2 $p.Line ''
+    & $add 5 33 12 4 2 $p.Line ''
+    & $add 34 9 34 5 2.5 $p.Text ''
+    & $add 34 20 70 44 6 $p.Card $p.Stroke
+    & $add 41 28 44 4 2 $p.Line ''
+    & $add 41 36 54 4 2 $p.Line ''
+    & $add 41 44 32 4 2 $p.Line ''
+    & $add 41 53 22 6 3 $p.Accent ''
+    return $cv
+}
+function New-ThemeThumb([string]$kind) {
+    $light = @{ Bg = '#F5F5F7'; Side = '#E6E6EB'; Card = '#FFFFFF'; Line = '#DCDCE1'; Text = '#C7C7CC'; Accent = '#0071E3'; Stroke = '#E2E2E7' }
+    $dark = @{ Bg = '#1C1C1E'; Side = '#2A2A2D'; Card = '#2E2E31'; Line = '#4A4A4E'; Text = '#5E5E63'; Accent = '#0A84FF'; Stroke = '#3A3A3D' }
+    $g = New-Object System.Windows.Controls.Grid; $g.Width = 112; $g.Height = 72
+    $g.Clip = New-Object System.Windows.Media.RectangleGeometry -ArgumentList (New-Object System.Windows.Rect 0, 0, 112, 72), 9.0, 9.0
+    if ($kind -eq 'dark') { [void]$g.Children.Add((New-ThemeLayer $dark)) }
+    else {
+        [void]$g.Children.Add((New-ThemeLayer $light))
+        # 跟随系统：一半浅色一半深色，斜着分开
+        if ($kind -eq 'system') { $d = New-ThemeLayer $dark; $d.Clip = [System.Windows.Media.Geometry]::Parse('M68,0 L112,0 L112,72 L44,72 Z'); [void]$g.Children.Add($d) }
+    }
+    return $g
+}
+foreach ($k in 'Light', 'Dark', 'System') { $pic = $win.FindName('SetTheme' + $k + 'Pic'); if ($pic) { $pic.Child = New-ThemeThumb $k.ToLowerInvariant() } }
+# 对话框里的三张缩略图：点一张选中，点「应用」才换
+function New-ThemePicker([string]$cur) {
+    $sp = New-Object System.Windows.Controls.StackPanel; $sp.Orientation = 'Horizontal'; $sp.HorizontalAlignment = 'Left'
+    $script:themePick = $cur
+    $keys = @('light', 'dark', 'system')
+    foreach ($k in $keys) {
+        $rb = New-Object System.Windows.Controls.RadioButton
+        $rb.GroupName = 'sheettheme'; $rb.Style = $win.FindResource('ThemeCard'); $rb.Tag = $k
+        if ($k -eq $keys[-1]) { $rb.Margin = New-Object System.Windows.Thickness 0 }
+        $in = New-Object System.Windows.Controls.StackPanel
+        $pic = New-Object System.Windows.Controls.Border; $pic.Style = $win.FindResource('ThemePic'); $pic.Child = New-ThemeThumb $k
+        $lb = New-Object System.Windows.Controls.TextBlock; $lb.Style = $win.FindResource('ThemeLbl'); $lb.Text = $script:themeNames[$k]
+        [void]$in.Children.Add($pic); [void]$in.Children.Add($lb); $rb.Content = $in
+        if ($k -eq $cur) { $rb.IsChecked = $true }
+        $rb.Add_Checked({ $script:themePick = [string]$this.Tag })
+        [void]$sp.Children.Add($rb)
+    }
+    return $sp
+}
 $ctl.BtnThemeText.Text = (T "外观：{0}") -f $script:themeNames[$(if ($script:themeNames.ContainsKey($script:themePref)) { $script:themePref } else { 'light' })]
 $ctl.BtnTheme.Add_Click({
     if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return }
-    $ans = Show-Sheet -Title (T '选择外观') -Text ((T "深色适合在暗的环境里用；跟随系统会照 Windows 设置里「选择应用模式」来。换了以后本工具会关闭，再自动打开。`n`n现在：{0}") -f $script:themeNames[$script:themePref]) `
-        -Buttons @((T '取消'), (T '跟随系统'), (T '深色'), (T '浅色')) -Primary (T '浅色') -Cancel (T '取消')
-    $to = if ($ans -eq (T '浅色')) { 'light' } elseif ($ans -eq (T '深色')) { 'dark' } elseif ($ans -eq (T '跟随系统')) { 'system' } else { '' }
+    $ok = (T '应用')
+    $ans = Show-Sheet -Title (T '选择外观') -Text (T '深色适合在暗的环境里用；跟随系统会照 Windows 设置里「选择应用模式」来。换了以后本工具会关闭，再自动打开。') `
+        -Extra (New-ThemePicker $script:themePref) -Buttons @((T '取消'), $ok) -Primary $ok -Cancel (T '取消')
+    if ($ans -ne $ok) { return }
+    $to = [string]$script:themePick
     if (-not $to -or $to -eq $script:themePref) { return }
     Set-ThemePref $to
 })

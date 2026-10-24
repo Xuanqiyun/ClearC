@@ -22,6 +22,7 @@ $script:sheetXaml = @'
           <TextBlock x:Name="SList" LineHeight="22" TextWrapping="Wrap"/>
         </ScrollViewer>
       </Border>
+      <ContentControl x:Name="SExtra" Margin="0,20,0,4" Visibility="Collapsed" Focusable="False" IsTabStop="False"/>
       <Border x:Name="SAckBox" Margin="0,16,0,0" Background="#FFF6F6" BorderBrush="#F3C4C8" BorderThickness="1" CornerRadius="9" Padding="12,10" Visibility="Collapsed">
         <CheckBox x:Name="SAck" VerticalContentAlignment="Top">
           <TextBlock x:Name="SAckText" TextWrapping="Wrap" Foreground="#1D1D1F" LineHeight="20"/>
@@ -101,6 +102,84 @@ foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageM
 # 右键菜单不在窗口的元素树里：万一按名字找不到，就从菜单里一个个取
 if (-not $ctl.MmDelete -and $ctl.MapList.ContextMenu) { $ctl.MapMenu = $ctl.MapList.ContextMenu; foreach ($it in $ctl.MapMenu.Items) { if ($it.Name) { $ctl[$it.Name] = $it } } }
 if (-not $ctl.CmOpen -and $ctl.List.ContextMenu) { $ctl.CleanMenu = $ctl.List.ContextMenu; foreach ($it in $ctl.CleanMenu.Items) { if ($it.Name) { $ctl[$it.Name] = $it } } }
+
+# ---------- 自适应排版：窗口拉宽（最大化）时一排多放几列，表格的宽列分到多出来的宽度；窗口窄了退回一列 ----------
+# XAML 里写 Tag="cols:最小列宽:列间距:行间距[:最多几列]" 的 Grid：里面的元素按顺序排进几列等宽的列，一行排满再换行
+function Update-AutoCols($g) {
+    $c = $g.Tag; if ($c -isnot [hashtable]) { return }
+    $kids = New-Object System.Collections.Generic.List[object]; $vis = New-Object System.Text.StringBuilder; $i = 0
+    foreach ($k in $g.Children) { if ($k.Visibility -ne [System.Windows.Visibility]::Collapsed) { $kids.Add($k); [void]$vis.Append($i).Append(',') }; $i++ }
+    $w = [double]$g.ActualWidth
+    $n = [int][math]::Floor(($w + $c.Gap) / ($c.Min + $c.Gap))
+    $n = [math]::Max(1, [math]::Min($n, [int]$c.Max))
+    $sig = '{0}|{1}' -f $n, $vis.ToString()
+    if ($c.Sig -eq $sig) { return }
+    $c.Sig = $sig; $c.Cols = $n
+    $g.ColumnDefinitions.Clear(); $g.RowDefinitions.Clear()
+    for ($j = 0; $j -lt $n; $j++) {
+        if ($j -gt 0) { $gd = New-Object System.Windows.Controls.ColumnDefinition; $gd.Width = New-Object System.Windows.GridLength ([double]$c.Gap); $g.ColumnDefinitions.Add($gd) }
+        $cd = New-Object System.Windows.Controls.ColumnDefinition; $cd.Width = New-Object System.Windows.GridLength 1, ([System.Windows.GridUnitType]::Star); $g.ColumnDefinitions.Add($cd)
+    }
+    $rows = [int][math]::Max(1, [math]::Ceiling($kids.Count / [double]$n))
+    for ($r = 0; $r -lt $rows; $r++) {
+        if ($r -gt 0) { $gr = New-Object System.Windows.Controls.RowDefinition; $gr.Height = New-Object System.Windows.GridLength ([double]$c.RowGap); $g.RowDefinitions.Add($gr) }
+        $rd = New-Object System.Windows.Controls.RowDefinition; $rd.Height = [System.Windows.GridLength]::Auto; $g.RowDefinitions.Add($rd)
+    }
+    for ($k = 0; $k -lt $kids.Count; $k++) {
+        [System.Windows.Controls.Grid]::SetColumn($kids[$k], [int](($k % $n) * 2))
+        [System.Windows.Controls.Grid]::SetRow($kids[$k], [int]([math]::Floor($k / $n) * 2))
+    }
+}
+function Register-AutoCols($root) {
+    if (-not $root) { return }
+    $dpd = [System.ComponentModel.DependencyPropertyDescriptor]::FromProperty([System.Windows.UIElement]::VisibilityProperty, [System.Windows.UIElement])
+    $q = New-Object System.Collections.Queue; $q.Enqueue($root)
+    while ($q.Count -gt 0) {
+        $v = $q.Dequeue()
+        if ($v -is [System.Windows.Controls.Grid] -and $v.Tag -is [string] -and $v.Tag -match '^cols:(\d+):(\d+):(\d+)(?::(\d+))?$') {
+            $v.Tag = @{ Min = [double]$Matches[1]; Gap = [double]$Matches[2]; RowGap = [double]$Matches[3]; Max = $(if ($Matches[4]) { [int]$Matches[4] } else { 4 }); Sig = ''; Cols = 1 }
+            $v.Add_SizeChanged({ param($s, $e) if ($e.WidthChanged) { Update-AutoCols $s } })
+            # 里面某一项显示、隐藏了：重新排
+            foreach ($k in $v.Children) { $dpd.AddValueChanged($k, [EventHandler]{ param($s, $e) $p = [System.Windows.LogicalTreeHelper]::GetParent($s); if ($p -is [System.Windows.Controls.Grid]) { Update-AutoCols $p } }) }
+            Update-AutoCols $v
+            [void]$script:autoColGrids.Add($v)
+        }
+        foreach ($c in [System.Windows.LogicalTreeHelper]::GetChildren($v)) { if ($c -is [System.Windows.DependencyObject]) { $q.Enqueue($c) } }
+    }
+}
+$script:autoColGrids = New-Object System.Collections.ArrayList
+foreach ($n in 'PageHelp', 'PageHealth', 'PageSettings') { Register-AutoCols $ctl[$n] }
+# 表格（GridView）：窗口变宽时，多出来的宽度按权重分给名称、路径这类列，其余列宽度不变；窗口窄了回到原来的宽度
+$script:gridFill = @{}
+function Update-GridFill($lv) {
+    $f = $script:gridFill[[string]$lv.Name]; if (-not $f) { return }
+    if (-not $f.Sv) { $f.Sv = Find-Visual $lv ([System.Windows.Controls.ScrollViewer]) }
+    $sv = $f.Sv
+    $avail = if ($sv -and $sv.ViewportWidth -gt 0) { [double]$sv.ViewportWidth } else { [double]$lv.ActualWidth - [System.Windows.SystemParameters]::VerticalScrollBarWidth }
+    $avail = [math]::Floor($avail - 8)   # 留一点余地，不然正好顶到边上会冒出横向滚动条
+    if ($avail -le 0 -or [math]::Abs($avail - $f.Last) -lt 1) { return }
+    $f.Last = $avail
+    $sum = [double]0; foreach ($b in $f.Base) { $sum += $b }
+    $wsum = [double]0; foreach ($x in $f.W) { $wsum += $x }
+    $extra = [math]::Max([double]0, $avail - $sum)
+    $cols = $lv.View.Columns
+    for ($i = 0; $i -lt $cols.Count -and $i -lt $f.Base.Count; $i++) {
+        $want = [double]$f.Base[$i]
+        if ($wsum -gt 0 -and $i -lt $f.W.Count) { $want += [math]::Floor($extra * [double]$f.W[$i] / $wsum) }
+        if ([math]::Abs([double]$cols[$i].Width - $want) -ge 1) { $cols[$i].Width = $want }
+    }
+}
+function Register-GridFill($lv, [double[]]$weights) {
+    if (-not $lv -or $lv.View -isnot [System.Windows.Controls.GridView]) { return }
+    $script:gridFill[[string]$lv.Name] = @{ Base = [double[]]@($lv.View.Columns | ForEach-Object { [double]$_.Width }); W = $weights; Last = -1; Sv = $null }
+    $lv.Add_SizeChanged({ param($s, $e) if ($e.WidthChanged) { Update-GridFill $s } })
+    # 出现、去掉竖滚动条时可用的宽度会变
+    $lv.AddHandler([System.Windows.Controls.ScrollViewer]::ScrollChangedEvent, [System.Windows.Controls.ScrollChangedEventHandler]{ param($s, $e) if ($e.ViewportWidthChange -ne 0) { Update-GridFill $s } })
+}
+Register-GridFill $ctl.MonList @(3, 0, 0, 0, 1, 0)        # 程序、本次监控写入
+Register-GridFill $ctl.DupList @(0, 3, 0, 1, 0)           # 位置、注意
+Register-GridFill $ctl.MapGrow @(1, 0, 0, 0)              # 文件夹
+Register-GridFill $ctl.LogList @(0, 0, 1, 2, 1.5)         # 操作、对象、详情
 
 # ---------- 列表排序：点表头按这一列排，再点一下反过来；切换筛选、数据刷新以后还按原来的排 ----------
 # 每个列表一份配置：Cols 是「表头的键 → 按哪个属性排、是不是数字」（数字第一次点从大到小，文字从 A 到 Z）；
@@ -393,7 +472,7 @@ $ctl.BtnLogHide.Add_Click({ Set-LogVisible $false })
 #   Kind：info 蓝色信息 / warn 橙色提醒 / danger 红色删除 / done 绿色完成
 function Show-Sheet {
     param([string]$Title, [string]$Text = '', [string[]]$Items = $null, [string[]]$Buttons = @((T '好')),
-          [string]$Primary = '', [string]$Cancel = '', [string]$Kind = 'info', [string]$Confirm = '')
+          [string]$Primary = '', [string]$Cancel = '', [string]$Kind = 'info', [string]$Confirm = '', $Extra = $null)
     if (-not $Primary) { $Primary = $Buttons[-1] }
     if (-not $Cancel)  { $Cancel = $Buttons[0] }
     if ($script:uiTest) { $script:uiSheets.Add(("{0}`n{1}" -f $Title, $Text)); return $Cancel }   # 界面自测：不弹对话框，当作点了取消
@@ -420,6 +499,7 @@ function Show-Sheet {
     $sw.FindName('SIconBg').Fill = New-Brush $lk[2] 'b'
     $sw.FindName('STitle').Text = $Title
     $st = $sw.FindName('SText'); $st.Text = $Text; if (-not $Text) { $st.Visibility = 'Collapsed' }
+    if ($Extra) { $xc = $sw.FindName('SExtra'); $xc.Content = $Extra; $xc.Visibility = 'Visible' }
     if ($Items) {
         $sw.FindName('SListBox').Visibility = 'Visible'
         $sw.FindName('SList').Text = (($Items | ForEach-Object { if ([string]$_ -match '^[✓!✗·…]') { [string]$_ } else { "•  $_" } }) -join "`n")

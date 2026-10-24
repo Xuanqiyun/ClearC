@@ -25,14 +25,37 @@ $script:hcGreen = @('#1D7A35', '#E5F4E9'); $script:hcAmber = @('#995700', '#FFF1
 function New-Chip([string]$text, $tier) { $c = New-Object HealthChip; $c.Text = $text; $c.Fg = $tier[0]; $c.Bg = $tier[1]; return $c }
 function New-HealthCard([string]$title, [string]$sub, $tier) { $c = New-Object HealthCard; $c.Title = $title; $c.Sub = $sub; $c.Stripe = $tier[0]; $c.BarBrush = $tier[0]; return $c }
 function Tier-Worst($a, $b) { $rank = @{ ($script:hcGrey[0]) = 0; ($script:hcGreen[0]) = 1; ($script:hcBlue[0]) = 1; ($script:hcAmber[0]) = 2; ($script:hcRed[0]) = 3 }; if ($rank[$b[0]] -gt $rank[$a[0]]) { $b } else { $a } }
+# 空间地图上每块盘一张卡片：卡片一起排满这一排（每张至少 280、最多 560），盘多了就换行
+$win.Resources['DcCardW'] = [double]300
+function Update-DcCardW {
+    $w = [double]$ctl.MapHealth.ActualWidth; if ($w -lt 100) { return }
+    $n = @($ctl.MapHealth.ItemsSource).Count; if ($n -lt 1) { $n = 1 }
+    $cols = [math]::Max(1, [math]::Min($n, [math]::Floor(($w + 1) / (280 + 12))))
+    $cw = [math]::Min([double]560, [math]::Floor($w / $cols) - 12)
+    if ([math]::Abs([double]$win.Resources['DcCardW'] - $cw) -lt 1) { return }
+    $win.Resources['DcCardW'] = [double]$cw
+    # 用量条的长度跟着卡片宽度变
+    foreach ($c in @($ctl.MapHealth.ItemsSource)) { if ($c) { $c.BarW = [math]::Round(($cw - 34) * [double]$c.UsedPct / 100.0) } }
+    try { $ctl.MapHealth.Items.Refresh() } catch {}
+}
+$ctl.MapHealth.Add_SizeChanged({ param($s, $e) if ($e.WidthChanged) { Update-DcCardW } })
 # 硬件卡片的宽度跟着这一页的宽度走：每张至少 270，一排能放几张放几张，正好排满（最大化时右边不留空白，也不用往下拉很长）
 $win.Resources['HcCardW'] = [double]290
+# 卡片上的用量条按百分比画：卡片多宽，满格就多长
+function Set-CardBar($card, [double]$pct) {
+    $card.HasBar = $true; $card.BarPct = $pct
+    $card.BarW = [math]::Max(2, ([double]$win.Resources['HcCardW'] - 33) * $pct / 100.0)
+}
 $ctl.HealthCards.Add_SizeChanged({
     param($s, $e)
     $w = [double]$s.ActualWidth; if ($w -lt 100) { return }
     $cols = [math]::Max(1, [math]::Floor(($w + 1) / (270 + 12)))
     $cw = [math]::Floor($w / $cols) - 12
-    if ([math]::Abs([double]$win.Resources['HcCardW'] - $cw) -ge 1) { $win.Resources['HcCardW'] = [double]$cw }
+    if ([math]::Abs([double]$win.Resources['HcCardW'] - $cw) -lt 1) { return }
+    $win.Resources['HcCardW'] = [double]$cw
+    $any = $false
+    foreach ($c in @($ctl.HealthCards.ItemsSource)) { if ($c -and $c.HasBar) { $c.BarW = [math]::Max(2, ($cw - 33) * [double]$c.BarPct / 100.0); $any = $true } }
+    if ($any) { try { $ctl.HealthCards.Items.Refresh() } catch {} }
 })
 # 事件的说明文字：一行一行合起来，太长的截到 300 字（完整的在鼠标提示里）
 function Shorten-Note([string]$t) {
@@ -51,7 +74,7 @@ function Show-Health($r) {
     if ($c.Ok) {
         $tier = $script:hcGreen
         $card = New-HealthCard (T 'CPU') $c.Name $tier
-        if ($c.Load -ge 0) { $card.Chips.Add((New-Chip ((T "负载 {0}%") -f $c.Load) $(if ($c.Load -ge 90) { $script:hcAmber } else { $script:hcGreen }))); $card.HasBar = $true; $card.BarW = [math]::Max(2, 2.5 * $c.Load) }
+        if ($c.Load -ge 0) { $card.Chips.Add((New-Chip ((T "负载 {0}%") -f $c.Load) $(if ($c.Load -ge 90) { $script:hcAmber } else { $script:hcGreen }))); Set-CardBar $card $c.Load }
         if ($c.MaxMHz -gt 0) { $card.Chips.Add((New-Chip ("{0:N1} / {1:N1} GHz" -f ($c.MHz / 1000), ($c.MaxMHz / 1000)) $script:hcBlue)) }
         if ($c.Perf -ge 0) { $t2 = if ($c.Throttle) { $script:hcRed } elseif ($c.Perf -lt 90) { $script:hcAmber } else { $script:hcGreen }; $card.Chips.Add((New-Chip ((T "性能 {0}%") -f $c.Perf) $t2)); $tier = Tier-Worst $tier $t2 }
         if ($c.Temp -ne $null) { $t2 = if ($c.Temp -ge 90) { $script:hcRed } elseif ($c.Temp -ge 75) { $script:hcAmber } else { $script:hcGreen }; $card.Chips.Add((New-Chip ("{0} °C" -f $c.Temp) $t2)); $tier = Tier-Worst $tier $t2; if ($c.TempNote) { $card.Lines.Add($c.TempNote) } }
@@ -65,7 +88,7 @@ function Show-Health($r) {
     if ($m.Ok) {
         $tier = switch ($m.Pressure) { 'high' { $script:hcRed } 'mid' { $script:hcAmber } default { $script:hcGreen } }
         $card = New-HealthCard (T '内存') ((T "{0} 已用 {1}，可用 {2}") -f (Fmt $m.Total), (Fmt ($m.Total - $m.Free)), (Fmt $m.Free)) $tier
-        $card.HasBar = $true; $card.BarW = [math]::Max(2, 2.5 * $m.UsedPct)
+        Set-CardBar $card $m.UsedPct
         $card.Chips.Add((New-Chip ((T "已用 {0}%") -f $m.UsedPct) $(if ($m.UsedPct -ge 92) { $script:hcRed } elseif ($m.UsedPct -ge 80) { $script:hcAmber } else { $script:hcGreen })))
         $card.Chips.Add((New-Chip ((T "提交 {0}%") -f $m.CommitPct) $(if ($m.CommitPct -ge 90) { $script:hcRed } elseif ($m.CommitPct -ge 75) { $script:hcAmber } else { $script:hcGreen })))
         if ($m.HardFaults -ge 0) { $card.Chips.Add((New-Chip ((T "硬错误 {0}/秒") -f $m.HardFaults) $(if ($m.HardFaults -ge 100) { $script:hcRed } elseif ($m.HardFaults -ge 20) { $script:hcAmber } else { $script:hcGreen }))) }
@@ -79,7 +102,7 @@ function Show-Health($r) {
         $tier = $script:hcGreen
         $sub = if ($d.Model) { [string]$d.Model } else { (T '型号读不到') }
         $card = New-HealthCard ((T "磁盘 {0}") -f $d.Drive) $sub $tier
-        try { $di = New-Object System.IO.DriveInfo ($d.Drive + '\'); $pct = [int][math]::Round(100.0 * ($di.TotalSize - $di.TotalFreeSpace) / [math]::Max([double]1, [double]$di.TotalSize)); $card.HasBar = $true; $card.BarW = [math]::Max(2, 2.5 * $pct); $card.Chips.Add((New-Chip ((T "已用 {0}%") -f $pct) $(if ($pct -ge 95) { $script:hcRed } elseif ($pct -ge 85) { $script:hcAmber } else { $script:hcGreen }))) } catch {}
+        try { $di = New-Object System.IO.DriveInfo ($d.Drive + '\'); $pct = [int][math]::Round(100.0 * ($di.TotalSize - $di.TotalFreeSpace) / [math]::Max([double]1, [double]$di.TotalSize)); Set-CardBar $card $pct; $card.Chips.Add((New-Chip ((T "已用 {0}%") -f $pct) $(if ($pct -ge 95) { $script:hcRed } elseif ($pct -ge 85) { $script:hcAmber } else { $script:hcGreen }))) } catch {}
         if ($d.Ok) {
             $h = [string]$d.Health
             $t2 = if ($h -match 'Healthy|正常|OK') { $script:hcGreen } elseif ($h) { $script:hcRed } else { $script:hcGrey }
@@ -98,7 +121,7 @@ function Show-Health($r) {
     if ($b.Present) {
         $tier = $script:hcGreen
         $card = New-HealthCard (T '电池') $b.Status $tier
-        if ($b.Charge -ge 0) { $card.HasBar = $true; $card.BarW = [math]::Max(2, 2.5 * $b.Charge); $card.Chips.Add((New-Chip ((T "电量 {0}%") -f $b.Charge) $script:hcBlue)) }
+        if ($b.Charge -ge 0) { Set-CardBar $card $b.Charge; $card.Chips.Add((New-Chip ((T "电量 {0}%") -f $b.Charge) $script:hcBlue)) }
         if ($b.Design -gt 0 -and $b.Full -gt 0) {
             $pct = [int][math]::Round(100.0 * $b.Full / $b.Design)
             $t2 = if ($pct -lt 60) { $script:hcRed } elseif ($pct -lt 80) { $script:hcAmber } else { $script:hcGreen }
@@ -113,7 +136,7 @@ function Show-Health($r) {
     foreach ($g in @($r.Gpu)) {
         if (-not $g.Ok) { $card = New-HealthCard (T '显卡') (T '读不到') $script:hcGrey; $card.Lines.Add($g.Why); $cards.Add($card); continue }
         $card = New-HealthCard (T '显卡') $g.Name $script:hcGreen
-        if ($g.Util -ge 0) { $card.HasBar = $true; $card.BarW = [math]::Max(2, 2.5 * $g.Util); $card.Chips.Add((New-Chip ((T "占用 {0}%") -f $g.Util) $(if ($g.Util -ge 95) { $script:hcAmber } else { $script:hcGreen }))) }
+        if ($g.Util -ge 0) { Set-CardBar $card $g.Util; $card.Chips.Add((New-Chip ((T "占用 {0}%") -f $g.Util) $(if ($g.Util -ge 95) { $script:hcAmber } else { $script:hcGreen }))) }
         if ($g.Vram -gt 0) { $card.Chips.Add((New-Chip ($(if ($g.VramUsed -ge 0) { (T "显存 {0} / {1}") -f (Fmt $g.VramUsed), (Fmt $g.Vram) } else { (T "显存 {0}") -f (Fmt $g.Vram) })) $script:hcBlue)) }
         $card.Chips.Add((New-Chip (T '温度读不到') $script:hcGrey))
         $card.Lines.Add($g.TempWhy)
@@ -238,6 +261,12 @@ function New-FixStepRow([string]$id, $st) {
         }
     }
     $row.Tag = $tag; $row.TagFg = $tier[0]; $row.TagBg = $tier[1]
+    # 卡片上：标题是这一步做什么，按钮上写动作；点了会先问一下的，按钮后面带省略号
+    $row.Title = ([string]$row.Name).TrimEnd([char]0x2026)
+    $ask = ([string]$row.Name).EndsWith([string][char]0x2026)
+    $act = switch ($s.Kind) { 'open' { T '打开' } 'go' { T '查看' } default { T '运行' } }
+    switch ($id) { 'diagpack' { $act = (T '导出') } 'vendor' { $act = (T '打开') } 'ahciguide' { $act = (T '查看步骤') } 'diskpowerundo' { $act = (T '恢复') } }
+    $row.Act = if (-not $row.Enabled) { $tag } elseif ($ask) { $act + [char]0x2026 } else { $act }
     return $row
 }
 function New-FixBtn([string]$id, $st) {
@@ -255,7 +284,7 @@ function Show-Fixes($st) {
             $s = $c.Steps[$id]; if (-not $s) { continue }
             $show = [int]$s.Lvl -le $m
             if ($id -eq 'diskpowerundo') { $show = ($st -and $st.DiskFix) -or $m -ge [int]$c.Steps['diskpower'].Lvl }   # 改过了就一直能恢复，不管什么模式
-            if ($show) { $g.Steps.Add((New-FixStepRow $id $st)) }
+            if ($show) { $x = New-FixStepRow $id $st; $x.No = [string]($g.Steps.Count + 1); $g.Steps.Add($x) }
         }
         if ($g.Steps.Count -gt 0) { $col.Add($g) }
     }

@@ -249,6 +249,93 @@ $ctl.CandList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickE
     if (-not ($b -is [System.Windows.Controls.Button]) -or -not ($b.Tag -is [CandRow])) { return }
     if ($b.Name -eq 'CandOpen') { Open-Location $b.Tag.Location }
 })
+# 按住鼠标左键上下拖：拖过的行一起勾上（从没勾的行开始拖）或一起取消（从勾着的行开始拖），像在资源管理器里拉框；
+# 按在方框、「打开」按钮、滚动条上照常用；拖到列表上面或下面会自动滚动；不能搬的行不动
+$script:cdrag = $null
+$script:cdragTimer = New-Object System.Windows.Threading.DispatcherTimer
+$script:cdragTimer.Interval = [TimeSpan]::FromMilliseconds(50)
+# 纵坐标 y 处是哪一行（返回这一行的数据；分组标题、空白处返回 $null）
+function Get-CandRowAt([double]$y) {
+    $lv = $ctl.CandList; $h = [double]$lv.ActualHeight; if ($h -le 4) { return $null }
+    $yy = [math]::Min([math]::Max($y, 2.0), $h - 2.0)
+    foreach ($dy in 0, -4, 4) {
+        $hit = $lv.InputHitTest((New-Object System.Windows.Point ([math]::Max(40.0, [double]$lv.ActualWidth / 2)), ($yy + $dy)))
+        if ($hit -is [System.Windows.DependencyObject]) {
+            $c = $null; try { $c = [System.Windows.Controls.ItemsControl]::ContainerFromElement($lv, $hit) } catch {}
+            if ($c -is [System.Windows.Controls.ListViewItem]) { return $c.Content }
+        }
+    }
+    return $null
+}
+function Get-CandIndex($items, $row) { for ($k = 0; $k -lt $items.Count; $k++) { if ([object]::ReferenceEquals($items[$k], $row)) { return $k } }; return -1 }
+function Set-CandRange($d, $row) {
+    if (-not $row) { return }
+    $i = Get-CandIndex $d.Items $row
+    if ($i -lt 0 -or $i -eq $d.Cur) { return }
+    $a = [math]::Min($d.Anchor, $i); $b = [math]::Max($d.Anchor, $i)
+    for ($k = 0; $k -lt $d.Items.Count; $k++) {
+        $r = $d.Items[$k]; if (-not $r.CanMove) { continue }
+        $want = if ($k -ge $a -and $k -le $b) { [bool]$d.Want } else { [bool]$d.Snap[$k] }
+        if ([bool]$r.Checked -ne $want) { $r.Checked = $want }
+    }
+    $d.Cur = $i
+    Update-CandSel
+}
+function Stop-CandDrag {
+    $d = $script:cdrag; $script:cdrag = $null
+    $script:cdragTimer.Stop()
+    if ($d -and $d.Cap -and $d.Cap.IsMouseCaptured) { $d.Cap.ReleaseMouseCapture() }
+}
+$ctl.CandList.Add_PreviewMouseLeftButtonDown({
+    param($s, $e)
+    Stop-CandDrag
+    $src = $e.OriginalSource
+    if ($src -isnot [System.Windows.DependencyObject]) { return }
+    try {
+        for ($v = $src; $v -and -not [object]::ReferenceEquals($v, $s); $v = [System.Windows.Media.VisualTreeHelper]::GetParent($v)) {
+            if ($v -is [System.Windows.Controls.Primitives.ButtonBase] -or $v -is [System.Windows.Controls.Primitives.ScrollBar]) { return }   # 方框、按钮、滚动条照常用
+            if ($v -is [System.Windows.Controls.ListViewItem]) { break }
+        }
+    } catch { return }
+    $c = $null; try { $c = [System.Windows.Controls.ItemsControl]::ContainerFromElement($s, $src) } catch {}
+    if ($c -isnot [System.Windows.Controls.ListViewItem]) { return }
+    $r = $c.Content; if (-not $r -or -not $r.CanMove) { return }
+    $items = [object[]]@($s.Items)
+    $script:cdrag = @{ Items = $items; Anchor = (Get-CandIndex $items $r); Cur = (Get-CandIndex $items $r); Moved = $false; Want = -not [bool]$r.Checked; Snap = $null; Cap = $null }
+})
+$ctl.CandList.Add_PreviewMouseMove({
+    param($s, $e)
+    $d = $script:cdrag
+    if (-not $d) { return }
+    if ($e.LeftButton -ne [System.Windows.Input.MouseButtonState]::Pressed) { Stop-CandDrag; return }
+    $r = Get-CandRowAt ($e.GetPosition($s).Y)
+    if (-not $d.Moved) {
+        if (-not $r -or (Get-CandIndex $d.Items $r) -eq $d.Anchor) { return }
+        $d.Moved = $true
+        $d.Snap = [bool[]]@($d.Items | ForEach-Object { [bool]$_.Checked })
+        # 鼠标交给列表里的滚动区：拖到列表外面也收得到；起点这一行先跟着变
+        $d.Cap = Find-Visual $s ([System.Windows.Controls.ScrollViewer]); if (-not $d.Cap) { $d.Cap = $s }
+        [void]$d.Cap.CaptureMouse()
+        $a = $d.Items[$d.Anchor]; if ([bool]$a.Checked -ne [bool]$d.Want) { $a.Checked = [bool]$d.Want }
+        $script:cdragTimer.Start()
+    }
+    Set-CandRange $d $r
+})
+$ctl.CandList.Add_PreviewMouseLeftButtonUp({ if ($script:cdrag) { Stop-CandDrag } })
+$ctl.CandList.Add_LostMouseCapture({ param($s, $e) $d = $script:cdrag; if ($d -and $d.Moved -and $d.Cap -and [object]::ReferenceEquals($e.OriginalSource, $d.Cap)) { $script:cdrag = $null; $script:cdragTimer.Stop() } })
+$script:cdragTimer.Add_Tick({
+    $d = $script:cdrag
+    if (-not $d -or -not $d.Moved) { $script:cdragTimer.Stop(); return }
+    if ([System.Windows.Input.Mouse]::LeftButton -ne [System.Windows.Input.MouseButtonState]::Pressed) { Stop-CandDrag; return }
+    $lv = $ctl.CandList; $y = [System.Windows.Input.Mouse]::GetPosition($lv).Y; $h = [double]$lv.ActualHeight
+    if ($y -ge 0 -and $y -le $h) { return }
+    $sv = $d.Cap; if ($sv -isnot [System.Windows.Controls.ScrollViewer]) { return }
+    $over = if ($y -lt 0) { -$y } else { $y - $h }
+    $steps = [math]::Min(4, 1 + [int][math]::Floor($over / 30))
+    for ($k = 0; $k -lt $steps; $k++) { if ($y -lt 0) { $sv.LineUp() } else { $sv.LineDown() } }
+    $lv.UpdateLayout()
+    Set-CandRange $d (Get-CandRowAt $y)
+})
 $ctl.BtnCandMove.Add_Click({ Start-MoveMany })
 
 # 勾选的一起搬：先确认（列出每一项、要关掉的软件），再逐项复制、核对、换成链接
