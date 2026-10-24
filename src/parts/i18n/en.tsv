@@ -156,6 +156,18 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+蓝屏转储：导出时选了不带	Crash dumps: left out when exporting
+腾挪 ClearC 诊断包里的文件（大小是压缩前的字节数）：	Files in this ClearC diagnostics package (sizes are uncompressed bytes):
+健康报告：硬件、Windows 和硬盘的状态	Health report: hardware, Windows and disk status
+最近 {0} 个蓝屏小转储（{1}）：里面有蓝屏那一刻内存里的一部分内容	The latest {0} small crash dumps ({1}): they hold part of what was in memory at the moment of the crash
+蓝屏小转储：这台电脑上没有	Small crash dumps: none on this PC
+最近 30 天的系统和应用日志	System and application event logs of the last 30 days
+systeminfo、驱动列表、硬盘信息、Windows 错误报告的列表	systeminfo, the driver list, disk details and the list of Windows Error Reports
+本工具最近的操作日志	ClearC's recent activity log
+一份清单（manifest.txt），列出包里的每个文件	A manifest (manifest.txt) listing every file in the package
+不带转储导出	Export without dumps
+导出诊断包？	Export a diagnostics package?
+诊断包里会有下面这些。里面有电脑名、用户名、装过的软件和文件路径，只发给你信得过、要帮你看问题的人。	The package contains the items below. They include the computer name, user name, installed apps and file paths, so only send it to someone you trust who is helping you.
 开着：系统文件压缩存放	On: system files are stored compressed
 「省空间」→「系统压缩」→「关闭」	Save space → CompactOS → Turn off
 放在 {0}	On {0}

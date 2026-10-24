@@ -471,15 +471,31 @@ $ctl.BtnSfcRepair.Add_Click({ Start-SystemFileTool $true })
 function Start-DiagPack {
     if (-not $script:healthData) { Show-Sheet -Kind warn -Title (T '还在读取') -Text (T '等系统健康读完再导出。') | Out-Null; return }
     if ($script:uiTest) { $script:uiFixRuns.Add('diagpack'); return }
+    # 先说清楚包里有什么：转储里有出事时内存里的一部分内容，日志和系统信息里有电脑名、用户名、装过的软件
+    $dumps = @(Get-ChildItem -LiteralPath (Join-Path $env:SystemRoot 'Minidump') -Filter *.dmp -File -Force -ErrorAction SilentlyContinue)
+    $db = [double]0; foreach ($f in $dumps) { $db += $f.Length }
+    $items = @(
+        (T '健康报告：硬件、Windows 和硬盘的状态')
+        $(if ($dumps.Count) { (T "最近 {0} 个蓝屏小转储（{1}）：里面有蓝屏那一刻内存里的一部分内容") -f [math]::Min(20, $dumps.Count), (Fmt $db) } else { (T '蓝屏小转储：这台电脑上没有') })
+        (T '最近 30 天的系统和应用日志')
+        (T 'systeminfo、驱动列表、硬盘信息、Windows 错误报告的列表')
+        (T '本工具最近的操作日志')
+        (T '一份清单（manifest.txt），列出包里的每个文件')
+    )
+    $all = T '导出'; $lite = T '不带转储导出'
+    $btns = if ($dumps.Count) { @((T '取消'), $lite, $all) } else { @((T '取消'), $all) }
+    $ans = Show-Sheet -Kind warn -Title (T '导出诊断包？') -Text (T '诊断包里会有下面这些。里面有电脑名、用户名、装过的软件和文件路径，只发给你信得过、要帮你看问题的人。') -Items $items -Buttons $btns -Primary $all -Cancel (T '取消')
+    if ($ans -ne $all -and $ans -ne $lite) { return }
+    $noDumps = ($ans -eq $lite)
     $dlg = New-Object Microsoft.Win32.SaveFileDialog
     $dlg.Title = (T '诊断包保存到'); $dlg.Filter = (T 'zip 压缩包') + ' (*.zip)|*.zip'; $dlg.OverwritePrompt = $false
-    $dlg.FileName = ('ClearC-diag-{0}-{1:yyyyMMdd-HHmm}.zip' -f $env:COMPUTERNAME, (Get-Date)); $dlg.InitialDirectory = [Environment]::GetFolderPath('Desktop')
+    $dlg.FileName = ('ClearC-diag-{0:yyyyMMdd-HHmm}.zip' -f (Get-Date)); $dlg.InitialDirectory = [Environment]::GetFolderPath('Desktop')
     if (-not $dlg.ShowDialog($win)) { return }
     $zip = $dlg.FileName
     if (Test-Path -LiteralPath $zip) { Show-Sheet -Kind warn -Title (T '已经有这个文件') -Text (T '换一个文件名再导出：不会覆盖已有的文件。') | Out-Null; return }
     $ctl.BtnDiagPack.IsEnabled = $false
     $ctl.HealthNote.Text = (T '正在导出诊断包，要半分钟到几分钟（systeminfo 比较慢）…')
-    $ok = Start-BgEngine 'diagpack' 'Export-DiagPack $arg.Zip $arg.Health' @{ Zip = $zip; Health = $script:healthData } {
+    $ok = Start-BgEngine 'diagpack' 'Export-DiagPack $arg.Zip $arg.Health -NoDumps:$arg.NoDumps' @{ Zip = $zip; Health = $script:healthData; NoDumps = $noDumps } {
         param($res, $err)
         $ctl.BtnDiagPack.IsEnabled = $true
         if ($res -and $res.Ok) {

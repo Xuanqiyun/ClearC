@@ -731,6 +731,11 @@ try { & {
     $rp = [regex]::Match($engineText, '(?s)function New-RestorePointIfWanted.*?\r?\n\}').Value
     Check 'OPS-7 a restore point is only made when the switch is on, once per run, and nothing ever deletes one' ($rp -match "Get-Setting 'RestorePoint'" -and $rp -match 'Checkpoint-Computer' -and ([regex]::Matches($src, 'Checkpoint-Computer')).Count -eq 1)
     Check 'OPS-7 every system setting change asks for the restore point first (page file, hibernation, reserved storage, dumps, temp, CompactOS, power, repair steps)' (([regex]::Matches($src, 'New-RestorePointIfWanted ')).Count -ge 9 -and $src -match 'x:Name="SetCardChanges"' -and $src -match 'x:Name="SetRestorePoint"')
+    # ============ 38. 诊断包：导出前列出里面有什么，可以不带转储；包里附一份清单（3.6 安全评审） ============
+    $dp = [regex]::Match($engineText, '(?s)function Export-DiagPack\(.*?\r?\n\}').Value
+    $sd = [regex]::Match($src, '(?s)function Start-DiagPack \{.*?\r?\n\}').Value
+    Check 'SEC-10 the dumps can be left out, and the package carries a manifest of everything in it' ($dp -match '\[switch\]\$NoDumps' -and $dp -match "if \(-not \`$NoDumps\)" -and $dp -match "'manifest\.txt'")
+    Check 'SEC-10 before exporting, one sheet lists what goes in (dumps, logs, computer and user names) and offers to leave the dumps out; the file name has no computer name' ($sd.IndexOf('Show-Sheet') -lt $sd.IndexOf('SaveFileDialog') -and $sd -match "T '不带转储导出'" -and $sd -notmatch 'COMPUTERNAME' -and $sd -match 'NoDumps')
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue
