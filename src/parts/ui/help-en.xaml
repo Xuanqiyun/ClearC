@@ -670,6 +670,10 @@
                       <TextBlock Style="{StaticResource HelpBody}"><Run>Fast scan reads the file table directly; the duplicate search can make way for other programs so it doesn't slow down what you are using.</Run></TextBlock>
                     </StackPanel>
                     <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="What ClearC changed"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Changes ClearC made that are still in effect (CompactOS, page file, hibernation, moved folders, disabled startup items…), each with how to undo it. You can also turn on "Create a restore point before changing system settings".</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
                       <TextBlock Style="{StaticResource HelpLead}" Text="Cleanup list"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>Send deleted files to the Recycle Bin first, and add folders to clean or to exclude.</Run></TextBlock>
                     </StackPanel>

@@ -823,6 +823,7 @@ function Get-ReservedStorageState {
     return ''
 }
 function Set-ReservedStorage([bool]$on) {
+    New-RestorePointIfWanted (T '保留的存储')
     try { Set-WindowsReservedStorageState -State $(if ($on) { 'Enabled' } else { 'Disabled' }) -ErrorAction Stop | Out-Null; return '' }
     catch { $m = $_.Exception.Message }
     $o = (& "$sys32\Dism.exe" /Online /Set-ReservedStorageState /State:$(if ($on) { 'Enabled' } else { 'Disabled' }) 2>&1 | Out-String)
@@ -847,10 +848,13 @@ function ConvertFrom-DismAnalyze([string]$o) {
 }
 # ---------- 蓝屏转储的类型：0 不保存  1 完整内存  2 内核  3 小转储(256 KB)  7 自动 ----------
 function Get-CrashDumpMode { try { return [int](Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl' -ErrorAction Stop).CrashDumpEnabled } catch { return -1 } }
-function Set-CrashDumpMode([int]$mode) { Set-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl' -Name CrashDumpEnabled -Value $mode -Type DWord -ErrorAction Stop }
+function Set-CrashDumpMode([int]$mode) {
+    New-RestorePointIfWanted (T '蓝屏转储')
+    Set-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl' -Name CrashDumpEnabled -Value $mode -Type DWord -ErrorAction Stop }
 # ---------- 当前用户的临时文件夹位置（TEMP / TMP 环境变量）----------
 function Get-UserTemp { try { return [string](Get-ItemProperty 'HKCU:\Environment' -ErrorAction Stop).TEMP } catch { return '' } }
 function Set-UserTemp([string]$path) {
+    New-RestorePointIfWanted (T '临时文件夹')
     $v = if ($path) { $path } else { '%USERPROFILE%\AppData\Local\Temp' }
     foreach ($n in 'TEMP', 'TMP') { Set-ItemProperty 'HKCU:\Environment' -Name $n -Value $v -Type ExpandString -ErrorAction Stop }
     # 通知正在运行的程序环境变量变了（新开的程序才会用新位置）
@@ -1633,6 +1637,7 @@ function Get-PowerValue([string]$scheme, [string]$sub, [string]$set) {
     return @{ Ac = [long]$hex[$hex.Count - 2]; Dc = [long]$hex[$hex.Count - 1] }
 }
 function Set-DiskPowerFix([bool]$on) {
+    New-RestorePointIfWanted (T '硬盘和 PCIe 省电')
     $pc = "$sys32\powercfg.exe"
     if ($on) {
         $g = Get-ActiveSchemeGuid
@@ -3315,6 +3320,50 @@ function Get-AccountMismatch([string]$me, [string]$desk) {
     $a = ($me -split '\\')[-1]; $b = ($desk -split '\\')[-1]
     return ((T "本工具现在以 {0} 的身份运行，但登录桌面的是 {1}（打开时输入的是另一个管理员账户的密码）。清理的缓存、要搬的聊天记录、受保护的个人文件夹，都按 {0} 的账户算，{1} 的不会动。`n`n要整理 {1} 的，把 {1} 设成管理员后用它打开，或者登录 {0} 再用。") -f $a, $b)
 }
+# ---------- 本工具改过的（设置里的总览） ----------
+# 本工具能改、现在还在生效的系统设置和搬家，每一项写当前状态和怎么改回去。$st 是 Get-ChangeState 读到的现状
+function Get-ChangeOverview($st) {
+    $out = New-Object System.Collections.Generic.List[object]
+    $add = { param($n, $s, $u) $out.Add([pscustomobject]@{ Name = $n; State = $s; Undo = $u }) }
+    if ($st.CompactOS -eq $true) { & $add (T '系统压缩（CompactOS）') (T '开着：系统文件压缩存放') (T '「省空间」→「系统压缩」→「关闭」') }
+    $offC = @($st.PageFiles | Where-Object { $_ -and -not ([string]$_).StartsWith($env:SystemDrive, [StringComparison]::OrdinalIgnoreCase) })
+    if ($st.PageAuto -eq $false -or $offC.Count) { & $add (T '页面文件') ((T "放在 {0}") -f (@($st.PageFiles) -join (T '、'))) (T '「省空间」→「页面文件」→「恢复系统默认」，重启后生效') }
+    if ($st.Hiber -and -not $st.Hiber.Exists) { & $add (T '休眠') (T '关着：没有休眠和快速启动') (T '「省空间」→「休眠文件」→「恢复完整休眠」') }
+    elseif ($st.Hiber -and $st.Hiber.Reduced) { & $add (T '休眠') (T '精简：只留快速启动') (T '「省空间」→「休眠文件」→「恢复完整休眠」') }
+    if ($st.Reserved -eq 'Disabled') { & $add (T '保留的存储') (T '关着') (T '「省空间」→「保留的存储」→「恢复」') }
+    if ($null -ne $st.Dump -and [int]$st.Dump -ge 0 -and [int]$st.Dump -ne 7) { & $add (T '蓝屏转储') $(if ([int]$st.Dump -eq 3) { (T '只存小转储') } else { (T '不是系统默认的「自动」') }) (T '「省空间」→「蓝屏转储」→「恢复自动」') }
+    if ($st.Temp) { & $add (T '临时文件夹') ((T "改到了 {0}") -f $st.Temp) (T '「省空间」→「临时文件夹」→「恢复默认」，注销再登录后生效') }
+    if ([int]$st.Moves -gt 0) { & $add (T '搬到其他盘的文件夹') ((T "{0} 个，C 盘上只留了链接") -f $st.Moves) (T '「搬家管理」→「已经搬走的」→「搬回 C 盘」') }
+    if ($st.DiskFix) { & $add (T '硬盘和 PCIe 省电') (T '关着') (T '「系统健康」→「常见问题修复」→「恢复硬盘省电」') }
+    if ($st.FastStartup -eq 'off') { & $add (T '快速启动') (T '关着') (T '「系统健康」→「常见问题修复」→「快速启动」再打开（如果是本工具关的）') }
+    foreach ($d in @($st.Disabled)) { if ($d) { & $add ([string]$d) (T '被本工具禁用') (T '「软件管理」→ 开机启动、计划任务或右键菜单 → 找到它点「启用」') } }
+    foreach ($t in @($st.Tasks)) { if ($t) { & $add ((T "定时任务 {0}") -f $t) (T '开着') (T '「自动提醒」→ 关掉对应的开关') } }
+    return $out.ToArray()
+}
+# 读现状（有的要问 WMI、DISM，放在后台读）。被本工具禁用的启动项、开着的定时任务由界面补上（Get-DisabledByUs、Test-CleanTask）
+function Get-ChangeState {
+    $st = @{}
+    try { $st.CompactOS = [bool](Get-CompactOSOn) } catch {}
+    try { $pf = Get-PageFileInfo; $st.PageAuto = $pf.Auto; $st.PageFiles = @($pf.Files | ForEach-Object { $_.Path }) } catch {}
+    try { $st.Hiber = Get-HiberInfo } catch {}
+    try { $st.Reserved = [string](Get-ReservedStorageState) } catch {}
+    try { $st.Dump = Get-CrashDumpMode } catch {}
+    try { $st.Temp = Get-UserTemp } catch {}
+    try { $st.Moves = @(Get-MoveRecords | Where-Object { IsLink ([string]$_.Src) }).Count } catch {}
+    try { $p = Get-PowerFixState; $st.DiskFix = $p.DiskFix; $st.FastStartup = [string]$p.FastStartup } catch {}
+    return $st
+}
+# 改系统设置前先建一个还原点（设置里打开才建；一次打开本工具最多建一次，Windows 自己也限制一天一个）。建不成不拦着，记下来
+$script:rpTried = $false
+function New-RestorePointIfWanted([string]$what) {
+    if ((Get-Setting 'RestorePoint' '0') -ne '1' -or $script:rpTried) { return }
+    $script:rpTried = $true
+    try { Log (T '  先建一个系统还原点（要一会儿）…') } catch {}
+    try {
+        Checkpoint-Computer -Description ('ClearC: ' + $what) -RestorePointType MODIFY_SETTINGS -ErrorAction Stop
+        OpLog '系统设置' (T '建系统还原点') $what ''
+    } catch { OpLog '系统设置' (T '没建成系统还原点') $what $_.Exception.Message; try { Log ((T '  没建成还原点（{0}），照常继续') -f $_.Exception.Message) } catch {} }
+}
 # 定时任务上次、下次运行的时间和结果，写成一句话。$code 是任务计划程序给的结果码
 function Format-TaskRunInfo($last, [long]$code, $next) {
     $fmt = { param($d) if ($d -is [datetime] -and $d.Year -gt 2000) { $d.ToString('yyyy-MM-dd HH:mm') } else { '' } }
@@ -3552,6 +3601,7 @@ function Get-CompactOSOn {
     return ($n -ge 2)
 }
 function Invoke-CompactOS([bool]$on, $res) {
+    New-RestorePointIfWanted (T '系统压缩（CompactOS）')
     $f0 = [double](FreeC)
     $arg = if ($on) { '/compactos:always' } else { '/compactos:never' }
     SetP @{ Detail = $(if ($on) { (T '正在压缩系统文件，通常要 10 到 30 分钟，期间可以照常用电脑') } else { (T '正在解压系统文件，通常要 10 到 30 分钟') }) }
@@ -3566,6 +3616,7 @@ function Get-PageFileInfo {
     return @{ Auto = $auto; Files = $files }
 }
 function Set-PageFile([string]$drive) {
+    New-RestorePointIfWanted (T '页面文件')
     try {
         $cs = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
         if (-not $drive) {
@@ -3592,6 +3643,7 @@ function Get-HiberInfo {
     return @{ Exists = [bool]$i; Bytes = $(if ($i) { [double]$i.Length } else { [double]0 }); Reduced = ($type -eq 1) }
 }
 function Set-Hiber([string]$mode) {
+    New-RestorePointIfWanted (T '休眠')
     $pc = "$sys32\powercfg.exe"
     switch ($mode) {
         'off'     { & $pc /h off | Out-Null; OpLog '系统设置' (T '关闭休眠') 'hiberfil.sys' (T '没有「休眠」和「快速启动」了，睡眠不受影响') }

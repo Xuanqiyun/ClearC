@@ -4397,6 +4397,7 @@ function Get-ReservedStorageState {
     return ''
 }
 function Set-ReservedStorage([bool]$on) {
+    New-RestorePointIfWanted (T '保留的存储')
     try { Set-WindowsReservedStorageState -State $(if ($on) { 'Enabled' } else { 'Disabled' }) -ErrorAction Stop | Out-Null; return '' }
     catch { $m = $_.Exception.Message }
     $o = (& "$sys32\Dism.exe" /Online /Set-ReservedStorageState /State:$(if ($on) { 'Enabled' } else { 'Disabled' }) 2>&1 | Out-String)
@@ -4421,10 +4422,13 @@ function ConvertFrom-DismAnalyze([string]$o) {
 }
 # ---------- 蓝屏转储的类型：0 不保存  1 完整内存  2 内核  3 小转储(256 KB)  7 自动 ----------
 function Get-CrashDumpMode { try { return [int](Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl' -ErrorAction Stop).CrashDumpEnabled } catch { return -1 } }
-function Set-CrashDumpMode([int]$mode) { Set-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl' -Name CrashDumpEnabled -Value $mode -Type DWord -ErrorAction Stop }
+function Set-CrashDumpMode([int]$mode) {
+    New-RestorePointIfWanted (T '蓝屏转储')
+    Set-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl' -Name CrashDumpEnabled -Value $mode -Type DWord -ErrorAction Stop }
 # ---------- 当前用户的临时文件夹位置（TEMP / TMP 环境变量）----------
 function Get-UserTemp { try { return [string](Get-ItemProperty 'HKCU:\Environment' -ErrorAction Stop).TEMP } catch { return '' } }
 function Set-UserTemp([string]$path) {
+    New-RestorePointIfWanted (T '临时文件夹')
     $v = if ($path) { $path } else { '%USERPROFILE%\AppData\Local\Temp' }
     foreach ($n in 'TEMP', 'TMP') { Set-ItemProperty 'HKCU:\Environment' -Name $n -Value $v -Type ExpandString -ErrorAction Stop }
     # 通知正在运行的程序环境变量变了（新开的程序才会用新位置）
@@ -5207,6 +5211,7 @@ function Get-PowerValue([string]$scheme, [string]$sub, [string]$set) {
     return @{ Ac = [long]$hex[$hex.Count - 2]; Dc = [long]$hex[$hex.Count - 1] }
 }
 function Set-DiskPowerFix([bool]$on) {
+    New-RestorePointIfWanted (T '硬盘和 PCIe 省电')
     $pc = "$sys32\powercfg.exe"
     if ($on) {
         $g = Get-ActiveSchemeGuid
@@ -6889,6 +6894,50 @@ function Get-AccountMismatch([string]$me, [string]$desk) {
     $a = ($me -split '\\')[-1]; $b = ($desk -split '\\')[-1]
     return ((T "本工具现在以 {0} 的身份运行，但登录桌面的是 {1}（打开时输入的是另一个管理员账户的密码）。清理的缓存、要搬的聊天记录、受保护的个人文件夹，都按 {0} 的账户算，{1} 的不会动。`n`n要整理 {1} 的，把 {1} 设成管理员后用它打开，或者登录 {0} 再用。") -f $a, $b)
 }
+# ---------- 本工具改过的（设置里的总览） ----------
+# 本工具能改、现在还在生效的系统设置和搬家，每一项写当前状态和怎么改回去。$st 是 Get-ChangeState 读到的现状
+function Get-ChangeOverview($st) {
+    $out = New-Object System.Collections.Generic.List[object]
+    $add = { param($n, $s, $u) $out.Add([pscustomobject]@{ Name = $n; State = $s; Undo = $u }) }
+    if ($st.CompactOS -eq $true) { & $add (T '系统压缩（CompactOS）') (T '开着：系统文件压缩存放') (T '「省空间」→「系统压缩」→「关闭」') }
+    $offC = @($st.PageFiles | Where-Object { $_ -and -not ([string]$_).StartsWith($env:SystemDrive, [StringComparison]::OrdinalIgnoreCase) })
+    if ($st.PageAuto -eq $false -or $offC.Count) { & $add (T '页面文件') ((T "放在 {0}") -f (@($st.PageFiles) -join (T '、'))) (T '「省空间」→「页面文件」→「恢复系统默认」，重启后生效') }
+    if ($st.Hiber -and -not $st.Hiber.Exists) { & $add (T '休眠') (T '关着：没有休眠和快速启动') (T '「省空间」→「休眠文件」→「恢复完整休眠」') }
+    elseif ($st.Hiber -and $st.Hiber.Reduced) { & $add (T '休眠') (T '精简：只留快速启动') (T '「省空间」→「休眠文件」→「恢复完整休眠」') }
+    if ($st.Reserved -eq 'Disabled') { & $add (T '保留的存储') (T '关着') (T '「省空间」→「保留的存储」→「恢复」') }
+    if ($null -ne $st.Dump -and [int]$st.Dump -ge 0 -and [int]$st.Dump -ne 7) { & $add (T '蓝屏转储') $(if ([int]$st.Dump -eq 3) { (T '只存小转储') } else { (T '不是系统默认的「自动」') }) (T '「省空间」→「蓝屏转储」→「恢复自动」') }
+    if ($st.Temp) { & $add (T '临时文件夹') ((T "改到了 {0}") -f $st.Temp) (T '「省空间」→「临时文件夹」→「恢复默认」，注销再登录后生效') }
+    if ([int]$st.Moves -gt 0) { & $add (T '搬到其他盘的文件夹') ((T "{0} 个，C 盘上只留了链接") -f $st.Moves) (T '「搬家管理」→「已经搬走的」→「搬回 C 盘」') }
+    if ($st.DiskFix) { & $add (T '硬盘和 PCIe 省电') (T '关着') (T '「系统健康」→「常见问题修复」→「恢复硬盘省电」') }
+    if ($st.FastStartup -eq 'off') { & $add (T '快速启动') (T '关着') (T '「系统健康」→「常见问题修复」→「快速启动」再打开（如果是本工具关的）') }
+    foreach ($d in @($st.Disabled)) { if ($d) { & $add ([string]$d) (T '被本工具禁用') (T '「软件管理」→ 开机启动、计划任务或右键菜单 → 找到它点「启用」') } }
+    foreach ($t in @($st.Tasks)) { if ($t) { & $add ((T "定时任务 {0}") -f $t) (T '开着') (T '「自动提醒」→ 关掉对应的开关') } }
+    return $out.ToArray()
+}
+# 读现状（有的要问 WMI、DISM，放在后台读）。被本工具禁用的启动项、开着的定时任务由界面补上（Get-DisabledByUs、Test-CleanTask）
+function Get-ChangeState {
+    $st = @{}
+    try { $st.CompactOS = [bool](Get-CompactOSOn) } catch {}
+    try { $pf = Get-PageFileInfo; $st.PageAuto = $pf.Auto; $st.PageFiles = @($pf.Files | ForEach-Object { $_.Path }) } catch {}
+    try { $st.Hiber = Get-HiberInfo } catch {}
+    try { $st.Reserved = [string](Get-ReservedStorageState) } catch {}
+    try { $st.Dump = Get-CrashDumpMode } catch {}
+    try { $st.Temp = Get-UserTemp } catch {}
+    try { $st.Moves = @(Get-MoveRecords | Where-Object { IsLink ([string]$_.Src) }).Count } catch {}
+    try { $p = Get-PowerFixState; $st.DiskFix = $p.DiskFix; $st.FastStartup = [string]$p.FastStartup } catch {}
+    return $st
+}
+# 改系统设置前先建一个还原点（设置里打开才建；一次打开本工具最多建一次，Windows 自己也限制一天一个）。建不成不拦着，记下来
+$script:rpTried = $false
+function New-RestorePointIfWanted([string]$what) {
+    if ((Get-Setting 'RestorePoint' '0') -ne '1' -or $script:rpTried) { return }
+    $script:rpTried = $true
+    try { Log (T '  先建一个系统还原点（要一会儿）…') } catch {}
+    try {
+        Checkpoint-Computer -Description ('ClearC: ' + $what) -RestorePointType MODIFY_SETTINGS -ErrorAction Stop
+        OpLog '系统设置' (T '建系统还原点') $what ''
+    } catch { OpLog '系统设置' (T '没建成系统还原点') $what $_.Exception.Message; try { Log ((T '  没建成还原点（{0}），照常继续') -f $_.Exception.Message) } catch {} }
+}
 # 定时任务上次、下次运行的时间和结果，写成一句话。$code 是任务计划程序给的结果码
 function Format-TaskRunInfo($last, [long]$code, $next) {
     $fmt = { param($d) if ($d -is [datetime] -and $d.Year -gt 2000) { $d.ToString('yyyy-MM-dd HH:mm') } else { '' } }
@@ -7126,6 +7175,7 @@ function Get-CompactOSOn {
     return ($n -ge 2)
 }
 function Invoke-CompactOS([bool]$on, $res) {
+    New-RestorePointIfWanted (T '系统压缩（CompactOS）')
     $f0 = [double](FreeC)
     $arg = if ($on) { '/compactos:always' } else { '/compactos:never' }
     SetP @{ Detail = $(if ($on) { (T '正在压缩系统文件，通常要 10 到 30 分钟，期间可以照常用电脑') } else { (T '正在解压系统文件，通常要 10 到 30 分钟') }) }
@@ -7140,6 +7190,7 @@ function Get-PageFileInfo {
     return @{ Auto = $auto; Files = $files }
 }
 function Set-PageFile([string]$drive) {
+    New-RestorePointIfWanted (T '页面文件')
     try {
         $cs = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
         if (-not $drive) {
@@ -7166,6 +7217,7 @@ function Get-HiberInfo {
     return @{ Exists = [bool]$i; Bytes = $(if ($i) { [double]$i.Length } else { [double]0 }); Reduced = ($type -eq 1) }
 }
 function Set-Hiber([string]$mode) {
+    New-RestorePointIfWanted (T '休眠')
     $pc = "$sys32\powercfg.exe"
     switch ($mode) {
         'off'     { & $pc /h off | Out-Null; OpLog '系统设置' (T '关闭休眠') 'hiberfil.sys' (T '没有「休眠」和「快速启动」了，睡眠不受影响') }
@@ -7664,6 +7716,44 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+开着：系统文件压缩存放	On: system files are stored compressed
+「省空间」→「系统压缩」→「关闭」	Save space → CompactOS → Turn off
+放在 {0}	On {0}
+「省空间」→「页面文件」→「恢复系统默认」，重启后生效	Save space → Page file → Restore the Windows default; takes effect after a restart
+休眠	Hibernation
+关着：没有休眠和快速启动	Off: no hibernation or fast startup
+「省空间」→「休眠文件」→「恢复完整休眠」	Save space → Hibernation file → Restore full hibernation
+精简：只留快速启动	Reduced: only fast startup is kept
+「省空间」→「保留的存储」→「恢复」	Save space → Reserved storage → Restore
+只存小转储	Small dumps only
+不是系统默认的「自动」	Not the Windows default "Automatic"
+「省空间」→「蓝屏转储」→「恢复自动」	Save space → Crash dumps → Back to automatic
+临时文件夹	Temp folder
+改到了 {0}	Moved to {0}
+「省空间」→「临时文件夹」→「恢复默认」，注销再登录后生效	Save space → Temp folder → Restore the default; takes effect after signing out and in
+搬到其他盘的文件夹	Folders moved to another drive
+{0} 个，C 盘上只留了链接	{0}; only links stay on C:
+「搬家管理」→「已经搬走的」→「搬回 C 盘」	Move manager → Already moved → Move back to C:
+硬盘和 PCIe 省电	Disk and PCIe power saving
+「系统健康」→「常见问题修复」→「恢复硬盘省电」	System health → Common fixes → Restore disk power saving
+快速启动	Fast startup
+「系统健康」→「常见问题修复」→「快速启动」再打开（如果是本工具关的）	System health → Common fixes → Fast startup, turn it on again (if ClearC turned it off)
+被本工具禁用	Disabled by ClearC
+「软件管理」→ 开机启动、计划任务或右键菜单 → 找到它点「启用」	Apps → Startup, Scheduled tasks or Context menu → find it and click "Enable"
+定时任务 {0}	Scheduled task {0}
+「自动提醒」→ 关掉对应的开关	Reminders → turn off its switch
+  先建一个系统还原点（要一会儿）…	  Creating a system restore point first (this takes a moment)…
+建系统还原点	Create a system restore point
+没建成系统还原点	Could not create a system restore point
+  没建成还原点（{0}），照常继续	  Could not create a restore point ({0}); continuing anyway
+改动	Changes
+本工具改过的	What ClearC changed
+这台电脑上本工具做过、现在还在生效的改动，每一项写着怎么改回去。删了什么、什么时候做的，完整记录在「操作日志」里。	Changes ClearC made on this PC that are still in effect, each with how to undo it. What was deleted and when is all in the Activity log.
+改系统设置前先建一个还原点	Create a restore point before changing system settings
+在「省空间」和「常见问题修复」里改系统设置之前，先用 Windows 的系统还原建一个还原点，出问题可以回到改之前。要几十秒；一次打开本工具最多建一次，Windows 自己也限制一天一个；系统保护没开时建不成，照常继续。本工具从不删还原点。	Before Save space or Common fixes change a system setting, ClearC first creates a System Restore point so you can go back if something goes wrong. It takes tens of seconds; at most one per run of ClearC, and Windows also allows only one a day. If System Protection is off it cannot be created and ClearC carries on. ClearC never deletes restore points.
+改回去：	To undo: 
+本工具没有改过这台电脑的系统设置，也没有搬走东西。	ClearC has not changed any system settings on this PC or moved anything away.
+改系统设置前先建还原点	Restore point before system changes
 成功	succeeded
 正在运行	running now
 出错（代码 0x{0:X8}）	failed (code 0x{0:X8})
@@ -10880,6 +10970,10 @@ $script:helpEnXaml = @'
                     <StackPanel>
                       <TextBlock Style="{StaticResource HelpLead}" Text="Scanning and duplicates"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>Fast scan reads the file table directly; the duplicate search can make way for other programs so it doesn't slow down what you are using.</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="What ClearC changed"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Changes ClearC made that are still in effect (CompactOS, page file, hibernation, moved folders, disabled startup items…), each with how to undo it. You can also turn on "Create a restore point before changing system settings".</Run></TextBlock>
                     </StackPanel>
                     <StackPanel>
                       <TextBlock Style="{StaticResource HelpLead}" Text="Cleanup list"/>
@@ -14361,6 +14455,8 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                 <TextBlock x:Name="SetHeadClean" Text="清理和扫描" Style="{StaticResource TreeHead}"/>
                 <RadioButton x:Name="SetNavClean" GroupName="setnav" Tag="Clean" Content="清理列表" Style="{StaticResource TreeItem}"/>
                 <RadioButton x:Name="SetNavScan" GroupName="setnav" Tag="Scan" Content="扫描和查重" Style="{StaticResource TreeItem}"/>
+                <TextBlock x:Name="SetHeadChanges" Text="改动" Style="{StaticResource TreeHead}"/>
+                <RadioButton x:Name="SetNavChanges" GroupName="setnav" Tag="Changes" Content="本工具改过的" Style="{StaticResource TreeItem}"/>
             </StackPanel>
           </ScrollViewer>
         </Border>
@@ -14494,6 +14590,22 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                   <StackPanel>
                     <TextBlock Text="右上角的「快速扫描」开关" Style="{StaticResource SetName}"/>
                     <TextBlock Style="{StaticResource SetNote}" Text="只是不在空间地图上显示这个开关；快速扫描本身在「扫描和查重」里开关。"/>
+                  </StackPanel>
+                </DockPanel>
+              </StackPanel>
+            </Border>
+
+            <Border x:Name="SetCardChanges" Style="{StaticResource Card}" Padding="24,20" Margin="0" Visibility="Collapsed">
+              <StackPanel>
+                <TextBlock Text="本工具改过的" Style="{StaticResource CardHead}"/>
+                <TextBlock Style="{StaticResource SetNote}" Margin="0,6,0,0" TextWrapping="Wrap" Text="这台电脑上本工具做过、现在还在生效的改动，每一项写着怎么改回去。删了什么、什么时候做的，完整记录在「操作日志」里。"/>
+                <StackPanel x:Name="SetChangesList" Margin="0,12,0,0"/>
+                <TextBlock x:Name="SetChangesEmpty" Style="{StaticResource SetNote}" Margin="0,12,0,0" Text="正在读取…"/>
+                <DockPanel Margin="0,22,0,0">
+                  <CheckBox x:Name="SetRestorePoint" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                  <StackPanel>
+                    <TextBlock Text="改系统设置前先建一个还原点" Style="{StaticResource SetName}"/>
+                    <TextBlock Style="{StaticResource SetNote}" TextWrapping="Wrap" Text="在「省空间」和「常见问题修复」里改系统设置之前，先用 Windows 的系统还原建一个还原点，出问题可以回到改之前。要几十秒；一次打开本工具最多建一次，Windows 自己也限制一天一个；系统保护没开时建不成，照常继续。本工具从不删还原点。"/>
                   </StackPanel>
                 </DockPanel>
               </StackPanel>
@@ -15236,6 +15348,10 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                       <TextBlock Style="{StaticResource HelpBody}"><Run>快速扫描直接读文件表；查重复文件时可以让着其他程序，不拖慢正在用的软件。</Run></TextBlock>
                     </StackPanel>
                     <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="本工具改过的"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>本工具做过、现在还在生效的改动（系统压缩、页面文件、休眠、搬走的文件夹、禁用的启动项……），每一项写着怎么改回去。也可以打开「改系统设置前先建一个还原点」。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
                       <TextBlock Style="{StaticResource HelpLead}" Text="清理列表"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>删除时先放进回收站，以及添加要清理或要排除的文件夹。</Run></TextBlock>
                     </StackPanel>
@@ -15531,7 +15647,7 @@ foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageM
                'NavHealth','PageHealth','HTabHw','HTabBoot','HTabCrash','HTabFix','HTabMon','HTabEvents','HealthViewHw','HealthViewBoot','HealthViewCrash','HealthViewFix','HealthViewMon','HealthViewEvents',
                'HealthCardVerdict','BtnCopyReport','BtnDiagPack','HealthVerdicts','HealthCardFix','FixRecBox','FixRecHead','FixRec','FixGroups','FixDetail','FixDetailScroll','CTabVerdict','CTabDumps','CTabEvents','CTabDumpsB','CTabDumpsN','CTabEventsB','CTabEventsN','CrashViewVerdict','CrashViewDumps','CrashViewEvents','BtnHealthRefresh','HealthNote','HealthCardHw','HealthCards','HealthCardBoot','HealthBootText','HealthSlow','HealthCardCrash','BtnSfcCheck','BtnSfcRepair','HealthCrashText','HealthDumps','HealthEventsHead','HealthEvents','HealthDriversHead','HealthDrivers',
                'HealthCardMon','BtnMonStart','BtnMonStop','HealthMonText','MonList','HealthCardEvents','HealthWinText','HealthErrors','SetPageHealth',
-               'SaveCardCos','SaveCardPf','SaveCardHib','SaveCardRp','SaveCardFc','SaveCardOd','SaveCardRs','SaveCardCs','SaveCardDump','SaveCardTmp','SaveCardVd','SaveCardMerge','SetCardMode','SetCardDisplay','SetCardScan','SetModeBasic','SetModePro','SetModeExpert','SetModeNote','ModeTag','AutoJunkRow','FbCopyDiag','FbSelfTest','FbCheckUpdate','MapViewBox',
+               'SaveCardCos','SaveCardPf','SaveCardHib','SaveCardRp','SaveCardFc','SaveCardOd','SaveCardRs','SaveCardCs','SaveCardDump','SaveCardTmp','SaveCardVd','SaveCardMerge','SetCardMode','SetCardChanges','SetChangesList','SetChangesEmpty','SetRestorePoint','SetNavChanges','SetHeadChanges','SetCardDisplay','SetCardScan','SetModeBasic','SetModePro','SetModeExpert','SetModeNote','ModeTag','AutoJunkRow','FbCopyDiag','FbSelfTest','FbCheckUpdate','MapViewBox',
                'BtnOdFree','SaveOdState','BtnRsOn','BtnRsOff','SaveRsState','BtnCsAnalyze','BtnCsClean','SaveCsState','BtnDumpSmall','BtnDumpAuto','SaveDumpState','SaveTmpState','SaveTmpDrive','BtnTmpMove','BtnTmpAuto','BtnCleanCustom','AutoJunkGB','AutoCleanWhen','SetCleanCard','SetRecycle','SetRecycleRow','SetCustomHead','SetCustomNote','SetExcludeHead','SetExcludeNote','SetCustomList','SetCustomEmpty','BtnSetCustomAdd','SetExcludeList','SetExcludeEmpty','BtnSetExcludeAdd',
                'BtnMovesRefresh','MovesInfo','MovesList','EmptyMoves','EmptyMovesText',
                'AutoRemindOn','AutoRemindGB','AutoRemindNote','AutoCleanOn','AutoCleanNote','HistInfo','HistChart','HistLast','HistFirst','ATabRemind','ATabClean','ATabHist','ATabRemindState','ATabCleanState','ATabHistState','ATabRemindB','ATabCleanB','ATabHistB','AutoViewRemind','AutoViewClean','AutoViewHist',
@@ -20512,7 +20628,7 @@ function Invoke-FixStep([string]$id, [switch]$Quiet) {
                     $ans = Show-Sheet -Title (T '打开快速启动？') -Text (T '会重新打开快速启动：「关机」变成半休眠，下次开机快几秒。') -Buttons @((T '取消'), (T '打开')) -Primary (T '打开') -Cancel (T '取消')
                     if ($ans -ne (T '打开')) { return }
                 }
-                try { Set-FastStartup ($cur -ne 'on'); UI-Log $(if ($cur -eq 'on') { (T '已关闭快速启动') } else { (T '已打开快速启动') }) } catch { Show-Sheet -Kind warn -Title (T '没能改') -Text $_.Exception.Message | Out-Null }
+                try { New-RestorePointIfWanted (T '快速启动'); Set-FastStartup ($cur -ne 'on'); UI-Log $(if ($cur -eq 'on') { (T '已关闭快速启动') } else { (T '已打开快速启动') }) } catch { Show-Sheet -Kind warn -Title (T '没能改') -Text $_.Exception.Message | Out-Null }
                 Refresh-FixState
             }
         }
@@ -20523,6 +20639,7 @@ function Invoke-FixStep([string]$id, [switch]$Quiet) {
         if ($ans -ne (T '开始')) { return }
     }
     if ($script:uiTest) { $script:uiFixRuns.Add($id); return }   # 界面自测：不真的运行
+    if ($s.Kind -eq 'fix') { New-RestorePointIfWanted $name }
     try {
         if ($s.Cmd) { Start-Process -FilePath "$env:SystemRoot\System32\cmd.exe" -ArgumentList ('/k title ClearC - {0} & {1} & echo. & echo {2}' -f $name, $s.Cmd, (T '运行完了，可以关掉这个窗口。')) }
         elseif ($s.Uri) { [void](Open-AsUser $s.Uri) }
@@ -22117,9 +22234,9 @@ $script:linkLvl = @{ log = 2 }
 $script:appsUpdatesAllowed = $true
 function Get-ModeName([int]$m = (Get-Mode)) { switch ($m) { 0 { (T '普通用户') } 1 { (T '工程师') } default { (T '开发者和 IT') } } }
 # ---------- 设置：左边目录，点哪项右边只显示那一项（记住上次看的） ----------
-$script:setGroups = [ordered]@{ General = @('Mode', 'Look'); Ui = @('Display', 'Map'); Clean = @('Clean', 'Scan') }
+$script:setGroups = [ordered]@{ General = @('Mode', 'Look'); Ui = @('Display', 'Map'); Clean = @('Clean', 'Scan'); Changes = @('Changes') }
 $script:setLvl = @{ Display = 1; Scan = 2 }
-$script:setCards = @{ Mode = 'SetCardMode'; Look = 'SetCardLook'; Display = 'SetCardDisplay'; Map = 'SetCardMap'; Clean = 'SetCleanCard'; Scan = 'SetCardScan' }
+$script:setCards = @{ Mode = 'SetCardMode'; Look = 'SetCardLook'; Display = 'SetCardDisplay'; Map = 'SetCardMap'; Clean = 'SetCleanCard'; Scan = 'SetCardScan'; Changes = 'SetCardChanges' }
 $script:setSec = Get-Setting 'SetSection' 'Mode'
 function Update-SetNav {
     $m = Get-Mode; $first = ''
@@ -22142,6 +22259,38 @@ function Select-SetSection([string]$k) {
     foreach ($x in $script:setCards.Keys) { $ctl[$script:setCards[$x]].Visibility = $(if ($x -eq $k) { 'Visible' } else { 'Collapsed' }) }
     $rb = $ctl['SetNav' + $k]; if (-not $rb.IsChecked) { $script:setNavQuiet = $true; try { $rb.IsChecked = $true } finally { $script:setNavQuiet = $false } }
     $ctl.SetScroll.ScrollToTop()
+    if ($k -eq 'Changes') { Load-Changes }
+}
+# 「本工具改过的」：现状在后台读（要问 WMI、DISM），被禁用的启动项从操作日志里找，开着的定时任务直接查
+function Get-DisabledByUs {
+    $last = @{}
+    try {
+        foreach ($row in (Read-OpLog)) {   # 新的在前：每个名字只看最近的一条
+            $w = [string]$row.What
+            $on = $w -in @((T '启用开机启动项'), (T '启用计划任务'), (T '启用右键菜单扩展')); $off = $w -in @((T '禁用开机启动项'), (T '禁用计划任务'), (T '禁用右键菜单扩展'))
+            if (($on -or $off) -and -not $last.ContainsKey([string]$row.Target)) { $last[[string]$row.Target] = @{ Off = $off; What = $w } }
+        }
+    } catch {}
+    return @($last.Keys | Where-Object { $last[$_].Off } | ForEach-Object { '{0}：{1}' -f $last[$_].What, $_ })
+}
+function Load-Changes {
+    $ctl.SetChangesEmpty.Text = (T '正在读取…'); $ctl.SetChangesEmpty.Visibility = 'Visible'
+    [void](Start-BgEngine 'changes' 'Get-ChangeState' $null {
+        param($st, $err)
+        if (-not $st) { $st = @{} }
+        $st.Disabled = @(Get-DisabledByUs)
+        $st.Tasks = @(@($script:taskRemind, $script:taskClean) | Where-Object { Test-CleanTask $_ })
+        $items = @(Get-ChangeOverview $st)
+        $ctl.SetChangesList.Children.Clear()
+        foreach ($x in $items) {
+            $sp = New-Object System.Windows.Controls.StackPanel; $sp.Margin = New-Object System.Windows.Thickness 0, 0, 0, 12
+            $t1 = New-Object System.Windows.Controls.TextBlock; $t1.Text = ('{0}：{1}' -f $x.Name, $x.State); $t1.FontWeight = 'SemiBold'; $t1.TextWrapping = 'Wrap'
+            $t2 = New-Object System.Windows.Controls.TextBlock; $t2.Text = ((T '改回去：') + $x.Undo); $t2.Style = $win.FindResource('SetNote'); $t2.TextWrapping = 'Wrap'; $t2.Margin = New-Object System.Windows.Thickness 0, 3, 0, 0
+            [void]$sp.Children.Add($t1); [void]$sp.Children.Add($t2); [void]$ctl.SetChangesList.Children.Add($sp)
+        }
+        $ctl.SetChangesEmpty.Text = (T '本工具没有改过这台电脑的系统设置，也没有搬走东西。')
+        $ctl.SetChangesEmpty.Visibility = $(if ($items.Count) { 'Collapsed' } else { 'Visible' })
+    })
 }
 foreach ($g in $script:setGroups.Keys) { foreach ($k in $script:setGroups[$g]) { $ctl['SetNav' + $k].Add_Checked({ if ($script:setNavQuiet) { return }; Select-SetSection ([string]$this.Tag); Set-Setting 'SetSection' $script:setSec }) } }
 function Apply-Mode {
@@ -22252,6 +22401,7 @@ function Load-Settings {
         $ctl.SetFast.IsChecked = [bool]$ctl.MapFast.IsChecked
         $ctl.SetLowIo.IsChecked = ((Get-Setting 'LowIo' '0') -eq '1')
         $ctl.SetRecycle.IsChecked = ((Get-Setting 'Recycle' '0') -eq '1')
+        $ctl.SetRestorePoint.IsChecked = ((Get-Setting 'RestorePoint' '0') -eq '1')
     } finally { $script:setLoading = $false }
 }
 function Save-Display {
@@ -22265,6 +22415,12 @@ foreach ($k in $script:optLinks.Keys) { $ctl[$script:optLinks[$k][0]].Add_Click(
 foreach ($k in $script:optSwitches.Keys) { $ctl[$script:optSwitches[$k]].Add_Click({ if (-not $script:setLoading) { Save-Display; if ([object]::ReferenceEquals($this, $ctl.SetMapDisk)) { Refresh-MapRows } } }) }
 $ctl.SetFast.Add_Click({ if (-not $script:setLoading) { Set-FastScan ([bool]$ctl.SetFast.IsChecked) } })
 [DupFinder]::LowPriority = ((Get-Setting 'LowIo' '0') -eq '1')
+$ctl.SetRestorePoint.Add_Click({
+    if ($script:setLoading) { return }
+    $on = [bool]$ctl.SetRestorePoint.IsChecked
+    Set-Setting 'RestorePoint' $(if ($on) { '1' } else { '0' })
+    OpLog '系统设置' (T '改系统设置前先建还原点') $(if ($on) { (T '打开') } else { (T '关闭') }) ''
+})
 $ctl.SetRecycle.Add_Click({
     if ($script:setLoading) { return }
     $on = [bool]$ctl.SetRecycle.IsChecked

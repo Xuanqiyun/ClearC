@@ -3150,6 +3150,8 @@
                 <TextBlock x:Name="SetHeadClean" Text="清理和扫描" Style="{StaticResource TreeHead}"/>
                 <RadioButton x:Name="SetNavClean" GroupName="setnav" Tag="Clean" Content="清理列表" Style="{StaticResource TreeItem}"/>
                 <RadioButton x:Name="SetNavScan" GroupName="setnav" Tag="Scan" Content="扫描和查重" Style="{StaticResource TreeItem}"/>
+                <TextBlock x:Name="SetHeadChanges" Text="改动" Style="{StaticResource TreeHead}"/>
+                <RadioButton x:Name="SetNavChanges" GroupName="setnav" Tag="Changes" Content="本工具改过的" Style="{StaticResource TreeItem}"/>
             </StackPanel>
           </ScrollViewer>
         </Border>
@@ -3283,6 +3285,22 @@
                   <StackPanel>
                     <TextBlock Text="右上角的「快速扫描」开关" Style="{StaticResource SetName}"/>
                     <TextBlock Style="{StaticResource SetNote}" Text="只是不在空间地图上显示这个开关；快速扫描本身在「扫描和查重」里开关。"/>
+                  </StackPanel>
+                </DockPanel>
+              </StackPanel>
+            </Border>
+
+            <Border x:Name="SetCardChanges" Style="{StaticResource Card}" Padding="24,20" Margin="0" Visibility="Collapsed">
+              <StackPanel>
+                <TextBlock Text="本工具改过的" Style="{StaticResource CardHead}"/>
+                <TextBlock Style="{StaticResource SetNote}" Margin="0,6,0,0" TextWrapping="Wrap" Text="这台电脑上本工具做过、现在还在生效的改动，每一项写着怎么改回去。删了什么、什么时候做的，完整记录在「操作日志」里。"/>
+                <StackPanel x:Name="SetChangesList" Margin="0,12,0,0"/>
+                <TextBlock x:Name="SetChangesEmpty" Style="{StaticResource SetNote}" Margin="0,12,0,0" Text="正在读取…"/>
+                <DockPanel Margin="0,22,0,0">
+                  <CheckBox x:Name="SetRestorePoint" DockPanel.Dock="Right" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                  <StackPanel>
+                    <TextBlock Text="改系统设置前先建一个还原点" Style="{StaticResource SetName}"/>
+                    <TextBlock Style="{StaticResource SetNote}" TextWrapping="Wrap" Text="在「省空间」和「常见问题修复」里改系统设置之前，先用 Windows 的系统还原建一个还原点，出问题可以回到改之前。要几十秒；一次打开本工具最多建一次，Windows 自己也限制一天一个；系统保护没开时建不成，照常继续。本工具从不删还原点。"/>
                   </StackPanel>
                 </DockPanel>
               </StackPanel>
@@ -4023,6 +4041,10 @@
                     <StackPanel>
                       <TextBlock Style="{StaticResource HelpLead}" Text="扫描和查重"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>快速扫描直接读文件表；查重复文件时可以让着其他程序，不拖慢正在用的软件。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="本工具改过的"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>本工具做过、现在还在生效的改动（系统压缩、页面文件、休眠、搬走的文件夹、禁用的启动项……），每一项写着怎么改回去。也可以打开「改系统设置前先建一个还原点」。</Run></TextBlock>
                     </StackPanel>
                     <StackPanel>
                       <TextBlock Style="{StaticResource HelpLead}" Text="清理列表"/>
