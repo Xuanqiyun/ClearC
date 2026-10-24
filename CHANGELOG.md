@@ -1,5 +1,9 @@
 # 更新记录
 
+## 3.6.2
+- 3.6.1 下载时被 Windows Defender 报成 Trojan:Win32/Bearfoos.B!ml（结尾的 !ml 表示是机器学习的启发式判断，不是查到了具体的恶意代码）。启动器不再自己先探测 PowerShell 的语言模式（攻击工具常这样做），改由脚本第一句检查，公司电脑上受限时照旧弹窗说明。exe 没有代码签名，仍可能被误报；遇到时可以把文件提交给微软复核。
+- 3.6.1 was flagged by Windows Defender as Trojan:Win32/Bearfoos.B!ml (a machine-learning heuristic). The launcher no longer probes the PowerShell language mode itself; the script checks it first and the launcher still explains a locked-down PC. The exe is not code-signed and may still be flagged; such files can be submitted to Microsoft for review.
+
 ## 3.6.1
 - **空间地图：盘的容量只写一次**。原来 C 盘、D 盘的「已用 / 共多少」在下拉框、盘的卡片、下面的概览里各写一遍，有时还差 0.01 GB。现在下拉框只写盘符；卡片左边写「已用 / 共 · 百分比」，右边写「剩多少」；下面的概览只讲已用的空间里系统与软件、个人文件、可清理的缓存、其他各占多少，几类加起来正好是已用空间（硬链接在几个文件夹里各算一次的，按比例缩回）。设置里关掉了磁盘卡片时，概览才写总量。在盘的最上一层，列表上面那行不再写和已用空间对不上的「这一层共多少」。
 - 所有页面的「已用、剩多少」都按同一种算法读，同一块盘在各处的数一样。搬家目标下面的提示不再重复下拉框里的空闲空间。
