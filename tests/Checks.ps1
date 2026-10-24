@@ -51,6 +51,9 @@ foreach ($k in $parts.Keys) {
 $names = [regex]::Matches($xaml, 'x:Name="([^"]+)"') | ForEach-Object { $_.Groups[1].Value }
 $list = [regex]::Match($src, "(?s)foreach \(\`$n in ('Nav.*?)\) \{ \`$ctl\[\`$n\]").Groups[1].Value
 $wanted = [regex]::Matches($list, "'([^']+)'") | ForEach-Object { $_.Groups[1].Value }
+# 帮助页里的控件在第一次打开帮助时才取（Initialize-HelpPage 按 $script:helpNames 取）
+$helpList = [regex]::Match($src, "\`$script:helpNames = @\(([^)]*)\)").Groups[1].Value
+$wanted = @($wanted) + @([regex]::Matches($helpList, "'([^']+)'") | ForEach-Object { $_.Groups[1].Value })
 $missing = @($wanted | Where-Object { $_ -notin $names })
 if ($missing) { Bad "controls missing in XAML: $($missing -join ', ')" } else { Ok "$($wanted.Count) controls found in XAML" }
 $used = [regex]::Matches($src, '\$ctl\.([A-Za-z]+)') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique

@@ -61,7 +61,10 @@ function Invoke-UiTest {
             }
         }
         & $step 'help: contents list on the left, only the picked item on the right' {
+            if ($script:helpAtStart) { throw 'the help page was built when the window opened, not on first use' }
             Show-Page 'help'; $win.UpdateLayout()
+            if (-not $script:helpReady -or $ctl.PageHelp.Children.Count -ne 1) { throw 'opening the help page did not build it' }
+            $L.Add(('  help page built on first use in {0} ms' -f $script:helpMs))
             $navs = @($ctl.HelpNav.Children | Where-Object { $_ -is [System.Windows.Controls.RadioButton] })
             if ($navs.Count -lt 13 -or $script:helpPanes.Count -ne $navs.Count) { throw ('{0} items in the contents, {1} panes' -f $navs.Count, $script:helpPanes.Count) }
             if (@($ctl.HelpNav.Children | Where-Object { $_ -is [System.Windows.Controls.TextBlock] }).Count -lt 4) { throw 'no group headings in the contents' }

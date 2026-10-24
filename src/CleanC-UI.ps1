@@ -15746,21 +15746,21 @@ $script:sheetXaml = @'
 </Window>
 '@
 
-if ($script:Lang -eq 'en') {
-    # 换成英文的帮助页
+# 换成英文的帮助页（整页替换中文的那一页）
+function Use-EnglishHelp([xml]$doc, [string]$enXaml) {
     try {
-        $ns = New-Object System.Xml.XmlNamespaceManager $xaml.NameTable
+        $ns = New-Object System.Xml.XmlNamespaceManager $doc.NameTable
         $ns.AddNamespace('w', 'http://schemas.microsoft.com/winfx/2006/xaml/presentation'); $ns.AddNamespace('x', 'http://schemas.microsoft.com/winfx/2006/xaml')
-        $old = $xaml.SelectSingleNode("//w:Grid[@x:Name='PageHelp']", $ns)
-        $frag = [xml]("<R xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml'>" + $script:helpEnXaml + '</R>')
+        $old = $doc.SelectSingleNode("//w:Grid[@x:Name='PageHelp']", $ns)
+        $frag = [xml]("<R xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml'>" + $enXaml + '</R>')
         $new = $frag.DocumentElement.SelectSingleNode("w:Grid[@x:Name='PageHelp']", $ns)
-        if ($old -and $new) { [void]$old.ParentNode.ReplaceChild($xaml.ImportNode($new, $true), $old) }
+        if ($old -and $new) { [void]$old.ParentNode.ReplaceChild($doc.ImportNode($new, $true), $old) }
     } catch {}
-    # 英文词更长：重复文件页左边那一列标签放宽一点
-    foreach ($cd in $xaml.SelectNodes("//*[local-name()='ColumnDefinition' and @Width='92']")) { $cd.SetAttribute('Width', '108') }
-    # 其余文字逐个查表
+}
+# 界面上的文字逐个查表换成英文
+function Set-XamlLang([xml]$doc) {
     $attrs = @('Text', 'Content', 'ToolTip', 'Header', 'Title')
-    foreach ($el in $xaml.SelectNodes('//*')) {
+    foreach ($el in $doc.SelectNodes('//*')) {
         foreach ($a in @($el.Attributes)) {
             # 触发器里和数据比较的值（比如行的操作「删除」）也要换成同样的英文，否则颜色等样式对不上
             $use = ($attrs -contains $a.LocalName) -or ($a.LocalName -eq 'Value' -and (($el.LocalName -eq 'Setter' -and ($attrs -contains [string]$el.GetAttribute('Property'))) -or $el.LocalName -in @('Condition', 'DataTrigger', 'Trigger')))
@@ -15769,6 +15769,27 @@ if ($script:Lang -eq 'en') {
         }
         foreach ($c in @($el.ChildNodes)) { if ($c.NodeType -eq 'Text' -and $c.Value) { $c.Value = T $c.Value } }
     }
+}
+# ---------- 帮助页用到时才加载 ----------
+# 帮助页的内容占主界面 XAML 的四分之一。打开窗口时只留一个空的 PageHelp，内容拿出来存成字符串，第一次打开帮助时
+# 再解析（Initialize-HelpPage）。单独解析时找不到主窗口里的样式，所以 StaticResource 换成 DynamicResource：挂进窗口以后再取
+function Split-HelpPage([xml]$doc) {
+    $ns = New-Object System.Xml.XmlNamespaceManager $doc.NameTable
+    $ns.AddNamespace('w', 'http://schemas.microsoft.com/winfx/2006/xaml/presentation'); $ns.AddNamespace('x', 'http://schemas.microsoft.com/winfx/2006/xaml')
+    $hp = $doc.SelectSingleNode("//w:Grid[@x:Name='PageHelp']", $ns)
+    if (-not $hp) { return '' }
+    $sb = New-Object System.Text.StringBuilder
+    [void]$sb.Append("<Grid xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml'>")
+    foreach ($c in @($hp.ChildNodes)) { if ($c.NodeType -eq 'Element') { [void]$sb.Append($c.OuterXml) }; [void]$hp.RemoveChild($c) }
+    [void]$sb.Append('</Grid>')
+    return ($sb.ToString() -replace '\{StaticResource ', '{DynamicResource ')
+}
+if ($script:Lang -eq 'en') { Use-EnglishHelp $xaml $script:helpEnXaml }
+$script:helpXml = Split-HelpPage $xaml
+if ($script:Lang -eq 'en') {
+    # 英文词更长：重复文件页左边那一列标签放宽一点
+    foreach ($cd in $xaml.SelectNodes("//*[local-name()='ColumnDefinition' and @Width='92']")) { $cd.SetAttribute('Width', '108') }
+    Set-XamlLang $xaml
 }
 $win = $null; $script:themeFail = ''
 if ([Theme]::Dark) {
@@ -15789,12 +15810,12 @@ foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageM
                'NavHealth','PageHealth','HTabHw','HTabBoot','HTabCrash','HTabFix','HTabMon','HTabEvents','HealthViewHw','HealthViewBoot','HealthViewCrash','HealthViewFix','HealthViewMon','HealthViewEvents',
                'HealthCardVerdict','BtnCopyReport','BtnDiagPack','HealthVerdicts','HealthCardFix','FixRecBox','FixRecHead','FixRec','FixGroups','FixDetail','FixDetailScroll','CTabVerdict','CTabDumps','CTabEvents','CTabDumpsB','CTabDumpsN','CTabEventsB','CTabEventsN','CrashViewVerdict','CrashViewDumps','CrashViewEvents','BtnHealthRefresh','HealthNote','HealthCardHw','HealthCards','HealthCardBoot','HealthBootText','HealthSlow','HealthCardCrash','BtnSfcCheck','BtnSfcRepair','HealthCrashText','HealthDumps','HealthEventsHead','HealthEvents','HealthDriversHead','HealthDrivers',
                'HealthCardMon','BtnMonStart','BtnMonStop','HealthMonText','MonList','HealthCardEvents','HealthWinText','HealthErrors','SetPageHealth',
-               'SaveCardCos','SaveCardPf','SaveCardHib','SaveCardRp','SaveCardFc','SaveCardOd','SaveCardRs','SaveCardCs','SaveCardDump','SaveCardTmp','SaveCardVd','SaveCardMerge','SetCardMode','SetCardChanges','SetChangesList','SetChangesEmpty','SetRestorePoint','SetNavChanges','SetHeadChanges','SetCardDisplay','SetCardScan','SetModeBasic','SetModePro','SetModeExpert','SetModeNote','ModeTag','AutoJunkRow','FbCopyDiag','FbSelfTest','FbCheckUpdate','MapViewBox',
+               'SaveCardCos','SaveCardPf','SaveCardHib','SaveCardRp','SaveCardFc','SaveCardOd','SaveCardRs','SaveCardCs','SaveCardDump','SaveCardTmp','SaveCardVd','SaveCardMerge','SetCardMode','SetCardChanges','SetChangesList','SetChangesEmpty','SetRestorePoint','SetNavChanges','SetHeadChanges','SetCardDisplay','SetCardScan','SetModeBasic','SetModePro','SetModeExpert','SetModeNote','ModeTag','AutoJunkRow','MapViewBox',
                'BtnOdFree','SaveOdState','BtnRsOn','BtnRsOff','SaveRsState','BtnCsAnalyze','BtnCsClean','SaveCsState','BtnDumpSmall','BtnDumpAuto','SaveDumpState','SaveTmpState','SaveTmpDrive','BtnTmpMove','BtnTmpAuto','BtnCleanCustom','AutoJunkGB','AutoCleanWhen','SetCleanCard','SetRecycle','SetRecycleRow','SetCustomHead','SetCustomNote','SetExcludeHead','SetExcludeNote','SetCustomList','SetCustomEmpty','BtnSetCustomAdd','SetExcludeList','SetExcludeEmpty','BtnSetExcludeAdd',
                'BtnMovesRefresh','MovesInfo','MovesList','EmptyMoves','EmptyMovesText',
                'AutoRemindOn','AutoRemindGB','AutoRemindNote','AutoCleanOn','AutoCleanNote','HistInfo','HistChart','HistLast','HistFirst','ATabRemind','ATabClean','ATabHist','ATabRemindState','ATabCleanState','ATabHistState','ATabRemindB','ATabCleanB','ATabHistB','AutoViewRemind','AutoViewClean','AutoViewHist',
                'BtnLogOpenDir','BtnLogRefresh','LogKeep','LogKeepNote','LogCats','LogRange','LogSearch','LogCount','LogList','EmptyLog','EmptyLogText',
-               'BtnLang','BtnLangText','BtnTheme','BtnThemeText','NavHelp','PageHelp','HelpScroll','HelpSections','HelpFaq','HelpNav','HelpPaneStart','HelpPaneFaq','BtnHelpPrev','BtnHelpNext','FeedbackCard','RiskCard','BtnFeedback','BtnGitHub','BtnIssue','BtnCopyDiag','BtnOpenLog','CopyHint','BtnSelfTest','BtnCheckUpdate','SelfHash','BtnCopyHash','MapFast','MapChat',
+               'BtnLang','BtnLangText','BtnTheme','BtnThemeText','NavHelp','PageHelp','BtnFeedback','MapFast','MapChat',
                'NavClean','NavDup','PageClean','PageDup','AppVer','BtnLog','BtnLogText','BtnLogHide','LogPanel','Dim',
                'CapFree','CapTotal','CapBar','CapReclaim','EmptyClean','EmptyCleanText','EmptyDup','EmptyDupText','SizeCustomRow',
                'DestPick','BtnDestBrowse','DestHint','ChatCard','ChatCardTitle','ChatCardText','BtnChatMove','BtnOneClick','BtnScan','BtnRun','BtnHogs','Hint','List','CleanMenu','CmOpen','CmOpenAll','CmCopy','Summary','Log',
@@ -15860,7 +15881,7 @@ function Register-AutoCols($root) {
     }
 }
 $script:autoColGrids = New-Object System.Collections.ArrayList
-foreach ($n in 'PageHelp', 'PageHealth', 'PageSettings') { Register-AutoCols $ctl[$n] }
+foreach ($n in 'PageHealth', 'PageSettings') { Register-AutoCols $ctl[$n] }   # 帮助页的在 Initialize-HelpPage 里
 # 表格（GridView）：窗口变宽时，多出来的宽度按权重分给名称、路径这类列，其余列宽度不变；窗口窄了回到原来的宽度
 $script:gridFill = @{}
 function Update-GridFill($lv) {
@@ -16096,6 +16117,7 @@ function Show-Page([string]$key) {
         'auto'  { Load-Auto }
         'log'   { Load-Log }
         'settings' { Load-Settings }
+        'help'  { Initialize-HelpPage }
     }
 }
 foreach ($k in $script:pageList.Keys) {
@@ -16105,15 +16127,10 @@ foreach ($k in $script:pageList.Keys) {
 }
 
 # ---------- 帮助页：使用反馈 ----------
-function Show-CopyHint([string]$t) { $ctl.CopyHint.Text = $t }
+function Show-CopyHint([string]$t) { if ($ctl.CopyHint) { $ctl.CopyHint.Text = $t } }
 # ---------- 帮助页：左边目录，右边只显示点开的那一项（和设置页一样） ----------
 # 目录的每一项：键 → 右边的内容、左边的那一行。顺序就是目录里从上到下的顺序（「上一项」「下一项」按这个走）
 $script:helpPanes = [ordered]@{}
-foreach ($rb in @($ctl.HelpNav.Children | Where-Object { $_ -is [System.Windows.Controls.RadioButton] })) {
-    $k = [string]$rb.Tag
-    $pane = switch -regex ($k) { '^start$' { $ctl.HelpPaneStart } '^faq$' { $ctl.HelpPaneFaq } '^fb$' { $ctl.FeedbackCard } '^s(\d+)$' { $win.FindName('HelpSec' + $Matches[1]) } }
-    if ($pane) { $script:helpPanes[$k] = @{ Pane = $pane; Nav = $rb; Name = [string]$rb.ToolTip } }
-}
 $script:helpPane = ''; $script:helpPick = 'start'; $script:helpNavQuiet = $false
 function Select-HelpPane([string]$k, [switch]$NoRemember) {
     if (-not $script:helpPanes.Contains($k)) { $k = 'start' }
@@ -16142,13 +16159,12 @@ function Show-SelfHash {
     $ctl.SelfHash.Text = if ($script:selfHash) { $script:selfHash } else { (T '现在运行的是脚本，不是 exe，没有可以核对的文件') }
     $ctl.BtnCopyHash.IsEnabled = [bool]$script:selfHash
 }
-$ctl.BtnCopyHash.Add_Click({ if ($script:selfHash) { try { [System.Windows.Clipboard]::SetText($script:selfHash); Show-CopyHint (T 'SHA256 已复制') } catch {} } })
-foreach ($x in @($script:helpPanes.Values)) { $x.Nav.Add_Checked({ if ($script:helpNavQuiet) { return }; Select-HelpPane ([string]$this.Tag) }) }
 # 帮助只讲当前模式里有的功能：标着 lvl:1、lvl:2 的说明在低一级的模式里藏起来；这个模式没有的页面（重复文件、搬家管理……），
 # 帮助目录里那一项也不列；一组里都藏了，组名也不列
 $script:helpSecPage = @{ s1 = 'dup'; s6 = 'moves'; s7 = 'auto'; s8 = 'log' }
 function Update-HelpForMode {
     $m = Get-Mode
+    $ctl.FbCopyDiag.Visibility = $(if ($m -ge 1) { 'Visible' } else { 'Collapsed' }); $ctl.FbSelfTest.Visibility = $(if ($m -ge 2) { 'Visible' } else { 'Collapsed' })
     $st = New-Object System.Collections.Stack; $st.Push($ctl.HelpSections); $grids = @{}
     while ($st.Count -gt 0) {
         $e = $st.Pop()
@@ -16173,45 +16189,15 @@ function Update-HelpForMode {
     if ($script:helpPane -and $script:helpPanes.Contains($script:helpPane) -and $script:helpPanes[$script:helpPane].Nav.Visibility -ne 'Visible') { Select-HelpPane 'start' -NoRemember }
     elseif ($script:helpPane) { Select-HelpPane $script:helpPane -NoRemember }   # 上一项、下一项跳过藏起来的
 }
-$ctl.BtnHelpPrev.Add_Click({ if ($this.Tag) { Select-HelpPane ([string]$this.Tag) } })
-$ctl.BtnHelpNext.Add_Click({ if ($this.Tag) { Select-HelpPane ([string]$this.Tag) } })
-Select-HelpPane (Get-Setting 'HelpPane' 'start') -NoRemember
-$script:helpPick = $script:helpPane
 # 左下角「使用反馈」：直接打开帮助里的「反馈和新版本」；再点左侧的「帮助」回到原来在看的那一项（从头显示）
 $ctl.BtnFeedback.Add_Click({ Show-Page 'help'; Select-HelpPane 'fb' -NoRemember })
-$ctl.NavHelp.Add_Click({ if ($script:helpPane -ne $script:helpPick) { Select-HelpPane $script:helpPick -NoRemember } else { $ctl.HelpScroll.ScrollToTop() } })
-# 常见问题：点开的一个问题在下面时，往上滚到能看见它的答案
-foreach ($x in @($ctl.HelpFaq.Children)) {
-    $x.Add_Expanded({
-        param($s, $e)
-        if (-not [object]::ReferenceEquals($e.OriginalSource, $s)) { return }
-        $q = $s
-        [void]$win.Dispatcher.BeginInvoke([Action]{ try { $q.BringIntoView() } catch {} }.GetNewClosure(), [System.Windows.Threading.DispatcherPriority]::Loaded)
-    })
-}
+$ctl.NavHelp.Add_Click({ Initialize-HelpPage; if ($script:helpPane -ne $script:helpPick) { Select-HelpPane $script:helpPick -NoRemember } else { $ctl.HelpScroll.ScrollToTop() } })
 $script:projectPage = 'https://github.com/Xuanqiyun/ClearC'
 function Open-Web([string]$url) {
     # 用资源管理器打开网址：浏览器不会以管理员身份运行
     if (Open-AsUser $url) { UI-Log ((T "打开网页：{0}") -f $url) }
     else { Show-CopyHint ((T "打不开浏览器，请手动访问 {0}") -f $url) }
 }
-$ctl.BtnGitHub.Add_Click({ Open-Web $script:projectPage })
-$ctl.BtnIssue.Add_Click({ Open-Web ($script:projectPage + '/issues') })
-$ctl.BtnCopyDiag.Add_Click({
-    $c = $null; try { $c = New-Object System.IO.DriveInfo 'C:\' } catch {}
-    $info = @(
-        ((T "腾挪 ClearC {0}") -f $script:AppVersion) + $(if ($script:AppBuild) { " ($($script:AppBuild))" } else { '' })
-        ((T "Windows {0}，{1} 位") -f [Environment]::OSVersion.Version, $(if ([Environment]::Is64BitOperatingSystem) { 64 } else { 32 }))
-        $(if ($c) { (T "C 盘剩余 {0} / 共 {1}") -f (Fmt $c.AvailableFreeSpace), (Fmt $c.TotalSize) } else { '' })
-        ((T "屏幕可用区域 {0:N0} x {1:N0}") -f [System.Windows.SystemParameters]::WorkArea.Width, [System.Windows.SystemParameters]::WorkArea.Height)
-        ''
-        (T '---- 最近的运行记录 ----')
-    )
-    $tail = @()
-    try { $tail = @(Get-Content -LiteralPath $script:logFile -Encoding UTF8 -Tail 80 -ErrorAction Stop) } catch { $tail = @(($ctl.Log.Text -split "`r?`n") | Select-Object -Last 80) }
-    try { [System.Windows.Clipboard]::SetText((($info + $tail) -join "`r`n")); Show-CopyHint (T '已复制，可以粘贴到 GitHub 的问题（Issue）里') }
-    catch { Show-CopyHint (T '复制失败，可以点「打开运行记录文件」再手动复制') }
-})
 # ---------- 后台任务登记 ----------
 # 每种后台任务在启动它的代码旁边登记一次，它的情况都写在这一处，取消、加锁、做完收尾都照登记的来：
 #   -Cancel    能不能中途取消。look = 只是查看，直接停；其余的先问一句（问什么见 Request-Cancel）。
@@ -16255,16 +16241,6 @@ Register-BgJob 'selftest' -Cancel look -ReadOnly -Done {
             Buttons = @((T '好'), (T '打开结果')); Primary = (T '打开结果'); Cancel = (T '好'); Then = { [void](Open-AsUser $file) }.GetNewClosure() }
     }
 }
-$ctl.BtnSelfTest.Add_Click({
-    if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return }
-    Use-BgJob 'selftest'; $sync.SelfTest = $null
-    Start-Op (T '检查扫描功能')
-    UI-Busy $true
-    UI-Log (T '开始检查扫描功能')
-    Start-Worker @'
-$sync.SelfTest = Invoke-SelfTest $arg.Version
-'@ @{ Version = $script:AppVersion }
-})
 $script:releasePage = 'https://github.com/Xuanqiyun/ClearC/releases'
 Register-BgJob 'update' -ReadOnly -Done {
     $u = $sync.Update
@@ -16287,24 +16263,92 @@ Register-BgJob 'update' -ReadOnly -Done {
         $script:pendingDialog = @{ Title = (T '已经是最新版本'); Kind = 'done'; Text = ((T "现在用的是 {0}，GitHub 上最新的是 {1}。") -f $script:AppVersion, $u.Tag) }
     }
 }
-$ctl.BtnCheckUpdate.Add_Click({
-    if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return }
-    Use-BgJob 'update'; $sync.Update = $null
-    Start-Op (T '检查新版本') -NoCard
-    UI-Busy $true
-    Start-Worker @'
+# 第一次打开帮助页时：解析帮助的内容，挂进空的 PageHelp，再接上里面按钮、目录的事件
+$script:helpNames = @('BtnCheckUpdate', 'BtnCopyDiag', 'BtnCopyHash', 'BtnGitHub', 'BtnHelpNext', 'BtnHelpPrev', 'BtnIssue', 'BtnOpenLog', 'BtnSelfTest', 'CopyHint', 'FbCheckUpdate', 'FbCopyDiag', 'FbCopyHash', 'FbSelfTest', 'FeedbackCard', 'GitHubUrl', 'HelpFaq', 'HelpNav', 'HelpNav0', 'HelpNav1', 'HelpNav2', 'HelpNav3', 'HelpNav4', 'HelpNav5', 'HelpNav6', 'HelpNav7', 'HelpNav8', 'HelpNav9', 'HelpNavFaq', 'HelpNavFb', 'HelpNavStart', 'HelpPager', 'HelpPaneFaq', 'HelpPaneStart', 'HelpScroll', 'HelpSec0', 'HelpSec1', 'HelpSec2', 'HelpSec3', 'HelpSec4', 'HelpSec5', 'HelpSec6', 'HelpSec7', 'HelpSec8', 'HelpSec9', 'HelpSections', 'RiskCard', 'SelfHash')
+$script:helpReady = $false; $script:helpMs = 0
+function Initialize-HelpPage {
+    if ($script:helpReady -or -not $script:helpXml) { return }
+    $script:helpReady = $true
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    $doc = [xml]$script:helpXml
+    if ($script:Lang -eq 'en') { Set-XamlLang $doc }
+    $s = $doc.OuterXml; $g = $null
+    if ([Theme]::Dark) { try { $g = [Windows.Markup.XamlReader]::Parse([Theme]::Xaml($s)) } catch { $g = $null } }
+    if (-not $g) { $g = [Windows.Markup.XamlReader]::Parse($s) }
+    [void]$ctl.PageHelp.Children.Add($g)
+    foreach ($n in $script:helpNames) { $ctl[$n] = $g.FindName($n) }
+    $script:helpRoot = $g
+    foreach ($rb in @($ctl.HelpNav.Children | Where-Object { $_ -is [System.Windows.Controls.RadioButton] })) {
+        $k = [string]$rb.Tag
+        $pane = switch -regex ($k) { '^start$' { $ctl.HelpPaneStart } '^faq$' { $ctl.HelpPaneFaq } '^fb$' { $ctl.FeedbackCard } '^s(\d+)$' { $g.FindName('HelpSec' + $Matches[1]) } }
+        if ($pane) { $script:helpPanes[$k] = @{ Pane = $pane; Nav = $rb; Name = [string]$rb.ToolTip } }
+    }
+    $ctl.BtnCopyHash.Add_Click({ if ($script:selfHash) { try { [System.Windows.Clipboard]::SetText($script:selfHash); Show-CopyHint (T 'SHA256 已复制') } catch {} } })
+    foreach ($x in @($script:helpPanes.Values)) { $x.Nav.Add_Checked({ if ($script:helpNavQuiet) { return }; Select-HelpPane ([string]$this.Tag) }) }
+    $ctl.BtnHelpPrev.Add_Click({ if ($this.Tag) { Select-HelpPane ([string]$this.Tag) } })
+    $ctl.BtnHelpNext.Add_Click({ if ($this.Tag) { Select-HelpPane ([string]$this.Tag) } })
+    Select-HelpPane (Get-Setting 'HelpPane' 'start') -NoRemember
+    $script:helpPick = $script:helpPane
+    # 常见问题：点开的一个问题在下面时，往上滚到能看见它的答案
+    foreach ($x in @($ctl.HelpFaq.Children)) {
+        $x.Add_Expanded({
+            param($s, $e)
+            if (-not [object]::ReferenceEquals($e.OriginalSource, $s)) { return }
+            $q = $s
+            [void]$win.Dispatcher.BeginInvoke([Action]{ try { $q.BringIntoView() } catch {} }.GetNewClosure(), [System.Windows.Threading.DispatcherPriority]::Loaded)
+        })
+    }
+    $ctl.BtnGitHub.Add_Click({ Open-Web $script:projectPage })
+    $ctl.BtnIssue.Add_Click({ Open-Web ($script:projectPage + '/issues') })
+    $ctl.BtnCopyDiag.Add_Click({
+        $c = $null; try { $c = New-Object System.IO.DriveInfo 'C:\' } catch {}
+        $info = @(
+            ((T "腾挪 ClearC {0}") -f $script:AppVersion) + $(if ($script:AppBuild) { " ($($script:AppBuild))" } else { '' })
+            ((T "Windows {0}，{1} 位") -f [Environment]::OSVersion.Version, $(if ([Environment]::Is64BitOperatingSystem) { 64 } else { 32 }))
+            $(if ($c) { (T "C 盘剩余 {0} / 共 {1}") -f (Fmt $c.AvailableFreeSpace), (Fmt $c.TotalSize) } else { '' })
+            ((T "屏幕可用区域 {0:N0} x {1:N0}") -f [System.Windows.SystemParameters]::WorkArea.Width, [System.Windows.SystemParameters]::WorkArea.Height)
+            ''
+            (T '---- 最近的运行记录 ----')
+        )
+        $tail = @()
+        try { $tail = @(Get-Content -LiteralPath $script:logFile -Encoding UTF8 -Tail 80 -ErrorAction Stop) } catch { $tail = @(($ctl.Log.Text -split "`r?`n") | Select-Object -Last 80) }
+        try { [System.Windows.Clipboard]::SetText((($info + $tail) -join "`r`n")); Show-CopyHint (T '已复制，可以粘贴到 GitHub 的问题（Issue）里') }
+        catch { Show-CopyHint (T '复制失败，可以点「打开运行记录文件」再手动复制') }
+    })
+    $ctl.BtnSelfTest.Add_Click({
+        if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return }
+        Use-BgJob 'selftest'; $sync.SelfTest = $null
+        Start-Op (T '检查扫描功能')
+        UI-Busy $true
+        UI-Log (T '开始检查扫描功能')
+        Start-Worker @'
+$sync.SelfTest = Invoke-SelfTest $arg.Version
+'@ @{ Version = $script:AppVersion }
+    })
+    $ctl.BtnCheckUpdate.Add_Click({
+        if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return }
+        Use-BgJob 'update'; $sync.Update = $null
+        Start-Op (T '检查新版本') -NoCard
+        UI-Busy $true
+        Start-Worker @'
 try {
     [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
     $r = Invoke-RestMethod -Uri 'https://api.github.com/repos/Xuanqiyun/ClearC/releases/latest' -Headers @{ 'User-Agent' = 'ClearC'; 'Accept' = 'application/vnd.github+json' } -TimeoutSec 20 -UseBasicParsing -ErrorAction Stop
     $sync.Update = @{ Ok = $true; Tag = [string]$r.tag_name; Url = [string]$r.html_url; Body = [string]$r.body }
 } catch { $sync.Update = @{ Ok = $false; Err = $_.Exception.Message } }
 '@ $null
-})
+    })
 
-$ctl.BtnOpenLog.Add_Click({
-    if (Test-Path -LiteralPath $script:logFile) { [void](Open-AsUser $script:logFile) }
-    else { Show-CopyHint (T '还没有运行记录') }
-})
+    $ctl.BtnOpenLog.Add_Click({
+        if (Test-Path -LiteralPath $script:logFile) { [void](Open-AsUser $script:logFile) }
+        else { Show-CopyHint (T '还没有运行记录') }
+    })
+
+    Register-AutoCols $g
+    [void](Set-AutoNames $g)
+    Update-HelpForMode
+    $script:helpMs = $sw.ElapsedMilliseconds
+}
 
 # ---------- 运行记录：默认收起，左下角打开 ----------
 function Set-LogVisible([bool]$on) {
@@ -22941,7 +22985,7 @@ function Apply-Mode {
     $ctl.HTabEvents.Visibility = & $v 2
     Select-HealthTab $script:healthTab
     Show-Fixes $(if ($script:healthData) { $script:healthData.Power } else { $null })
-    $ctl.FbCopyDiag.Visibility = & $v 1; $ctl.FbSelfTest.Visibility = & $v 2
+    if ($ctl.FbCopyDiag) { $ctl.FbCopyDiag.Visibility = & $v 1; $ctl.FbSelfTest.Visibility = & $v 2 }   # 帮助页还没打开时没有这两个
     Update-SetNav
     foreach ($n in 'SetCustomList', 'SetCustomEmpty', 'BtnSetCustomAdd', 'SetExcludeList', 'SetExcludeEmpty', 'BtnSetExcludeAdd', 'SetCustomHead', 'SetCustomNote', 'SetExcludeHead', 'SetExcludeNote') { $ctl[$n].Visibility = & $v 2 }
     $ctl.ModeTag.Text = (Get-ModeName $m) + (T '模式')
@@ -23004,7 +23048,7 @@ function Apply-Display {
     $show = @{}
     foreach ($k in $script:optPages.Keys) { $show[$k] = (-not $hp.ContainsKey($k)) -and (-not $script:pageLvl.ContainsKey($k) -or $script:pageLvl[$k] -le $m -or ($k -eq 'moves' -and $script:hasMoves)); $ctl[$script:pageList[$k][1]].Visibility = & $vis $show[$k] }
     $ctl.NavHeadManage.Visibility = & $vis ($show['moves'] -or $show['auto'] -or $show['log'])
-    if ($script:helpPanes) { Update-HelpForMode }
+    if ($script:helpReady) { Update-HelpForMode }
     $hl = Get-HiddenSet 'HideLinks'
     foreach ($k in $script:optLinks.Keys) { $ctl[$script:optLinks[$k][1]].Visibility = & $vis ((-not $hl.ContainsKey($k)) -and (-not $script:linkLvl.ContainsKey($k) -or $script:linkLvl[$k] -le $m)) }
 }
@@ -23198,7 +23242,10 @@ function Invoke-UiTest {
             }
         }
         & $step 'help: contents list on the left, only the picked item on the right' {
+            if ($script:helpAtStart) { throw 'the help page was built when the window opened, not on first use' }
             Show-Page 'help'; $win.UpdateLayout()
+            if (-not $script:helpReady -or $ctl.PageHelp.Children.Count -ne 1) { throw 'opening the help page did not build it' }
+            $L.Add(('  help page built on first use in {0} ms' -f $script:helpMs))
             $navs = @($ctl.HelpNav.Children | Where-Object { $_ -is [System.Windows.Controls.RadioButton] })
             if ($navs.Count -lt 13 -or $script:helpPanes.Count -ne $navs.Count) { throw ('{0} items in the contents, {1} panes' -f $navs.Count, $script:helpPanes.Count) }
             if (@($ctl.HelpNav.Children | Where-Object { $_ -is [System.Windows.Controls.TextBlock] }).Count -lt 4) { throw 'no group headings in the contents' }
@@ -24810,5 +24857,6 @@ $sync.ResumeRes = $out
     if ($ans -eq (T '打开所在位置')) { Open-Location $h[0].Bak }
 }
 $global:CLEANC_UI_SHOWN = $true   # 告诉外层 exe：界面已经正常打开
+$script:helpAtStart = $script:helpReady   # 界面自测核对：帮助页没有在打开窗口时就建好
 if ($script:uiTest) { $win.WindowStartupLocation = 'Manual'; $win.Left = -32000; $win.Top = -32000; $win.ShowActivated = $false; $win.ShowInTaskbar = $false }
 $win.ShowDialog() | Out-Null
