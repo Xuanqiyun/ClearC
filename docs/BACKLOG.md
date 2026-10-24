@@ -17,7 +17,7 @@
 | SEC-2 | P0 | 计划任务以最高权限运行，指向用户能改的 exe，还会自动改指向更新的 exe | 开任务时把 exe 复制到 `Program Files\ClearC`，任务指向那里；改指向前核对 | 3.6 |
 | SEC-3 | P0 | 搬走的聊天记录、桌面、文档继承 D 盘根目录的权限，其他账户能读能改 | 所有搬家都带上原权限；CDriveMoved 只给本人、系统、管理员；已经搬走的可以修正 | 3.6 |
 | SEC-4 | P1 | C 盘加密、目标盘没加密时，搬家等于把数据放到不加密的盘 | 确认框里写明 | |
-| SEC-5 | P1 | 系统程序的路径取自环境变量 `SystemRoot` | 改用 `[Environment]::SystemDirectory`、`GetFolderPath('Windows')` | |
+| SEC-5 | P1 | 系统程序的路径取自环境变量 `SystemRoot` | 改用 `[Environment]::SystemDirectory`、`GetFolderPath('Windows')` | 3.6 |
 | SEC-6 | P1 | 厂商下载页、运行记录用管理员身份打开浏览器、记事本 | 都经资源管理器打开 | |
 | SEC-7 | P1 | 存密码、证书、密钥的文件夹只挡了当前账户 | 对所有账户的 `AppData\…\Microsoft\Protect` 等生效 | |
 | SEC-8 | P1 | 重复文件删除不写操作日志 | 每删一个写一条 | 3.6 |

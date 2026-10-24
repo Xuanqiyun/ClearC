@@ -610,6 +610,18 @@ try { & {
     $br = [regex]::Match($src, '(?s)function Build-Rows\(.*?\r?\n\}').Value
     Check 'UX-3 the cleanup page shows a separate chat-records card with its own move button' ($br -match 'Update-ChatCard' -and $src -match 'x:Name="ChatCard"' -and $src -match '(?s)\$ctl\.BtnChatMove\.Add_Click\(\{.*?Invoke-RunSelected .*?-OnlyMove')
     Check 'UX-3 the move manager is listed in every mode once something has been moved, and broken links are reported at startup' ([regex]::Match($src, '(?s)function Apply-Display.*?\r?\n\}').Value -match '\$script:hasMoves' -and $src -match 'Show-HalfMoves; Show-LooseMoves; Show-BrokenMoves; return' -and $src -match "(?s)function Show-BrokenMoves.*?State -eq 'broken'")
+    # ============ 19. 系统文件夹从系统接口取，不信环境变量（3.6 安全评审） ============
+    $top = $src.Substring(0, $src.IndexOf('$rowCode = @"'))
+    $first = $src.IndexOf('$env:SystemRoot'); $fix = $src.IndexOf('Use-SystemPaths')
+    Check 'SEC-5 the system folder comes from the Windows API before anything uses $env:SystemRoot (also in the engine for background work)' ($fix -gt 0 -and $fix -lt $first -and $top -match "GetFolderPath\('Windows'\)" -and $engineText -match '(?m)^Use-SystemPaths' -and $engineText -match '\$sys32 = \[Environment\]::SystemDirectory')
+    if ($win) {
+        $keepRoot = $env:SystemRoot; $keepDrive = $env:SystemDrive
+        try {
+            $env:SystemRoot = 'C:\Users\Public\FakeWindows'; $env:SystemDrive = 'Q:'
+            Use-SystemPaths
+            Check 'SEC-5 a changed SystemRoot / SystemDrive in the environment is replaced with the real ones' ($env:SystemRoot -eq [Environment]::GetFolderPath('Windows') -and $env:SystemDrive -eq ([Environment]::GetFolderPath('Windows')).Substring(0, 2))
+        } finally { $env:SystemRoot = $keepRoot; $env:SystemDrive = $keepDrive }
+    } else { Skip 'SEC-5 replacing a changed SystemRoot' }
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue
