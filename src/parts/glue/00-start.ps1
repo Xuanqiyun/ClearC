@@ -40,11 +40,12 @@ function Write-LogFile([string]$m) {
 }
 Rotate-RunLog
 # ---------- 运行记录结束 ----------
-# 公司电脑的应用控制策略（AppLocker、WDAC）把 PowerShell 限制在受限语言模式时，后面编译 C#、调系统接口都会失败：先说清楚（exe 在启动器里已经查过）
+# 公司电脑的应用控制策略（AppLocker、WDAC）把 PowerShell 限制在受限语言模式时，后面编译 C#、调系统接口都会失败：先说清楚。
+# exe 的启动器看 CLEANC_LANGMODE 弹窗说明（启动器自己不探测语言模式）
 if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') {
     Write-Host ("这台电脑的应用控制策略（AppLocker 或 WDAC）把 PowerShell 限制在「{0}」模式，本工具在这种模式下没法运行。请找管理员把它加进允许运行的列表。" -f $ExecutionContext.SessionState.LanguageMode)
     Write-Host ("This PC's application control policy (AppLocker or WDAC) keeps PowerShell in {0} mode, so ClearC cannot run. Ask your administrator to allow it." -f $ExecutionContext.SessionState.LanguageMode)
-    $global:CLEANC_UI_SHOWN = $true
+    $global:CLEANC_LANGMODE = [string]$ExecutionContext.SessionState.LanguageMode
     return
 }
 
