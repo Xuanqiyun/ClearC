@@ -8,6 +8,7 @@ cs/Mft.cs
 cs/DiskMap.cs
 cs/Theme.cs
 cs/FsTools.cs
+cs/Core.cs
 cs/Rows.cs
 glue/02-engine.ps1
 engine/Engine.ps1

@@ -13,7 +13,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File build\merge.ps1
 | 文件夹 | 内容 |
 |---|---|
 | `glue/` | 把各部分接起来的 PowerShell：管理员权限、加载 C# 类型、定时任务的后台模式（`/check`、`/autoclean`、`/selftest`）等 |
-| `cs/` | C# 部分。`RowTypes.cs` 是 `$rowCode`；其余几个按顺序拼成 `$dupCode`，一起编译：重复文件查找、批量读目录和多线程统计（`DirReader.cs`）、直接读 NTFS 文件表和变更日志（`Mft.cs`）、空间地图的文件夹树（`DiskMap.cs`）、深色模式配色（`Theme.cs`）、文件系统小工具、各页面列表的行 |
+| `cs/` | C# 部分。`RowTypes.cs` 是 `$rowCode`；其余几个按顺序拼成 `$dupCode`，一起编译：重复文件查找、批量读目录和多线程统计（`DirReader.cs`）、直接读 NTFS 文件表和变更日志（`Mft.cs`）、空间地图的文件夹树（`DiskMap.cs`）、深色模式配色（`Theme.cs`）、文件系统小工具、核心规则（`Core.cs`：路径规则、搬家进度的状态机，纯函数，引擎调用它们）、各页面列表的行 |
 | `engine/` | `$engine`：清理、搬家、删除保护、日志、自检等核心逻辑，界面线程和每个后台任务共用 |
 | `i18n/en.tsv` | 英文界面的翻译表：每行「中文原文<Tab>英文」，`\n` 表示换行 |
 | `ui/` | `main.xaml` 是主窗口，`help-en.xaml` 是英文帮助页；`10-…` 到 `99-…` 是各页面的界面逻辑，按页面分开 |

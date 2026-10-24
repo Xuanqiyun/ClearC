@@ -26,7 +26,7 @@ here('$rowCode = @"', 'cs/RowTypes.cs', 'glue/01-load-types.ps1', '"')
 d = here("$dupCode = @'", 'cs/DupFinder.cs', 'glue/02-engine.ps1', "'")
 for banner, name in [('// ==================== 读一个文件夹里的条目', 'cs/DirReader.cs'), ('// ==================== 直接读 NTFS 的文件表', 'cs/Mft.cs'),
                      ('// ==================== 空间地图：', 'cs/DiskMap.cs'), ('// ==================== 深色模式', 'cs/Theme.cs'),
-                     ('// ==================== 文件系统小工具', 'cs/FsTools.cs'), ('// ==================== 界面文字翻译', 'cs/Rows.cs')]:
+                     ('// ==================== 文件系统小工具', 'cs/FsTools.cs'), ('// ==================== 核心规则', 'cs/Core.cs'), ('// ==================== 界面文字翻译', 'cs/Rows.cs')]:
     i = find(starts(banner), 0, banner)
     if i >= d: raise SystemExit('split.py: %r is not inside $dupCode' % banner)
     cuts.append((i, name))
