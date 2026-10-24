@@ -156,6 +156,13 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+成功	succeeded
+正在运行	running now
+出错（代码 0x{0:X8}）	failed (code 0x{0:X8})
+上次运行：{0}，{1}	Last run: {0}, {1}
+上次运行：{0}	Last run: {0}
+还没运行过	Has not run yet
+下次：{0}	next: {0}
 清后要重建（删了要重新下载或重新生成，第一次打开会慢一点；默认也清，执行前会单独列出来）	Rebuilt after cleaning (downloaded or generated again after deletion, so the first start is a bit slower; cleaned by default and listed separately before running)
 默认不清（有代价，看清说明再选）	Skipped by default (comes at a cost; read the description before selecting)
 开始处理所选项	Process selected

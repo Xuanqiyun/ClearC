@@ -718,6 +718,11 @@ try { & {
     $lc = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '../build/launcher.cs'))
     Check 'OPS-9 the exe checks the PowerShell language mode before running the script and explains a locked-down PC' ($lc -match 'LanguageMode' -and $lc.IndexOf('LanguageMode') -lt $lc.IndexOf('"AddScript"') -and $lc -match 'AppLocker')
     Check 'OPS-9 running the script directly checks it too, before anything needs full PowerShell' ($src -match "LanguageMode -ne 'FullLanguage'" -and $src.IndexOf("LanguageMode -ne 'FullLanguage'") -lt $src.IndexOf('Add-Type'))
+    # ============ 36. 自动提醒页写明任务上次、下次什么时候运行，结果怎样（3.6 运维评审） ============
+    $d1 = [datetime]'2026-10-20 12:00'; $d2 = [datetime]'2026-10-27 12:00'
+    $ok1 = Format-TaskRunInfo $d1 0 $d2; $bad1 = Format-TaskRunInfo $d1 2147942402 $d2; $never = Format-TaskRunInfo ([datetime]'1999-11-30') 267011 $d2
+    Check 'OPS-10 the task''s last run, its result and the next run are written out (success, error code, never run)' ($ok1 -match '2026-10-20 12:00' -and $ok1 -match '2026-10-27 12:00' -and $bad1 -match '0x80070002' -and $never -notmatch '1999' -and $ok1 -ne $bad1 -and $never -ne $ok1)
+    Check 'OPS-10 the reminders page shows it for both tasks' (([regex]::Matches([regex]::Match($src, '(?s)function Load-Auto.*?\r?\n\}').Value, 'Get-TaskRunInfo \$script:task')).Count -eq 2)
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue
