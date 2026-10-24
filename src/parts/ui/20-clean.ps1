@@ -252,6 +252,25 @@ function Build-Rows($sizes) {
     UI-Status
     $ctl.Summary.Text = ((T "共 {0} 项。按当前选择，可释放约 {1}。") -f $col.Count, (GB $total))
 }
+# 第一次打开扫完：一句结论（一键清理能腾出多少），一个主按钮。点了和「一键清理」一样，会先列出要做的事再确认
+$script:firstRun = $false; $script:firstResult = $false
+function Show-FirstResult {
+    if (-not $script:rows) { return }
+    $cat = @{}; foreach ($c in $catalog) { $cat[$c.Idx] = $c }
+    $b = [double]0
+    foreach ($r in $script:rows) { $a = Get-OneClickAction $cat[$r.Idx]; if ($a -ne (T '跳过') -and $r.Actions -contains $a -and $r.Bytes -gt 0) { $b += $r.Bytes } }
+    if ($b -lt 100MB) {
+        Show-Sheet -Kind done -Title (T '扫描完了') -Text ((T "C 盘上能放心删的缓存和临时文件不多（{0}）。下面的列表里有每一项的说明；左边的「空间地图」能看到是什么占着 C 盘。") -f (Fmt $b)) | Out-Null
+        return
+    }
+    $go = T '一键清理'
+    $ans = Show-Sheet -Kind info -Title ((T "C 盘可以腾出约 {0}") -f (Fmt $b)) `
+        -Text (T "都是缓存、临时文件和日志，删了会自动重建；个人文件夹（桌面、文档、下载等）里的东西不碰，聊天记录也不动。`n`n点「一键清理」开始（会先列出要做的事，再确认一次）；想先看看明细，点「先看看」。") `
+        -Buttons @((T '先看看'), $go) -Primary $go -Cancel (T '先看看')
+    if ($ans -ne $go -or $script:worker) { return }
+    Apply-OneClick
+    Invoke-RunSelected (T '一键清理')
+}
 # 聊天记录卡片：一键清理只删不搬，聊天记录占了多少、要不要搬，在这里单独说，按钮只搬这几项
 $script:chatIdx = @()
 function Update-ChatCard {
