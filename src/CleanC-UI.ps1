@@ -17810,7 +17810,7 @@ foreach ($pair in @(
 foreach ($d in [System.IO.DriveInfo]::GetDrives()) {
     try {
         if ($d.DriveType -eq 'Fixed' -and $d.IsReady -and ($d.Name.TrimEnd('\') -ine $env:SystemDrive) -and -not [FsTools]::IsSubst($d.Name)) {
-            Add-Root $d.RootDirectory.FullName ((T "整个 {0} 盘") -f $d.Name.Substring(0, 1)) $true ((T "{0}  已用 {1}") -f $d.Name, (Fmt ($d.TotalSize - $d.TotalFreeSpace)))
+            Add-Root $d.RootDirectory.FullName ((T "整个 {0} 盘") -f $d.Name.Substring(0, 1)) $true ((T "{0}  已用 {1}") -f $d.Name, (Fmt (Get-DriveUse $d.Name).Used))
         }
     } catch {}
 }
@@ -19494,7 +19494,7 @@ function Show-SpaceAcct {
     if (-not $r -or -not $r.HasDisk) { return }
     $drive = $r.FullPath()
     $total = [double]0; $used = [double]0
-    try { $di = New-Object System.IO.DriveInfo $drive; $total = [double]$di.TotalSize; $used = [double]($di.TotalSize - $di.TotalFreeSpace) } catch {}
+    $du = Get-DriveUse $drive; $total = $du.Total; $used = $du.Used   # 和磁盘卡片上写的已用是同一个数
     $files = [double]$r.UniqueDisk; $mft = [double]$r.MftBytes
     $a = New-Object System.Collections.Generic.List[string]
     $a.Add(((T "· 文件实际占用 {0}：每个文件只算一次，有几个名字的（硬链接）也只算一份") -f (Fmt $files)))
@@ -20943,7 +20943,7 @@ function Show-Health($r) {
         $tier = $script:hcGreen
         $sub = if ($d.Model) { [string]$d.Model } else { (T '型号读不到') }
         $card = New-HealthCard ((T "磁盘 {0}") -f $d.Drive) $sub $tier
-        try { $di = New-Object System.IO.DriveInfo ($d.Drive + '\'); $pct = [int][math]::Round(100.0 * ($di.TotalSize - $di.TotalFreeSpace) / [math]::Max([double]1, [double]$di.TotalSize)); Set-CardBar $card $pct; $card.Chips.Add((New-Chip ((T "已用 {0}%") -f $pct) $(if ($pct -ge 95) { $script:hcRed } elseif ($pct -ge 85) { $script:hcAmber } else { $script:hcGreen }))) } catch {}
+        try { $du = Get-DriveUse ($d.Drive + '\'); if (-not $du.Ok) { throw 'no size' }; $pct = [int][math]::Round($du.Pct); Set-CardBar $card $pct; $card.Chips.Add((New-Chip ((T "已用 {0}%") -f $pct) $(if ($pct -ge 95) { $script:hcRed } elseif ($pct -ge 85) { $script:hcAmber } else { $script:hcGreen }))) } catch {}
         if ($d.Ok) {
             $h = [string]$d.Health
             $t2 = if ($h -match 'Healthy|正常|OK') { $script:hcGreen } elseif ($h) { $script:hcRed } else { $script:hcGrey }
@@ -24689,7 +24689,7 @@ function Refresh-Drives([string]$old, [string]$new) {
     foreach ($d in $add) {
         try {
             $di = New-Object System.IO.DriveInfo $d
-            if ($di.DriveType -eq 'Fixed' -and $di.IsReady -and -not [FsTools]::IsSubst($di.Name)) { Add-Root $di.RootDirectory.FullName ((T "整个 {0} 盘") -f $di.Name.Substring(0, 1)) $false ((T "{0}  已用 {1}") -f $di.Name, (Fmt ($di.TotalSize - $di.TotalFreeSpace))) }
+            if ($di.DriveType -eq 'Fixed' -and $di.IsReady -and -not [FsTools]::IsSubst($di.Name)) { Add-Root $di.RootDirectory.FullName ((T "整个 {0} 盘") -f $di.Name.Substring(0, 1)) $false ((T "{0}  已用 {1}") -f $di.Name, (Fmt (Get-DriveUse $di.Name).Used)) }
         } catch {}
     }
     foreach ($d in $gone) { foreach ($rt in @($script:roots)) { if (([string]$rt.Path).TrimEnd('\') -ieq $d.TrimEnd('\')) { [void]$script:roots.Remove($rt) } } }

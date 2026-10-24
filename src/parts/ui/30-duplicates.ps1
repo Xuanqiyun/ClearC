@@ -30,7 +30,7 @@ foreach ($pair in @(
 foreach ($d in [System.IO.DriveInfo]::GetDrives()) {
     try {
         if ($d.DriveType -eq 'Fixed' -and $d.IsReady -and ($d.Name.TrimEnd('\') -ine $env:SystemDrive) -and -not [FsTools]::IsSubst($d.Name)) {
-            Add-Root $d.RootDirectory.FullName ((T "整个 {0} 盘") -f $d.Name.Substring(0, 1)) $true ((T "{0}  已用 {1}") -f $d.Name, (Fmt ($d.TotalSize - $d.TotalFreeSpace)))
+            Add-Root $d.RootDirectory.FullName ((T "整个 {0} 盘") -f $d.Name.Substring(0, 1)) $true ((T "{0}  已用 {1}") -f $d.Name, (Fmt (Get-DriveUse $d.Name).Used))
         }
     } catch {}
 }

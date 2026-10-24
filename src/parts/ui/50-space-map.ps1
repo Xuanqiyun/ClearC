@@ -1008,7 +1008,7 @@ function Show-SpaceAcct {
     if (-not $r -or -not $r.HasDisk) { return }
     $drive = $r.FullPath()
     $total = [double]0; $used = [double]0
-    try { $di = New-Object System.IO.DriveInfo $drive; $total = [double]$di.TotalSize; $used = [double]($di.TotalSize - $di.TotalFreeSpace) } catch {}
+    $du = Get-DriveUse $drive; $total = $du.Total; $used = $du.Used   # 和磁盘卡片上写的已用是同一个数
     $files = [double]$r.UniqueDisk; $mft = [double]$r.MftBytes
     $a = New-Object System.Collections.Generic.List[string]
     $a.Add(((T "· 文件实际占用 {0}：每个文件只算一次，有几个名字的（硬链接）也只算一份") -f (Fmt $files)))
