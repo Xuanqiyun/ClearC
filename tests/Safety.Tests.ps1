@@ -714,6 +714,10 @@ try { & {
         $names = @(Get-ChildItem -LiteralPath $script:logDir -File | ForEach-Object { $_.Name } | Sort-Object)
         Check ("OPS-8 a full run log is moved aside and at most two old copies are kept ({0})" -f ($names -join ', ')) (($names -join ',') -eq 'run.1.log,run.2.log,run.log' -and [IO.File]::ReadAllText($script:logFile) -match 'hello')
     }
+    # ============ 35. 受限语言模式（AppLocker、WDAC）下说清楚为什么打不开（3.6 运维评审） ============
+    $lc = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '../build/launcher.cs'))
+    Check 'OPS-9 the exe checks the PowerShell language mode before running the script and explains a locked-down PC' ($lc -match 'LanguageMode' -and $lc.IndexOf('LanguageMode') -lt $lc.IndexOf('"AddScript"') -and $lc -match 'AppLocker')
+    Check 'OPS-9 running the script directly checks it too, before anything needs full PowerShell' ($src -match "LanguageMode -ne 'FullLanguage'" -and $src.IndexOf("LanguageMode -ne 'FullLanguage'") -lt $src.IndexOf('Add-Type'))
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue

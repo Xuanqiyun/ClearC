@@ -84,6 +84,19 @@ static class CleanCLauncher {
             SetEnumProp(rs, "ThreadOptions", "UseCurrentThread");          // 就在当前（STA）主线程上执行
             Method(rs.GetType(), "Open").Invoke(rs, null);
 
+            // 公司电脑的应用控制策略（AppLocker、WDAC）会把 PowerShell 限制在「受限语言模式」：本工具要调用系统接口、
+            // 编译 C#、显示窗口，在这种模式下都做不了。直接说清楚，不要报一堆看不懂的错
+            object proxy0 = rs.GetType().GetProperty("SessionStateProxy").GetValue(rs, null);
+            object lang = proxy0.GetType().GetProperty("LanguageMode").GetValue(proxy0, null);
+            if (lang != null && lang.ToString() != "FullLanguage") {
+                bool zh = System.Globalization.CultureInfo.CurrentUICulture.Name.StartsWith("zh", StringComparison.OrdinalIgnoreCase);
+                string msg = zh
+                    ? "这台电脑的应用控制策略（AppLocker 或 WDAC）把 PowerShell 限制在「受限语言模式」（" + lang + "）。本工具要用的功能（读文件表、调用系统接口、显示窗口）在这种模式下都用不了，所以没法运行。\r\n\r\n这通常是公司电脑的安全设置。需要用的话，请找管理员把本工具加进允许运行的列表。"
+                    : "This PC's application control policy (AppLocker or WDAC) keeps PowerShell in \"" + lang + "\" mode. ClearC needs things that mode does not allow (reading the file table, calling Windows, showing its window), so it cannot run.\r\n\r\nThis is usually a company security setting. Ask your administrator to allow ClearC if you need it.";
+                if (TestMode) Console.Error.WriteLine("FAIL: language mode " + lang); else MessageBoxW(IntPtr.Zero, msg, zh ? "腾挪 ClearC" : "ClearC", 0x30);
+                return 3;
+            }
+
             ps = Method(psType, "Create").Invoke(null, null);
             psType.GetProperty("Runspace").SetValue(ps, rs, null);
             Method(psType, "AddScript", typeof(string)).Invoke(ps, new object[] { script });
