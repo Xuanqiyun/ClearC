@@ -9,6 +9,8 @@ $ErrorActionPreference = 'SilentlyContinue'
 $script:AppVersion = '3.5.2'
 $script:AppBuildStamp = ''   # 构建 exe 时由 build 脚本填上构建时间（UTC）：写进诊断信息和运行记录，反馈问题时好对上是哪一次构建的
 $script:startClock = [Diagnostics.Stopwatch]::StartNew()   # 记下启动各阶段用了多久，写进运行记录
+# 构建日期只有一个来源：exe 由构建脚本填上 AppBuildStamp；直接运行脚本时用脚本文件的修改日期
+try { $env:CLEANC_BUILT = $(if ($script:AppBuildStamp) { $script:AppBuildStamp.Substring(0, 10) } elseif ($PSCommandPath) { (Get-Item -LiteralPath $PSCommandPath).LastWriteTime.ToString('yyyy-MM-dd') } else { '' }) } catch {}
 # 系统文件夹从系统接口取，不信环境变量：环境变量是启动本工具的那个程序给的，普通权限就能改，
 # 而本工具以管理员身份运行 cmd、robocopy、icacls 这些系统程序。之后用到的 SystemRoot、SystemDrive 环境变量都是这里的值
 function Use-SystemPaths {
@@ -3598,7 +3600,9 @@ function Use-SystemPaths {
 Use-SystemPaths
 $sys32 = [Environment]::SystemDirectory
 if (-not $sys32) { $sys32 = "$env:SystemRoot\System32" }
-$script:AppBuilt = [DateTime]'2026-10-24'   # 这一版的发布日期（发版时改）：系统时间比它还早，时钟肯定不对
+# 这一版的构建日期（系统时间比它还早，时钟肯定不对）：由主程序放进环境变量 CLEANC_BUILT，后台线程里也读得到；不用手改
+$script:AppBuilt = $null
+try { if ($env:CLEANC_BUILT) { $script:AppBuilt = [DateTime]::ParseExact($env:CLEANC_BUILT, 'yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture) } } catch {}
 function GB($b) { "{0:N2} GB" -f ([double]$b / 1GB) }
 function FreeC { (Get-PSDrive C).Free }
 function DirBytes($p) { [double][DirStat]::Measure([string]$p) }
