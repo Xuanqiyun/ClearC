@@ -156,6 +156,9 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+没有可以搬去的其他硬盘，先跳过	No other drive to move to; skipped for now
+只做删除	Delete only
+要搬的 {0} 项找不到可以搬去的其他硬盘（这台电脑只有 C 盘，或者选的盘拔掉了）。可以在「搬家目标」里换一块盘；也可以先只做删除，这几项留着不动。	There is no other drive to move the {0} item(s) to (this PC has only C:, or the chosen drive was unplugged). Pick another drive under Move target, or do only the deletions now and leave these items as they are.
 这次自动清理跳过：本工具的窗口里正在删除或搬家	Skipped this scheduled cleanup: the ClearC window was deleting or moving things
 下次到时间再做	It will run next time
 没有开始	Not started
