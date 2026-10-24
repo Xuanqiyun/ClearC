@@ -304,7 +304,7 @@ try { & {
     try { $half = @(Find-HalfMoves) } finally { Set-Setting 'MoveRoots' '' }
     Check ("an interrupted move (folder left as *.moved_backup) is found at startup ({0})" -f $half.Count) (@($half | Where-Object { $_.Bak -like '*halfsrc.moved_backup' }).Count -eq 1 -and $src -match 'Show-HalfMoves; (Show-LooseMoves; )?(Show-BrokenMoves; )?return')
     # Windows.old、Installer、失效快捷方式、回收站说明
-    Check 'Windows.old: takeown skips symbolic links, icacls works on links themselves, links are removed again after taking ownership' ($engineText -match 'takeown\.exe" /F \$p /R /A /D Y /SKIPSL' -and $engineText -match 'icacls\.exe" \$p /grant Administrators:F /T /C /L /Q' -and $engineText -match '\$more = Remove-LinksInside \$p')
+    Check 'Windows.old: takeown skips symbolic links, icacls works on links themselves, links are removed again after taking ownership' ($engineText -match 'takeown\.exe" /F \$p /R /A /D \(Get-YesLetter\) /SKIPSL' -and $engineText -match 'icacls\.exe" \$p /grant \*S-1-5-32-544:F /T /C /L /Q' -and $engineText -match '\$more = Remove-LinksInside \$p')
     Check 'Installer orphans: nothing is judged when the Windows Installer query fails or the registry has no packages' ($engineText -match 'if \(\$null -eq \$viaApi\) \{ return @\(\) \}   # 接口读不了' -and $engineText -match 'if \(\$fromReg -eq 0\) \{ return @\(\) \}' -and ([regex]::Match($src, '(?s)public static List<string> FromInstaller\(\).*?\r?\n    \}').Value) -match '(?s)CreateInstance\(t\); \} catch \{ return null; \}.*?\} catch \{ return null; \}')
     Check 'broken shortcuts: a target inside a moved (linked) folder is not counted' ($engineText -match 'if \(Get-LinkedAncestor \$t\) \{ continue \}')
     Check 'with the Recycle Bin on, the confirm text names the items that are deleted permanently' ($src -match '由系统命令处理，不能放进回收站，会直接删除')
@@ -661,6 +661,12 @@ try { & {
     # ============ 25. 用另一个管理员账户的密码打开时说清楚（3.6 运维评审） ============
     Check 'OPS-5 running as another administrator than the one at the desktop is spelled out' ([bool](Get-AccountMismatch 'PC\admin' 'PC\leon') -and -not (Get-AccountMismatch 'PC\Leon' 'pc\leon') -and -not (Get-AccountMismatch 'PC\leon' ''))
     Check 'OPS-5 the check runs when the window opens' ($src -match '(?s)function Show-AccountMismatch.*?Get-DesktopUser' -and $src -match 'Show-AccountMismatch; Show-WriteTrouble -Startup')
+    # ============ 26. 不同语言的 Windows：组用 SID，确认字母从系统命令的说明里读（3.6 运维评审） ============
+    $en = "TAKEOWN [/S system] [/F filename] [/A] [/R [/D prompt]]`n    /R                       Recurses.`n    /D       prompt          Default answer used when the current user`n                             does not have the ""list folder"" permission`n                             on a directory. Valid`n                             values ""Y"" to take ownership or ""N"" to skip.`n    /SKIPSL                  Do not follow symbolic links."
+    $de = "    /D       Eingabeaufforderung  Standardantwort, wenn der aktuelle Benutzer`n                             nicht über die Berechtigung ""Ordner auflisten"" verfügt.`n                             Gültige Werte: ""J"" für Besitzübernahme, ""N"" zum Überspringen.`n    /SKIPSL   Symbolischen Links nicht folgen."
+    $fr = "    /D       invite       Réponse par défaut ... Valeurs valides : « O » pour prendre possession ou « N » pour ignorer.`n    /SKIPSL"
+    Check 'OPS-6 the "yes" letter is read from the system command''s own help (English Y, German J, French O)' ((Get-YesFromHelp $en) -eq 'Y' -and (Get-YesFromHelp $de) -eq 'J' -and (Get-YesFromHelp $fr) -eq 'O' -and (Get-YesFromHelp 'nothing here') -eq '')
+    Check 'OPS-6 icacls grants by SID, takeown and chkdsk use that letter' ($engineText -notmatch 'icacls[^\r\n]*Administrators:' -and $engineText -match '\*S-1-5-32-544:F' -and $engineText -notmatch 'takeown[^\r\n]*/D Y' -and $engineText -notmatch "echo Y\|" -and ([regex]::Matches($engineText, 'Get-YesLetter')).Count -ge 3)
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue
