@@ -128,6 +128,7 @@ PAGE = dict(
             I('Appearance and language', 'Light, dark or follow Windows; Chinese or English. ClearC reopens after you change them.'),
             I('What the window shows', 'Pages, buttons and descriptions you don\'t use can be hidden and brought back at any time.'),
             I('Scanning and duplicates', 'Fast scan reads the file table directly; the duplicate search can make way for other programs so it doesn\'t slow down what you are using.'),
+            I('What ClearC changed', 'Changes ClearC made that are still in effect (CompactOS, page file, hibernation, moved folders, disabled startup items…), each with how to undo it. You can also turn on "Create a restore point before changing system settings".'),
             I('Cleanup list', 'Send deleted files to the Recycle Bin first, and add folders to clean or to exclude.'),
         ]),
     ],

@@ -14,9 +14,9 @@ $script:linkLvl = @{ log = 2 }
 $script:appsUpdatesAllowed = $true
 function Get-ModeName([int]$m = (Get-Mode)) { switch ($m) { 0 { (T '普通用户') } 1 { (T '工程师') } default { (T '开发者和 IT') } } }
 # ---------- 设置：左边目录，点哪项右边只显示那一项（记住上次看的） ----------
-$script:setGroups = [ordered]@{ General = @('Mode', 'Look'); Ui = @('Display', 'Map'); Clean = @('Clean', 'Scan') }
+$script:setGroups = [ordered]@{ General = @('Mode', 'Look'); Ui = @('Display', 'Map'); Clean = @('Clean', 'Scan'); Changes = @('Changes') }
 $script:setLvl = @{ Display = 1; Scan = 2 }
-$script:setCards = @{ Mode = 'SetCardMode'; Look = 'SetCardLook'; Display = 'SetCardDisplay'; Map = 'SetCardMap'; Clean = 'SetCleanCard'; Scan = 'SetCardScan' }
+$script:setCards = @{ Mode = 'SetCardMode'; Look = 'SetCardLook'; Display = 'SetCardDisplay'; Map = 'SetCardMap'; Clean = 'SetCleanCard'; Scan = 'SetCardScan'; Changes = 'SetCardChanges' }
 $script:setSec = Get-Setting 'SetSection' 'Mode'
 function Update-SetNav {
     $m = Get-Mode; $first = ''
@@ -39,6 +39,38 @@ function Select-SetSection([string]$k) {
     foreach ($x in $script:setCards.Keys) { $ctl[$script:setCards[$x]].Visibility = $(if ($x -eq $k) { 'Visible' } else { 'Collapsed' }) }
     $rb = $ctl['SetNav' + $k]; if (-not $rb.IsChecked) { $script:setNavQuiet = $true; try { $rb.IsChecked = $true } finally { $script:setNavQuiet = $false } }
     $ctl.SetScroll.ScrollToTop()
+    if ($k -eq 'Changes') { Load-Changes }
+}
+# 「本工具改过的」：现状在后台读（要问 WMI、DISM），被禁用的启动项从操作日志里找，开着的定时任务直接查
+function Get-DisabledByUs {
+    $last = @{}
+    try {
+        foreach ($row in (Read-OpLog)) {   # 新的在前：每个名字只看最近的一条
+            $w = [string]$row.What
+            $on = $w -in @((T '启用开机启动项'), (T '启用计划任务'), (T '启用右键菜单扩展')); $off = $w -in @((T '禁用开机启动项'), (T '禁用计划任务'), (T '禁用右键菜单扩展'))
+            if (($on -or $off) -and -not $last.ContainsKey([string]$row.Target)) { $last[[string]$row.Target] = @{ Off = $off; What = $w } }
+        }
+    } catch {}
+    return @($last.Keys | Where-Object { $last[$_].Off } | ForEach-Object { '{0}：{1}' -f $last[$_].What, $_ })
+}
+function Load-Changes {
+    $ctl.SetChangesEmpty.Text = (T '正在读取…'); $ctl.SetChangesEmpty.Visibility = 'Visible'
+    [void](Start-BgEngine 'changes' 'Get-ChangeState' $null {
+        param($st, $err)
+        if (-not $st) { $st = @{} }
+        $st.Disabled = @(Get-DisabledByUs)
+        $st.Tasks = @(@($script:taskRemind, $script:taskClean) | Where-Object { Test-CleanTask $_ })
+        $items = @(Get-ChangeOverview $st)
+        $ctl.SetChangesList.Children.Clear()
+        foreach ($x in $items) {
+            $sp = New-Object System.Windows.Controls.StackPanel; $sp.Margin = New-Object System.Windows.Thickness 0, 0, 0, 12
+            $t1 = New-Object System.Windows.Controls.TextBlock; $t1.Text = ('{0}：{1}' -f $x.Name, $x.State); $t1.FontWeight = 'SemiBold'; $t1.TextWrapping = 'Wrap'
+            $t2 = New-Object System.Windows.Controls.TextBlock; $t2.Text = ((T '改回去：') + $x.Undo); $t2.Style = $win.FindResource('SetNote'); $t2.TextWrapping = 'Wrap'; $t2.Margin = New-Object System.Windows.Thickness 0, 3, 0, 0
+            [void]$sp.Children.Add($t1); [void]$sp.Children.Add($t2); [void]$ctl.SetChangesList.Children.Add($sp)
+        }
+        $ctl.SetChangesEmpty.Text = (T '本工具没有改过这台电脑的系统设置，也没有搬走东西。')
+        $ctl.SetChangesEmpty.Visibility = $(if ($items.Count) { 'Collapsed' } else { 'Visible' })
+    })
 }
 foreach ($g in $script:setGroups.Keys) { foreach ($k in $script:setGroups[$g]) { $ctl['SetNav' + $k].Add_Checked({ if ($script:setNavQuiet) { return }; Select-SetSection ([string]$this.Tag); Set-Setting 'SetSection' $script:setSec }) } }
 function Apply-Mode {
@@ -149,6 +181,7 @@ function Load-Settings {
         $ctl.SetFast.IsChecked = [bool]$ctl.MapFast.IsChecked
         $ctl.SetLowIo.IsChecked = ((Get-Setting 'LowIo' '0') -eq '1')
         $ctl.SetRecycle.IsChecked = ((Get-Setting 'Recycle' '0') -eq '1')
+        $ctl.SetRestorePoint.IsChecked = ((Get-Setting 'RestorePoint' '0') -eq '1')
     } finally { $script:setLoading = $false }
 }
 function Save-Display {
@@ -162,6 +195,12 @@ foreach ($k in $script:optLinks.Keys) { $ctl[$script:optLinks[$k][0]].Add_Click(
 foreach ($k in $script:optSwitches.Keys) { $ctl[$script:optSwitches[$k]].Add_Click({ if (-not $script:setLoading) { Save-Display; if ([object]::ReferenceEquals($this, $ctl.SetMapDisk)) { Refresh-MapRows } } }) }
 $ctl.SetFast.Add_Click({ if (-not $script:setLoading) { Set-FastScan ([bool]$ctl.SetFast.IsChecked) } })
 [DupFinder]::LowPriority = ((Get-Setting 'LowIo' '0') -eq '1')
+$ctl.SetRestorePoint.Add_Click({
+    if ($script:setLoading) { return }
+    $on = [bool]$ctl.SetRestorePoint.IsChecked
+    Set-Setting 'RestorePoint' $(if ($on) { '1' } else { '0' })
+    OpLog '系统设置' (T '改系统设置前先建还原点') $(if ($on) { (T '打开') } else { (T '关闭') }) ''
+})
 $ctl.SetRecycle.Add_Click({
     if ($script:setLoading) { return }
     $on = [bool]$ctl.SetRecycle.IsChecked

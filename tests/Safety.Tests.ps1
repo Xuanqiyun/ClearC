@@ -723,6 +723,14 @@ try { & {
     $ok1 = Format-TaskRunInfo $d1 0 $d2; $bad1 = Format-TaskRunInfo $d1 2147942402 $d2; $never = Format-TaskRunInfo ([datetime]'1999-11-30') 267011 $d2
     Check 'OPS-10 the task''s last run, its result and the next run are written out (success, error code, never run)' ($ok1 -match '2026-10-20 12:00' -and $ok1 -match '2026-10-27 12:00' -and $bad1 -match '0x80070002' -and $never -notmatch '1999' -and $ok1 -ne $bad1 -and $never -ne $ok1)
     Check 'OPS-10 the reminders page shows it for both tasks' (([regex]::Matches([regex]::Match($src, '(?s)function Load-Auto.*?\r?\n\}').Value, 'Get-TaskRunInfo \$script:task')).Count -eq 2)
+    # ============ 37. 「本工具改过的」总览；改系统设置前可以先建还原点（3.6 运维评审） ============
+    $none = @(Get-ChangeOverview @{ CompactOS = $false; PageAuto = $true; PageFiles = @("$env:SystemDrive\pagefile.sys"); Hiber = @{ Exists = $true; Reduced = $false }; Reserved = 'Enabled'; Dump = 7; Temp = ''; Moves = 0; DiskFix = $false; FastStartup = 'on'; Disabled = @(); Tasks = @() })
+    $all = @(Get-ChangeOverview @{ CompactOS = $true; PageAuto = $false; PageFiles = @('D:\pagefile.sys'); Hiber = @{ Exists = $false; Reduced = $false }; Reserved = 'Disabled'; Dump = 3; Temp = 'D:\CleanC-Temp'; Moves = 2; DiskFix = $true; FastStartup = 'off'; Disabled = @('开机启动项：Foo'); Tasks = @('CleanC\WeeklyCleanup') })
+    Check 'OPS-7 the overview lists nothing when nothing was changed' ($none.Count -eq 0)
+    Check ("OPS-7 every change ClearC can make is listed with its state and how to undo it ({0})" -f $all.Count) ($all.Count -ge 11 -and @($all | Where-Object { -not $_.Name -or -not $_.State -or -not $_.Undo }).Count -eq 0)
+    $rp = [regex]::Match($engineText, '(?s)function New-RestorePointIfWanted.*?\r?\n\}').Value
+    Check 'OPS-7 a restore point is only made when the switch is on, once per run, and nothing ever deletes one' ($rp -match "Get-Setting 'RestorePoint'" -and $rp -match 'Checkpoint-Computer' -and ([regex]::Matches($src, 'Checkpoint-Computer')).Count -eq 1)
+    Check 'OPS-7 every system setting change asks for the restore point first (page file, hibernation, reserved storage, dumps, temp, CompactOS, power, repair steps)' (([regex]::Matches($src, 'New-RestorePointIfWanted ')).Count -ge 9 -and $src -match 'x:Name="SetCardChanges"' -and $src -match 'x:Name="SetRestorePoint"')
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue

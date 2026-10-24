@@ -438,7 +438,7 @@ function Invoke-FixStep([string]$id, [switch]$Quiet) {
                     $ans = Show-Sheet -Title (T '打开快速启动？') -Text (T '会重新打开快速启动：「关机」变成半休眠，下次开机快几秒。') -Buttons @((T '取消'), (T '打开')) -Primary (T '打开') -Cancel (T '取消')
                     if ($ans -ne (T '打开')) { return }
                 }
-                try { Set-FastStartup ($cur -ne 'on'); UI-Log $(if ($cur -eq 'on') { (T '已关闭快速启动') } else { (T '已打开快速启动') }) } catch { Show-Sheet -Kind warn -Title (T '没能改') -Text $_.Exception.Message | Out-Null }
+                try { New-RestorePointIfWanted (T '快速启动'); Set-FastStartup ($cur -ne 'on'); UI-Log $(if ($cur -eq 'on') { (T '已关闭快速启动') } else { (T '已打开快速启动') }) } catch { Show-Sheet -Kind warn -Title (T '没能改') -Text $_.Exception.Message | Out-Null }
                 Refresh-FixState
             }
         }
@@ -449,6 +449,7 @@ function Invoke-FixStep([string]$id, [switch]$Quiet) {
         if ($ans -ne (T '开始')) { return }
     }
     if ($script:uiTest) { $script:uiFixRuns.Add($id); return }   # 界面自测：不真的运行
+    if ($s.Kind -eq 'fix') { New-RestorePointIfWanted $name }
     try {
         if ($s.Cmd) { Start-Process -FilePath "$env:SystemRoot\System32\cmd.exe" -ArgumentList ('/k title ClearC - {0} & {1} & echo. & echo {2}' -f $name, $s.Cmd, (T '运行完了，可以关掉这个窗口。')) }
         elseif ($s.Uri) { [void](Open-AsUser $s.Uri) }

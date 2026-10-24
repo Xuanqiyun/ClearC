@@ -156,6 +156,44 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+开着：系统文件压缩存放	On: system files are stored compressed
+「省空间」→「系统压缩」→「关闭」	Save space → CompactOS → Turn off
+放在 {0}	On {0}
+「省空间」→「页面文件」→「恢复系统默认」，重启后生效	Save space → Page file → Restore the Windows default; takes effect after a restart
+休眠	Hibernation
+关着：没有休眠和快速启动	Off: no hibernation or fast startup
+「省空间」→「休眠文件」→「恢复完整休眠」	Save space → Hibernation file → Restore full hibernation
+精简：只留快速启动	Reduced: only fast startup is kept
+「省空间」→「保留的存储」→「恢复」	Save space → Reserved storage → Restore
+只存小转储	Small dumps only
+不是系统默认的「自动」	Not the Windows default "Automatic"
+「省空间」→「蓝屏转储」→「恢复自动」	Save space → Crash dumps → Back to automatic
+临时文件夹	Temp folder
+改到了 {0}	Moved to {0}
+「省空间」→「临时文件夹」→「恢复默认」，注销再登录后生效	Save space → Temp folder → Restore the default; takes effect after signing out and in
+搬到其他盘的文件夹	Folders moved to another drive
+{0} 个，C 盘上只留了链接	{0}; only links stay on C:
+「搬家管理」→「已经搬走的」→「搬回 C 盘」	Move manager → Already moved → Move back to C:
+硬盘和 PCIe 省电	Disk and PCIe power saving
+「系统健康」→「常见问题修复」→「恢复硬盘省电」	System health → Common fixes → Restore disk power saving
+快速启动	Fast startup
+「系统健康」→「常见问题修复」→「快速启动」再打开（如果是本工具关的）	System health → Common fixes → Fast startup, turn it on again (if ClearC turned it off)
+被本工具禁用	Disabled by ClearC
+「软件管理」→ 开机启动、计划任务或右键菜单 → 找到它点「启用」	Apps → Startup, Scheduled tasks or Context menu → find it and click "Enable"
+定时任务 {0}	Scheduled task {0}
+「自动提醒」→ 关掉对应的开关	Reminders → turn off its switch
+  先建一个系统还原点（要一会儿）…	  Creating a system restore point first (this takes a moment)…
+建系统还原点	Create a system restore point
+没建成系统还原点	Could not create a system restore point
+  没建成还原点（{0}），照常继续	  Could not create a restore point ({0}); continuing anyway
+改动	Changes
+本工具改过的	What ClearC changed
+这台电脑上本工具做过、现在还在生效的改动，每一项写着怎么改回去。删了什么、什么时候做的，完整记录在「操作日志」里。	Changes ClearC made on this PC that are still in effect, each with how to undo it. What was deleted and when is all in the Activity log.
+改系统设置前先建一个还原点	Create a restore point before changing system settings
+在「省空间」和「常见问题修复」里改系统设置之前，先用 Windows 的系统还原建一个还原点，出问题可以回到改之前。要几十秒；一次打开本工具最多建一次，Windows 自己也限制一天一个；系统保护没开时建不成，照常继续。本工具从不删还原点。	Before Save space or Common fixes change a system setting, ClearC first creates a System Restore point so you can go back if something goes wrong. It takes tens of seconds; at most one per run of ClearC, and Windows also allows only one a day. If System Protection is off it cannot be created and ClearC carries on. ClearC never deletes restore points.
+改回去：	To undo: 
+本工具没有改过这台电脑的系统设置，也没有搬走东西。	ClearC has not changed any system settings on this PC or moved anything away.
+改系统设置前先建还原点	Restore point before system changes
 成功	succeeded
 正在运行	running now
 出错（代码 0x{0:X8}）	failed (code 0x{0:X8})
