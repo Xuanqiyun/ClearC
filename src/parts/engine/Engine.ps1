@@ -1757,7 +1757,7 @@ function Get-HealthReportText($r) {
 }
 # 诊断包：蓝屏转储、最近 30 天的系统和应用日志、系统信息、驱动列表、健康报告、本工具的操作日志，打成一个 zip。
 # 只读这些文件，不改任何东西。中间文件放在 TEMP 里自己建的文件夹，用完逐个删掉（不整个递归删）
-function Export-DiagPack([string]$zip, $health) {
+function Export-DiagPack([string]$zip, $health, [switch]$NoDumps) {
     $r = @{ Ok = $false; Path = $zip; Count = 0; Bytes = [double]0; Skipped = @(); Error = '' }
     try { Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem } catch { $r.Error = $_.Exception.Message; return $r }
     if (Test-Path -LiteralPath $zip) { $r.Error = (T '这个文件已经存在'); return $r }
@@ -1768,16 +1768,19 @@ function Export-DiagPack([string]$zip, $health) {
         [void][IO.Directory]::CreateDirectory($tmp)
         $fs = New-Object IO.FileStream($zip, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
         $za = New-Object IO.Compression.ZipArchive($fs, [IO.Compression.ZipArchiveMode]::Create)
-        $addText = { param($name, $text) $en = $za.CreateEntry($name); $sw = New-Object IO.StreamWriter($en.Open(), (New-Object Text.UTF8Encoding $true)); $sw.Write([string]$text); $sw.Dispose(); $r.Count++ }
-        $addFile = { param($name, $path) try { [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($za, $path, $name); $r.Count++ } catch { $r.Skipped += ('{0}: {1}' -f $name, $_.Exception.Message) } }
+        $entries = New-Object System.Collections.ArrayList   # 写清单用（创建模式下的 zip 读不了自己的 Entries）
+        $addText = { param($name, $text) $en = $za.CreateEntry($name); $sw = New-Object IO.StreamWriter($en.Open(), (New-Object Text.UTF8Encoding $true)); $sw.Write([string]$text); $sw.Dispose(); $r.Count++; [void]$entries.Add(('{0,12:N0}  {1}' -f [Text.Encoding]::UTF8.GetByteCount([string]$text), $name)) }
+        $addFile = { param($name, $path) try { [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($za, $path, $name); $r.Count++; [void]$entries.Add(('{0,12:N0}  {1}' -f ([IO.FileInfo]$path).Length, $name)) } catch { $r.Skipped += ('{0}: {1}' -f $name, $_.Exception.Message) } }
         Progress-Note (T '健康报告')
         if ($health) { & $addText 'summary.txt' (Get-HealthReportText $health) }
         Progress-Note (T '蓝屏转储')
         $md = Join-Path $env:SystemRoot 'Minidump'
-        foreach ($f in @(Get-ChildItem -LiteralPath $md -Filter *.dmp -File -Force -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 20)) {
-            if ($f.Length -gt 64MB) { $r.Skipped += ('{0}: {1}' -f $f.Name, (T '太大，没放进去')); continue }
-            & $addFile ('minidump/' + $f.Name) $f.FullName
-        }
+        if (-not $NoDumps) {
+            foreach ($f in @(Get-ChildItem -LiteralPath $md -Filter *.dmp -File -Force -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 20)) {
+                if ($f.Length -gt 64MB) { $r.Skipped += ('{0}: {1}' -f $f.Name, (T '太大，没放进去')); continue }
+                & $addFile ('minidump/' + $f.Name) $f.FullName
+            }
+        } else { $r.Skipped += (T '蓝屏转储：导出时选了不带') }
         $mem = Join-Path $env:SystemRoot 'MEMORY.DMP'
         if (Test-Path -LiteralPath $mem) { $r.Skipped += ('MEMORY.DMP: ' + (T '完整转储太大，没放进去；需要的话单独拷')) }
         Progress-Note (T '系统和应用日志')
@@ -1800,6 +1803,8 @@ function Export-DiagPack([string]$zip, $health) {
         & $addText 'wer-reports.txt' ($wl -join "`r`n")
         foreach ($f in @(Get-ChildItem -LiteralPath $script:opLogDir -Filter '*.txt' -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 3)) { & $addFile ('clearc-oplog/' + ('oplog-' + ($f.BaseName -replace '^\D+', '') + '.txt')) $f.FullName }
         if ($r.Skipped.Count -gt 0) { & $addText 'skipped.txt' ($r.Skipped -join "`r`n") }
+        # 清单：包里每一个文件和大小，收到的人、发出去之前的你都能一眼看到里面有什么
+        & $addText 'manifest.txt' (((T '腾挪 ClearC 诊断包里的文件（大小是压缩前的字节数）：') + "`r`n") + (@($entries) -join "`r`n"))
         $r.Ok = $true
     } catch { $r.Error = $_.Exception.Message }
     finally {

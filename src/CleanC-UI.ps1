@@ -5331,7 +5331,7 @@ function Get-HealthReportText($r) {
 }
 # 诊断包：蓝屏转储、最近 30 天的系统和应用日志、系统信息、驱动列表、健康报告、本工具的操作日志，打成一个 zip。
 # 只读这些文件，不改任何东西。中间文件放在 TEMP 里自己建的文件夹，用完逐个删掉（不整个递归删）
-function Export-DiagPack([string]$zip, $health) {
+function Export-DiagPack([string]$zip, $health, [switch]$NoDumps) {
     $r = @{ Ok = $false; Path = $zip; Count = 0; Bytes = [double]0; Skipped = @(); Error = '' }
     try { Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem } catch { $r.Error = $_.Exception.Message; return $r }
     if (Test-Path -LiteralPath $zip) { $r.Error = (T '这个文件已经存在'); return $r }
@@ -5342,16 +5342,19 @@ function Export-DiagPack([string]$zip, $health) {
         [void][IO.Directory]::CreateDirectory($tmp)
         $fs = New-Object IO.FileStream($zip, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
         $za = New-Object IO.Compression.ZipArchive($fs, [IO.Compression.ZipArchiveMode]::Create)
-        $addText = { param($name, $text) $en = $za.CreateEntry($name); $sw = New-Object IO.StreamWriter($en.Open(), (New-Object Text.UTF8Encoding $true)); $sw.Write([string]$text); $sw.Dispose(); $r.Count++ }
-        $addFile = { param($name, $path) try { [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($za, $path, $name); $r.Count++ } catch { $r.Skipped += ('{0}: {1}' -f $name, $_.Exception.Message) } }
+        $entries = New-Object System.Collections.ArrayList   # 写清单用（创建模式下的 zip 读不了自己的 Entries）
+        $addText = { param($name, $text) $en = $za.CreateEntry($name); $sw = New-Object IO.StreamWriter($en.Open(), (New-Object Text.UTF8Encoding $true)); $sw.Write([string]$text); $sw.Dispose(); $r.Count++; [void]$entries.Add(('{0,12:N0}  {1}' -f [Text.Encoding]::UTF8.GetByteCount([string]$text), $name)) }
+        $addFile = { param($name, $path) try { [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($za, $path, $name); $r.Count++; [void]$entries.Add(('{0,12:N0}  {1}' -f ([IO.FileInfo]$path).Length, $name)) } catch { $r.Skipped += ('{0}: {1}' -f $name, $_.Exception.Message) } }
         Progress-Note (T '健康报告')
         if ($health) { & $addText 'summary.txt' (Get-HealthReportText $health) }
         Progress-Note (T '蓝屏转储')
         $md = Join-Path $env:SystemRoot 'Minidump'
-        foreach ($f in @(Get-ChildItem -LiteralPath $md -Filter *.dmp -File -Force -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 20)) {
-            if ($f.Length -gt 64MB) { $r.Skipped += ('{0}: {1}' -f $f.Name, (T '太大，没放进去')); continue }
-            & $addFile ('minidump/' + $f.Name) $f.FullName
-        }
+        if (-not $NoDumps) {
+            foreach ($f in @(Get-ChildItem -LiteralPath $md -Filter *.dmp -File -Force -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 20)) {
+                if ($f.Length -gt 64MB) { $r.Skipped += ('{0}: {1}' -f $f.Name, (T '太大，没放进去')); continue }
+                & $addFile ('minidump/' + $f.Name) $f.FullName
+            }
+        } else { $r.Skipped += (T '蓝屏转储：导出时选了不带') }
         $mem = Join-Path $env:SystemRoot 'MEMORY.DMP'
         if (Test-Path -LiteralPath $mem) { $r.Skipped += ('MEMORY.DMP: ' + (T '完整转储太大，没放进去；需要的话单独拷')) }
         Progress-Note (T '系统和应用日志')
@@ -5374,6 +5377,8 @@ function Export-DiagPack([string]$zip, $health) {
         & $addText 'wer-reports.txt' ($wl -join "`r`n")
         foreach ($f in @(Get-ChildItem -LiteralPath $script:opLogDir -Filter '*.txt' -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 3)) { & $addFile ('clearc-oplog/' + ('oplog-' + ($f.BaseName -replace '^\D+', '') + '.txt')) $f.FullName }
         if ($r.Skipped.Count -gt 0) { & $addText 'skipped.txt' ($r.Skipped -join "`r`n") }
+        # 清单：包里每一个文件和大小，收到的人、发出去之前的你都能一眼看到里面有什么
+        & $addText 'manifest.txt' (((T '腾挪 ClearC 诊断包里的文件（大小是压缩前的字节数）：') + "`r`n") + (@($entries) -join "`r`n"))
         $r.Ok = $true
     } catch { $r.Error = $_.Exception.Message }
     finally {
@@ -7716,6 +7721,18 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+蓝屏转储：导出时选了不带	Crash dumps: left out when exporting
+腾挪 ClearC 诊断包里的文件（大小是压缩前的字节数）：	Files in this ClearC diagnostics package (sizes are uncompressed bytes):
+健康报告：硬件、Windows 和硬盘的状态	Health report: hardware, Windows and disk status
+最近 {0} 个蓝屏小转储（{1}）：里面有蓝屏那一刻内存里的一部分内容	The latest {0} small crash dumps ({1}): they hold part of what was in memory at the moment of the crash
+蓝屏小转储：这台电脑上没有	Small crash dumps: none on this PC
+最近 30 天的系统和应用日志	System and application event logs of the last 30 days
+systeminfo、驱动列表、硬盘信息、Windows 错误报告的列表	systeminfo, the driver list, disk details and the list of Windows Error Reports
+本工具最近的操作日志	ClearC's recent activity log
+一份清单（manifest.txt），列出包里的每个文件	A manifest (manifest.txt) listing every file in the package
+不带转储导出	Export without dumps
+导出诊断包？	Export a diagnostics package?
+诊断包里会有下面这些。里面有电脑名、用户名、装过的软件和文件路径，只发给你信得过、要帮你看问题的人。	The package contains the items below. They include the computer name, user name, installed apps and file paths, so only send it to someone you trust who is helping you.
 开着：系统文件压缩存放	On: system files are stored compressed
 「省空间」→「系统压缩」→「关闭」	Save space → CompactOS → Turn off
 放在 {0}	On {0}
@@ -20661,15 +20678,31 @@ $ctl.BtnSfcRepair.Add_Click({ Start-SystemFileTool $true })
 function Start-DiagPack {
     if (-not $script:healthData) { Show-Sheet -Kind warn -Title (T '还在读取') -Text (T '等系统健康读完再导出。') | Out-Null; return }
     if ($script:uiTest) { $script:uiFixRuns.Add('diagpack'); return }
+    # 先说清楚包里有什么：转储里有出事时内存里的一部分内容，日志和系统信息里有电脑名、用户名、装过的软件
+    $dumps = @(Get-ChildItem -LiteralPath (Join-Path $env:SystemRoot 'Minidump') -Filter *.dmp -File -Force -ErrorAction SilentlyContinue)
+    $db = [double]0; foreach ($f in $dumps) { $db += $f.Length }
+    $items = @(
+        (T '健康报告：硬件、Windows 和硬盘的状态')
+        $(if ($dumps.Count) { (T "最近 {0} 个蓝屏小转储（{1}）：里面有蓝屏那一刻内存里的一部分内容") -f [math]::Min(20, $dumps.Count), (Fmt $db) } else { (T '蓝屏小转储：这台电脑上没有') })
+        (T '最近 30 天的系统和应用日志')
+        (T 'systeminfo、驱动列表、硬盘信息、Windows 错误报告的列表')
+        (T '本工具最近的操作日志')
+        (T '一份清单（manifest.txt），列出包里的每个文件')
+    )
+    $all = T '导出'; $lite = T '不带转储导出'
+    $btns = if ($dumps.Count) { @((T '取消'), $lite, $all) } else { @((T '取消'), $all) }
+    $ans = Show-Sheet -Kind warn -Title (T '导出诊断包？') -Text (T '诊断包里会有下面这些。里面有电脑名、用户名、装过的软件和文件路径，只发给你信得过、要帮你看问题的人。') -Items $items -Buttons $btns -Primary $all -Cancel (T '取消')
+    if ($ans -ne $all -and $ans -ne $lite) { return }
+    $noDumps = ($ans -eq $lite)
     $dlg = New-Object Microsoft.Win32.SaveFileDialog
     $dlg.Title = (T '诊断包保存到'); $dlg.Filter = (T 'zip 压缩包') + ' (*.zip)|*.zip'; $dlg.OverwritePrompt = $false
-    $dlg.FileName = ('ClearC-diag-{0}-{1:yyyyMMdd-HHmm}.zip' -f $env:COMPUTERNAME, (Get-Date)); $dlg.InitialDirectory = [Environment]::GetFolderPath('Desktop')
+    $dlg.FileName = ('ClearC-diag-{0:yyyyMMdd-HHmm}.zip' -f (Get-Date)); $dlg.InitialDirectory = [Environment]::GetFolderPath('Desktop')
     if (-not $dlg.ShowDialog($win)) { return }
     $zip = $dlg.FileName
     if (Test-Path -LiteralPath $zip) { Show-Sheet -Kind warn -Title (T '已经有这个文件') -Text (T '换一个文件名再导出：不会覆盖已有的文件。') | Out-Null; return }
     $ctl.BtnDiagPack.IsEnabled = $false
     $ctl.HealthNote.Text = (T '正在导出诊断包，要半分钟到几分钟（systeminfo 比较慢）…')
-    $ok = Start-BgEngine 'diagpack' 'Export-DiagPack $arg.Zip $arg.Health' @{ Zip = $zip; Health = $script:healthData } {
+    $ok = Start-BgEngine 'diagpack' 'Export-DiagPack $arg.Zip $arg.Health -NoDumps:$arg.NoDumps' @{ Zip = $zip; Health = $script:healthData; NoDumps = $noDumps } {
         param($res, $err)
         $ctl.BtnDiagPack.IsEnabled = $true
         if ($res -and $res.Ok) {
