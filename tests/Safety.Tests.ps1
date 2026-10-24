@@ -696,6 +696,10 @@ try { & {
     # ============ 32. 键盘看得到焦点；读屏软件读得出图标按钮（3.6 体验评审） ============
     Check 'UX-9 no style hides the keyboard focus any more; a visible focus ring is used instead' ($src -notmatch 'Property="FocusVisualStyle" Value="\{x:Null\}"' -and $src -match 'x:Key="FocusRing"' -and ([regex]::Matches($src, 'Value="\{StaticResource FocusRing\}"')).Count -ge 10)
     Check 'UX-9 buttons made of an icon and text get a name screen readers can read, icon-only ones use their tooltip' ($src -match '(?s)function Set-AutoNames.*?AutomationProperties\]::SetName' -and $src -match 'Set-AutoNames \$win' -and $src -match 'x:Key="PillX"(?s:.*?)AutomationProperties\.Name')
+    # ============ 33. 帮助只讲当前模式里有的功能（3.6 体验评审） ============
+    Check 'UX-10 help items for features of a higher mode are marked in the help sources' (([regex]::Matches($src, 'Tag="lvl:[12]"')).Count -ge 40)
+    $hm = [regex]::Match($src, '(?s)function Update-HelpForMode.*?\r?\n\}').Value
+    Check 'UX-10 the help hides those items, and whole sections for pages this mode does not have' ($hm -match "lvl:" -and $hm -match 'helpSecPage' -and [regex]::Match($src, '(?s)function Apply-Display.*?\r?\n\}').Value -match 'Update-HelpForMode')
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue

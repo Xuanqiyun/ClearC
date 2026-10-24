@@ -409,7 +409,7 @@ function Select-HelpPane([string]$k, [switch]$NoRemember) {
     foreach ($x in $script:helpPanes.Keys) { $script:helpPanes[$x].Pane.Visibility = $(if ($x -eq $k) { 'Visible' } else { 'Collapsed' }) }
     $rb = $script:helpPanes[$k].Nav
     if (-not $rb.IsChecked) { $script:helpNavQuiet = $true; try { $rb.IsChecked = $true } finally { $script:helpNavQuiet = $false } }
-    $keys = @($script:helpPanes.Keys); $i = [array]::IndexOf($keys, $k)
+    $keys = @($script:helpPanes.Keys | Where-Object { $_ -eq $k -or $script:helpPanes[$_].Nav.Visibility -eq 'Visible' }); $i = [array]::IndexOf($keys, $k)
     $prev = if ($i -gt 0) { $keys[$i - 1] } else { '' }; $next = if ($i -lt $keys.Count - 1) { $keys[$i + 1] } else { '' }
     $ctl.BtnHelpPrev.Tag = $prev; $ctl.BtnHelpNext.Tag = $next
     $ctl.BtnHelpPrev.Content = if ($prev) { (T "← 上一项：{0}") -f $script:helpPanes[$prev].Name } else { '' }
@@ -419,6 +419,35 @@ function Select-HelpPane([string]$k, [switch]$NoRemember) {
     if (-not $NoRemember) { $script:helpPick = $k; Set-Setting 'HelpPane' $k }
 }
 foreach ($x in @($script:helpPanes.Values)) { $x.Nav.Add_Checked({ if ($script:helpNavQuiet) { return }; Select-HelpPane ([string]$this.Tag) }) }
+# 帮助只讲当前模式里有的功能：标着 lvl:1、lvl:2 的说明在低一级的模式里藏起来；这个模式没有的页面（重复文件、搬家管理……），
+# 帮助目录里那一项也不列；一组里都藏了，组名也不列
+$script:helpSecPage = @{ s1 = 'dup'; s6 = 'moves'; s7 = 'auto'; s8 = 'log' }
+function Update-HelpForMode {
+    $m = Get-Mode
+    $st = New-Object System.Collections.Stack; $st.Push($ctl.HelpSections); $grids = @{}
+    while ($st.Count -gt 0) {
+        $e = $st.Pop()
+        if ($e -is [System.Windows.FrameworkElement] -and $e.Tag -is [string] -and ([string]$e.Tag).StartsWith('lvl:')) {
+            $e.Visibility = $(if ([int]([string]$e.Tag).Substring(4) -le $m) { 'Visible' } else { 'Collapsed' })
+            if ($e.Parent -is [System.Windows.Controls.Grid] -and $e.Parent.Tag -is [hashtable]) { $grids[$e.Parent.GetHashCode()] = $e.Parent }
+        }
+        foreach ($c in [System.Windows.LogicalTreeHelper]::GetChildren($e)) { if ($c -is [System.Windows.DependencyObject]) { $st.Push($c) } }
+    }
+    foreach ($g in $grids.Values) { $g.Tag.Sig = ''; Update-AutoCols $g }
+    foreach ($k in $script:helpSecPage.Keys) {
+        if (-not $script:helpPanes.Contains($k)) { continue }
+        $nav = $ctl[$script:pageList[$script:helpSecPage[$k]][1]]
+        $script:helpPanes[$k].Nav.Visibility = $nav.Visibility
+    }
+    # 组名：下面一项都没有了就不列
+    $head = $null; $any = $false
+    foreach ($c in @($ctl.HelpNav.Children) + @($null)) {
+        if ($null -eq $c -or $c -is [System.Windows.Controls.TextBlock]) { if ($head) { $head.Visibility = $(if ($any) { 'Visible' } else { 'Collapsed' }) }; $head = $c; $any = $false }
+        elseif ($c.Visibility -eq 'Visible') { $any = $true }
+    }
+    if ($script:helpPane -and $script:helpPanes.Contains($script:helpPane) -and $script:helpPanes[$script:helpPane].Nav.Visibility -ne 'Visible') { Select-HelpPane 'start' -NoRemember }
+    elseif ($script:helpPane) { Select-HelpPane $script:helpPane -NoRemember }   # 上一项、下一项跳过藏起来的
+}
 $ctl.BtnHelpPrev.Add_Click({ if ($this.Tag) { Select-HelpPane ([string]$this.Tag) } })
 $ctl.BtnHelpNext.Add_Click({ if ($this.Tag) { Select-HelpPane ([string]$this.Tag) } })
 Select-HelpPane (Get-Setting 'HelpPane' 'start') -NoRemember

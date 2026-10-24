@@ -14,7 +14,7 @@ def runs(s):
 
 # 内容块
 def G(t): return ('group', t)
-def I(lead, body=None, subs=()): return ('item', lead, body, list(subs))
+def I(lead, body=None, subs=(), lvl=0): return ('item', lead, body, list(subs), lvl)   # lvl：1 工程师、2 开发者和 IT 模式才有的功能
 def N(kind, lead, body): return ('note', kind, lead, body)
 def K(rows, w): return ('keys', rows, w)
 def F(lead, steps, after=None): return ('flow', lead, steps, after)
@@ -48,8 +48,10 @@ def sub(w, t, top):
 def tiles(w, items, top, numbered=False):
     # 方块按窗口宽度排成 1 到 4 列（由程序在窗口变宽、变窄时重新排）
     w.push('<Grid Tag="%s" Margin="0,%d,0,0">' % ('cols:230:12:12:4' if numbered else 'cols:280:12:12:3', top))
-    for k, (lead, body) in enumerate(items):
-        w.push('<Border Style="{StaticResource HelpTile}">')
+    for k, t in enumerate(items):
+        lead, body = t[0], t[1]
+        lvl = t[2] if len(t) > 2 else 0
+        w.push('<Border Style="{StaticResource HelpTile}"%s>' % (' Tag="lvl:%d"' % lvl if lvl else ''))
         if numbered:
             w.push('<DockPanel>')
             w('<Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0"><TextBlock Text="%d" Foreground="White" FontSize="12.5" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>' % (k + 1))
@@ -64,8 +66,9 @@ def tiles(w, items, top, numbered=False):
 # 一组里连着的几条说明：窗口宽的时候排成两三列，窄的时候一列
 ITEM_COLS = 'cols:330:44:26:3'
 def item_panel(w, b):
-    _, lead, body, subs = b
-    w.push('<StackPanel>')
+    _, lead, body, subs, lvl = b
+    # 当前模式看不到的功能：程序按 Tag 把这一条藏起来（换到那个模式才显示）
+    w.push('<StackPanel%s>' % (' Tag="lvl:%d"' % lvl if lvl else ''))
     w('<TextBlock Style="{StaticResource HelpLead}" Text="%s"/>' % qa(lead))
     if body: w('<TextBlock Style="{StaticResource HelpBody}">%s</TextBlock>' % runs(body))
     for j, t in enumerate(subs): sub(w, t, 10 if j == 0 else 7)
