@@ -6089,6 +6089,8 @@ function Get-DeleteBlock([string]$path, [switch]$Leftover) {
                      "$env:LOCALAPPDATA\Microsoft\Credentials", "$env:LOCALAPPDATA\Microsoft\Vault")) {
         if ($full -ieq $k -or $full.StartsWith("$k\", [StringComparison]::OrdinalIgnoreCase)) { return (T '系统保存密码、证书和密钥的地方，删了会丢失登录信息和证书') }
     }
+    # 这台电脑上其他账户的同样这几个文件夹也不删（空间地图能看到整块盘）
+    if ($full -match ('^' + [regex]::Escape($users) + '\\[^\\]+\\AppData\\(Roaming|Local|LocalLow)\\Microsoft\\(Protect|Credentials|Crypto|SystemCertificates|Vault)(\\|$)')) { return (T '系统保存密码、证书和密钥的地方，删了会丢失登录信息和证书') }
     $pc = "$sd\ProgramData\Package Cache"
     if ($full -ieq $pc -or $full.StartsWith("$pc\", [StringComparison]::OrdinalIgnoreCase)) { return (T '软件的安装包缓存，删了以后这些软件可能没法修复、升级或卸载') }
     if ($full -ieq $script:appDir -or $full.StartsWith("$($script:appDir)\", [StringComparison]::OrdinalIgnoreCase)) { return (T '本工具自己的设置和日志') }

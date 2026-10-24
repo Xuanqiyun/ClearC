@@ -625,6 +625,15 @@ try { & {
     # ============ 20. 网页、记事本、报告都经资源管理器打开，不以管理员身份运行（3.6 安全评审） ============
     $oa = [regex]::Match($engineText, '(?s)function Open-AsUser\(.*?\r?\n\}').Value
     Check 'SEC-6 links, logs and reports open through Explorer (as the signed-in user), never as administrator' ($oa -match 'explorer\.exe' -and $src -notmatch '(?i)notepad\.exe' -and $src -notmatch "Start-Process (-FilePath )?(\`$url|\`$file|\`$s\.Uri|\`$dlg\.FileName|'ms-settings|'https?:)" -and ([regex]::Matches($src, 'Open-AsUser ')).Count -ge 8)
+    # ============ 21. 存密码、证书、密钥的文件夹：这台电脑上所有账户的都不删（3.6 安全评审） ============
+    $db = [regex]::Match($engineText, '(?s)function Get-DeleteBlock\(.*?\r?\n\}').Value
+    Check 'SEC-7 the key and certificate folders are blocked for every account, not only the current one' ($db -match 'AppData\\\\\(Roaming\|Local\|LocalLow\)\\\\Microsoft\\\\\(Protect\|Credentials\|Crypto\|SystemCertificates\|Vault')
+    if ($win) {
+        $ub = Split-Path $env:USERPROFILE -Parent
+        $kp = @('Other\AppData\Roaming\Microsoft\Protect\S-1-5-21-1\key', 'Other\AppData\Local\Microsoft\Credentials\abc', 'Other\AppData\Roaming\Microsoft\SystemCertificates\My', 'Other\AppData\Local\Microsoft\Vault', 'Other\AppData\Roaming\Microsoft\Crypto\RSA')
+        $open = @($kp | Where-Object { -not (Get-DeleteBlock (Join-Path $ub $_)) })
+        Check ("SEC-7 another account's key folders can not be deleted ({0})" -f ($open -join ', ')) ($open.Count -eq 0 -and -not (Get-DeleteBlock (Join-Path $ub 'Other\AppData\Local\Temp\x.tmp')))
+    } else { Skip 'SEC-7 key folders of other accounts' }
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue
