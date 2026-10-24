@@ -73,10 +73,9 @@ static class CleanCLauncher {
 
         object ps = null, rs = null;
         try {
-            string smaPath = Environment.GetEnvironmentVariable("CLEANC_SMA");
-            Assembly sma = string.IsNullOrEmpty(smaPath)
-                ? Assembly.Load("System.Management.Automation, Version=3.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35")
-                : Assembly.LoadFrom(smaPath);
+            // 只从系统里加载 Windows 自带的 PowerShell（按强名称），不接受任何路径：本程序以管理员身份运行，
+            // 环境变量是普通权限就能改的，按它加载程序集等于把管理员权限交出去
+            Assembly sma = Assembly.Load("System.Management.Automation, Version=3.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35");
             Type rfType = sma.GetType("System.Management.Automation.Runspaces.RunspaceFactory", true);
             Type psType = sma.GetType("System.Management.Automation.PowerShell", true);
 
