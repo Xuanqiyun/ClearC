@@ -3230,6 +3230,12 @@ function Get-DestChoices($drives = $null) {
     }
     return $out.ToArray()
 }
+# 打开网页、文本文件、报告：交给资源管理器去开。本工具以管理员身份运行，直接开的话浏览器、记事本也是管理员身份，
+# 网页里的下载、记事本里的「另存为」都带着管理员权限。资源管理器把它交给当前登录用户的桌面，用普通权限打开
+function Open-AsUser([string]$target) {
+    if (-not $target) { return $false }
+    try { Start-Process -FilePath "$env:SystemRoot\explorer.exe" -ArgumentList ('"{0}"' -f $target.Replace('"', '')); return $true } catch { return $false }
+}
 # 一键清理给目录里的一项选什么：只删不搬（聊天记录这类要搬的在清理页单独一张卡片，用户自己点）；
 # 有代价的（「需确认」一组）和自己加的文件夹一律跳过
 function Get-OneClickAction($it) {

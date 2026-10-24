@@ -242,7 +242,7 @@ function Update-CandSel {
 # 全选：聊天记录和软件（正在看其中一类时只选这一类）；「其他可搬的文件夹」要看清说明自己勾
 $ctl.BtnCandAll.Add_Click({ if ($script:candRows) { foreach ($r in $script:candRows) { if ($r.CanMove -and $r.Group -ne 'other' -and (-not $script:candGroup -or $r.Group -eq $script:candGroup)) { $r.Checked = $true } } }; Update-CandSel })
 $ctl.BtnCandNone.Add_Click({ if ($script:candRows) { foreach ($r in $script:candRows) { $r.Checked = $false } }; Update-CandSel })
-$ctl.BtnCandStore.Add_Click({ try { Start-Process 'ms-settings:appsfeatures' } catch {} })
+$ctl.BtnCandStore.Add_Click({ [void](Open-AsUser 'ms-settings:appsfeatures') })
 $ctl.CandList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent, [System.Windows.RoutedEventHandler]{
     param($s, $e)
     $b = $e.OriginalSource

@@ -673,7 +673,7 @@ function Show-DeletePreview($items) {
     if ($file) { $text += (T "`n完整清单已存到：{0}") -f $file }
     $b = if ($file) { @((T '打开完整清单'), (T '好')) } else { @((T '好')) }
     $ans = Show-Sheet -Title (T '删除前的文件清单') -Text $text -Items $lines -Buttons $b -Primary (T '好') -Cancel (T '好')
-    if ($ans -eq (T '打开完整清单')) { try { Start-Process $file } catch {} }
+    if ($ans -eq (T '打开完整清单')) { [void](Open-AsUser $file) }
 }
 
 # 一键清理：先扫描，扫完按 One 字段（没有就用默认）设好每一项，再走同一个执行流程（会弹确认框）

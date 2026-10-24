@@ -138,7 +138,7 @@ if ($script:mode -match '(?i)/selftest') {
     try { [IO.File]::WriteAllText($file, (@($r.Lines) -join "`r`n"), (New-Object Text.UTF8Encoding $true)) } catch {}
     if (-not $env:CLEANC_QUIET) {
         $ans = Show-Toast -Title (T '扫描功能检查完了') -Text ((T "{0} 项正常，{1} 项提醒，{2} 项有问题") -f $r.Res.Pass, $r.Res.Warn, $r.Res.Fail) -Buttons @((T '好'), (T '打开结果'))
-        if ($ans -eq (T '打开结果')) { Start-Process -FilePath "$env:SystemRoot\System32\notepad.exe" -ArgumentList ('"{0}"' -f $file) }
+        if ($ans -eq (T '打开结果')) { [void](Open-AsUser $file) }
     }
     $global:CLEANC_EXIT = [int]$r.Res.Fail
     $global:CLEANC_UI_SHOWN = $true

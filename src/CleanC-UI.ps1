@@ -6765,6 +6765,12 @@ function Get-DestChoices($drives = $null) {
     }
     return $out.ToArray()
 }
+# 打开网页、文本文件、报告：交给资源管理器去开。本工具以管理员身份运行，直接开的话浏览器、记事本也是管理员身份，
+# 网页里的下载、记事本里的「另存为」都带着管理员权限。资源管理器把它交给当前登录用户的桌面，用普通权限打开
+function Open-AsUser([string]$target) {
+    if (-not $target) { return $false }
+    try { Start-Process -FilePath "$env:SystemRoot\explorer.exe" -ArgumentList ('"{0}"' -f $target.Replace('"', '')); return $true } catch { return $false }
+}
 # 一键清理给目录里的一项选什么：只删不搬（聊天记录这类要搬的在清理页单独一张卡片，用户自己点）；
 # 有代价的（「需确认」一组）和自己加的文件夹一律跳过
 function Get-OneClickAction($it) {
@@ -10970,7 +10976,7 @@ if ($script:mode -match '(?i)/selftest') {
     try { [IO.File]::WriteAllText($file, (@($r.Lines) -join "`r`n"), (New-Object Text.UTF8Encoding $true)) } catch {}
     if (-not $env:CLEANC_QUIET) {
         $ans = Show-Toast -Title (T '扫描功能检查完了') -Text ((T "{0} 项正常，{1} 项提醒，{2} 项有问题") -f $r.Res.Pass, $r.Res.Warn, $r.Res.Fail) -Buttons @((T '好'), (T '打开结果'))
-        if ($ans -eq (T '打开结果')) { Start-Process -FilePath "$env:SystemRoot\System32\notepad.exe" -ArgumentList ('"{0}"' -f $file) }
+        if ($ans -eq (T '打开结果')) { [void](Open-AsUser $file) }
     }
     $global:CLEANC_EXIT = [int]$r.Res.Fail
     $global:CLEANC_UI_SHOWN = $true
@@ -15645,8 +15651,8 @@ foreach ($x in @($ctl.HelpFaq.Children)) {
 $script:projectPage = 'https://github.com/Xuanqiyun/ClearC'
 function Open-Web([string]$url) {
     # 用资源管理器打开网址：浏览器不会以管理员身份运行
-    try { Start-Process -FilePath "$env:SystemRoot\explorer.exe" -ArgumentList $url; UI-Log ((T "打开网页：{0}") -f $url) }
-    catch { Show-CopyHint ((T "打不开浏览器，请手动访问 {0}") -f $url) }
+    if (Open-AsUser $url) { UI-Log ((T "打开网页：{0}") -f $url) }
+    else { Show-CopyHint ((T "打不开浏览器，请手动访问 {0}") -f $url) }
 }
 $ctl.BtnGitHub.Add_Click({ Open-Web $script:projectPage })
 $ctl.BtnIssue.Add_Click({ Open-Web ($script:projectPage + '/issues') })
@@ -15692,7 +15698,7 @@ try {
 })
 
 $ctl.BtnOpenLog.Add_Click({
-    if (Test-Path -LiteralPath $script:logFile) { Start-Process -FilePath "$env:SystemRoot\System32\notepad.exe" -ArgumentList ('"{0}"' -f $script:logFile) }
+    if (Test-Path -LiteralPath $script:logFile) { [void](Open-AsUser $script:logFile) }
     else { Show-CopyHint (T '还没有运行记录') }
 })
 
@@ -16874,7 +16880,7 @@ function Show-DeletePreview($items) {
     if ($file) { $text += (T "`n完整清单已存到：{0}") -f $file }
     $b = if ($file) { @((T '打开完整清单'), (T '好')) } else { @((T '好')) }
     $ans = Show-Sheet -Title (T '删除前的文件清单') -Text $text -Items $lines -Buttons $b -Primary (T '好') -Cancel (T '好')
-    if ($ans -eq (T '打开完整清单')) { try { Start-Process $file } catch {} }
+    if ($ans -eq (T '打开完整清单')) { [void](Open-AsUser $file) }
 }
 
 # 一键清理：先扫描，扫完按 One 字段（没有就用默认）设好每一项，再走同一个执行流程（会弹确认框）
@@ -18971,7 +18977,7 @@ $ctl.BtnMapReport.Add_Click({
     finally { $win.Cursor = $null }
     UI-Log ((T "空间地图：报告已保存到 {0}") -f $dlg.FileName)
     $ans = Show-Sheet -Kind done -Title (T '报告已保存') -Text ((T "{0}`n`n用浏览器打开就能看；想要 PDF，在浏览器里按 Ctrl+P，打印机选「另存为 PDF」。") -f $dlg.FileName) -Buttons @((T '打开所在位置'), (T '打开报告')) -Primary (T '打开报告') -Cancel (T '打开所在位置')
-    if ($ans -eq (T '打开报告')) { try { Start-Process -FilePath $dlg.FileName } catch { Open-Location $dlg.FileName } }
+    if ($ans -eq (T '打开报告')) { if (-not (Open-AsUser $dlg.FileName)) { Open-Location $dlg.FileName } }
     elseif ($ans -eq (T '打开所在位置')) { Open-Location $dlg.FileName }
 })
 $ctl.BtnMapExport.Add_Click({
@@ -19495,7 +19501,7 @@ function Update-CandSel {
 # 全选：聊天记录和软件（正在看其中一类时只选这一类）；「其他可搬的文件夹」要看清说明自己勾
 $ctl.BtnCandAll.Add_Click({ if ($script:candRows) { foreach ($r in $script:candRows) { if ($r.CanMove -and $r.Group -ne 'other' -and (-not $script:candGroup -or $r.Group -eq $script:candGroup)) { $r.Checked = $true } } }; Update-CandSel })
 $ctl.BtnCandNone.Add_Click({ if ($script:candRows) { foreach ($r in $script:candRows) { $r.Checked = $false } }; Update-CandSel })
-$ctl.BtnCandStore.Add_Click({ try { Start-Process 'ms-settings:appsfeatures' } catch {} })
+$ctl.BtnCandStore.Add_Click({ [void](Open-AsUser 'ms-settings:appsfeatures') })
 $ctl.CandList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent, [System.Windows.RoutedEventHandler]{
     param($s, $e)
     $b = $e.OriginalSource
@@ -20124,7 +20130,7 @@ function Open-VendorPage {
     if ($script:uiTest) { $script:uiFixRuns.Add('vendor:' + $url); return }
     $txt = (T "{0} {1}，服务编号 / 序列号 {2}`n`n{3}`n`n链接已经复制。要下载的：BIOS、芯片组驱动、存储驱动（Intel RST）、固态硬盘固件；装的顺序是 BIOS → 芯片组 → 存储驱动 → 固件，每装一样重启一次。这台电脑上不了外网的话，在别的电脑上打开这个链接，下载好用 U 盘拷过来。") -f $f.Maker, $f.Model, $f.Serial, $url
     $ans = Show-Sheet -Title (T '厂商驱动下载页') -Text $txt -Buttons @((T '关闭'), (T '在浏览器里打开')) -Primary (T '在浏览器里打开') -Cancel (T '关闭')
-    if ($ans -eq (T '在浏览器里打开')) { try { Start-Process $url } catch {} }
+    if ($ans -eq (T '在浏览器里打开')) { [void](Open-AsUser $url) }
 }
 # 改用 Windows 自带的硬盘驱动：只给步骤（要进 BIOS），先替你查好能不能改
 function Show-AhciGuide {
@@ -20194,7 +20200,7 @@ function Invoke-FixStep([string]$id, [switch]$Quiet) {
     if ($script:uiTest) { $script:uiFixRuns.Add($id); return }   # 界面自测：不真的运行
     try {
         if ($s.Cmd) { Start-Process -FilePath "$env:SystemRoot\System32\cmd.exe" -ArgumentList ('/k title ClearC - {0} & {1} & echo. & echo {2}' -f $name, $s.Cmd, (T '运行完了，可以关掉这个窗口。')) }
-        elseif ($s.Uri) { Start-Process $s.Uri }
+        elseif ($s.Uri) { [void](Open-AsUser $s.Uri) }
         elseif ($s.Folder) { Open-Location $s.Folder; return }
         elseif ($s.Exe -and $s.Args) { Start-Process -FilePath $s.Exe -ArgumentList $s.Args }
         elseif ($s.Exe) { Start-Process -FilePath $s.Exe }
@@ -20743,7 +20749,7 @@ function Start-AppMove($r) {
     try { $why = Get-AppMoveBlock $r $sync.AppsResult } finally { $win.Cursor = $null }
     if ($why -eq 'store') {
         $ans = Show-Sheet -Title (T '应用商店的软件由 Windows 管理') -Text ((T "「{0}」是从应用商店装的，本工具不能搬它。`n`n有的应用可以在 Windows 设置里换盘：设置 → 应用 → 已安装的应用，点它右边的「…」，选「移动」（没有这个选项就是不支持）。") -f $r.Name) -Buttons @((T '好'), (T '打开 Windows 设置')) -Primary (T '打开 Windows 设置') -Cancel (T '好')
-        if ($ans -eq (T '打开 Windows 设置')) { try { Start-Process 'ms-settings:appsfeatures' } catch {} }
+        if ($ans -eq (T '打开 Windows 设置')) { [void](Open-AsUser 'ms-settings:appsfeatures') }
         return
     }
     if ($why) { Show-Sheet -Kind warn -Title ((T "「{0}」不适合搬") -f $r.Name) -Text $why | Out-Null; return }
@@ -23339,7 +23345,7 @@ $timer.Add_Tick({
                 $msg = $sum + (T '。') + $(if ($copied) { (T '结果已经复制，可以粘贴到 GitHub 的问题（Issue）里。') } else { '' }) + "`n`n" + ((T "完整结果存在 {0}") -f $file)
                 if ($x.Fail -gt 0) { $msg += "`n`n" + (T '有问题的项目，扫描时会自动改用逐个文件夹扫描，不影响使用；把结果贴到 GitHub 的问题里可以帮助修好它。') }
                 $script:pendingDialog = @{ Title = (T '扫描功能检查完了'); Kind = $(if ($x.Fail -gt 0) { 'warn' } else { 'done' }); Text = $msg
-                    Buttons = @((T '好'), (T '打开结果')); Primary = (T '打开结果'); Cancel = (T '好'); Then = { Start-Process -FilePath "$env:SystemRoot\System32\notepad.exe" -ArgumentList ('"{0}"' -f $file) }.GetNewClosure() }
+                    Buttons = @((T '好'), (T '打开结果')); Primary = (T '打开结果'); Cancel = (T '好'); Then = { [void](Open-AsUser $file) }.GetNewClosure() }
             }
         }
         elseif ($sync.Mode -eq 'update') {
