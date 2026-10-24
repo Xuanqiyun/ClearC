@@ -3499,7 +3499,8 @@ public class DiskCard {
     public string Letter { get; set; }
     public bool Sel { get; set; }
     public string Model { get; set; }
-    public string UsedText { get; set; }
+    public string UsedText { get; set; }    // 已用 / 共 · 百分比
+    public string FreeText { get; set; }    // 剩多少，写在右边
     public double UsedPct { get; set; }
     public double BarW { get; set; }        // 用量条已用部分的宽度（像素）
     public string TempText { get; set; }
@@ -6912,6 +6913,19 @@ function Get-ModuleHolders([string]$dir) {
 function Test-PluggableDrive([string]$drive) { try { return [bool][FsTools]::IsPluggable($drive) } catch { return $false } }
 # 搬家目标的候选：C 盘以外、插着的本机硬盘，按空闲从多到少；移动硬盘排在后面，不参与自动选择（拔掉后搬走的软件打不开）。
 # $drives 是测试用的，每项 @{ Drive; Free; Plug }
+# 一块盘用了多少：总容量、可用（和资源管理器里的「可用空间」一样）、已用 = 总容量 - 可用、百分比。
+# 界面上写「已用多少、剩多少」的地方都从这里取：清理页的存储卡片、空间地图的磁盘卡片和概览、系统健康的磁盘卡片
+function Get-DriveUse([string]$drive) {
+    $r = @{ Ok = $false; Total = [double]0; Free = [double]0; Used = [double]0; Pct = [double]0 }
+    if (-not $drive) { return $r }
+    try {
+        $di = New-Object System.IO.DriveInfo $drive
+        $r.Total = [double]$di.TotalSize; $r.Free = [double]$di.AvailableFreeSpace
+        $r.Used = [math]::Max([double]0, $r.Total - $r.Free)
+        if ($r.Total -gt 0) { $r.Pct = 100.0 * $r.Used / $r.Total; $r.Ok = $true }
+    } catch {}
+    return $r
+}
 function Get-DestChoices($drives = $null) {
     if ($null -eq $drives) {
         $drives = @([IO.DriveInfo]::GetDrives() | Where-Object { try { $_.DriveType -eq 'Fixed' -and $_.IsReady } catch { $false } } | ForEach-Object {
@@ -7797,7 +7811,6 @@ C 盘上没找到可以清理的东西	Nothing to clean up was found on C:
 ，空间最大	, most space
 {0}    空闲 {1}，自选	{0}    {1} free, custom
 这台电脑只有 C 盘，没有可以搬去的磁盘	This PC only has drive C:, so there's no other drive to move to
-已自动选了空闲最多的 {0} 盘（剩 {1}）。也可以从下拉框换一块盘，或点「选择文件夹」。只列本机硬盘：网络盘、网盘、U 盘不能做链接目标。	The drive with the most free space, {0}:, was selected automatically ({1} free). You can pick another drive from the list, or click "Choose folder". Only local hard drives are listed: network drives, cloud drives and USB drives can't be link targets.
 这台电脑只有 C 盘，不能搬家；其他清理照常可以做。	This PC only has drive C:, so moving isn't possible. Other cleanups still work as usual.
 选择搬家目标文件夹（要在 C 盘以外的本机硬盘上）	Choose a destination folder for moving (on a local hard drive other than C:)
 请选 C 盘以外的位置	Choose a location other than C:
@@ -7853,6 +7866,12 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+已用 {0} / {1} · {2:N0}%	{0} used of {1} · {2:N0}%
+剩 {0}	{0} free
+已用的空间里都是什么	What the used space is made of
+按文件夹估算。系统与软件：Windows、Program Files、ProgramData 等；个人文件：Users；可清理的缓存：清理页「安全清理」里的那些目录；其他：页面文件、休眠文件、文件表等不在上面几类里的。几类加起来按这块盘的已用空间算：硬链接在几个文件夹里各算一次的，按比例缩回。	Estimated by folder. System and apps: Windows, Program Files, ProgramData and so on; personal files: Users; cleanable caches: the folders under Safe to clean on the cleanup page; other: page file, hibernation file, file table and anything not in the groups above. The groups add up to the used space of this drive: hard links counted in several folders are scaled back.
+{0:N0} 个文件{1}	{0:N0} files{1}
+自动选了空间最大的那块盘，也可以从下拉框换，或点「选择文件夹」。只列本机硬盘：网络盘、网盘、U 盘不能做链接目标。	The drive with the most free space was picked. You can pick another one or click Choose folder. Only local hard drives are listed: network drives, cloud folders and USB sticks cannot hold a link target.
 帮助页没能打开，原因写在运行记录里。	The help page could not be opened; the reason is in the run log.
 重开前的扫描结果已经恢复；要最新的数字，点「扫描」	The scan results from before the restart are back; click "Scan" for fresh numbers
 没有权限：这个文件或设置被系统保护，或者正被别的程序占着。关掉相关的程序再试；还不行就重启电脑后再试。	No permission: the file or setting is protected by Windows or held by another program. Close the related programs and try again; if that does not help, restart the PC and try again.
@@ -8946,8 +8965,6 @@ Windows 事件：最近 7 天的严重错误	Windows events: critical errors in 
 系统与软件	System and apps
 个人文件	Personal files
 可清理的缓存	Cleanable caches
-剩余空间	Free space
-系统与软件：Windows、Program Files、ProgramData 等；个人文件：Users；可清理的缓存：清理页「安全清理」里的那些目录（估算）；其他：页面文件、休眠文件、文件表等不在上面几类里的。剩余空间按 Windows 报告的算。	System and apps: Windows, Program Files, ProgramData and so on; personal files: Users; cleanable caches: the "Safe cleanup" folders on the cleanup page (estimate); other: page file, hibernation file, file table and anything not in those groups. Free space as reported by Windows.
 代码和开发文件	Code and developer files
  · 所有者 {0}	 · owner {0}
 ；所有者只在列出来的这些文件里分	; the owner filter applies only to the files listed
@@ -9029,7 +9046,6 @@ JetBrains 缓存	JetBrains cache
 点一下到设置里换模式	Click to change the mode in Settings
 正在读取各块盘的健康信息…	Reading the health of each drive…
 读不到型号和健康信息	Model and health could not be read
-已用 {0} / 共 {1}（{2:N0}%），剩 {3}	{0} used of {1} ({2:N0}%), {3} free
 健康	Healthy
 健康状态未知	Health unknown
 磨损 {0}%	{0}% worn
@@ -11504,13 +11520,55 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
     <FontFamily x:Key="Icons">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
 
     <!-- ===== 文字 ===== -->
+    <!-- 换行的文字按字号给行距（约 1.5 倍），几行中文读起来不挤：12 号 19、13 号 21、13.5 号 21、14 号 22、15 号 23。
+         只管会换行的文字：一行的标签不加，免得和旁边的按钮、图标对不齐；自己写了行距的照旧 -->
+    <Style x:Key="TextBase" TargetType="TextBlock">
+      <Style.Triggers>
+        <MultiTrigger>
+          <MultiTrigger.Conditions>
+            <Condition Property="TextWrapping" Value="Wrap"/>
+            <Condition Property="FontSize" Value="12"/>
+          </MultiTrigger.Conditions>
+          <Setter Property="LineHeight" Value="19"/>
+        </MultiTrigger>
+        <MultiTrigger>
+          <MultiTrigger.Conditions>
+            <Condition Property="TextWrapping" Value="Wrap"/>
+            <Condition Property="FontSize" Value="13"/>
+          </MultiTrigger.Conditions>
+          <Setter Property="LineHeight" Value="21"/>
+        </MultiTrigger>
+        <MultiTrigger>
+          <MultiTrigger.Conditions>
+            <Condition Property="TextWrapping" Value="Wrap"/>
+            <Condition Property="FontSize" Value="13.5"/>
+          </MultiTrigger.Conditions>
+          <Setter Property="LineHeight" Value="21"/>
+        </MultiTrigger>
+        <MultiTrigger>
+          <MultiTrigger.Conditions>
+            <Condition Property="TextWrapping" Value="Wrap"/>
+            <Condition Property="FontSize" Value="14"/>
+          </MultiTrigger.Conditions>
+          <Setter Property="LineHeight" Value="22"/>
+        </MultiTrigger>
+        <MultiTrigger>
+          <MultiTrigger.Conditions>
+            <Condition Property="TextWrapping" Value="Wrap"/>
+            <Condition Property="FontSize" Value="15"/>
+          </MultiTrigger.Conditions>
+          <Setter Property="LineHeight" Value="23"/>
+        </MultiTrigger>
+      </Style.Triggers>
+    </Style>
+    <Style TargetType="TextBlock" BasedOn="{StaticResource TextBase}"/>
     <Style x:Key="PageTitle" TargetType="TextBlock">
       <Setter Property="FontSize" Value="26"/>
       <Setter Property="FontWeight" Value="SemiBold"/>
       <Setter Property="Foreground" Value="#1D1D1F"/>
       <Setter Property="TextOptions.TextFormattingMode" Value="Ideal"/>
     </Style>
-    <Style x:Key="PageSub" TargetType="TextBlock">
+    <Style x:Key="PageSub" TargetType="TextBlock" BasedOn="{StaticResource TextBase}">
       <Setter Property="FontSize" Value="13"/>
       <Setter Property="Foreground" Value="#6E6E73"/>
       <Setter Property="Margin" Value="0,5,0,0"/>
@@ -11518,28 +11576,28 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
       <Setter Property="Visibility" Value="{DynamicResource SubVis}"/>
     </Style>
     <!-- 设置页：每一项的名字和说明 -->
-    <Style x:Key="SetName" TargetType="TextBlock">
+    <Style x:Key="SetName" TargetType="TextBlock" BasedOn="{StaticResource TextBase}">
       <Setter Property="FontSize" Value="13.5"/>
       <Setter Property="Foreground" Value="#1D1D1F"/>
     </Style>
-    <Style x:Key="SetNote" TargetType="TextBlock">
+    <Style x:Key="SetNote" TargetType="TextBlock" BasedOn="{StaticResource TextBase}">
       <Setter Property="FontSize" Value="12"/>
       <Setter Property="Foreground" Value="#6E6E73"/>
       <Setter Property="TextWrapping" Value="Wrap"/>
       <Setter Property="LineHeight" Value="18"/>
       <Setter Property="Margin" Value="0,3,0,0"/>
     </Style>
-    <Style x:Key="SectionTitle" TargetType="TextBlock">
+    <Style x:Key="SectionTitle" TargetType="TextBlock" BasedOn="{StaticResource TextBase}">
       <Setter Property="FontSize" Value="13"/>
       <Setter Property="FontWeight" Value="SemiBold"/>
       <Setter Property="Foreground" Value="#1D1D1F"/>
     </Style>
-    <Style x:Key="RowLabel" TargetType="TextBlock">
+    <Style x:Key="RowLabel" TargetType="TextBlock" BasedOn="{StaticResource TextBase}">
       <Setter Property="Foreground" Value="#1D1D1F"/>
       <Setter Property="Margin" Value="0,6,0,0"/>
       <Setter Property="VerticalAlignment" Value="Top"/>
     </Style>
-    <Style x:Key="Caption" TargetType="TextBlock">
+    <Style x:Key="Caption" TargetType="TextBlock" BasedOn="{StaticResource TextBase}">
       <Setter Property="FontSize" Value="12"/>
       <Setter Property="Foreground" Value="#6E6E73"/>
       <Setter Property="VerticalAlignment" Value="Center"/>
@@ -13233,7 +13291,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top" Margin="16,4,0,0">
           <CheckBox x:Name="MapFast" Content="快速扫描" IsChecked="True" VerticalAlignment="Center" Margin="0,0,14,0"
                     ToolTip="直接读取 NTFS 的文件表（MFT），比逐个文件夹查看快得多。少数安全软件对直接读盘会提示，可以关掉，改为逐个文件夹扫描。清理、搬家、软件管理统计大小时也按这个设置。"/>
-          <ComboBox x:Name="MapDrive" Width="200" Margin="0,0,8,0"/>
+          <ComboBox x:Name="MapDrive" Width="130" Margin="0,0,8,0"/>
           <Button x:Name="BtnMapStop" Content="停止" Margin="0,0,8,0" IsEnabled="False"/>
           <Button x:Name="BtnMapScan" Content="扫描" Style="{StaticResource Primary}" Padding="20,6"/>
         </StackPanel>
@@ -13257,12 +13315,15 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                         <TextBlock DockPanel.Dock="Left" Text="{Binding Letter}" FontSize="17" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0"/>
                         <TextBlock Text="{Binding Model}" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
                       </DockPanel>
-                      <Grid Margin="0,8,0,0" Height="6">
+                      <Grid Margin="0,10,0,0" Height="6">
                         <Border Background="#EBEBF0" CornerRadius="3"/>
                         <Border Background="{Binding BarBrush}" CornerRadius="3" HorizontalAlignment="Left" Width="{Binding BarW}"/>
                       </Grid>
-                      <TextBlock Text="{Binding UsedText}" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
-                      <WrapPanel Margin="0,8,0,0">
+                      <DockPanel Margin="0,7,0,0">
+                        <TextBlock DockPanel.Dock="Right" Text="{Binding FreeText}" FontSize="12" FontWeight="SemiBold" Foreground="#1D1D1F" Margin="12,0,0,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="{Binding UsedText}" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis"/>
+                      </DockPanel>
+                      <WrapPanel Margin="0,10,0,0">
                         <Border Background="{Binding HealthBg}" CornerRadius="6" Padding="7,2" Margin="0,0,6,4"><TextBlock Text="{Binding HealthText}" FontSize="12" FontWeight="SemiBold" Foreground="{Binding HealthFg}"/></Border>
                         <Border x:Name="TempChip" Background="{Binding TempBg}" CornerRadius="6" Padding="7,2" Margin="0,0,6,4"><TextBlock Text="{Binding TempText}" FontSize="12" FontWeight="SemiBold" Foreground="{Binding TempFg}"/></Border>
                         <Border x:Name="WearChip" Background="{Binding WearBg}" CornerRadius="6" Padding="7,2" Margin="0,0,6,4"><TextBlock Text="{Binding WearText}" FontSize="12" FontWeight="SemiBold" Foreground="{Binding WearFg}"/></Border>
@@ -13402,10 +13463,11 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
             <RowDefinition Height="0"/>
             <RowDefinition Height="*"/>
           </Grid.RowDefinitions>
-          <!-- 概览：这块盘用了多少，系统、个人文件、缓存各占多少（扫描后才有） -->
+          <!-- 概览：已用的空间里系统、个人文件、缓存各占多少（扫描后才有）。上面的磁盘卡片已经写着这块盘用了多少、剩多少，
+               所以「已用 / 共多少」那一行只在卡片不显示这块盘时出现（设置里关了卡片、读不到健康信息） -->
           <Border x:Name="MapOverview" Grid.Row="0" Margin="18,6,18,8" Visibility="Collapsed">
             <StackPanel>
-              <DockPanel>
+              <DockPanel x:Name="MapOvHead" Margin="0,0,0,12" Visibility="Collapsed">
                 <StackPanel DockPanel.Dock="Right" HorizontalAlignment="Right">
                   <TextBlock Text="已使用" Style="{StaticResource Caption}" HorizontalAlignment="Right"/>
                   <TextBlock x:Name="MapOvPct" Text="" FontSize="26" FontWeight="SemiBold" HorizontalAlignment="Right"/>
@@ -13415,17 +13477,17 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                   <TextBlock x:Name="MapOvUsed" Text="" FontSize="26" FontWeight="SemiBold"/>
                 </StackPanel>
               </DockPanel>
-              <Grid x:Name="MapOvBar" Height="10" Margin="0,8,0,0">
+              <TextBlock x:Name="MapOvWhat" Text="已用的空间里都是什么" FontWeight="SemiBold"/>
+              <Grid x:Name="MapOvBar" Height="10" Margin="0,10,0,0">
                 <Grid.ColumnDefinitions>
-                  <ColumnDefinition Width="1*"/><ColumnDefinition Width="0"/><ColumnDefinition Width="0"/><ColumnDefinition Width="0"/><ColumnDefinition Width="0"/>
+                  <ColumnDefinition Width="1*"/><ColumnDefinition Width="0"/><ColumnDefinition Width="0"/><ColumnDefinition Width="0"/>
                 </Grid.ColumnDefinitions>
-                <Border Grid.Column="0" Background="#3B82F6" CornerRadius="5,0,0,5" Margin="0,0,1,0"/>
-                <Border Grid.Column="1" Background="#E0A731" Margin="0,0,1,0"/>
-                <Border Grid.Column="2" Background="#3FA37E" Margin="0,0,1,0"/>
-                <Border Grid.Column="3" Background="#8E8E93" Margin="0,0,1,0"/>
-                <Border Grid.Column="4" Background="#9B6FD6" CornerRadius="0,5,5,0"/>
+                <Border Grid.Column="0" Background="#3B82F6"/>
+                <Border Grid.Column="1" Background="#E0A731"/>
+                <Border Grid.Column="2" Background="#3FA37E"/>
+                <Border Grid.Column="3" Background="#8E8E93"/>
               </Grid>
-              <WrapPanel x:Name="MapOvLegend" Margin="0,8,0,0"/>
+              <WrapPanel x:Name="MapOvLegend" Margin="0,10,0,0"/>
               <!-- 值得一看：可能用不上、删了能腾出不少空间的大文件夹（缓存、依赖包、构建产物、虚拟环境、临时文件），点一下跳过去看 -->
               <DockPanel x:Name="MapWorthBox" Margin="0,10,0,0" Visibility="Collapsed">
                 <TextBlock DockPanel.Dock="Left" Text="值得一看" FontWeight="SemiBold" VerticalAlignment="Top" Margin="0,4,12,0"
@@ -15847,6 +15909,20 @@ if ([Theme]::Dark) {
 if (-not $win) { $win = [Windows.Markup.XamlReader]::Load((New-Object System.Xml.XmlNodeReader $xaml)) }
 # 深色的窗口标题栏
 $win.Add_SourceInitialized({ try { [Theme]::DarkTitle((New-Object System.Windows.Interop.WindowInteropHelper $win).Handle) } catch {} })
+# 字距：Display 模式把每个字的宽度取整到整像素，96 DPI 的小字最清楚，但在缩放 125% 以上的屏幕上，字和字之间会忽宽忽窄。
+# 这种屏幕改用 Ideal，字距照字体本来的设计；像素够多，也不会发虚。对话框跟着主窗口
+$script:textIdeal = $false
+function Set-TextMode($w) {
+    try {
+        $ps = [System.Windows.PresentationSource]::FromVisual($w)
+        $scale = if ($ps -and $ps.CompositionTarget) { [double]$ps.CompositionTarget.TransformToDevice.M11 } else { 1.0 }
+        if ($scale -ge 1.2 -or $script:textIdeal) {
+            $script:textIdeal = $true
+            [System.Windows.Media.TextOptions]::SetTextFormattingMode($w, [System.Windows.Media.TextFormattingMode]::Ideal)
+        }
+    } catch {}
+}
+$win.Add_SourceInitialized({ Set-TextMode $win })
 $script:tUi = $script:startClock.Elapsed.TotalSeconds
 $ctl = @{}
 foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageMap','PageSave','PageApps','PageMoves','PageAuto','PageLog','BtnDupMerge',
@@ -15854,7 +15930,7 @@ foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageM
                'SaveScroll','SaveNav','SaveNavCos','SaveNavPf','SaveNavHib','SaveNavRs','SaveNavCs','SaveNavDump','SaveNavRp','SaveNavTmp','SaveNavFc','SaveNavOd','SaveNavMerge','SaveNavVd','SaveHeadSys','SaveHeadSafe','SaveHeadFiles','SaveHeadVd','BtnSaveRefresh','BtnCosOff','BtnCosOn','SaveCosState','SavePfState','SavePfDrive','BtnPfMove','BtnPfAuto','SaveHibState','BtnHibReduced','BtnHibOff','BtnHibFull','BtnFolderCompress','SaveFcState','VdList','VdEmpty','BtnGoDup',
                'BtnAppsRefresh','AppsAll','AppsC','AppsStore','AppsInfo','AppsSearch','AppsLeftBox','BtnAppsLeftClose','BtnAppsLeft','AppsLeftText','AppsList','EmptyApps','EmptyAppsText',
                'BtnAppsUpdates','AppsViewApps','AppsViewStartup','AppsViewTasks','AppsViewMenu','AppsViewLeft','AppsViewBox','AppsFilterBox','StartList','MapHealthBox','MapHealth','MapHealthNote','SetMapHealth',
-               'MapViewTypes','MapViewRecent','MapOwner','MapSort','MapGrowBar','MapGrowBase','MapRecentBar','MapRecentDays','BtnMapRecent','MapGrid','MapOverview','MapOvPct','MapOvTitle','MapOvUsed','MapOvBar','MapOvLegend',
+               'MapViewTypes','MapViewRecent','MapOwner','MapSort','MapGrowBar','MapGrowBase','MapRecentBar','MapRecentDays','BtnMapRecent','MapGrid','MapOverview','MapOvPct','MapOvTitle','MapOvHead','MapOvWhat','MapOvUsed','MapOvBar','MapOvLegend',
                'NavHealth','PageHealth','HTabHw','HTabBoot','HTabCrash','HTabFix','HTabMon','HTabEvents','HealthViewHw','HealthViewBoot','HealthViewCrash','HealthViewFix','HealthViewMon','HealthViewEvents',
                'HealthCardVerdict','BtnCopyReport','BtnDiagPack','HealthVerdicts','HealthCardFix','FixRecBox','FixRecHead','FixRec','FixGroups','FixDetail','FixDetailScroll','CTabVerdict','CTabDumps','CTabEvents','CTabDumpsB','CTabDumpsN','CTabEventsB','CTabEventsN','CrashViewVerdict','CrashViewDumps','CrashViewEvents','BtnHealthRefresh','HealthNote','HealthCardHw','HealthCards','HealthCardBoot','HealthBootText','HealthSlow','HealthCardCrash','BtnSfcCheck','BtnSfcRepair','HealthCrashText','HealthDumps','HealthEventsHead','HealthEvents','HealthDriversHead','HealthDrivers',
                'HealthCardMon','BtnMonStart','BtnMonStop','HealthMonText','MonList','HealthCardEvents','HealthWinText','HealthErrors','SetPageHealth',
@@ -16426,6 +16502,7 @@ function Show-Sheet {
     if ($script:uiTest) { $script:uiSheets.Add(("{0}`n{1}" -f $Title, $Text)); return $Cancel }   # 界面自测：不弹对话框，当作点了取消
     $sw = $null
     try { $sw = [Windows.Markup.XamlReader]::Parse([Theme]::Xaml($script:sheetXaml)) } catch { $sw = $null }
+    if ($sw -and $script:textIdeal) { [System.Windows.Media.TextOptions]::SetTextFormattingMode($sw, [System.Windows.Media.TextFormattingMode]::Ideal) }
     if (-not $sw) {
         # 万一自绘对话框出问题，退回系统消息框，保证流程能走下去
         $body = $Text; if ($Items) { $body += "`n`n" + (($Items | ForEach-Object { "  · $_" }) -join "`n") }
@@ -16858,9 +16935,9 @@ function UI-Log($m) { $ctl.Log.AppendText("$m`r`n"); $ctl.Log.ScrollToEnd(); Wri
 # 存储空间卡片：一条横条分成 已用 / 可释放（按扫描后的默认选择） / 可用 三段
 $script:reclaim = [double]0
 function UI-Status {
-    $total = [double]0; $free = [double]0
-    try { $di = New-Object System.IO.DriveInfo 'C:\'; $total = [double]$di.TotalSize; $free = [double]$di.AvailableFreeSpace }
-    catch { $d = Get-PSDrive C; $free = [double]$d.Free; $total = [double]($d.Used + $d.Free) }
+    $u = Get-DriveUse 'C:\'
+    $total = $u.Total; $free = $u.Free
+    if (-not $u.Ok) { try { $d = Get-PSDrive C; $free = [double]$d.Free; $total = [double]($d.Used + $d.Free) } catch {} }
     $used = [math]::Max([double]0, [double]($total - $free))
     $rec = [math]::Min([double]$script:reclaim, [double]$used)
     $ctl.CapFree.Text = Fmt $free
@@ -17354,7 +17431,7 @@ function Fill-DestChoices([string]$keep) {
         $ctl.DestPick.SelectedIndex = 0
         $plugs = @($choices | Where-Object { $_.Plug }).Count
         if ($auto) {
-            $ctl.DestHint.Text = (T "已自动选了空闲最多的 {0} 盘（剩 {1}）。也可以从下拉框换一块盘，或点「选择文件夹」。只列本机硬盘：网络盘、网盘、U 盘不能做链接目标。") -f $auto.Drive.Substring(0, 1), (Fmt $auto.Free)
+            $ctl.DestHint.Text = (T '自动选了空间最大的那块盘，也可以从下拉框换，或点「选择文件夹」。只列本机硬盘：网络盘、网盘、U 盘不能做链接目标。')   # 盘符和空闲空间下拉框里写着，这里不再写
             if ($plugs) { $ctl.DestHint.Text += (T '移动硬盘排在最后，不会自动选：拔掉以后，搬过去的软件会打不开。') }
         } elseif ($plugs) {
             $ctl.DestHint.Text = (T '只找到移动硬盘，所以没有自动选：拔掉以后，搬过去的软件会打不开。这块盘一直插着用的话，可以从下拉框选它；其他清理照常可以做。')
@@ -18416,7 +18493,8 @@ function Fill-MapDrives {
     $ctl.MapDrive.Items.Clear()
     foreach ($d in (Fixed-Drives)) {
         $it = New-Object System.Windows.Controls.ComboBoxItem
-        $it.Content = (T "{0}  已用 {1} / 共 {2}") -f $d.Name.TrimEnd('\'), (Fmt ($d.TotalSize - $d.AvailableFreeSpace)), (Fmt $d.TotalSize)
+        # 只写盘符：用了多少、剩多少写在下面每块盘的卡片上，这里不再写一遍
+        $it.Content = $d.Name.TrimEnd('\') + $(if ($d.Name -ieq ($env:SystemDrive + '\')) { '  ' + (T '系统盘') } else { '' })
         $it.Tag = $d.RootDirectory.FullName
         [void]$ctl.MapDrive.Items.Add($it)
         if ($it.Tag -ieq $keep) { $ctl.MapDrive.SelectedItem = $it }
@@ -18490,12 +18568,12 @@ function Show-DiskHealth($list) {
         $c = New-Object DiskCard
         $c.Letter = [string]$h.Drive
         $c.Model = if ($h.Ok -and $h.Model) { $h.Model + $(if ($h.Media) { ' · ' + $h.Media } else { '' }) } else { (T '读不到型号和健康信息') }
-        $used = [double]0; $total = [double]0
-        try { $di = New-Object System.IO.DriveInfo ([string]$h.Drive + '\'); $total = [double]$di.TotalSize; $used = $total - [double]$di.AvailableFreeSpace } catch {}
-        $pct = if ($total -gt 0) { 100.0 * $used / $total } else { 0 }
+        $u = Get-DriveUse ([string]$h.Drive + '\')
+        $used = $u.Used; $total = $u.Total; $pct = $u.Pct
         $dw = [double]$win.Resources['DcCardW']; if ($dw -lt 100) { $dw = 300 }
         $c.UsedPct = $pct; $c.BarW = [math]::Round(($dw - 34) * $pct / 100.0)
-        $c.UsedText = (T "已用 {0} / 共 {1}（{2:N0}%），剩 {3}") -f (Fmt $used), (Fmt $total), $pct, (Fmt ($total - $used))
+        $c.UsedText = (T "已用 {0} / {1} · {2:N0}%") -f (Fmt $used), (Fmt $total), $pct
+        $c.FreeText = (T "剩 {0}") -f (Fmt $u.Free)
         $c.BarBrush = if ($pct -ge 95) { '#FF3B30' } elseif ($pct -ge 85) { '#FF9F0A' } else { '#0071E3' }
         $worst = 0   # 0 绿 1 橙 2 红
         if ($h.Ok -and $h.Health) {
@@ -18533,6 +18611,15 @@ function Show-DiskHealth($list) {
     Update-MapCardSel
     $ctl.MapHealthNote.Visibility = if ($col.Count -gt 0) { 'Collapsed' } else { 'Visible' }
     if ($col.Count -eq 0) { $ctl.MapHealthNote.Text = (T '读不到磁盘的健康信息（型号、磨损、温度）') }
+    Update-MapOvHead
+}
+# 磁盘卡片显示着这块盘时，下面的概览就不再写一遍「已用多少 / 共多少」；卡片不显示（设置里关了、读不到）时才写
+function Update-MapOvHead {
+    if (-not $script:mapRoot) { return }
+    $drive = ''; try { $drive = $script:mapRoot.FullPath().TrimEnd('\') } catch {}
+    $shown = $false
+    if ($ctl.MapHealthBox.Visibility -eq 'Visible') { foreach ($c in @($ctl.MapHealth.ItemsSource)) { if ($c -and ([string]$c.Letter).TrimEnd('\') -ieq $drive) { $shown = $true } } }
+    $ctl.MapOvHead.Visibility = if ($shown) { 'Collapsed' } else { 'Visible' }
 }
 # 选中的盘：卡片描边跟着下拉框走
 function Update-MapCardSel {
@@ -18746,7 +18833,9 @@ function Show-MapLevel($node) {
     Restore-MapKeep $keep
     $ctl.MapPath.Text = $path
     Show-MapCrumbs $node
-    $ctl.MapInfo.Text = (T "这一层共 {0}，{1:N0} 个文件{2}") -f (Fmt $node.Size), $node.Files, $(if ($script:mapScanAt) { (T " · 扫描于 {0:HH:mm}（{1}）") -f $script:mapScanAt, $script:mapHow } else { '' })
+    $scanNote = if ($script:mapScanAt) { (T " · 扫描于 {0:HH:mm}（{1}）") -f $script:mapScanAt, $script:mapHow } else { '' }
+    # 在盘的最上一层不写「这一层共多少」：按文件大小加起来的数和盘的已用空间对不上（硬链接、压缩、文件表），上面卡片写的才是已用
+    $ctl.MapInfo.Text = if ($node.Parent) { (T "这一层共 {0}，{1:N0} 个文件{2}") -f (Fmt $node.Size), $node.Files, $scanNote } else { (T "{0:N0} 个文件{1}") -f $node.Files, $scanNote }
     if ($script:mapView -eq 'tree') { $ctl.MapInfo.Text += $(if (Test-CheckMode) { (T ' · 点方块在下面的列表里找到这一行，勾上的方块会描边；双击进入') } else { (T ' · 点方块就是选中下面列表里的那一行，列表里选中的方块会描边；双击进入') }) }
     $ctl.BtnMapAcct.Visibility = if ($script:mapRoot -and $script:mapRoot.HasDisk -and (Get-Mode) -ge 2) { 'Visible' } else { 'Collapsed' }
     $ctl.BtnMapUp.IsEnabled = ($null -ne $node.Parent)
@@ -18914,8 +19003,8 @@ function Show-MapOverview {
     if (-not $r -or ($script:mapView -ne 'dirs' -and $script:mapView -ne 'tree' -and $script:mapView -ne 'types')) { $ctl.MapOverview.Visibility = 'Collapsed'; return }
     $drive = $r.FullPath()
     if ($drive.Length -ne 3 -or $drive[1] -ne ':') { $ctl.MapOverview.Visibility = 'Collapsed'; return }
-    $total = [double]0; $used = [double]0; $free = [double]0
-    try { $di = New-Object System.IO.DriveInfo $drive; $total = [double]$di.TotalSize; $free = [double]$di.AvailableFreeSpace; $used = $total - $di.TotalFreeSpace } catch {}
+    $u = Get-DriveUse $drive
+    $total = $u.Total; $used = $u.Used; $free = $u.Free
     if ($total -le 0) { $ctl.MapOverview.Visibility = 'Collapsed'; return }
     $sz = { param($n) if ($n) { if ($r.HasDisk) { [double]$n.Disk } else { [double]$n.Size } } else { [double]0 } }
     $sys = [double]0
@@ -18936,20 +19025,37 @@ function Show-MapOverview {
     }
     $other = [math]::Max([double]0, $used - $sys - $users)
     $sys = [math]::Max([double]0, $sys - $cache * 0.3); $users = [math]::Max([double]0, $users - $cache * 0.7)   # 缓存大多在个人目录（AppData），少数在 Windows 和 ProgramData 里
-    $ctl.MapOvTitle.Text = (T "{0} {1}") -f $drive.TrimEnd('\'), $(if ($drive -ieq ($env:SystemDrive + '\')) { (T '系统盘') } else { '' })
+    # 几类加起来不能比这块盘的已用空间还多：系统文件夹里的硬链接（WinSxS 等）在几个文件夹里各算一次，按比例缩回到已用空间
+    $sum = $sys + $users + $cache + $other
+    if ($sum -gt $used -and $sum -gt 0) { $f = $used / $sum; $sys *= $f; $users *= $f; $cache *= $f; $other *= $f }
+    # 卡片不显示这块盘时才用得上的总量那一行
+    $ctl.MapOvTitle.Text = ((T "{0} {1}") -f $drive.TrimEnd('\'), $(if ($drive -ieq ($env:SystemDrive + '\')) { (T '系统盘') } else { '' })) + '  ·  ' + ((T "剩 {0}") -f (Fmt $free))
     $ctl.MapOvUsed.Text = "{0} / {1}" -f (Fmt $used), (Fmt $total)
-    $ctl.MapOvPct.Text = "{0:N1}%" -f (100.0 * $used / $total)
-    $parts = @(@((T '系统与软件'), $sys, '#3B82F6'), @((T '个人文件'), $users, '#E0A731'), @((T '可清理的缓存'), $cache, '#3FA37E'), @((T '其他'), $other, '#8E8E93'), @((T '剩余空间'), $free, '#9B6FD6'))
-    for ($i = 0; $i -lt 5; $i++) { $ctl.MapOvBar.ColumnDefinitions[$i].Width = New-Object System.Windows.GridLength ([math]::Max([double]0, $parts[$i][1])), ([System.Windows.GridUnitType]::Star) }
+    $ctl.MapOvPct.Text = "{0:N0}%" -f $u.Pct
+    Update-MapOvHead
+    $parts = @(@((T '系统与软件'), $sys, '#3B82F6'), @((T '个人文件'), $users, '#E0A731'), @((T '可清理的缓存'), $cache, '#3FA37E'), @((T '其他'), $other, '#8E8E93'))
+    for ($i = 0; $i -lt 4; $i++) { $ctl.MapOvBar.ColumnDefinitions[$i].Width = New-Object System.Windows.GridLength ([math]::Max([double]0, $parts[$i][1])), ([System.Windows.GridUnitType]::Star) }
+    # 条的两头是圆的：圆角给有内容的第一段和最后一段，段与段之间留 1 像素的缝
+    $on = @(for ($i = 0; $i -lt 4; $i++) { if ($parts[$i][1] -gt 0) { $i } })
+    for ($i = 0; $i -lt 4; $i++) {
+        $b = $ctl.MapOvBar.Children[$i]
+        $first = ($on.Count -gt 0 -and $i -eq $on[0]); $last = ($on.Count -gt 0 -and $i -eq $on[-1])
+        $b.CornerRadius = New-Object System.Windows.CornerRadius $(if ($first) { 5 } else { 0 }), $(if ($last) { 5 } else { 0 }), $(if ($last) { 5 } else { 0 }), $(if ($first) { 5 } else { 0 })
+        $b.Margin = New-Object System.Windows.Thickness 0, 0, $(if ($last) { 0 } else { 1 }), 0
+    }
     $ctl.MapOvLegend.Children.Clear()
-    for ($i = 0; $i -lt 5; $i++) {
-        if ($parts[$i][1] -le 0 -and $i -ne 4) { continue }
-        $sp = New-Object System.Windows.Controls.StackPanel; $sp.Orientation = 'Horizontal'; $sp.Margin = New-Object System.Windows.Thickness 0, 0, 18, 2
-        $dot = New-Object System.Windows.Controls.Border; $dot.Width = 9; $dot.Height = 9; $dot.CornerRadius = New-Object System.Windows.CornerRadius 4.5; $dot.Background = Brush $parts[$i][2] 'b'; $dot.VerticalAlignment = 'Center'; $dot.Margin = New-Object System.Windows.Thickness 0, 0, 6, 0
-        $tb = New-Object System.Windows.Controls.TextBlock; $tb.Text = "{0} {1}" -f $parts[$i][0], (Fmt $parts[$i][1]); $tb.FontSize = 12; $tb.Foreground = Brush '#6E6E73'; $tb.VerticalAlignment = 'Center'
+    foreach ($p in $parts) {
+        if ($p[1] -le 0) { continue }
+        $sp = New-Object System.Windows.Controls.StackPanel; $sp.Orientation = 'Horizontal'; $sp.Margin = New-Object System.Windows.Thickness 0, 0, 22, 4
+        $dot = New-Object System.Windows.Controls.Border; $dot.Width = 9; $dot.Height = 9; $dot.CornerRadius = New-Object System.Windows.CornerRadius 4.5; $dot.Background = Brush $p[2] 'b'; $dot.VerticalAlignment = 'Center'; $dot.Margin = New-Object System.Windows.Thickness 0, 0, 7, 0
+        # 名称灰色，大小深色加粗：一眼看到数
+        $tb = New-Object System.Windows.Controls.TextBlock; $tb.FontSize = 12; $tb.VerticalAlignment = 'Center'
+        $r1 = New-Object System.Windows.Documents.Run ([string]$p[0]); $r1.Foreground = Brush '#6E6E73'
+        $r2 = New-Object System.Windows.Documents.Run ('  ' + (Fmt $p[1])); $r2.Foreground = Brush '#1D1D1F'; $r2.FontWeight = 'SemiBold'
+        [void]$tb.Inlines.Add($r1); [void]$tb.Inlines.Add($r2)
         [void]$sp.Children.Add($dot); [void]$sp.Children.Add($tb); [void]$ctl.MapOvLegend.Children.Add($sp)
     }
-    $ctl.MapOverview.ToolTip = (T '系统与软件：Windows、Program Files、ProgramData 等；个人文件：Users；可清理的缓存：清理页「安全清理」里的那些目录（估算）；其他：页面文件、休眠文件、文件表等不在上面几类里的。剩余空间按 Windows 报告的算。')
+    $ctl.MapOverview.ToolTip = (T '按文件夹估算。系统与软件：Windows、Program Files、ProgramData 等；个人文件：Users；可清理的缓存：清理页「安全清理」里的那些目录；其他：页面文件、休眠文件、文件表等不在上面几类里的。几类加起来按这块盘的已用空间算：硬链接在几个文件夹里各算一次的，按比例缩回。')
     if ($script:worthKey -ne $key) { $script:worthKey = $key; Show-MapWorth }
     $ctl.MapOverview.Visibility = 'Visible'
 }
@@ -23099,6 +23205,7 @@ function Apply-Display {
     $win.Resources['MapPctVis'] = & $vis (Get-Flag 'MapPct')
     $win.Resources['MapMetaVis'] = & $vis (Get-Flag 'MapMeta')
     $win.Resources['MapHealthVis'] = & $vis (Get-Flag 'MapHealth')
+    if ($ctl.MapOverview.Visibility -eq 'Visible') { Update-MapOvHead }
     $ctl.MapFast.Visibility = & $vis ((Get-Flag 'MapFastBtn') -and $m -ge 2)
     $hp = Get-HiddenSet 'HidePages'
     $show = @{}
@@ -23296,6 +23403,16 @@ function Invoke-UiTest {
                 Show-Page $k; $win.UpdateLayout()
                 if ($ctl[$script:pageList[$k][0]].Visibility -ne 'Visible') { throw "page $k not visible" }
             }
+        }
+        & $step 'wrapped text gets line spacing, one-line labels do not; text spacing follows the screen' {
+            $tb = New-Object System.Windows.Controls.TextBlock; $tb.Style = $win.FindResource('Caption'); $tb.TextWrapping = 'Wrap'
+            if ($tb.LineHeight -ne 19) { throw ('a wrapped caption has line height ' + $tb.LineHeight) }
+            $one = New-Object System.Windows.Controls.TextBlock; $one.Style = $win.FindResource('Caption')
+            if (-not [double]::IsNaN($one.LineHeight)) { throw ('a one-line caption got line height ' + $one.LineHeight) }
+            $ps = [System.Windows.PresentationSource]::FromVisual($win); $sc = if ($ps) { $ps.CompositionTarget.TransformToDevice.M11 } else { 0 }
+            $mode = [System.Windows.Media.TextOptions]::GetTextFormattingMode($win)
+            $L.Add(('  text formatting {0} at DPI scale {1:N2}' -f $mode, $sc))
+            if ($sc -ge 1.2 -and [string]$mode -ne 'Ideal') { throw 'high-DPI screen but text is still snapped to whole pixels' }
         }
         & $step 'help: contents list on the left, only the picked item on the right' {
             if ($script:helpAtStart) { throw 'the help page was built when the window opened, not on first use' }
@@ -23602,7 +23719,7 @@ function Invoke-UiTest {
             if (-not (& $waitUi { -not $script:dhPs } 60000)) { throw 'disk health did not finish' }
             $cards = @($ctl.MapHealth.ItemsSource)
             if ($cards.Count -eq 0) { throw ('no disk cards; ' + [string]$script:dhErr + ' / direct: ' + (Get-DiskHealth $env:SystemDrive)) }
-            if (-not $cards[0].HealthText -or -not $cards[0].UsedText -or $cards[0].Model -eq (T '读不到型号和健康信息')) { throw ('card not filled: ' + $cards[0].Model + ' / ' + $cards[0].HealthText) }
+            if (-not $cards[0].HealthText -or -not $cards[0].UsedText -or -not $cards[0].FreeText -or $cards[0].Model -eq (T '读不到型号和健康信息')) { throw ('card not filled: ' + $cards[0].Model + ' / ' + $cards[0].HealthText) }
             & $snap $ctl.MapHealthBox 'disk-cards' 2
             $ctl.SetMapHealth.IsChecked = $false; & $click $ctl.SetMapHealth; $win.UpdateLayout()
             $hidden = $ctl.MapHealthBox.Visibility -ne 'Visible'
@@ -24267,6 +24384,11 @@ function Invoke-UiTest {
                 if (-not $script:mapRoot -or [object]::ReferenceEquals($script:mapRoot, $tree)) { throw 'space map has no scan of the drive' }
                 $ctl.OpPanel.Visibility = 'Collapsed'; & $shot 'map'
                 if ($ctl.MapOverview.Visibility -ne 'Visible' -or -not $ctl.MapOvPct.Text) { throw 'drive overview missing' }
+                # 同一个数不写两遍：卡片显示着这块盘时，概览不再写已用 / 共多少；下拉框只写盘符；概览只分已用空间的四类
+                $cardC = @(@($ctl.MapHealth.ItemsSource) | Where-Object { $_ -and ([string]$_.Letter).TrimEnd('\') -ieq $env:SystemDrive })
+                if ($cardC.Count -gt 0 -and $ctl.MapHealthBox.Visibility -eq 'Visible' -and $ctl.MapOvHead.Visibility -ne 'Collapsed') { throw 'the overview repeats the used / total shown on the drive card' }
+                if (@($ctl.MapDrive.Items | Where-Object { [string]$_.Content -match 'GB|TB|MB' }).Count) { throw 'the drive picker repeats the capacity' }
+                if (@($ctl.MapOvLegend.Children).Count -gt 4) { throw 'the overview legend has more than the four kinds of used space' }
                 $ctl.MapViewTree.IsChecked = $true; & $shot 'map-tree'
                 $ctl.MapViewTypes.IsChecked = $true; & $shot 'map-types'
                 if ($ctl.MapList.Items.Count -lt 3) { throw 'type statistics missing for the drive' }

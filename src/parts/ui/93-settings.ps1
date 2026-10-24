@@ -155,6 +155,7 @@ function Apply-Display {
     $win.Resources['MapPctVis'] = & $vis (Get-Flag 'MapPct')
     $win.Resources['MapMetaVis'] = & $vis (Get-Flag 'MapMeta')
     $win.Resources['MapHealthVis'] = & $vis (Get-Flag 'MapHealth')
+    if ($ctl.MapOverview.Visibility -eq 'Visible') { Update-MapOvHead }
     $ctl.MapFast.Visibility = & $vis ((Get-Flag 'MapFastBtn') -and $m -ge 2)
     $hp = Get-HiddenSet 'HidePages'
     $show = @{}

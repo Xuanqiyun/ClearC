@@ -100,7 +100,6 @@ C 盘上没找到可以清理的东西	Nothing to clean up was found on C:
 ，空间最大	, most space
 {0}    空闲 {1}，自选	{0}    {1} free, custom
 这台电脑只有 C 盘，没有可以搬去的磁盘	This PC only has drive C:, so there's no other drive to move to
-已自动选了空闲最多的 {0} 盘（剩 {1}）。也可以从下拉框换一块盘，或点「选择文件夹」。只列本机硬盘：网络盘、网盘、U 盘不能做链接目标。	The drive with the most free space, {0}:, was selected automatically ({1} free). You can pick another drive from the list, or click "Choose folder". Only local hard drives are listed: network drives, cloud drives and USB drives can't be link targets.
 这台电脑只有 C 盘，不能搬家；其他清理照常可以做。	This PC only has drive C:, so moving isn't possible. Other cleanups still work as usual.
 选择搬家目标文件夹（要在 C 盘以外的本机硬盘上）	Choose a destination folder for moving (on a local hard drive other than C:)
 请选 C 盘以外的位置	Choose a location other than C:
@@ -156,6 +155,12 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+已用 {0} / {1} · {2:N0}%	{0} used of {1} · {2:N0}%
+剩 {0}	{0} free
+已用的空间里都是什么	What the used space is made of
+按文件夹估算。系统与软件：Windows、Program Files、ProgramData 等；个人文件：Users；可清理的缓存：清理页「安全清理」里的那些目录；其他：页面文件、休眠文件、文件表等不在上面几类里的。几类加起来按这块盘的已用空间算：硬链接在几个文件夹里各算一次的，按比例缩回。	Estimated by folder. System and apps: Windows, Program Files, ProgramData and so on; personal files: Users; cleanable caches: the folders under Safe to clean on the cleanup page; other: page file, hibernation file, file table and anything not in the groups above. The groups add up to the used space of this drive: hard links counted in several folders are scaled back.
+{0:N0} 个文件{1}	{0:N0} files{1}
+自动选了空间最大的那块盘，也可以从下拉框换，或点「选择文件夹」。只列本机硬盘：网络盘、网盘、U 盘不能做链接目标。	The drive with the most free space was picked. You can pick another one or click Choose folder. Only local hard drives are listed: network drives, cloud folders and USB sticks cannot hold a link target.
 帮助页没能打开，原因写在运行记录里。	The help page could not be opened; the reason is in the run log.
 重开前的扫描结果已经恢复；要最新的数字，点「扫描」	The scan results from before the restart are back; click "Scan" for fresh numbers
 没有权限：这个文件或设置被系统保护，或者正被别的程序占着。关掉相关的程序再试；还不行就重启电脑后再试。	No permission: the file or setting is protected by Windows or held by another program. Close the related programs and try again; if that does not help, restart the PC and try again.
@@ -1249,8 +1254,6 @@ Windows 事件：最近 7 天的严重错误	Windows events: critical errors in 
 系统与软件	System and apps
 个人文件	Personal files
 可清理的缓存	Cleanable caches
-剩余空间	Free space
-系统与软件：Windows、Program Files、ProgramData 等；个人文件：Users；可清理的缓存：清理页「安全清理」里的那些目录（估算）；其他：页面文件、休眠文件、文件表等不在上面几类里的。剩余空间按 Windows 报告的算。	System and apps: Windows, Program Files, ProgramData and so on; personal files: Users; cleanable caches: the "Safe cleanup" folders on the cleanup page (estimate); other: page file, hibernation file, file table and anything not in those groups. Free space as reported by Windows.
 代码和开发文件	Code and developer files
  · 所有者 {0}	 · owner {0}
 ；所有者只在列出来的这些文件里分	; the owner filter applies only to the files listed
@@ -1332,7 +1335,6 @@ JetBrains 缓存	JetBrains cache
 点一下到设置里换模式	Click to change the mode in Settings
 正在读取各块盘的健康信息…	Reading the health of each drive…
 读不到型号和健康信息	Model and health could not be read
-已用 {0} / 共 {1}（{2:N0}%），剩 {3}	{0} used of {1} ({2:N0}%), {3} free
 健康	Healthy
 健康状态未知	Health unknown
 磨损 {0}%	{0}% worn

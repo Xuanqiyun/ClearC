@@ -433,7 +433,7 @@ function Fill-DestChoices([string]$keep) {
         $ctl.DestPick.SelectedIndex = 0
         $plugs = @($choices | Where-Object { $_.Plug }).Count
         if ($auto) {
-            $ctl.DestHint.Text = (T "已自动选了空闲最多的 {0} 盘（剩 {1}）。也可以从下拉框换一块盘，或点「选择文件夹」。只列本机硬盘：网络盘、网盘、U 盘不能做链接目标。") -f $auto.Drive.Substring(0, 1), (Fmt $auto.Free)
+            $ctl.DestHint.Text = (T '自动选了空间最大的那块盘，也可以从下拉框换，或点「选择文件夹」。只列本机硬盘：网络盘、网盘、U 盘不能做链接目标。')   # 盘符和空闲空间下拉框里写着，这里不再写
             if ($plugs) { $ctl.DestHint.Text += (T '移动硬盘排在最后，不会自动选：拔掉以后，搬过去的软件会打不开。') }
         } elseif ($plugs) {
             $ctl.DestHint.Text = (T '只找到移动硬盘，所以没有自动选：拔掉以后，搬过去的软件会打不开。这块盘一直插着用的话，可以从下拉框选它；其他清理照常可以做。')

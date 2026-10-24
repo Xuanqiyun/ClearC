@@ -3253,6 +3253,19 @@ function Get-ModuleHolders([string]$dir) {
 function Test-PluggableDrive([string]$drive) { try { return [bool][FsTools]::IsPluggable($drive) } catch { return $false } }
 # 搬家目标的候选：C 盘以外、插着的本机硬盘，按空闲从多到少；移动硬盘排在后面，不参与自动选择（拔掉后搬走的软件打不开）。
 # $drives 是测试用的，每项 @{ Drive; Free; Plug }
+# 一块盘用了多少：总容量、可用（和资源管理器里的「可用空间」一样）、已用 = 总容量 - 可用、百分比。
+# 界面上写「已用多少、剩多少」的地方都从这里取：清理页的存储卡片、空间地图的磁盘卡片和概览、系统健康的磁盘卡片
+function Get-DriveUse([string]$drive) {
+    $r = @{ Ok = $false; Total = [double]0; Free = [double]0; Used = [double]0; Pct = [double]0 }
+    if (-not $drive) { return $r }
+    try {
+        $di = New-Object System.IO.DriveInfo $drive
+        $r.Total = [double]$di.TotalSize; $r.Free = [double]$di.AvailableFreeSpace
+        $r.Used = [math]::Max([double]0, $r.Total - $r.Free)
+        if ($r.Total -gt 0) { $r.Pct = 100.0 * $r.Used / $r.Total; $r.Ok = $true }
+    } catch {}
+    return $r
+}
 function Get-DestChoices($drives = $null) {
     if ($null -eq $drives) {
         $drives = @([IO.DriveInfo]::GetDrives() | Where-Object { try { $_.DriveType -eq 'Fixed' -and $_.IsReady } catch { $false } } | ForEach-Object {

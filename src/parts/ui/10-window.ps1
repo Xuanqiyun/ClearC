@@ -91,6 +91,20 @@ if ([Theme]::Dark) {
 if (-not $win) { $win = [Windows.Markup.XamlReader]::Load((New-Object System.Xml.XmlNodeReader $xaml)) }
 # 深色的窗口标题栏
 $win.Add_SourceInitialized({ try { [Theme]::DarkTitle((New-Object System.Windows.Interop.WindowInteropHelper $win).Handle) } catch {} })
+# 字距：Display 模式把每个字的宽度取整到整像素，96 DPI 的小字最清楚，但在缩放 125% 以上的屏幕上，字和字之间会忽宽忽窄。
+# 这种屏幕改用 Ideal，字距照字体本来的设计；像素够多，也不会发虚。对话框跟着主窗口
+$script:textIdeal = $false
+function Set-TextMode($w) {
+    try {
+        $ps = [System.Windows.PresentationSource]::FromVisual($w)
+        $scale = if ($ps -and $ps.CompositionTarget) { [double]$ps.CompositionTarget.TransformToDevice.M11 } else { 1.0 }
+        if ($scale -ge 1.2 -or $script:textIdeal) {
+            $script:textIdeal = $true
+            [System.Windows.Media.TextOptions]::SetTextFormattingMode($w, [System.Windows.Media.TextFormattingMode]::Ideal)
+        }
+    } catch {}
+}
+$win.Add_SourceInitialized({ Set-TextMode $win })
 $script:tUi = $script:startClock.Elapsed.TotalSeconds
 $ctl = @{}
 foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageMap','PageSave','PageApps','PageMoves','PageAuto','PageLog','BtnDupMerge',
@@ -98,7 +112,7 @@ foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageM
                'SaveScroll','SaveNav','SaveNavCos','SaveNavPf','SaveNavHib','SaveNavRs','SaveNavCs','SaveNavDump','SaveNavRp','SaveNavTmp','SaveNavFc','SaveNavOd','SaveNavMerge','SaveNavVd','SaveHeadSys','SaveHeadSafe','SaveHeadFiles','SaveHeadVd','BtnSaveRefresh','BtnCosOff','BtnCosOn','SaveCosState','SavePfState','SavePfDrive','BtnPfMove','BtnPfAuto','SaveHibState','BtnHibReduced','BtnHibOff','BtnHibFull','BtnFolderCompress','SaveFcState','VdList','VdEmpty','BtnGoDup',
                'BtnAppsRefresh','AppsAll','AppsC','AppsStore','AppsInfo','AppsSearch','AppsLeftBox','BtnAppsLeftClose','BtnAppsLeft','AppsLeftText','AppsList','EmptyApps','EmptyAppsText',
                'BtnAppsUpdates','AppsViewApps','AppsViewStartup','AppsViewTasks','AppsViewMenu','AppsViewLeft','AppsViewBox','AppsFilterBox','StartList','MapHealthBox','MapHealth','MapHealthNote','SetMapHealth',
-               'MapViewTypes','MapViewRecent','MapOwner','MapSort','MapGrowBar','MapGrowBase','MapRecentBar','MapRecentDays','BtnMapRecent','MapGrid','MapOverview','MapOvPct','MapOvTitle','MapOvUsed','MapOvBar','MapOvLegend',
+               'MapViewTypes','MapViewRecent','MapOwner','MapSort','MapGrowBar','MapGrowBase','MapRecentBar','MapRecentDays','BtnMapRecent','MapGrid','MapOverview','MapOvPct','MapOvTitle','MapOvHead','MapOvWhat','MapOvUsed','MapOvBar','MapOvLegend',
                'NavHealth','PageHealth','HTabHw','HTabBoot','HTabCrash','HTabFix','HTabMon','HTabEvents','HealthViewHw','HealthViewBoot','HealthViewCrash','HealthViewFix','HealthViewMon','HealthViewEvents',
                'HealthCardVerdict','BtnCopyReport','BtnDiagPack','HealthVerdicts','HealthCardFix','FixRecBox','FixRecHead','FixRec','FixGroups','FixDetail','FixDetailScroll','CTabVerdict','CTabDumps','CTabEvents','CTabDumpsB','CTabDumpsN','CTabEventsB','CTabEventsN','CrashViewVerdict','CrashViewDumps','CrashViewEvents','BtnHealthRefresh','HealthNote','HealthCardHw','HealthCards','HealthCardBoot','HealthBootText','HealthSlow','HealthCardCrash','BtnSfcCheck','BtnSfcRepair','HealthCrashText','HealthDumps','HealthEventsHead','HealthEvents','HealthDriversHead','HealthDrivers',
                'HealthCardMon','BtnMonStart','BtnMonStop','HealthMonText','MonList','HealthCardEvents','HealthWinText','HealthErrors','SetPageHealth',
@@ -670,6 +684,7 @@ function Show-Sheet {
     if ($script:uiTest) { $script:uiSheets.Add(("{0}`n{1}" -f $Title, $Text)); return $Cancel }   # 界面自测：不弹对话框，当作点了取消
     $sw = $null
     try { $sw = [Windows.Markup.XamlReader]::Parse([Theme]::Xaml($script:sheetXaml)) } catch { $sw = $null }
+    if ($sw -and $script:textIdeal) { [System.Windows.Media.TextOptions]::SetTextFormattingMode($sw, [System.Windows.Media.TextFormattingMode]::Ideal) }
     if (-not $sw) {
         # 万一自绘对话框出问题，退回系统消息框，保证流程能走下去
         $body = $Text; if ($Items) { $body += "`n`n" + (($Items | ForEach-Object { "  · $_" }) -join "`n") }
@@ -1102,9 +1117,9 @@ function UI-Log($m) { $ctl.Log.AppendText("$m`r`n"); $ctl.Log.ScrollToEnd(); Wri
 # 存储空间卡片：一条横条分成 已用 / 可释放（按扫描后的默认选择） / 可用 三段
 $script:reclaim = [double]0
 function UI-Status {
-    $total = [double]0; $free = [double]0
-    try { $di = New-Object System.IO.DriveInfo 'C:\'; $total = [double]$di.TotalSize; $free = [double]$di.AvailableFreeSpace }
-    catch { $d = Get-PSDrive C; $free = [double]$d.Free; $total = [double]($d.Used + $d.Free) }
+    $u = Get-DriveUse 'C:\'
+    $total = $u.Total; $free = $u.Free
+    if (-not $u.Ok) { try { $d = Get-PSDrive C; $free = [double]$d.Free; $total = [double]($d.Used + $d.Free) } catch {} }
     $used = [math]::Max([double]0, [double]($total - $free))
     $rec = [math]::Min([double]$script:reclaim, [double]$used)
     $ctl.CapFree.Text = Fmt $free

@@ -242,6 +242,10 @@ try { & {
     Check "file categories by extension ($($cats -join ','))" (($cats -join ',') -eq '1,5,0,0,9,0')
     $u = [Text.Encoding]::Unicode.GetBytes('photo.JPEG'); Check 'file category from UTF-16 name bytes' ([FileCats]::Of($u, 0, $u.Length) -eq 2)
     Check 'walk scan counts file types' ($tree.TypeBytes -and $tree.TypeBytes.Length -eq 10 -and (($tree.TypeCount | Measure-Object -Sum).Sum) -eq $tree.Files)
+    # 一块盘用了多少：已用 + 可用 = 总容量，百分比在 0 到 100 之间；读不到的盘不报错
+    $root = [IO.Path]::GetPathRoot([IO.Path]::GetTempPath())
+    $du = Get-DriveUse $root; $dn = Get-DriveUse 'Q:\no-such-drive'
+    Check ("Get-DriveUse: used + free = total ({0:N1} GB of {1:N1} GB, {2:N0}%)" -f ($du.Used / 1GB), ($du.Total / 1GB), $du.Pct) ($du.Ok -and [math]::Abs($du.Used + $du.Free - $du.Total) -lt 1 -and $du.Pct -ge 0 -and $du.Pct -le 100 -and -not $dn.Ok -and $dn.Total -eq 0)
 } } finally {
     Remove-Item -LiteralPath $lk -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue
