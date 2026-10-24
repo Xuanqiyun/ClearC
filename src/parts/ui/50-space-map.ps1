@@ -1654,26 +1654,12 @@ foreach ($x in $arg.Items) {
     $i++
     $p = [string]$x.Path
     SetP @{ Steps = $arg.Items.Count; Step = $i; StepName = (Split-Path $p -Leaf); SubKind = 'action'; SubStart = (Get-Date); Detail = $p }
-    # 删之前再查一次：个人文件夹、系统位置、软件安装文件夹、搬家后的数据一律不删
-    $why = Get-DeleteBlock $p
-    if (-not $why -and (IsLink $p)) { $why = (T '这是一个链接（多半是搬家后留下的），删了软件会找不到数据。要处理请到「搬家管理」') }
-    if (-not $why) { $up = Get-LinkedAncestor $p; if ($up) { $why = ((T "它所在的文件夹 {0} 已经搬到其他盘了，这份扫描结果过时了，请重新扫描") -f $up) } }
-    if ($why) { [void]$res.Fail.Add(((T "{0}：{1}") -f $p, $why)); continue }
-    $msg = ''
-    if ($arg.Recycle) {
-        $why = Test-RecycleOk $p $(if ($x.IsDir) { try { [double][FsTools]::OnDiskTree($p) } catch { [double]$x.Size } } else { [double]$x.Size })
-        if ($why) { [void]$res.Fail.Add(((T "{0}：{1}。要删的话选「永久删除」") -f $p, $why)); continue }
-        $rc = [FsTools]::Recycle($p, [long]$sync.Hwnd)
-        $ok = -not (Test-Path -LiteralPath $p)
-        if (-not $ok) { $msg = ((T "没有删掉（代码 {0}，可能文件正被占用，或者在提示里选了取消）") -f $rc) }
-    } else {
-        if ($x.IsDir -and -not (Test-CmdPathOk $p)) { [void]$res.Fail.Add(((T "{0}：{1}") -f $p, (T '路径里有 % 或引号，为了不删错地方不交给系统命令'))); continue }
-        if ($x.IsDir) { & "$sys32\cmd.exe" /c rd /s /q "\\?\$p" 2>$null | Out-Null } else { Remove-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue }
-        $ok = -not (Test-Path -LiteralPath $p)
-        if (-not $ok) { $msg = (T '没删干净，可能有文件正被占用') }
-    }
-    OpLog '删除' $how $p ("{0}{1}" -f (GB $x.Size), $(if ($ok) { '' } else { (T '，失败：') + $msg }))
-    if ($ok) { [void]$res.Ok.Add($p) } else { [void]$res.Fail.Add(((T "{0}：{1}") -f $p, $msg)) }
+    # 删之前再查一次（个人文件夹、系统位置、软件安装文件夹、搬家后的数据、链接一律不删），删完核对、写操作日志：都在 Invoke-SafeRemove 里
+    $bytes = if ($arg.Recycle -and $x.IsDir) { try { [double][FsTools]::OnDiskTree($p) } catch { [double]$x.Size } } else { [double]$x.Size }
+    $r = Invoke-SafeRemove -Path $p -Scope pick -How $(if ($arg.Recycle) { 'recycle' } else { 'delete' }) -Bytes $bytes -What $how -Detail (GB $x.Size)
+    if ($r.Ok) { [void]$res.Ok.Add($p) }
+    elseif ($r.Stage -eq 'recycle') { [void]$res.Fail.Add(((T "{0}：{1}。要删的话选「永久删除」") -f $p, $r.Why)) }
+    else { [void]$res.Fail.Add(((T "{0}：{1}") -f $p, $r.Why)) }
 }
 $sync.MapDel = $res
 '@ @{ Items = @($rows | ForEach-Object { @{ Path = [string]$_.Path; IsDir = [bool]$_.IsDir; Size = [double]$_.Size } }); Recycle = ($ans -eq (T '移到回收站')) }
