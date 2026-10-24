@@ -2721,11 +2721,14 @@
                     <Button x:Name="AppOpen" Content="打开位置" Tag="{Binding}" Style="{StaticResource Small}" Margin="0,0,6,0"/>
                     <Button x:Name="AppMove" Content="搬到其他盘" Tag="{Binding}" Style="{StaticResource Small}" Margin="0,0,6,0" Visibility="{DynamicResource AppMoveVis}"
                             ToolTip="把整个安装文件夹搬到其他盘，C 盘原位置留一个链接，软件照常使用，不用重装"/>
+                    <Button x:Name="AppNoMove" Content="不能搬" Tag="{Binding}" Style="{StaticResource LinkButton}" Foreground="#86868B" Margin="0,0,12,0" Visibility="{DynamicResource AppMoveVis}"
+                            VerticalAlignment="Center" Cursor="Help" ToolTip="{Binding MoveWhy}"/>
                     <Button x:Name="AppUninstall" Content="卸载" Tag="{Binding}" Style="{StaticResource Small}"/>
                   </StackPanel>
                 </Grid>
                 <DataTemplate.Triggers>
                   <DataTrigger Binding="{Binding CanMove}" Value="False"><Setter TargetName="AppMove" Property="Visibility" Value="Collapsed"/></DataTrigger>
+                  <DataTrigger Binding="{Binding ShowWhy}" Value="False"><Setter TargetName="AppNoMove" Property="Visibility" Value="Collapsed"/></DataTrigger>
                   <DataTrigger Binding="{Binding HasUpgrade}" Value="True"><Setter TargetName="AppUpgrade" Property="Visibility" Value="Visible"/></DataTrigger>
                 </DataTemplate.Triggers>
               </DataTemplate>

@@ -683,6 +683,10 @@ try { & {
     $sh = [regex]::Match($src, '(?s)function Show-Sheet \{.*?\r?\n\}').Value
     $md = [regex]::Match($src, '(?s)function Start-MapDelete.*?Start-Worker').Value
     Check 'UX-6 only the permanent-delete button is red; "move to Recycle Bin" is the normal main button' ($sh -match '\$Destructive' -and $md -match "-Destructive \(T '永久删除'\)" -and ([regex]::Matches($src, "-Destructive ''")).Count -ge 3)
+    # ============ 30. 软件管理：不能搬的软件不显示「搬到其他盘」，直接写原因（3.6 体验评审） ============
+    $aw = [regex]::Match($src, "(?s)\`$out = Get-InstalledApps.*?\`$sync\.AppsResult = \`$out").Value
+    Check 'UX-7 the apps list works out up front which apps can not be moved, and why' ($aw -match 'Get-ServicePaths' -and $aw -match 'MoveWhy = \[string\]\(Get-AppMoveBlock \$a \$out \$svc\)')
+    Check 'UX-7 such rows show "can not move" with the reason instead of the move button' ($src -match 'x:Name="AppNoMove"[^>]*ToolTip="\{Binding MoveWhy\}"' -and $src -match '\$r\.CanMove = \$r\.OnC -and \[bool\]\$a\.Location -and -not \$a\.MoveWhy' -and $src -match "\`$b\.Name -eq 'AppMove' -or \`$b\.Name -eq 'AppNoMove'")
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue
