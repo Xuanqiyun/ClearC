@@ -528,6 +528,15 @@ try { & {
         $r = Invoke-SafeRemove -Path (Join-Path $home2 'Desktop\thesis.docx') -Scope dup -How delete
         Check 'ARC-1 duplicates in personal folders are refused unless the page switch allows them' (-not $r.Ok -and (Test-Path -LiteralPath (Join-Path $home2 'Desktop\thesis.docx')))
     } else { Skip 'ARC-1 links and personal folders' }
+    # ============ 15. 统计文件夹大小：每次统计有自己的结果（3.6 架构评审） ============
+    # 以前个数和大小记在 DirStat 的静态字段里，两处同时统计会互相覆盖，搬家「文件个数一个不能少」的核对读的就是它
+    $big = Join-Path $T 'count-big'; $small = Join-Path $T 'count-small'
+    foreach ($i in 1..60) { $d = Join-Path $big "d$i"; [void][IO.Directory]::CreateDirectory($d); foreach ($j in 1..25) { [IO.File]::WriteAllText((Join-Path $d "f$j.bin"), 'abcd') } }
+    [void][IO.Directory]::CreateDirectory($small); foreach ($j in 1..7) { [IO.File]::WriteAllText((Join-Path $small "s$j.bin"), 'xy') }
+    $jobs = foreach ($dir in $big, $small, $big, $small) { $ps = [powershell]::Create(); $null = $ps.AddScript('param($d) [DirStat]::Count($d)').AddArgument($dir); @{ PS = $ps; H = $ps.BeginInvoke() } }
+    $got = @(foreach ($j in $jobs) { $o = @($j.PS.EndInvoke($j.H))[0]; $j.PS.Dispose(); $o })
+    Check 'ARC-3 four counts at the same time each get their own file count and size' ($got.Count -eq 4 -and $got[0].Files -eq 1500 -and $got[0].Bytes -eq 6000 -and $got[1].Files -eq 7 -and $got[1].Bytes -eq 14 -and $got[2].Files -eq 1500 -and $got[3].Files -eq 7 -and -not $got[1].Cancelled)
+    Check 'ARC-3 the move checks read their own count, not the shared progress counters' ($engineText -notmatch '\[DirStat\]::(Files|Bytes|Reparse)' -and ([regex]::Matches($engineText, 'DirCount \$')).Count -ge 6)
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue
