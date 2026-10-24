@@ -763,7 +763,7 @@ $win.Add_ContentRendered({
     if ($script:riskShown) { return }
     $script:riskShown = $true
     $script:prefetchTimer.Start()
-    if (Test-Path -LiteralPath $script:riskFile) { Show-WriteTrouble -Startup; Show-HalfMoves; Show-LooseMoves; Show-BrokenMoves; return }
+    if (Test-Path -LiteralPath $script:riskFile) { Show-AccountMismatch; Show-WriteTrouble -Startup; Show-HalfMoves; Show-LooseMoves; Show-BrokenMoves; return }
     $ans = Show-Sheet -Kind warn -Title (T '使用前请先阅读安全风险提示') `
         -Text (T "本工具会按你的选择删除或搬移电脑上的文件。删除的文件可能无法恢复，存在资料丢失的风险。`n`n每次删除前，请确认这些资料确实不再需要、删除不会给你带来损失；重要资料请先备份。因使用本工具造成的资料丢失或其他损失，责任由使用者自行承担，开发者不承担责任。`n`n完整说明随时可以在左侧「帮助」里查看。") `
         -Confirm (T '我已阅读并了解上述风险，同意自行承担使用本工具的后果。') -Buttons @((T '退出'), (T '同意并继续')) -Primary (T '同意并继续') -Cancel (T '退出')
@@ -773,7 +773,7 @@ $win.Add_ContentRendered({
         [IO.File]::WriteAllText($script:riskFile, ((T "{0:yyyy-MM-dd HH:mm:ss}  已同意（版本 {1}）") -f (Get-Date), $script:AppVersion), [Text.Encoding]::UTF8)
     } catch {}
     Write-LogFile (T '用户已同意安全风险提示')
-    Show-HalfMoves; Show-BrokenMoves
+    Show-AccountMismatch; Show-WriteTrouble -Startup; Show-HalfMoves; Show-BrokenMoves
 })
 # 打开时查一下有没有上次没做完的搬家（数据都在，只是要告诉用户在哪）
 # 以前的版本搬走的文件夹，其他账户也能打开：问一次要不要改成和在 C 盘时一样（一个月最多问一次）
@@ -794,6 +794,15 @@ function Show-LooseMoves {
     Start-Worker @'
 $sync.AclRes = Repair-MovedAccess $arg.Items
 '@ @{ Items = $l }
+}
+# 以另一个管理员账户运行（登录桌面的是普通账户，打开时输了管理员密码）：每次打开说一声，可以退出
+function Show-AccountMismatch {
+    $me = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+    $t = Get-AccountMismatch $me (Get-DesktopUser)
+    if (-not $t) { return }
+    Write-LogFile $t
+    $go = T '仍然继续'
+    if ((Show-Sheet -Kind warn -Title (T '本工具没有以你的账户运行') -Text $t -Buttons @((T '退出'), $go) -Primary $go -Cancel (T '退出')) -ne $go) { $win.Close() }
 }
 # 本工具自己的记录写不进去（多半是 C 盘满了）：打开时、做完一件事后各查一次，说一次就不再说
 $script:writeTroubleShown = $false

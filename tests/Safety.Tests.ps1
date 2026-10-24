@@ -658,6 +658,9 @@ try { & {
     $ac = [regex]::Match($src, "(?s)if \(\`$script:mode -match '\(\?i\)/autoclean'\) \{.*?\r?\n\}").Value
     Check 'OPS-4 the PC is kept awake while something is being changed, and allowed to sleep again afterwards' ($sw -match '\[FsTools\]::KeepAwake\(\$true\)' -and $src -match 'Exit-BusyLock; \[void\]\[FsTools\]::KeepAwake\(\$false\)' -and $ac -match 'KeepAwake\(\$true\)' -and $dupCode -match 'SetThreadExecutionState')
     Check 'OPS-4 the cleanup page, the move manager and app moves add the battery note' (([regex]::Matches($src, 'Get-PowerNote [$(]')).Count -ge 3)
+    # ============ 25. 用另一个管理员账户的密码打开时说清楚（3.6 运维评审） ============
+    Check 'OPS-5 running as another administrator than the one at the desktop is spelled out' ([bool](Get-AccountMismatch 'PC\admin' 'PC\leon') -and -not (Get-AccountMismatch 'PC\Leon' 'pc\leon') -and -not (Get-AccountMismatch 'PC\leon' ''))
+    Check 'OPS-5 the check runs when the window opens' ($src -match '(?s)function Show-AccountMismatch.*?Get-DesktopUser' -and $src -match 'Show-AccountMismatch; Show-WriteTrouble -Startup')
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue

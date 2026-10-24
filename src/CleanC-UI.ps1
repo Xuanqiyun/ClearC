@@ -6819,6 +6819,24 @@ function Get-PowerNote([double]$bytes, $ps = $null) {
     if ($bytes -lt 2GB -and $pct -ge 30) { return '' }
     return ((T "现在用的是电池（剩 {0}%）。搬家要一段时间，中途没电会停在一半（下次打开可以接着做完或撤回，数据不会丢），最好先插上电源。") -f $pct)
 }
+# 登录桌面的是谁（这个会话里资源管理器的主人），读不到返回空。打开时输入另一个管理员账户的密码，本工具就以那个账户运行
+function Get-DesktopUser {
+    try {
+        $sid = [Diagnostics.Process]::GetCurrentProcess().SessionId
+        foreach ($p in @(Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction Stop)) {
+            if ([int]$p.SessionId -ne $sid) { continue }
+            $o = Invoke-CimMethod -InputObject $p -MethodName GetOwner -ErrorAction Stop
+            if ($o.User) { return ('{0}\{1}' -f $o.Domain, $o.User) }
+        }
+    } catch {}
+    return ''
+}
+# 本工具运行的账户和登录桌面的不是同一个：返回给人看的说明，同一个或读不到时返回空
+function Get-AccountMismatch([string]$me, [string]$desk) {
+    if (-not $me -or -not $desk -or $me -ieq $desk) { return '' }
+    $a = ($me -split '\\')[-1]; $b = ($desk -split '\\')[-1]
+    return ((T "本工具现在以 {0} 的身份运行，但登录桌面的是 {1}（打开时输入的是另一个管理员账户的密码）。清理的缓存、要搬的聊天记录、受保护的个人文件夹，都按 {0} 的账户算，{1} 的不会动。`n`n要整理 {1} 的，把 {1} 设成管理员后用它打开，或者登录 {0} 再用。") -f $a, $b)
+}
 # 打开网页、文本文件、报告：交给资源管理器去开。本工具以管理员身份运行，直接开的话浏览器、记事本也是管理员身份，
 # 网页里的下载、记事本里的「另存为」都带着管理员权限。资源管理器把它交给当前登录用户的桌面，用普通权限打开
 function Open-AsUser([string]$target) {
@@ -7562,6 +7580,9 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+本工具现在以 {0} 的身份运行，但登录桌面的是 {1}（打开时输入的是另一个管理员账户的密码）。清理的缓存、要搬的聊天记录、受保护的个人文件夹，都按 {0} 的账户算，{1} 的不会动。\n\n要整理 {1} 的，把 {1} 设成管理员后用它打开，或者登录 {0} 再用。	ClearC is running as {0}, but {1} is signed in to the desktop (the password of another administrator account was entered when it opened). The caches it cleans, the chat history it moves and the personal folders it protects all belong to {0}; nothing of {1} is touched.\n\nTo tidy up {1}, make {1} an administrator and open ClearC with it, or sign in as {0}.
+本工具没有以你的账户运行	ClearC is not running as your account
+仍然继续	Continue anyway
 现在用的是电池（剩 {0}%）。搬家要一段时间，中途没电会停在一半（下次打开可以接着做完或撤回，数据不会丢），最好先插上电源。	The PC is on battery ({0}% left). Moving takes a while; if the battery runs out it stops halfway (next time you can finish or undo it, and no data is lost), so it is better to plug in first.
 C 盘只剩 {0}，本工具的操作日志写不进去了：刚才删了、搬了什么，有的没有记下来。先腾出一点 C 盘空间（比如清空回收站），以后的操作才会记下来。	C: has only {0} left and ClearC can no longer write its activity log: some of what was just deleted or moved was not recorded. Free a little space on C: first (for example empty the Recycle Bin) so later actions are recorded.
 C 盘只剩 {0}，本工具的设置、操作日志和空间记录都写不进去：改的设置不会保存，删了、搬了什么也记不下来。先腾出一点空间再用，比如清空回收站，或者用「一键清理」。	C: has only {0} left and ClearC cannot write its settings, activity log or space history: changed settings are not saved and what you delete or move is not recorded. Free a little space first, for example empty the Recycle Bin or use One-click cleanup.
@@ -23972,7 +23993,7 @@ $win.Add_ContentRendered({
     if ($script:riskShown) { return }
     $script:riskShown = $true
     $script:prefetchTimer.Start()
-    if (Test-Path -LiteralPath $script:riskFile) { Show-WriteTrouble -Startup; Show-HalfMoves; Show-LooseMoves; Show-BrokenMoves; return }
+    if (Test-Path -LiteralPath $script:riskFile) { Show-AccountMismatch; Show-WriteTrouble -Startup; Show-HalfMoves; Show-LooseMoves; Show-BrokenMoves; return }
     $ans = Show-Sheet -Kind warn -Title (T '使用前请先阅读安全风险提示') `
         -Text (T "本工具会按你的选择删除或搬移电脑上的文件。删除的文件可能无法恢复，存在资料丢失的风险。`n`n每次删除前，请确认这些资料确实不再需要、删除不会给你带来损失；重要资料请先备份。因使用本工具造成的资料丢失或其他损失，责任由使用者自行承担，开发者不承担责任。`n`n完整说明随时可以在左侧「帮助」里查看。") `
         -Confirm (T '我已阅读并了解上述风险，同意自行承担使用本工具的后果。') -Buttons @((T '退出'), (T '同意并继续')) -Primary (T '同意并继续') -Cancel (T '退出')
@@ -23982,7 +24003,7 @@ $win.Add_ContentRendered({
         [IO.File]::WriteAllText($script:riskFile, ((T "{0:yyyy-MM-dd HH:mm:ss}  已同意（版本 {1}）") -f (Get-Date), $script:AppVersion), [Text.Encoding]::UTF8)
     } catch {}
     Write-LogFile (T '用户已同意安全风险提示')
-    Show-HalfMoves; Show-BrokenMoves
+    Show-AccountMismatch; Show-WriteTrouble -Startup; Show-HalfMoves; Show-BrokenMoves
 })
 # 打开时查一下有没有上次没做完的搬家（数据都在，只是要告诉用户在哪）
 # 以前的版本搬走的文件夹，其他账户也能打开：问一次要不要改成和在 C 盘时一样（一个月最多问一次）
@@ -24003,6 +24024,15 @@ function Show-LooseMoves {
     Start-Worker @'
 $sync.AclRes = Repair-MovedAccess $arg.Items
 '@ @{ Items = $l }
+}
+# 以另一个管理员账户运行（登录桌面的是普通账户，打开时输了管理员密码）：每次打开说一声，可以退出
+function Show-AccountMismatch {
+    $me = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+    $t = Get-AccountMismatch $me (Get-DesktopUser)
+    if (-not $t) { return }
+    Write-LogFile $t
+    $go = T '仍然继续'
+    if ((Show-Sheet -Kind warn -Title (T '本工具没有以你的账户运行') -Text $t -Buttons @((T '退出'), $go) -Primary $go -Cancel (T '退出')) -ne $go) { $win.Close() }
 }
 # 本工具自己的记录写不进去（多半是 C 盘满了）：打开时、做完一件事后各查一次，说一次就不再说
 $script:writeTroubleShown = $false

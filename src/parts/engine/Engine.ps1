@@ -3277,6 +3277,24 @@ function Get-PowerNote([double]$bytes, $ps = $null) {
     if ($bytes -lt 2GB -and $pct -ge 30) { return '' }
     return ((T "现在用的是电池（剩 {0}%）。搬家要一段时间，中途没电会停在一半（下次打开可以接着做完或撤回，数据不会丢），最好先插上电源。") -f $pct)
 }
+# 登录桌面的是谁（这个会话里资源管理器的主人），读不到返回空。打开时输入另一个管理员账户的密码，本工具就以那个账户运行
+function Get-DesktopUser {
+    try {
+        $sid = [Diagnostics.Process]::GetCurrentProcess().SessionId
+        foreach ($p in @(Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction Stop)) {
+            if ([int]$p.SessionId -ne $sid) { continue }
+            $o = Invoke-CimMethod -InputObject $p -MethodName GetOwner -ErrorAction Stop
+            if ($o.User) { return ('{0}\{1}' -f $o.Domain, $o.User) }
+        }
+    } catch {}
+    return ''
+}
+# 本工具运行的账户和登录桌面的不是同一个：返回给人看的说明，同一个或读不到时返回空
+function Get-AccountMismatch([string]$me, [string]$desk) {
+    if (-not $me -or -not $desk -or $me -ieq $desk) { return '' }
+    $a = ($me -split '\\')[-1]; $b = ($desk -split '\\')[-1]
+    return ((T "本工具现在以 {0} 的身份运行，但登录桌面的是 {1}（打开时输入的是另一个管理员账户的密码）。清理的缓存、要搬的聊天记录、受保护的个人文件夹，都按 {0} 的账户算，{1} 的不会动。`n`n要整理 {1} 的，把 {1} 设成管理员后用它打开，或者登录 {0} 再用。") -f $a, $b)
+}
 # 打开网页、文本文件、报告：交给资源管理器去开。本工具以管理员身份运行，直接开的话浏览器、记事本也是管理员身份，
 # 网页里的下载、记事本里的「另存为」都带着管理员权限。资源管理器把它交给当前登录用户的桌面，用普通权限打开
 function Open-AsUser([string]$target) {
