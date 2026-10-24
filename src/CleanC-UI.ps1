@@ -6767,6 +6767,24 @@ function Get-DestChoices($drives = $null) {
     }
     return $out.ToArray()
 }
+# 这块盘有没有用 BitLocker（包括家庭版的「设备加密」）加密：$true 加密了（包括正在加密、暂停保护），$false 没加密，$null 查不到
+function Get-DriveEncrypted([string]$drive) {
+    if (-not $drive -or $drive.Length -lt 2 -or $drive[1] -ne ':') { return $null }
+    try {
+        $v = @(Get-CimInstance -Namespace 'root\CIMV2\Security\MicrosoftVolumeEncryption' -ClassName Win32_EncryptableVolume -Filter ("DriveLetter='{0}'" -f $drive.Substring(0, 2).ToUpperInvariant()) -ErrorAction Stop)
+        if ($v.Count -eq 0) { return $false }   # 不在列表里：这块盘不能用 BitLocker
+        return ([int]$v[0].ConversionStatus -ne 0)   # 0 = 完全没加密
+    } catch { return $null }
+}
+# 从加密的 C 盘搬到没加密的盘：确认框里加的一段话。查不到、两边一样、C 盘没加密时返回空。$cEnc / $dEnc 是测试用的
+function Get-EncryptionWarning([string]$dest, $cEnc = 'ask', $dEnc = 'ask') {
+    if (-not $dest -or $dest.Length -lt 2) { return '' }
+    if ($cEnc -is [string] -and $cEnc -eq 'ask') { $cEnc = Get-DriveEncrypted $env:SystemDrive }
+    if (-not ($cEnc -is [bool] -and $cEnc)) { return '' }
+    if ($dEnc -is [string] -and $dEnc -eq 'ask') { $dEnc = Get-DriveEncrypted $dest.Substring(0, 2) }
+    if (-not ($dEnc -is [bool]) -or $dEnc) { return '' }
+    return ((T "C 盘用 BitLocker 加密了，{0} 盘没有：搬过去的聊天记录和文件在那块盘上不加密，电脑丢了或者硬盘被拆走，别人能直接读出来。介意的话，先给 {0} 盘打开 BitLocker（控制面板 →「BitLocker 驱动器加密」）再搬。") -f $dest.Substring(0, 1).ToUpperInvariant())
+}
 # 打开网页、文本文件、报告：交给资源管理器去开。本工具以管理员身份运行，直接开的话浏览器、记事本也是管理员身份，
 # 网页里的下载、记事本里的「另存为」都带着管理员权限。资源管理器把它交给当前登录用户的桌面，用普通权限打开
 function Open-AsUser([string]$target) {
@@ -7510,6 +7528,7 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+C 盘用 BitLocker 加密了，{0} 盘没有：搬过去的聊天记录和文件在那块盘上不加密，电脑丢了或者硬盘被拆走，别人能直接读出来。介意的话，先给 {0} 盘打开 BitLocker（控制面板 →「BitLocker 驱动器加密」）再搬。	C: is encrypted with BitLocker but {0}: is not: the chat history and files you move are not encrypted on that drive, so if the PC is lost or the disk is taken out, anyone can read them. If that matters, turn on BitLocker for {0}: first (Control Panel → "BitLocker Drive Encryption"), then move.
 搬走聊天记录…	Move chat history…
 自动扫描，清掉所有安全项和默认选中的缓存、临时文件。只删不搬：聊天记录在下面单独一张卡片里，要搬自己点。不会关闭休眠、不清空回收站，个人文件夹（桌面、文档、下载等）里的东西一律不删。	Scans, then clears all safe items and the caches and temporary files selected by default. It only deletes and never moves: chat history has its own card below; move it there if you want. It never turns off hibernation, never empties the Recycle Bin, and never deletes anything in personal folders (Desktop, Documents, Downloads and so on).
 搬走聊天记录	Move chat history
@@ -16727,7 +16746,7 @@ function Invoke-RunSelected([string]$title = (T '执行所选操作'), [object[]
     $total = [double]0; foreach ($x in $plan) { $total += $x.Bytes }
     $items = @($plan | ForEach-Object { (T "{0}　{1}") -f $_.Action, $_.Name })
     $text = (T "涉及约 {0}。大文件夹搬家可能要几十分钟，进度会显示在窗口中间，做完会告诉你结果。") -f (GB $total)
-    if ($moves) { $text += ((T "`n`n要搬的东西会放到 {0}。") -f $dest) }
+    if ($moves) { $text += ((T "`n`n要搬的东西会放到 {0}。") -f $dest); $enc = Get-EncryptionWarning $dest; if ($enc) { $text += "`n`n" + $enc } }
     # 有删除项时，必须勾选「确认不会带来损失」才能开始
     $dels = @($plan | Where-Object { $_.Action -eq (T '删除') })
     $ack = ''
@@ -19631,6 +19650,7 @@ function Start-MoveMany {
     $text = (T "把下面 {0} 项搬到 {1}，一共约 {2}。每一项都先复制、核对两边一致，再把 C 盘上的原位置换成链接，删掉 C 盘上的那份；软件照常使用，以后可以在「已经搬走的」里搬回 C 盘。") -f $sel.Count, $dest, (Fmt $total)
     if ($who) { $text += ((T "`n`n{0} 正在运行，搬之前会替你关掉（包括屏幕右下角托盘里的）。没保存的内容请先保存。") -f $who) }
     $text += (T "`n`n要注意：目标盘要一直接着；不要删除、改名或移动目标盘上的 CDriveMoved 文件夹。")
+    $enc = Get-EncryptionWarning $dest; if ($enc) { $text += "`n`n" + $enc }
     $items = @($sel | ForEach-Object { (T "{0}（{1}）") -f $_.Name, $_.SizeText })
     $btn = if ($who) { (T '关掉并搬走') } else { (T '搬到其他盘') }
     if ((Show-Sheet -Title ((T "把 {0} 项搬到其他盘？") -f $sel.Count) -Text $text -Items $items -Buttons @((T '取消'), $btn) -Primary $btn -Cancel (T '取消')) -ne $btn) { return }
@@ -20772,6 +20792,7 @@ function Start-AppMove($r) {
     $text = (T "把安装文件夹 {0}（{1}）整个搬到 {2}，C 盘原位置留一个链接。桌面快捷方式、开始菜单、卸载和自动更新都照常可用，不用重装。`n`n搬之前先核对两边的文件完全一致，再删掉 C 盘上的那份。{3}") -f $loc, $r.SizeText, $dest, $small
     if ($running.Count -gt 0) { $text += (T "`n`n{0} 正在运行，搬之前会替你关掉（没保存的内容请先保存）。") -f ($running -join (T '、')) }
     $text += (T "`n`n要注意：{0} 盘要一直接着；以后软件大版本升级时，个别安装程序会把它重新装回 C 盘，到时在这里再搬一次就好。要搬回来，到「搬家管理」点「搬回 C 盘」。") -f $dest.Substring(0, 1)
+    $enc = Get-EncryptionWarning $dest; if ($enc) { $text += "`n`n" + $enc }
     $btn = if ($running.Count -gt 0) { (T '关掉并搬走') } else { (T '搬到其他盘') }
     if ((Show-Sheet -Title ((T "把「{0}」搬到其他盘？") -f $r.Name) -Text $text -Buttons @((T '取消'), $btn) -Primary $btn -Cancel (T '取消')) -ne $btn) { return }
     $item = @{ N = $r.Name; Paths = @($loc); Apps = @(); Kill = @(); KillDirs = @(); Restrict = $true; Allowed = @($running)

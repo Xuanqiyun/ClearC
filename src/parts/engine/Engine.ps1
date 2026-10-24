@@ -3232,6 +3232,24 @@ function Get-DestChoices($drives = $null) {
     }
     return $out.ToArray()
 }
+# 这块盘有没有用 BitLocker（包括家庭版的「设备加密」）加密：$true 加密了（包括正在加密、暂停保护），$false 没加密，$null 查不到
+function Get-DriveEncrypted([string]$drive) {
+    if (-not $drive -or $drive.Length -lt 2 -or $drive[1] -ne ':') { return $null }
+    try {
+        $v = @(Get-CimInstance -Namespace 'root\CIMV2\Security\MicrosoftVolumeEncryption' -ClassName Win32_EncryptableVolume -Filter ("DriveLetter='{0}'" -f $drive.Substring(0, 2).ToUpperInvariant()) -ErrorAction Stop)
+        if ($v.Count -eq 0) { return $false }   # 不在列表里：这块盘不能用 BitLocker
+        return ([int]$v[0].ConversionStatus -ne 0)   # 0 = 完全没加密
+    } catch { return $null }
+}
+# 从加密的 C 盘搬到没加密的盘：确认框里加的一段话。查不到、两边一样、C 盘没加密时返回空。$cEnc / $dEnc 是测试用的
+function Get-EncryptionWarning([string]$dest, $cEnc = 'ask', $dEnc = 'ask') {
+    if (-not $dest -or $dest.Length -lt 2) { return '' }
+    if ($cEnc -is [string] -and $cEnc -eq 'ask') { $cEnc = Get-DriveEncrypted $env:SystemDrive }
+    if (-not ($cEnc -is [bool] -and $cEnc)) { return '' }
+    if ($dEnc -is [string] -and $dEnc -eq 'ask') { $dEnc = Get-DriveEncrypted $dest.Substring(0, 2) }
+    if (-not ($dEnc -is [bool]) -or $dEnc) { return '' }
+    return ((T "C 盘用 BitLocker 加密了，{0} 盘没有：搬过去的聊天记录和文件在那块盘上不加密，电脑丢了或者硬盘被拆走，别人能直接读出来。介意的话，先给 {0} 盘打开 BitLocker（控制面板 →「BitLocker 驱动器加密」）再搬。") -f $dest.Substring(0, 1).ToUpperInvariant())
+}
 # 打开网页、文本文件、报告：交给资源管理器去开。本工具以管理员身份运行，直接开的话浏览器、记事本也是管理员身份，
 # 网页里的下载、记事本里的「另存为」都带着管理员权限。资源管理器把它交给当前登录用户的桌面，用普通权限打开
 function Open-AsUser([string]$target) {
