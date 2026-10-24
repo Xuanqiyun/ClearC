@@ -113,9 +113,11 @@ function Load-Auto {
     $ctl.AutoCleanWhen.SelectedIndex = $idx
     $where = (T "不用开着本工具，也不用设置开机启动。开启后会在 Windows「任务计划程序」里建一个任务（{0}）：每次登录电脑 2 分钟后、以及每天中午 12 点，Windows 会在后台运行一下本工具检查 C 盘，空间够就什么都不显示，查完马上退出。关掉开关就删除这个任务。`n任务运行的是复制到 {1} 的那一份（那里只有管理员能改，别人换不掉它）；两个开关都关掉后这一份会删掉。")
     $ctl.AutoRemindNote.Text = if ($hasExe) { $where -f $script:taskRemind, (Get-TaskExePath) } else { (T '只有 exe 版本支持自动提醒。') }
+    if ($r1) { $ri = Get-TaskRunInfo $script:taskRemind; if ($ri) { $ctl.AutoRemindNote.Text += "`n" + $ri } }
     $last = ''
     foreach ($row in (Read-OpLog)) { if ($row.What -in @('每周自动清理完成', (T '每周自动清理完成'))) { $last = (T "上次自动清理：{0}，{1}") -f $row.Time, $row.Detail; break } }
-    $ctl.AutoCleanNote.Text = if ($hasExe) { ((T "任务名：{0}。") -f $script:taskClean) + $(if ($last) { "`n$last" } else { '' }) } else { (T '只有 exe 版本支持每周自动清理。') }
+    $ci = if ($r2) { Get-TaskRunInfo $script:taskClean } else { '' }
+    $ctl.AutoCleanNote.Text = if ($hasExe) { ((T "任务名：{0}。") -f $script:taskClean) + $(if ($ci) { "`n$ci" } else { '' }) + $(if ($last) { "`n$last" } else { '' }) } else { (T '只有 exe 版本支持每周自动清理。') }
     $ctl.AutoCleanNote.Text += "`n" + $(if (Get-StorageSenseOn) { (T 'Windows 自带的「存储感知」现在是开着的：它也会定期清临时文件和回收站，和这里的自动清理不冲突，只是会各做一遍。') } else { (T 'Windows 自带的「存储感知」现在是关着的（在 Windows 设置 → 系统 → 存储里）。') })
     $script:autoSync = $false
     # 选项卡上写明开着还是关着，不点进去也知道

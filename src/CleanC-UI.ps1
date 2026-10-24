@@ -6889,6 +6889,22 @@ function Get-AccountMismatch([string]$me, [string]$desk) {
     $a = ($me -split '\\')[-1]; $b = ($desk -split '\\')[-1]
     return ((T "本工具现在以 {0} 的身份运行，但登录桌面的是 {1}（打开时输入的是另一个管理员账户的密码）。清理的缓存、要搬的聊天记录、受保护的个人文件夹，都按 {0} 的账户算，{1} 的不会动。`n`n要整理 {1} 的，把 {1} 设成管理员后用它打开，或者登录 {0} 再用。") -f $a, $b)
 }
+# 定时任务上次、下次运行的时间和结果，写成一句话。$code 是任务计划程序给的结果码
+function Format-TaskRunInfo($last, [long]$code, $next) {
+    $fmt = { param($d) if ($d -is [datetime] -and $d.Year -gt 2000) { $d.ToString('yyyy-MM-dd HH:mm') } else { '' } }
+    $l = & $fmt $last; $n = & $fmt $next
+    $res = switch ($code) { 0 { (T '成功') } 267009 { (T '正在运行') } 267011 { '' } default { (T "出错（代码 0x{0:X8}）") -f ([uint32]($code -band 0xFFFFFFFF)) } }
+    $t = if ($l -and $res) { (T "上次运行：{0}，{1}") -f $l, $res } elseif ($l) { (T "上次运行：{0}") -f $l } else { (T '还没运行过') }
+    if ($n) { $t += (T '；') + ((T "下次：{0}") -f $n) }
+    return $t
+}
+function Get-TaskRunInfo([string]$name) {
+    try {
+        $i = $name.LastIndexOf('\')
+        $info = Get-ScheduledTaskInfo -TaskPath ('\' + $name.Substring(0, $i + 1)) -TaskName $name.Substring($i + 1) -ErrorAction Stop
+        return (Format-TaskRunInfo $info.LastRunTime ([long]$info.LastTaskResult) $info.NextRunTime)
+    } catch { return '' }
+}
 # 打开网页、文本文件、报告：交给资源管理器去开。本工具以管理员身份运行，直接开的话浏览器、记事本也是管理员身份，
 # 网页里的下载、记事本里的「另存为」都带着管理员权限。资源管理器把它交给当前登录用户的桌面，用普通权限打开
 function Open-AsUser([string]$target) {
@@ -7648,6 +7664,13 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+成功	succeeded
+正在运行	running now
+出错（代码 0x{0:X8}）	failed (code 0x{0:X8})
+上次运行：{0}，{1}	Last run: {0}, {1}
+上次运行：{0}	Last run: {0}
+还没运行过	Has not run yet
+下次：{0}	next: {0}
 清后要重建（删了要重新下载或重新生成，第一次打开会慢一点；默认也清，执行前会单独列出来）	Rebuilt after cleaning (downloaded or generated again after deletion, so the first start is a bit slower; cleaned by default and listed separately before running)
 默认不清（有代价，看清说明再选）	Skipped by default (comes at a cost; read the description before selecting)
 开始处理所选项	Process selected
@@ -21773,9 +21796,11 @@ function Load-Auto {
     $ctl.AutoCleanWhen.SelectedIndex = $idx
     $where = (T "不用开着本工具，也不用设置开机启动。开启后会在 Windows「任务计划程序」里建一个任务（{0}）：每次登录电脑 2 分钟后、以及每天中午 12 点，Windows 会在后台运行一下本工具检查 C 盘，空间够就什么都不显示，查完马上退出。关掉开关就删除这个任务。`n任务运行的是复制到 {1} 的那一份（那里只有管理员能改，别人换不掉它）；两个开关都关掉后这一份会删掉。")
     $ctl.AutoRemindNote.Text = if ($hasExe) { $where -f $script:taskRemind, (Get-TaskExePath) } else { (T '只有 exe 版本支持自动提醒。') }
+    if ($r1) { $ri = Get-TaskRunInfo $script:taskRemind; if ($ri) { $ctl.AutoRemindNote.Text += "`n" + $ri } }
     $last = ''
     foreach ($row in (Read-OpLog)) { if ($row.What -in @('每周自动清理完成', (T '每周自动清理完成'))) { $last = (T "上次自动清理：{0}，{1}") -f $row.Time, $row.Detail; break } }
-    $ctl.AutoCleanNote.Text = if ($hasExe) { ((T "任务名：{0}。") -f $script:taskClean) + $(if ($last) { "`n$last" } else { '' }) } else { (T '只有 exe 版本支持每周自动清理。') }
+    $ci = if ($r2) { Get-TaskRunInfo $script:taskClean } else { '' }
+    $ctl.AutoCleanNote.Text = if ($hasExe) { ((T "任务名：{0}。") -f $script:taskClean) + $(if ($ci) { "`n$ci" } else { '' }) + $(if ($last) { "`n$last" } else { '' }) } else { (T '只有 exe 版本支持每周自动清理。') }
     $ctl.AutoCleanNote.Text += "`n" + $(if (Get-StorageSenseOn) { (T 'Windows 自带的「存储感知」现在是开着的：它也会定期清临时文件和回收站，和这里的自动清理不冲突，只是会各做一遍。') } else { (T 'Windows 自带的「存储感知」现在是关着的（在 Windows 设置 → 系统 → 存储里）。') })
     $script:autoSync = $false
     # 选项卡上写明开着还是关着，不点进去也知道

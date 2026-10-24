@@ -3315,6 +3315,22 @@ function Get-AccountMismatch([string]$me, [string]$desk) {
     $a = ($me -split '\\')[-1]; $b = ($desk -split '\\')[-1]
     return ((T "本工具现在以 {0} 的身份运行，但登录桌面的是 {1}（打开时输入的是另一个管理员账户的密码）。清理的缓存、要搬的聊天记录、受保护的个人文件夹，都按 {0} 的账户算，{1} 的不会动。`n`n要整理 {1} 的，把 {1} 设成管理员后用它打开，或者登录 {0} 再用。") -f $a, $b)
 }
+# 定时任务上次、下次运行的时间和结果，写成一句话。$code 是任务计划程序给的结果码
+function Format-TaskRunInfo($last, [long]$code, $next) {
+    $fmt = { param($d) if ($d -is [datetime] -and $d.Year -gt 2000) { $d.ToString('yyyy-MM-dd HH:mm') } else { '' } }
+    $l = & $fmt $last; $n = & $fmt $next
+    $res = switch ($code) { 0 { (T '成功') } 267009 { (T '正在运行') } 267011 { '' } default { (T "出错（代码 0x{0:X8}）") -f ([uint32]($code -band 0xFFFFFFFF)) } }
+    $t = if ($l -and $res) { (T "上次运行：{0}，{1}") -f $l, $res } elseif ($l) { (T "上次运行：{0}") -f $l } else { (T '还没运行过') }
+    if ($n) { $t += (T '；') + ((T "下次：{0}") -f $n) }
+    return $t
+}
+function Get-TaskRunInfo([string]$name) {
+    try {
+        $i = $name.LastIndexOf('\')
+        $info = Get-ScheduledTaskInfo -TaskPath ('\' + $name.Substring(0, $i + 1)) -TaskName $name.Substring($i + 1) -ErrorAction Stop
+        return (Format-TaskRunInfo $info.LastRunTime ([long]$info.LastTaskResult) $info.NextRunTime)
+    } catch { return '' }
+}
 # 打开网页、文本文件、报告：交给资源管理器去开。本工具以管理员身份运行，直接开的话浏览器、记事本也是管理员身份，
 # 网页里的下载、记事本里的「另存为」都带着管理员权限。资源管理器把它交给当前登录用户的桌面，用普通权限打开
 function Open-AsUser([string]$target) {
