@@ -845,7 +845,15 @@ try { & {
         @{ D1 = $d1; N1 = $n1; F1 = $f1; F2 = $f2 }
     }
     $hp1 = $null; if ($hres.D1) { $hns = New-Object System.Xml.XmlNamespaceManager $hres.D1.NameTable; $hns.AddNamespace('w', 'http://schemas.microsoft.com/winfx/2006/xaml/presentation'); $hns.AddNamespace('x', 'http://schemas.microsoft.com/winfx/2006/xaml'); $hp1 = $hres.D1.SelectSingleNode("//w:Grid[@x:Name='PageHelp']", $hns) }
-    $fragOk = { param($f) $ok = $false; try { $null = [xml]$f; $ok = $true } catch {}; $ok -and $f -match 'x:Name="HelpNav"' -and $f -match 'x:Name="HelpSections"' -and $f -match 'x:Name="FeedbackCard"' -and $f -match 'x:Name="BtnSelfTest"' -and $f -notmatch 'StaticResource' }
+    # XAML 的规矩：<Grid.RowDefinitions> 这类属性元素上不能有任何属性（xmlns 也不行）；根上不能留着隐藏、边距、名字
+    $fragOk = {
+        param($f)
+        $fx = $null; try { $fx = [xml]$f } catch {}
+        if (-not $fx) { return $false }
+        $propAttr = @($fx.SelectNodes('//*') | Where-Object { $_.LocalName.Contains('.') -and $_.Attributes.Count -gt 0 })
+        $rootAttr = @($fx.DocumentElement.Attributes | Where-Object { $_.Name -ne 'xmlns' -and -not $_.Name.StartsWith('xmlns:') })
+        $propAttr.Count -eq 0 -and $rootAttr.Count -eq 0 -and $fx.DocumentElement.LocalName -eq 'Grid' -and $f -match 'x:Name="HelpNav"' -and $f -match 'x:Name="HelpSections"' -and $f -match 'x:Name="FeedbackCard"' -and $f -match 'x:Name="BtnSelfTest"' -and $f -notmatch 'StaticResource'
+    }
     Check ("ARC-10 the window opens without the help content: the empty help page is filled from its own XAML on first use ({0:N0} of {1:N0} characters left)" -f $(if ($hres.D1) { $hres.D1.OuterXml.Length } else { 0 }), $hres.N1) ($hfn.Count -eq 2 -and $hp1 -and @($hp1.ChildNodes | Where-Object { $_.NodeType -eq 'Element' }).Count -eq 0 -and $hres.D1.OuterXml.Length -lt $hres.N1 * 0.85 -and (& $fragOk $hres.F1) -and (& $fragOk $hres.F2) -and $hres.F2 -match 'Getting started' -and $hres.F1 -match '快速上手')
     $helpNamesSrc = [regex]::Match($src, "\`$script:helpNames = @\(([^)]*)\)").Groups[1].Value
     $hn = @([regex]::Matches($helpNamesSrc, "'(\w+)'") | ForEach-Object { $_.Groups[1].Value })
