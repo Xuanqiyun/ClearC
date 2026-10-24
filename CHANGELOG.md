@@ -1,5 +1,11 @@
 # 更新记录
 
+## 3.6.1
+- **空间地图：盘的容量只写一次**。原来 C 盘、D 盘的「已用 / 共多少」在下拉框、盘的卡片、下面的概览里各写一遍，有时还差 0.01 GB。现在下拉框只写盘符；卡片左边写「已用 / 共 · 百分比」，右边写「剩多少」；下面的概览只讲已用的空间里系统与软件、个人文件、可清理的缓存、其他各占多少，几类加起来正好是已用空间（硬链接在几个文件夹里各算一次的，按比例缩回）。设置里关掉了磁盘卡片时，概览才写总量。在盘的最上一层，列表上面那行不再写和已用空间对不上的「这一层共多少」。
+- 所有页面的「已用、剩多少」都按同一种算法读，同一块盘在各处的数一样。搬家目标下面的提示不再重复下拉框里的空闲空间。
+- **行距和字距**：会换行的文字按字号给约 1.5 倍行距（12 号字 19、13 号 21、14 号 22），几行中文不再挤在一起；一行的标签不变，和旁边的按钮照样对齐。缩放 125% 以上的屏幕改用 Ideal 字形排列，字和字之间不再忽宽忽窄。
+- Space map: each drive's size is shown once. The drive picker shows only the letter; each drive card shows used / total / % on the left and free space on the right; the overview below only breaks the used space into system and apps, personal files, cleanable caches and other, adding up to the used space. All pages read drive usage the same way. Wrapped text now has about 1.5x line spacing, and on screens scaled 125% or more text uses ideal glyph spacing.
+
 ## 3.6
 按三份评审（安全和运维、用户体验、架构）一条一条改的，清单和每条的测试见 docs/BACKLOG.md。
 - **删除更稳**：所有删用户文件的地方都走同一个入口，删前查个人文件夹、系统位置、链接和回收站放不放得下，删后核对、写操作日志；删重复文件也一个一个记下来。存密码、证书、密钥的文件夹，电脑上所有账户的都挡住。设置文件先写到临时文件再替换，读不出来时一律不删。
