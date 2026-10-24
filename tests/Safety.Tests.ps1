@@ -736,6 +736,8 @@ try { & {
     $sd = [regex]::Match($src, '(?s)function Start-DiagPack \{.*?\r?\n\}').Value
     Check 'SEC-10 the dumps can be left out, and the package carries a manifest of everything in it' ($dp -match '\[switch\]\$NoDumps' -and $dp -match "if \(-not \`$NoDumps\)" -and $dp -match "'manifest\.txt'")
     Check 'SEC-10 before exporting, one sheet lists what goes in (dumps, logs, computer and user names) and offers to leave the dumps out; the file name has no computer name' ($sd.IndexOf('Show-Sheet') -lt $sd.IndexOf('SaveFileDialog') -and $sd -match "T '不带转储导出'" -and $sd -notmatch 'COMPUTERNAME' -and $sd -match 'NoDumps')
+    # ============ 39. 「反馈和新版本」里显示本机 exe 的 SHA256，可以和发布页对比（3.6 安全评审） ============
+    Check 'SEC-9 the help shows the SHA256 of this exe so it can be compared with the release page' ($src -match 'x:Name="SelfHash"' -and $src -match 'x:Name="BtnCopyHash"' -and $src -match '(?s)function Show-SelfHash.*?Get-FileHash -LiteralPath \$env:CLEANC_SELF -Algorithm SHA256')
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue

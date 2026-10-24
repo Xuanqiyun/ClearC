@@ -225,8 +225,9 @@ def page_cards(pg, risk):
         w('<TextBlock Style="{StaticResource HelpBody}" Text="%s"/>' % qa(body))
         w.push('<StackPanel Orientation="Horizontal" Margin="0,10,0,0">')
         for k, (name, text) in enumerate(btns):
-            if name == 'CopyHint': w('<TextBlock x:Name="CopyHint" Style="{StaticResource Caption}" Foreground="#248A3D" Margin="14,0,0,0"/>')
-            else: w('<Button x:Name="%s" Content="%s"%s/>' % (name, qa(text), ' Margin="0,0,8,0"' if k < len(btns) - 1 and btns[k + 1][0] != 'CopyHint' else ''))
+            if name == 'CopyHint': w('<TextBlock x:Name="CopyHint" Style="{StaticResource Caption}" Foreground="#1D7A35" Margin="14,0,0,0"/>')
+            elif name == 'SelfHash': w('<TextBlock x:Name="SelfHash" Style="{StaticResource Caption}" FontFamily="Consolas" VerticalAlignment="Center" TextWrapping="Wrap" Margin="14,0,0,0"/>')
+            else: w('<Button x:Name="%s" Content="%s"%s/>' % (name, qa(text), ' Margin="0,0,8,0"' if k < len(btns) - 1 and btns[k + 1][0] not in ('CopyHint', 'SelfHash') else ''))
         w.pop('</StackPanel>')
         w.pop('</StackPanel>')
     w.pop('</StackPanel>')
@@ -287,8 +288,9 @@ def feedback_card(w, fb):
         w('<TextBlock Style="{StaticResource HelpBody}" Text="%s"/>' % qa(body))
         w.push('<StackPanel Orientation="Horizontal" Margin="0,14,0,0">')
         for k, (name, text) in enumerate(btns):
-            if name == 'CopyHint': w('<TextBlock x:Name="CopyHint" Style="{StaticResource Caption}" Foreground="#248A3D" Margin="14,0,0,0"/>')
-            else: w('<Button x:Name="%s" Content="%s"%s/>' % (name, qa(text), ' Margin="0,0,8,0"' if k < len(btns) - 1 and btns[k + 1][0] != 'CopyHint' else ''))
+            if name == 'CopyHint': w('<TextBlock x:Name="CopyHint" Style="{StaticResource Caption}" Foreground="#1D7A35" Margin="14,0,0,0"/>')
+            elif name == 'SelfHash': w('<TextBlock x:Name="SelfHash" Style="{StaticResource Caption}" FontFamily="Consolas" VerticalAlignment="Center" TextWrapping="Wrap" Margin="14,0,0,0"/>')
+            else: w('<Button x:Name="%s" Content="%s"%s/>' % (name, qa(text), ' Margin="0,0,8,0"' if k < len(btns) - 1 and btns[k + 1][0] not in ('CopyHint', 'SelfHash') else ''))
         w.pop('</StackPanel>')
         w.pop('</StackPanel>')
     w.pop('</StackPanel>')

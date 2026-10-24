@@ -158,6 +158,8 @@ PAGE = dict(
              [('BtnSelfTest', '检查扫描功能')]),
             ('检查新版本', '只在你点的时候连一次 GitHub。',
              [('BtnCheckUpdate', '检查新版本')]),
+            ('核对这个文件', '本工具没有代码签名。把下面这串 SHA256 和 GitHub 发布页上写的对比，一样就说明你下载的 exe 没被改过。',
+             [('BtnCopyHash', '复制 SHA256'), ('SelfHash', '')]),
         ]),
 )
 

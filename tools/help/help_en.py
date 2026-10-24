@@ -158,6 +158,8 @@ PAGE = dict(
              [('BtnSelfTest', 'Check scanning')]),
             ('Check for updates', 'ClearC contacts GitHub only when you click this button.',
              [('BtnCheckUpdate', 'Check for updates')]),
+            ('Check this file', 'ClearC is not code-signed. Compare the SHA256 below with the one on the GitHub release page; if they match, the exe you downloaded has not been changed.',
+             [('BtnCopyHash', 'Copy SHA256'), ('SelfHash', '')]),
         ]),
 )
 

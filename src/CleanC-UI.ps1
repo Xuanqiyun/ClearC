@@ -7721,6 +7721,11 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+核对这个文件	Check this file
+本工具没有代码签名。把下面这串 SHA256 和 GitHub 发布页上写的对比，一样就说明你下载的 exe 没被改过。	ClearC is not code-signed. Compare the SHA256 below with the one on the GitHub release page; if they match, the exe you downloaded has not been changed.
+复制 SHA256	Copy SHA256
+现在运行的是脚本，不是 exe，没有可以核对的文件	Running as a script, not the exe, so there is no file to check
+SHA256 已复制	SHA256 copied
 蓝屏转储：导出时选了不带	Crash dumps: left out when exporting
 腾挪 ClearC 诊断包里的文件（大小是压缩前的字节数）：	Files in this ClearC diagnostics package (sizes are uncompressed bytes):
 健康报告：硬件、Windows 和硬盘的状态	Health report: hardware, Windows and disk status
@@ -11112,7 +11117,7 @@ $script:helpEnXaml = @'
                   <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
                     <Button x:Name="BtnCopyDiag" Content="Copy diagnostic info" Margin="0,0,8,0"/>
                     <Button x:Name="BtnOpenLog" Content="Open run log file"/>
-                    <TextBlock x:Name="CopyHint" Style="{StaticResource Caption}" Foreground="#248A3D" Margin="14,0,0,0"/>
+                    <TextBlock x:Name="CopyHint" Style="{StaticResource Caption}" Foreground="#1D7A35" Margin="14,0,0,0"/>
                   </StackPanel>
                 </StackPanel>
                 <StackPanel x:Name="FbSelfTest" Margin="0,24,0,0">
@@ -11129,6 +11134,15 @@ $script:helpEnXaml = @'
                   <TextBlock Style="{StaticResource HelpBody}" Text="ClearC contacts GitHub only when you click this button."/>
                   <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
                     <Button x:Name="BtnCheckUpdate" Content="Check for updates"/>
+                  </StackPanel>
+                </StackPanel>
+                <StackPanel x:Name="FbCopyHash" Margin="0,24,0,0">
+                  <Border Height="1" Background="#EDEDF0" Margin="0,0,0,24"/>
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Check this file"/>
+                  <TextBlock Style="{StaticResource HelpBody}" Text="ClearC is not code-signed. Compare the SHA256 below with the one on the GitHub release page; if they match, the exe you downloaded has not been changed."/>
+                  <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                    <Button x:Name="BtnCopyHash" Content="Copy SHA256"/>
+                    <TextBlock x:Name="SelfHash" Style="{StaticResource Caption}" FontFamily="Consolas" VerticalAlignment="Center" TextWrapping="Wrap" Margin="14,0,0,0"/>
                   </StackPanel>
                 </StackPanel>
               </StackPanel>
@@ -15488,7 +15502,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                   <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
                     <Button x:Name="BtnCopyDiag" Content="复制诊断信息" Margin="0,0,8,0"/>
                     <Button x:Name="BtnOpenLog" Content="打开运行记录文件"/>
-                    <TextBlock x:Name="CopyHint" Style="{StaticResource Caption}" Foreground="#248A3D" Margin="14,0,0,0"/>
+                    <TextBlock x:Name="CopyHint" Style="{StaticResource Caption}" Foreground="#1D7A35" Margin="14,0,0,0"/>
                   </StackPanel>
                 </StackPanel>
                 <StackPanel x:Name="FbSelfTest" Margin="0,24,0,0">
@@ -15505,6 +15519,15 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                   <TextBlock Style="{StaticResource HelpBody}" Text="只在你点的时候连一次 GitHub。"/>
                   <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
                     <Button x:Name="BtnCheckUpdate" Content="检查新版本"/>
+                  </StackPanel>
+                </StackPanel>
+                <StackPanel x:Name="FbCopyHash" Margin="0,24,0,0">
+                  <Border Height="1" Background="#EDEDF0" Margin="0,0,0,24"/>
+                  <TextBlock Style="{StaticResource HelpLead}" Text="核对这个文件"/>
+                  <TextBlock Style="{StaticResource HelpBody}" Text="本工具没有代码签名。把下面这串 SHA256 和 GitHub 发布页上写的对比，一样就说明你下载的 exe 没被改过。"/>
+                  <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                    <Button x:Name="BtnCopyHash" Content="复制 SHA256"/>
+                    <TextBlock x:Name="SelfHash" Style="{StaticResource Caption}" FontFamily="Consolas" VerticalAlignment="Center" TextWrapping="Wrap" Margin="14,0,0,0"/>
                   </StackPanel>
                 </StackPanel>
               </StackPanel>
@@ -15669,7 +15692,7 @@ foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageM
                'BtnMovesRefresh','MovesInfo','MovesList','EmptyMoves','EmptyMovesText',
                'AutoRemindOn','AutoRemindGB','AutoRemindNote','AutoCleanOn','AutoCleanNote','HistInfo','HistChart','HistLast','HistFirst','ATabRemind','ATabClean','ATabHist','ATabRemindState','ATabCleanState','ATabHistState','ATabRemindB','ATabCleanB','ATabHistB','AutoViewRemind','AutoViewClean','AutoViewHist',
                'BtnLogOpenDir','BtnLogRefresh','LogKeep','LogKeepNote','LogCats','LogRange','LogSearch','LogCount','LogList','EmptyLog','EmptyLogText',
-               'BtnLang','BtnLangText','BtnTheme','BtnThemeText','NavHelp','PageHelp','HelpScroll','HelpSections','HelpFaq','HelpNav','HelpPaneStart','HelpPaneFaq','BtnHelpPrev','BtnHelpNext','FeedbackCard','RiskCard','BtnFeedback','BtnGitHub','BtnIssue','BtnCopyDiag','BtnOpenLog','CopyHint','BtnSelfTest','BtnCheckUpdate','MapFast','MapChat',
+               'BtnLang','BtnLangText','BtnTheme','BtnThemeText','NavHelp','PageHelp','HelpScroll','HelpSections','HelpFaq','HelpNav','HelpPaneStart','HelpPaneFaq','BtnHelpPrev','BtnHelpNext','FeedbackCard','RiskCard','BtnFeedback','BtnGitHub','BtnIssue','BtnCopyDiag','BtnOpenLog','CopyHint','BtnSelfTest','BtnCheckUpdate','SelfHash','BtnCopyHash','MapFast','MapChat',
                'NavClean','NavDup','PageClean','PageDup','AppVer','BtnLog','BtnLogText','BtnLogHide','LogPanel','Dim',
                'CapFree','CapTotal','CapBar','CapReclaim','EmptyClean','EmptyCleanText','EmptyDup','EmptyDupText','SizeCustomRow',
                'DestPick','BtnDestBrowse','DestHint','ChatCard','ChatCardTitle','ChatCardText','BtnChatMove','BtnOneClick','BtnScan','BtnRun','BtnHogs','Hint','List','CleanMenu','CmOpen','CmOpenAll','CmCopy','Summary','Log',
@@ -16004,7 +16027,20 @@ function Select-HelpPane([string]$k, [switch]$NoRemember) {
     $ctl.BtnHelpPrev.Visibility = if ($prev) { 'Visible' } else { 'Collapsed' }; $ctl.BtnHelpNext.Visibility = if ($next) { 'Visible' } else { 'Collapsed' }
     $ctl.HelpScroll.ScrollToTop()
     if (-not $NoRemember) { $script:helpPick = $k; Set-Setting 'HelpPane' $k }
+    if ($k -eq 'fb') { Show-SelfHash }
 }
+# 本机 exe 的 SHA256：和发布页上写的对比，一样就说明下载的文件没被改过（本工具没有代码签名）
+$script:selfHash = ''
+function Show-SelfHash {
+    if (-not $script:selfHash) {
+        if ($env:CLEANC_SELF -and (Test-Path -LiteralPath $env:CLEANC_SELF)) {
+            try { $script:selfHash = (Get-FileHash -LiteralPath $env:CLEANC_SELF -Algorithm SHA256).Hash } catch { $script:selfHash = '' }
+        }
+    }
+    $ctl.SelfHash.Text = if ($script:selfHash) { $script:selfHash } else { (T '现在运行的是脚本，不是 exe，没有可以核对的文件') }
+    $ctl.BtnCopyHash.IsEnabled = [bool]$script:selfHash
+}
+$ctl.BtnCopyHash.Add_Click({ if ($script:selfHash) { try { [System.Windows.Clipboard]::SetText($script:selfHash); Show-CopyHint (T 'SHA256 已复制') } catch {} } })
 foreach ($x in @($script:helpPanes.Values)) { $x.Nav.Add_Checked({ if ($script:helpNavQuiet) { return }; Select-HelpPane ([string]$this.Tag) }) }
 # 帮助只讲当前模式里有的功能：标着 lvl:1、lvl:2 的说明在低一级的模式里藏起来；这个模式没有的页面（重复文件、搬家管理……），
 # 帮助目录里那一项也不列；一组里都藏了，组名也不列

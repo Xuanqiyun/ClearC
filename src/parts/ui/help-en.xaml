@@ -793,7 +793,7 @@
                   <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
                     <Button x:Name="BtnCopyDiag" Content="Copy diagnostic info" Margin="0,0,8,0"/>
                     <Button x:Name="BtnOpenLog" Content="Open run log file"/>
-                    <TextBlock x:Name="CopyHint" Style="{StaticResource Caption}" Foreground="#248A3D" Margin="14,0,0,0"/>
+                    <TextBlock x:Name="CopyHint" Style="{StaticResource Caption}" Foreground="#1D7A35" Margin="14,0,0,0"/>
                   </StackPanel>
                 </StackPanel>
                 <StackPanel x:Name="FbSelfTest" Margin="0,24,0,0">
@@ -810,6 +810,15 @@
                   <TextBlock Style="{StaticResource HelpBody}" Text="ClearC contacts GitHub only when you click this button."/>
                   <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
                     <Button x:Name="BtnCheckUpdate" Content="Check for updates"/>
+                  </StackPanel>
+                </StackPanel>
+                <StackPanel x:Name="FbCopyHash" Margin="0,24,0,0">
+                  <Border Height="1" Background="#EDEDF0" Margin="0,0,0,24"/>
+                  <TextBlock Style="{StaticResource HelpLead}" Text="Check this file"/>
+                  <TextBlock Style="{StaticResource HelpBody}" Text="ClearC is not code-signed. Compare the SHA256 below with the one on the GitHub release page; if they match, the exe you downloaded has not been changed."/>
+                  <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                    <Button x:Name="BtnCopyHash" Content="Copy SHA256"/>
+                    <TextBlock x:Name="SelfHash" Style="{StaticResource Caption}" FontFamily="Consolas" VerticalAlignment="Center" TextWrapping="Wrap" Margin="14,0,0,0"/>
                   </StackPanel>
                 </StackPanel>
               </StackPanel>
