@@ -386,7 +386,9 @@ function Remove-WindowsOld {
     Remove-OneDir (Get-Item -LiteralPath $p -Force)
 }
 function Remove-Contents2([string[]]$paths, [string]$filter, [bool]$wholeDir) {
+    $script:settingsBad = $false
     $ex = Get-ExcludeList
+    if ($script:settingsBad) { Log ((T "  跳过（设置文件读不出来，不知道你排除了哪些文件夹）：{0}") -f ($paths -join (T '；'))); OpLog '删除' (T '跳过：设置文件读不出来') ($paths -join (T '；')) ''; return }
     $skipEx = { param($x) Log ((T "  跳过（在设置里排除了）：{0}") -f $x); OpLog '删除' (T '跳过：在设置里排除了') $x '' }
     foreach ($p in $paths) {
         if (Stopping) { return }
@@ -2246,27 +2248,44 @@ $script:settingsFile = Join-Path $script:appDir 'settings.txt'
 $script:historyFile  = Join-Path $script:appDir 'history.txt'
 $script:snapDir      = Join-Path $script:appDir '空间快照'
 
+# 设置文件读不出来（被别的程序占着、坏了）时记下来：这时不知道你排除了哪些文件夹，清理一律不删
+$script:settingsBad = $false
+# 设置文件的全部行；没有这个文件返回空数组，有但读不出（重试几次以后）返回 $null
+function Read-SettingsLines {
+    if (-not $script:settingsFile -or -not (Test-Path -LiteralPath $script:settingsFile)) { return ,@() }
+    for ($i = 0; $i -lt 5; $i++) {
+        try { return ,[IO.File]::ReadAllLines($script:settingsFile, [Text.Encoding]::UTF8) } catch { Start-Sleep -Milliseconds 40 }
+    }
+    $script:settingsBad = $true
+    return $null
+}
 function Get-Setting([string]$k, [string]$def = '') {
-    try {
-        if ($script:settingsFile -and (Test-Path -LiteralPath $script:settingsFile)) {
-            foreach ($l in [IO.File]::ReadAllLines($script:settingsFile, [Text.Encoding]::UTF8)) {
-                $i = $l.IndexOf('=')
-                if ($i -gt 0 -and $l.Substring(0, $i).Trim() -eq $k) { return $l.Substring($i + 1).Trim() }
-            }
-        }
-    } catch {}
+    $lines = Read-SettingsLines
+    if ($null -eq $lines) { return $def }
+    foreach ($l in $lines) {
+        $i = $l.IndexOf('=')
+        if ($i -gt 0 -and $l.Substring(0, $i).Trim() -eq $k) { return $l.Substring($i + 1).Trim() }
+    }
     return $def
 }
+# 写设置：先写到旁边的临时文件，再整个换上去（写到一半断电、C 盘满了，原来的文件都还在）；
+# 界面和定时任务可能同时写，用一把锁排队；原来的文件读不出来时不写（不然会把别的设置都冲掉）
 function Set-Setting([string]$k, [string]$v) {
+    $mx = $null; $got = $false
     try {
+        try { $mx = New-Object System.Threading.Mutex($false, 'Local\ClearC-Settings'); $got = $mx.WaitOne(3000) } catch [System.Threading.AbandonedMutexException] { $got = $true } catch {}
         New-Item -ItemType Directory -Path $script:appDir -Force | Out-Null
+        $old = Read-SettingsLines
+        if ($null -eq $old) { return }
         $lines = New-Object System.Collections.Generic.List[string]
-        if (Test-Path -LiteralPath $script:settingsFile) {
-            foreach ($l in [IO.File]::ReadAllLines($script:settingsFile, [Text.Encoding]::UTF8)) { if ($l -and -not $l.StartsWith("$k=")) { $lines.Add($l) } }
-        }
+        foreach ($l in $old) { if ($l -and -not $l.StartsWith("$k=")) { $lines.Add($l) } }
         $lines.Add("$k=$v")
-        [IO.File]::WriteAllLines($script:settingsFile, $lines.ToArray(), (New-Object Text.UTF8Encoding $true))
-    } catch {}
+        $tmp = $script:settingsFile + '.tmp'
+        [IO.File]::WriteAllLines($tmp, $lines.ToArray(), (New-Object Text.UTF8Encoding $true))
+        if (Test-Path -LiteralPath $script:settingsFile) { [IO.File]::Replace($tmp, $script:settingsFile, ($script:settingsFile + '.bak')) } else { [IO.File]::Move($tmp, $script:settingsFile) }
+    } catch {
+        try { if (Test-Path -LiteralPath ($script:settingsFile + '.tmp')) { [IO.File]::Delete($script:settingsFile + '.tmp') } } catch {}
+    } finally { if ($mx) { if ($got) { try { $mx.ReleaseMutex() } catch {} }; $mx.Dispose() } }
 }
 
 # 操作日志：每月一个 txt，一行一条：时间 <Tab> 类别 <Tab> 操作 <Tab> 对象 <Tab> 详情

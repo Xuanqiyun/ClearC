@@ -413,6 +413,25 @@ try { & {
         [void](Set-DirAccess $kid (Get-AccessSddl $priv))
         Check 'SEC-3 after copying the permissions, other accounts can no longer open the folder or the files in it' (-not (Test-OthersCanRead $kid) -and -not (Test-OthersCanRead (Join-Path $kid 'msg.db')))
     } else { Skip 'SEC-3 permission behaviour' }
+    # ============ 10. 设置文件：写一半不会留下截断的文件；读不出来时不当成「没有排除」去删（3.6 运维评审） ============
+    New-Item -ItemType Directory -Force -Path $script:appDir | Out-Null
+    $script:settingsBad = $false
+    Set-Setting 'Exclude' (Join-Path $T 'keepme'); Set-Setting 'Other' '1'
+    Check 'OPS-2 settings are written whole, with nothing left behind' ((Get-Setting 'Exclude' '') -eq (Join-Path $T 'keepme') -and (Get-Setting 'Other' '') -eq '1' -and -not (Test-Path ($script:settingsFile + '.tmp')))
+    $lock = [IO.File]::Open($script:settingsFile, 'Open', 'ReadWrite', 'None')
+    try {
+        $script:settingsBad = $false
+        $got = Get-Setting 'Exclude' 'DEFAULT'
+        Check 'OPS-2 an unreadable settings file is noticed (not taken as empty)' ($script:settingsBad -and $got -eq 'DEFAULT')
+        Set-Setting 'Other' '2'
+    } finally { $lock.Close() }
+    $script:settingsBad = $false
+    Check 'OPS-2 a write while the file cannot be read does not wipe the other settings' ((Get-Setting 'Exclude' '') -eq (Join-Path $T 'keepme'))
+    $kd = Join-Path $T 'keepme'; New-Item -ItemType Directory -Force -Path $kd | Out-Null; [IO.File]::WriteAllText((Join-Path $kd 'a.tmp'), 'x')
+    $lock = [IO.File]::Open($script:settingsFile, 'Open', 'ReadWrite', 'None')
+    try { $script:settingsBad = $false; Remove-Contents2 @((Join-Path $T 'keepme')) '' $false } finally { $lock.Close() }
+    Check 'OPS-2 cleanup deletes nothing while the exclusion list cannot be read' (Test-Path (Join-Path $kd 'a.tmp'))
+    $script:settingsBad = $false; Set-Setting 'Exclude' ''
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue

@@ -156,6 +156,8 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+  跳过（设置文件读不出来，不知道你排除了哪些文件夹）：{0}	  Skipped (the settings file could not be read, so the excluded folders are unknown): {0}
+跳过：设置文件读不出来	Skipped: the settings file could not be read
 改成只有我能打开	Only I can open them
 搬走的文件夹，电脑上的其他账户也能打开	Other accounts on this PC can open your moved folders
 下面这些文件夹是以前的版本搬到其他盘的。在 C 盘时只有你、系统和管理员能打开；搬过去后用的是那块盘的默认权限，这台电脑上的其他账户也能打开、修改。\n\n可以改成和在 C 盘时一样。只改权限，不动里面的文件，文件多的要等一会儿。	An earlier version moved these folders to another drive. On C: only you, the system and administrators could open them; on the other drive they took that drive's default permissions, so other accounts on this PC can open and change them.\n\nThey can be set back to how they were on C:. Only the permissions change, not the files; folders with many files take a while.
