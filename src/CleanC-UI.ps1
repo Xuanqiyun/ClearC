@@ -7853,6 +7853,7 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+帮助页没能打开，原因写在运行记录里。	The help page could not be opened; the reason is in the run log.
 重开前的扫描结果已经恢复；要最新的数字，点「扫描」	The scan results from before the restart are back; click "Scan" for fresh numbers
 没有权限：这个文件或设置被系统保护，或者正被别的程序占着。关掉相关的程序再试；还不行就重启电脑后再试。	No permission: the file or setting is protected by Windows or held by another program. Close the related programs and try again; if that does not help, restart the PC and try again.
 文件正被别的程序使用：关掉打开着它的程序（包括右下角托盘里的）再试。	The file is in use by another program: close the program that has it open (including from the system tray) and try again.
@@ -15821,11 +15822,15 @@ function Split-HelpPage([xml]$doc) {
     $ns.AddNamespace('w', 'http://schemas.microsoft.com/winfx/2006/xaml/presentation'); $ns.AddNamespace('x', 'http://schemas.microsoft.com/winfx/2006/xaml')
     $hp = $doc.SelectSingleNode("//w:Grid[@x:Name='PageHelp']", $ns)
     if (-not $hp) { return '' }
-    $sb = New-Object System.Text.StringBuilder
-    [void]$sb.Append("<Grid xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml'>")
-    foreach ($c in @($hp.ChildNodes)) { if ($c.NodeType -eq 'Element') { [void]$sb.Append($c.OuterXml) }; [void]$hp.RemoveChild($c) }
-    [void]$sb.Append('</Grid>')
-    return ($sb.ToString() -replace '\{StaticResource ', '{DynamicResource ')
+    # 整个 PageHelp 复制成一份单独的文档，根上去掉名字、位置、隐藏和边距（这些留在窗口里那个空的 PageHelp 上）。
+    # 不能把每个子元素的 OuterXml 拼起来：那样 <Grid.RowDefinitions> 这类属性元素会带上 xmlns，XAML 不认
+    $frag = New-Object System.Xml.XmlDocument
+    $frag.LoadXml($hp.OuterXml)
+    $r = $frag.DocumentElement
+    foreach ($a in @($r.Attributes)) { if ($a.Name -ne 'xmlns' -and -not $a.Name.StartsWith('xmlns:')) { [void]$r.Attributes.Remove($a) } }
+    $r.SetAttribute('xmlns:x', 'http://schemas.microsoft.com/winfx/2006/xaml')
+    foreach ($c in @($hp.ChildNodes)) { [void]$hp.RemoveChild($c) }
+    return ($frag.OuterXml -replace '\{StaticResource ', '{DynamicResource ')
 }
 if ($script:Lang -eq 'en') { Use-EnglishHelp $xaml $script:helpEnXaml }
 $script:helpXml = Split-HelpPage $xaml
@@ -16317,7 +16322,15 @@ function Initialize-HelpPage {
     if ($script:Lang -eq 'en') { Set-XamlLang $doc }
     $s = $doc.OuterXml; $g = $null
     if ([Theme]::Dark) { try { $g = [Windows.Markup.XamlReader]::Parse([Theme]::Xaml($s)) } catch { $g = $null } }
-    if (-not $g) { $g = [Windows.Markup.XamlReader]::Parse($s) }
+    if (-not $g) {
+        try { $g = [Windows.Markup.XamlReader]::Parse($s) }
+        catch {
+            # 解析不了：写进运行记录，页面上说一句，不要让切换页面的操作跟着报错
+            Write-LogFile ((T "[内部] ") + 'help page: ' + $_.Exception.Message)
+            $tb = New-Object System.Windows.Controls.TextBlock; $tb.Text = (T '帮助页没能打开，原因写在运行记录里。'); $tb.TextWrapping = 'Wrap'
+            [void]$ctl.PageHelp.Children.Add($tb); return
+        }
+    }
     [void]$ctl.PageHelp.Children.Add($g)
     foreach ($n in $script:helpNames) { $ctl[$n] = $g.FindName($n) }
     $script:helpRoot = $g
