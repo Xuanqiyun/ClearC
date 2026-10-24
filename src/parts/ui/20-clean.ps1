@@ -113,6 +113,8 @@ function Update-CleanMore {
     $below = 0
     $bottom = [double]$sv.ViewportHeight
     foreach ($c in $script:cleanItems) {
+        # 列表刚换过内容时，记下的行可能已经不在界面上了：先问一声，不让它抛异常
+        if (-not $sv.IsAncestorOf($c)) { $script:cleanItems = $null; continue }
         try { if ($c.TransformToAncestor($sv).Transform((New-Object System.Windows.Point 0, 0)).Y + 20 -gt $bottom) { $below++ } } catch {}
     }
     $ctl.CleanMoreText.Text = if ($below -gt 0) { (T "下面还有 {0} 项") -f $below } else { (T '下面还有内容') }

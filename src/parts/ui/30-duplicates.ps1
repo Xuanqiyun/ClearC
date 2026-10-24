@@ -613,23 +613,13 @@ foreach ($p in $arg.Plan) {
     if ($same) { $same = $false; continue }
     if (-not $kept -and (Stopping)) { break }   # 核对到一半取消了：这个文件不删
     if (-not $kept) { Log ((T "  没有删除（和保留的那份内容不完全相同，或保留的那份已不在）：{0}") -f $($p.Path)); continue }
-    try {
-        if ($fi.Attributes -band [IO.FileAttributes]::ReadOnly) { $fi.Attributes = $fi.Attributes -bxor [IO.FileAttributes]::ReadOnly }
-        if ($arg.Recycle) {
-            $why = Test-RecycleOk $p.Path ([double]$p.Size)
-            if ($why) { throw ((T "没有删：{0}") -f $why) }
-            $rc = [FsTools]::Recycle($p.Path, [long]$sync.Hwnd)
-            if (Test-Path -LiteralPath $p.Path) { throw ((T "没能放进回收站（代码 {0}）：可能回收站放不下或被禁用，这个文件没有删") -f $rc) }
-        } else {
-            [IO.File]::Delete($p.Path)
-        }
+    # 删除本身（再查一遍删不删得、放不放得进回收站、删完核对、写操作日志）都在 Invoke-SafeRemove 里
+    $r = Invoke-SafeRemove -Item $fi -Scope dup -How $(if ($arg.Recycle) { 'recycle' } else { 'delete' }) -Bytes ([double]$p.Size) -AllowPersonal:(-not $arg.Protect) `
+        -What $how -Detail ((T "{0}，保留的那份：{1}") -f (GB $p.Size), $keepAt)
+    if ($r.Ok) {
         [void]$done.Add($p.Path); $freed += $p.Size
-        OpLog '删除' $how $p.Path ((T "{0}，保留的那份：{1}") -f (GB $p.Size), $keepAt)
         if ($total -le 200 -or $i % 100 -eq 0) { Log ((T "  [{0}/{1}] 已删除  {2}") -f $i, $total, $p.Path) }
-    } catch {
-        Log ((T "  删除失败  {0}：{1}") -f $($p.Path), $($_.Exception.Message))
-        OpLog '删除' $how $p.Path ((T '没删掉：') + $_.Exception.Message)
-    }
+    } else { Log ((T "  删除失败  {0}：{1}") -f $($p.Path), $r.Why) }
 }
 Log ((T "删除完成：{0} 个文件，{1}。") -f $done.Count, $(if ($freed -ge 1GB) { "{0:N2} GB" -f ($freed / 1GB) } else { "{0:N1} MB" -f ($freed / 1MB) }))
 $sync.DupDeleted = $done

@@ -254,14 +254,9 @@ foreach ($x in $arg.Items) {
     if (Stopping) { break }
     $i++
     SetP @{ Steps = $arg.Items.Count; Step = $i; StepName = $x.Path; SubKind = 'none' }
-    if (Get-DeleteBlock $x.Path -Leftover) { continue }
-    if (IsLink $x.Path) { Log ((T "  没删（是链接）：{0}") -f $x.Path); continue }
-    $why = Test-RecycleOk $x.Path ([double]$x.Bytes)
-    if ($why) { OpLog '删除' ((T "软件残留：没删（{0}）") -f $why) $x.Path ''; Log ((T "  没删（{0}）：{1}") -f $why, $x.Path); continue }
-    [void][FsTools]::Recycle($x.Path, [long]$sync.Hwnd)
-    $ok = -not (Test-Path -LiteralPath $x.Path)
-    if ($ok) { $n++ }
-    OpLog '删除' ((T "软件残留：移到回收站（{0}）") -f $arg.Name) $x.Path $(if ($ok) { GB $x.Bytes } else { (T '没删掉，可能被占用') })
+    # 删前再查一遍（Get-DeleteBlock -Leftover、链接、上级是链接）、只放进回收站、放不进就不删、写操作日志：都在 Invoke-SafeRemove 里
+    $r = Invoke-SafeRemove -Path $x.Path -Scope leftover -How recycle -Bytes ([double]$x.Bytes) -What ((T "软件残留：移到回收站（{0}）") -f $arg.Name)
+    if ($r.Ok) { $n++ } else { Log ((T "  没删（{0}）：{1}") -f $r.Why, $x.Path) }
 }
 $sync.LeftRes = @{ Count = $n; Name = $arg.Name }
 '@
@@ -408,14 +403,11 @@ $ctl.StartList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::Click
         $ans = Show-Sheet -Kind danger -Title ((T "把「{0}」移到回收站？") -f $r.Name) -Text ((T "{0}（{1}）。这只是猜测：名字对不上任何已装软件、没有程序在用、一个月没动过。先点「打开位置」看一眼里面是什么。移到回收站后还能恢复。") -f $r.Detail, $r.Size) `
             -Confirm (T '我看过了，这是已卸载软件留下的，删除不会给我带来损失。') -Buttons @((T '先不删'), (T '移到回收站')) -Primary (T '移到回收站') -Cancel (T '先不删')
         if ($ans -ne (T '移到回收站')) { return }
-        if (Get-DeleteBlock $r.Detail -Leftover) { Show-Sheet -Kind warn -Title (T '不能删') -Text (Get-DeleteBlock $r.Detail -Leftover) | Out-Null; return }
-        $why = Test-RecycleOk $r.Detail ([double][FsTools]::OnDiskTree($r.Detail))
-        if ($why) { Show-Sheet -Kind warn -Title (T '没有删') -Text ((T "{0}`n`n{1}。这个文件夹只能放进回收站，所以没有删。") -f $r.Detail, $why) | Out-Null; return }
-        [void][FsTools]::Recycle($r.Detail, [long]$sync.Hwnd)
-        $gone = -not (Test-Path -LiteralPath $r.Detail)
-        OpLog '删除' (T '残留文件夹：移到回收站') $r.Detail $(if ($gone) { $r.Size } else { (T '没删掉，可能被占用') })
-        if ($gone) { $script:startRows['leftover'].Remove($r) | Out-Null; Filter-StartRows; UI-Log ((T "残留文件夹已移到回收站：{0}") -f $r.Detail) }
-        else { Show-Sheet -Kind warn -Title (T '没删掉') -Text (T '可能有程序正在用里面的文件。') | Out-Null }
+        $x = Invoke-SafeRemove -Path $r.Detail -Scope leftover -How recycle -What (T '残留文件夹：移到回收站') -Detail $r.Size
+        if ($x.Ok) { $script:startRows['leftover'].Remove($r) | Out-Null; Filter-StartRows; UI-Log ((T "残留文件夹已移到回收站：{0}") -f $r.Detail) }
+        elseif ($x.Stage -eq 'block') { Show-Sheet -Kind warn -Title (T '不能删') -Text $x.Why | Out-Null }
+        elseif ($x.Stage -eq 'recycle') { Show-Sheet -Kind warn -Title (T '没有删') -Text ((T "{0}`n`n{1}。这个文件夹只能放进回收站，所以没有删。") -f $r.Detail, $x.Why) | Out-Null }
+        else { Show-Sheet -Kind warn -Title (T '没删掉') -Text $x.Why | Out-Null }
         return
     }
     if ($r.Enabled) {

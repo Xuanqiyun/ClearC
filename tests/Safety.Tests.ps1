@@ -171,10 +171,10 @@ try { & {
     Check 'recycle verdict: a 0 MB Recycle Bin takes nothing' ([bool](Get-RecycleVerdict 1KB 'Fixed' $false 0 0 500GB))
     Check 'recycle verdict: no settings yet means about 5% of the drive' ((Get-RecycleVerdict 30GB 'Fixed' $false 0 -1 500GB) -and -not (Get-RecycleVerdict 10GB 'Fixed' $false 0 -1 500GB))
     Check 'Test-RecycleOk refuses UNC paths' ((Test-RecycleOk '\\server\share\a.txt' 1) -and (Test-RecycleOk '\\?\UNC\server\share\a.txt' 1))
-    # 每一处调用 Recycle / RecycleMany 之前都先问过 Test-RecycleOk（数调用点：多了一处没问的就报）
+    # Recycle 只在删除入口里调用，调用前先问过 Test-RecycleOk；RecycleMany 只处理入口攒下的那一批（入口里同样问过）
+    $sr = [regex]::Match($engineText, '(?s)function Invoke-SafeRemove \{.*?\r?\n\}').Value
     $recCalls = [regex]::Matches($src, '\[FsTools\]::Recycle(Many)?\(').Count
-    $recGuards = [regex]::Matches($src, 'Test-RecycleOk ').Count
-    Check ("every Recycle call is preceded by Test-RecycleOk ({0} calls, {1} checks)" -f $recCalls, $recGuards) ($recCalls -eq 5 -and $recGuards -ge 5)
+    Check ("every Recycle call is in the delete entry, after Test-RecycleOk ({0} calls)" -f $recCalls) ($recCalls -eq 2 -and $sr -match '(?s)Test-RecycleOk \$full \$Bytes.*?recycleBatch\.Add.*?\[FsTools\]::Recycle\(' -and ([regex]::Matches($src, 'recycleBatch\.Add\(')).Count -eq 1)
     if ($win) {
         Check 'Test-RecycleOk: a small file on the system drive can be recycled' (-not (Test-RecycleOk (Join-Path $env:SystemDrive '\x.txt') 1KB))
         # 回收模式下清一个里面有链接的缓存文件夹：链接目标不动，文件进了回收站
@@ -285,7 +285,7 @@ try { & {
     Check 'paths with % or quotes are never handed to cmd' (-not (Test-CmdPathOk 'C:\x\%USERNAME%') -and -not (Test-CmdPathOk 'C:\x\a"b') -and (Test-CmdPathOk 'C:\x\cache'))
     $rdLines = @($src -split "`r?`n" | Where-Object { $_ -match 'rd /s /q' -and $_ -notmatch '^\s*#' })
     $rdGuarded = @($rdLines | Where-Object { $_ -match 'Test-CmdPathOk|IsDir\) \{ & ' })
-    Check ("every rd /s call is guarded against % paths ({0} of {1})" -f $rdGuarded.Count, $rdLines.Count) ($engineText -match '(?s)function Remove-OneDir\(\$d\) \{\s*\r?\n\s*if \(-not \(Test-CmdPathOk \$d\.FullName\)\)' -and $src -match 'if \(\$x\.IsDir -and -not \(Test-CmdPathOk \$p\)\)' -and ([regex]::Matches($engineText, 'Test-CmdPathOk \$(bak|dst|tmp)')).Count -ge 4)
+    Check ("every rd /s call is guarded against % paths ({0} of {1})" -f $rdGuarded.Count, $rdLines.Count) ($sr -match '(?s)\$isDir -and -not \(Test-CmdPathOk \$Path\).*?rd /s /q' -and ([regex]::Matches($engineText, 'Test-CmdPathOk \$(bak|dst|tmp)')).Count -ge 4)
     # 不用会跟进链接的 Remove-Item -Recurse（界面自测删它自己建的临时文件夹除外）
     $progLines = @(($engineText + "`n" + ($src -replace '(?s)function Invoke-UiTest.*', '')) -split "`r?`n" | Where-Object { $_ -notmatch '^\s*#' -and $_ -match 'Remove-Item\b.*-Recurse' })
     Check ("no Remove-Item -Recurse in program code ({0})" -f ($progLines -join ' | ')) ($progLines.Count -eq 0)
@@ -329,7 +329,7 @@ try { & {
         # 带 % 的文件夹：不交给 cmd，同一层同名的别的文件夹也不会被删
         $pc = Join-Path $T 'pct'; [void][IO.Directory]::CreateDirectory((Join-Path $pc '%USERNAME%')); [void][IO.Directory]::CreateDirectory((Join-Path $pc $env:USERNAME))
         [IO.File]::WriteAllText((Join-Path (Join-Path $pc $env:USERNAME) 'keep.txt'), 'keep')
-        Remove-OneDir (Get-Item -LiteralPath (Join-Path $pc '%USERNAME%') -Force)
+        [void](Invoke-SafeRemove -Item (Get-Item -LiteralPath (Join-Path $pc '%USERNAME%') -Force) -Scope list -How delete)
         Check 'a folder literally named %USERNAME% is not handed to cmd, and the folder named after the user survives' ((Test-Path -LiteralPath (Join-Path $pc '%USERNAME%')) -and (Test-Path -LiteralPath (Join-Path (Join-Path $pc $env:USERNAME) 'keep.txt')))
     } else { Skip 'auto cleanup newest-write, SameFile fail-closed, subst drives, % paths' }
     # OneDrive「仅在线」：OneDrive 自己的文件（云端类型的重解析点）要处理，真正的链接不碰
@@ -371,7 +371,7 @@ try { & {
     $sq = [regex]::Match($src, '(?s)function Step-UninstQueue.*?\r?\n\}').Value
     Check 'batch uninstall asks once first and only then starts the queue' ($bu -match "(?s)Show-Sheet -Kind warn.*?-ne \(T '卸载'\)\) \{ return \}.*?Step-UninstQueue")
     Check 'batch uninstall opens one uninstaller at a time (waits for it to exit), never silently, and the UI self-test never starts one' ($sq -match '(?s)HasExited.*?if \(\$script:uiTest\) \{ \$script:uiFixRuns\.Add\(''uninstall:'' \+ \$r\.Name\) \}\s*\r?\n\s*elseif \(\$pc\[1\]\) \{ \$q\.Proc = Start-Process' -and ($bu + $sq) -notmatch '(?i)QuietUninstall|/quiet|/qn\b|/silent|/verysilent|-WindowStyle Hidden')
-    Check 'batch leftover recycling reuses the leftover worker (Get-DeleteBlock -Leftover, IsLink, Test-RecycleOk)' (([regex]::Matches($src, 'Start-Worker \$script:leftDelCode')).Count -eq 2 -and ([regex]::Match($src, "(?s)\`$script:leftDelCode = @'.*?'@").Value) -match '(?s)Get-DeleteBlock \$x\.Path -Leftover.*?IsLink \$x\.Path.*?Test-RecycleOk')
+    Check 'batch leftover recycling reuses the leftover worker, which only recycles through the delete entry (leftover checks)' (([regex]::Matches($src, 'Start-Worker \$script:leftDelCode')).Count -eq 2 -and ([regex]::Match($src, "(?s)\`$script:leftDelCode = @'.*?'@").Value) -match 'Invoke-SafeRemove -Path \$x\.Path -Scope leftover -How recycle')
     Check 'batch disable / enable never touches ClearC''s own entries or leftovers' ([regex]::Match($src, '(?s)function Start-BatchToggle.*?\r?\n\}').Value -match "-not \`$_\.Ours -and \`$_\.Kind -ne 'leftover'")
     Check 'the space-map delete list deletes through Start-MapDelete (same checks as a normal delete)' ($src -match '\$ctl\.BtnMarkDelete\.Add_Click\(\{[^\r\n]*Start-MapDelete @\(\$script:mapMarks\.Values\)')
     # ============ 8. 源码锁：改坏了就报 ============
@@ -382,10 +382,10 @@ try { & {
     Check 'scheduled tasks run as the current user (InteractiveToken), never SYSTEM' ($src -match 'LogonType>InteractiveToken<' -and $src -notmatch '(?i)/RU\s+SYSTEM|<UserId>S-1-5-18<|NT AUTHORITY\\SYSTEM')
     Check 'processes are only stopped in the chat-app close flow (2 call sites)' (([regex]::Matches($engineText, 'Stop-Process')).Count -eq 2 -and $src -notmatch '(?i)taskkill')
     Check 'no self-deleting scripts or boot-time tasks' ($src -notmatch '(?i)schtasks[^\r\n]*ONSTART' -and $src -notmatch 'RunOnce' -and $src -notmatch '(?i)Remove-Item[^\r\n]*\$PSCommandPath')
-    # rd /s 的调用点是数过的：Remove-OneDir（先看是不是链接）、搬家收尾删备份、搬回来 / 删多余副本（核对过才删）、空间地图删除（IsLink 和 Get-LinkedAncestor 都查过）。多出一个就要人看
-    Check ("rd /s call sites are the known 6, and Remove-OneDir checks reparse points first ({0})" -f ([regex]::Matches($src, 'rd /s /q')).Count) (([regex]::Matches($src, 'rd /s /q')).Count -eq 6 -and $engineText -match 'ReparsePoint\)\) \{ & "\$sys32\\cmd.exe" /c rmdir')
-    $mapDel = [regex]::Match($src, '(?s)function Start-MapDelete.*?rd /s /q').Value
-    Check 'space map delete checks IsLink and Get-LinkedAncestor before rd /s' ($mapDel -match 'IsLink \$p' -and $mapDel -match 'Get-LinkedAncestor \$p' -and $mapDel -match 'Get-DeleteBlock')
+    # rd /s 的调用点：删除入口（先看是不是链接）、搬家收尾删备份、搬回来 / 删多余副本（核对过才删）、撤回没搬完的副本。全部调用点见第 14 节
+    Check ("rd /s call sites are the known 5 ({0})" -f ([regex]::Matches($src, 'rd /s /q')).Count) (([regex]::Matches($src, 'rd /s /q')).Count -eq 5 -and $sr -match 'if \(\$isLink\) \{ & "\$sys32\\cmd.exe" /c rmdir')
+    $mapDel = [regex]::Match($src, "(?s)function Start-MapDelete.*?'@ @\{").Value
+    Check 'space map delete goes through the delete entry with the strict checks (Get-DeleteBlock, links, linked parents)' ($mapDel -match 'Invoke-SafeRemove -Path \$p -Scope pick' -and $mapDel -notmatch 'rd /s|Remove-Item|\[FsTools\]::Recycle')
     Check 'moves verify the copy before replacing the original (robocopy/compare step present)' ($engineText -match '(?i)robocopy' -and $engineText -match '(?i)Compare-Copy|Verify-Copy|核对|对不上')
     Check 'every delete path in the UI goes through a confirmation sheet with the risk acknowledgement' (([regex]::Matches($src, '因删除造成的后果由我自己承担')).Count -ge 2)
     Check 'auto cleanup task is registered from exactly one place (the Reminders page switch), never at startup' (([regex]::Matches($src, 'Register-CleanTask \$script:taskClean')).Count -eq 1 -and $src -notmatch 'Enable-AutoTask \$true[^\r\n]*#.*启动')
@@ -460,8 +460,74 @@ try { & {
     Check 'UX-2 the move target list uses these choices, and picking a USB disk by hand asks first' ($fd -match 'Get-DestChoices' -and $src -match 'function Confirm-PlugDest' -and ([regex]::Matches($src, 'Confirm-PlugDest ')).Count -ge 3)
     # ============ 13. 重复文件的删除也记进操作日志（3.6 安全评审） ============
     $dw = [regex]::Match($src, "(?s)\`$sync\.Mode = 'dupdel'.*?'@ @\{ Plan").Value
-    $del = $dw.IndexOf('[IO.File]::Delete(')
-    Check 'SEC-8 every duplicate that is deleted, or fails to delete, is written to the activity log' ($dw -and $del -gt 0 -and ([regex]::Matches($dw.Substring($del), "OpLog '删除'")).Count -ge 2)
+    Check 'SEC-8 every duplicate that is deleted, or fails to delete, is written to the activity log' ($dw -match 'Invoke-SafeRemove -Item \$fi -Scope dup' -and $dw -match '-What \$how' -and $sr -match "(?s)\`$finish = \{.*?OpLog '删除' \`$What \`$Path")
+    # ============ 14. 删除只有一个入口（3.6 架构评审） ============
+    # 用语法树找出所有会删东西的调用，按所在的函数（或后台代码、事件处理）归类。删用户数据的只能是 Invoke-SafeRemove；
+    # 其余每一处都写明为什么可以，数量也锁住。要加一处，先在这里写清楚它删的是什么、为什么安全
+    . (Join-Path $PSScriptRoot 'DeleteSites.ps1')
+    $allowed = [ordered]@{
+        'Invoke-SafeRemove'     = 4   # 唯一的删除入口：Recycle、链接只拆链接（rmdir）、rd /s、删文件
+        'Recycle-Flush'         = 1   # 入口攒下的一批交给回收站（每一项进批之前都在入口里查过）
+        'Remove-LinksInside'    = 2   # 只拆链接本身（rmdir、不递归的 Directory.Delete），从不删数据
+        'Invoke-Move'           = 2   # 搬家：撤回时去掉刚建的链接；核对一致后删 C 盘上改了名的原目录
+        'Invoke-MoveBack'       = 2   # 搬回：去掉链接；核对一致后删目标盘上的旧副本（Test-OurMoveCopy）
+        'Invoke-DropCopy'       = 1   # 删没搬完留下的多余副本：副本里有 C 盘没有的文件就不删
+        'Undo-MoveBackCopy'     = 1   # 搬回中途失败：删掉刚复制回 C 盘的那份
+        'Invoke-FixLink'        = 1   # 修断掉的链接：只拆坏链接
+        'Invoke-CompactVdisk'   = 1   # 本工具自己写的 diskpart 脚本
+        'Export-DiagPack'       = 3   # 诊断包自己的临时文件和没写完的 zip
+        'Install-TaskExe'       = 1   # 定时任务用的副本：核对不一致时删掉刚复制的临时文件
+        'Remove-TaskExeIfUnused' = 2  # Program Files\ClearC 里本工具自己的副本
+        'Set-Setting'           = 1   # 设置文件的临时文件
+        'Prune-OpLog'           = 1   # 一年前的操作日志
+        'Update-Growth'         = 2   # 本工具自己的空间快照
+        'Register-CleanTask'    = 1   # 注册任务用的临时 XML
+        'Invoke-SelfTest'       = 4   # 自检在自己建的临时文件夹里试删
+        'Invoke-UiTest'         = 9   # 界面自测删它自己建的临时文件和设置
+    }
+    $sites = @(Get-DeleteSites $src)
+    $byFn = @{}; foreach ($x in $sites) { $fn = ($x.Where -split '/')[-1]; if (-not $byFn.ContainsKey($fn)) { $byFn[$fn] = 0 }; $byFn[$fn]++ }
+    $extra = @($byFn.Keys | Where-Object { -not $allowed.Contains($_) -or $byFn[$_] -gt $allowed[$_] } | ForEach-Object { "{0} ({1})" -f $_, $byFn[$_] })
+    Check ("ARC-1 nothing deletes files outside the delete entry and the listed own-file / move steps ({0})" -f ($extra -join ', ')) ($sites.Count -gt 20 -and $extra.Count -eq 0)
+    Check 'ARC-1 the finder sees deletes inside background code too (the entry is found inside the engine text)' (@($sites | Where-Object { $_.Where -eq '$engine/worker/Invoke-SafeRemove' }).Count -eq 4)
+    $uses = @{ 'cleanup list' = [regex]::Match($engineText, '(?s)function Remove-Path\(.*?\r?\n\}').Value; 'duplicates' = $dw; 'space map' = $mapDel
+               'app leftovers' = [regex]::Match($src, "(?s)\`$script:leftDelCode = @'.*?'@").Value; 'leftover folder' = [regex]::Match($src, '(?s)\$ctl\.StartList\.AddHandler.*?\}\)').Value
+               'Installer orphans and broken shortcuts' = [regex]::Match($engineText, "(?s)Get-InstallerOrphans\)\) \{ \`$r = Invoke-SafeRemove.*?Get-BrokenShortcuts\)\) \{ if \(\(Invoke-SafeRemove").Value; 'Windows.old' = [regex]::Match($engineText, '(?s)function Remove-WindowsOld.*?\r?\n\}').Value }
+    $miss = @($uses.Keys | Where-Object { $uses[$_] -notmatch 'Invoke-SafeRemove ' })
+    Check ("ARC-1 all six user-facing delete paths go through Invoke-SafeRemove ({0})" -f ($miss -join ', ')) ($miss.Count -eq 0)
+    # 入口本身的行为：真的建文件试
+    $sd = Join-Path $T 'saferemove'; [void][IO.Directory]::CreateDirectory($sd)
+    $f1 = Join-Path $sd 'a.tmp'; [IO.File]::WriteAllText($f1, 'x'); (Get-Item -LiteralPath $f1).Attributes = 'ReadOnly'
+    $r = Invoke-SafeRemove -Path $f1 -Scope pick -How delete -Bytes 1 -What 'ARC-1 test'
+    $log = (Get-ChildItem -LiteralPath $script:opLogDir -Filter '*.txt' -ErrorAction SilentlyContinue | ForEach-Object { [IO.File]::ReadAllText($_.FullName) }) -join "`n"
+    Check 'ARC-1 the entry deletes a read-only file, checks it is gone and writes the activity log' ($r.Ok -and -not (Test-Path -LiteralPath $f1) -and $log -match [regex]::Escape($f1))
+    $r = Invoke-SafeRemove -Path '' -How delete
+    Check 'ARC-1 an empty path is refused' (-not $r.Ok -and $r.Stage -eq 'block')
+    $mv = Join-Path $sd 'CDriveMoved'; [void][IO.Directory]::CreateDirectory($mv); [IO.File]::WriteAllText((Join-Path $mv 'data.db'), 'x')
+    $r = Invoke-SafeRemove -Path $mv -Scope pick -How delete -What 'ARC-1 test'
+    Check 'ARC-1 moved data (CDriveMoved) is refused and left in place' (-not $r.Ok -and $r.Stage -eq 'block' -and (Test-Path -LiteralPath (Join-Path $mv 'data.db')))
+    $f2 = Join-Path $sd 'b.tmp'; [IO.File]::WriteAllText($f2, 'x')
+    if (-not $win) {
+        $r = Invoke-SafeRemove -Path $f2 -Scope pick -How recycle -What 'ARC-1 test'
+        Check 'ARC-1 "move to Recycle Bin" where there is no Recycle Bin deletes nothing' (-not $r.Ok -and $r.Stage -eq 'recycle' -and (Test-Path -LiteralPath $f2))
+    }
+    $bad = $false; try { [void](Invoke-SafeRemove -Path $f2 -Scope everything -How delete) } catch { $bad = $true }
+    Check 'ARC-1 an unknown scope is an error, not a delete' ($bad -and (Test-Path -LiteralPath $f2))
+    if ($win) {
+        # 文件夹链接：点选的不删；清理列表里的只拆链接，链接指向的数据不动；链接下面的文件不删
+        $tgt = Join-Path $sd 'target'; [void][IO.Directory]::CreateDirectory($tgt); [IO.File]::WriteAllText((Join-Path $tgt 'keep.txt'), 'keep')
+        $jn = Join-Path $sd 'junction'; & "$env:SystemRoot\System32\cmd.exe" /c mklink /J "$jn" "$tgt" | Out-Null
+        $r = Invoke-SafeRemove -Path $jn -Scope pick -How delete
+        Check 'ARC-1 a picked folder link is refused' (-not $r.Ok -and (Test-Path -LiteralPath $jn))
+        $r = Invoke-SafeRemove -Path (Join-Path $jn 'keep.txt') -Scope pick -How delete
+        Check 'ARC-1 a file under a linked folder is refused (it lives somewhere else)' (-not $r.Ok -and (Test-Path -LiteralPath (Join-Path $tgt 'keep.txt')))
+        $r = Invoke-SafeRemove -Path $jn -Scope list -How delete
+        Check 'ARC-1 a cleanup-list folder link only loses the link, the data it points to stays' ($r.Ok -and -not (Test-Path -LiteralPath $jn) -and (Test-Path -LiteralPath (Join-Path $tgt 'keep.txt')))
+        $r = Invoke-SafeRemove -Path (Join-Path $home2 'Desktop\thesis.docx') -Scope list -How delete
+        Check 'ARC-1 even the cleanup list can not delete in personal folders' (-not $r.Ok -and (Test-Path -LiteralPath (Join-Path $home2 'Desktop\thesis.docx')))
+        $r = Invoke-SafeRemove -Path (Join-Path $home2 'Desktop\thesis.docx') -Scope dup -How delete
+        Check 'ARC-1 duplicates in personal folders are refused unless the page switch allows them' (-not $r.Ok -and (Test-Path -LiteralPath (Join-Path $home2 'Desktop\thesis.docx')))
+    } else { Skip 'ARC-1 links and personal folders' }
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue

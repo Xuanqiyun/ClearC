@@ -156,6 +156,10 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+没删：	Not deleted: 
+没能放进回收站（代码 {0}）：可能文件正被占用、回收站放不下，或者在提示里选了取消。没有删	Could not move it to the Recycle Bin (code {0}): a file may be in use, the Recycle Bin may be too small, or the prompt was cancelled. Nothing was deleted
+旧系统 Windows.old	Old Windows installation (Windows.old)
+  Windows.old 没删干净：{0}	  Windows.old was not fully removed: {0}
 {0}，保留的那份：{1}	{0}; the copy kept: {1}
 没删掉：	Not deleted: 
 重复文件：移到回收站	Duplicate: moved to Recycle Bin

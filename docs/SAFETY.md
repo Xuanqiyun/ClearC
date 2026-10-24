@@ -13,7 +13,7 @@
 | # | 规则 | 怎么保证 | 测试（`tests/Safety.Tests.ps1` 的段落） |
 |---|---|---|---|
 | 1 | C 盘个人文件夹（桌面、文档、下载、图片、视频、音乐、收藏夹、OneDrive、其他账户和公用的同名文件夹）里的东西从不删；桌面和下载只能搬，默认跳过 | 所有删除都过 `Test-Personal`；空间地图、残留、自定义文件夹过 `Get-DeleteBlock`；重复文件默认保护 | §1 全部、§4 目录库、§5「桌面和下载默认跳过」 |
-| 2 | 删除从不跟进链接（目录联接、符号链接）；删链接只删链接本身 | `Remove-OneDir` 先看重解析点；`rd /s` 只拆内部链接；清理路径本身是链接、或者上级文件夹是链接（被搬走了）都跳过；`Windows.old` 先拆内部链接，夺权和改权限不跟链接；程序里没有 `Remove-Item -Recurse`；扫描（`DirStat`、`DupFinder`、`PhotoHash`）不进链接 | §3、§7b Windows.old、§7c 回收模式、§7d 链接路径、§7e 上级是链接、`Remove-Item -Recurse` |
+| 2 | 删除从不跟进链接（目录联接、符号链接）；删链接只删链接本身 | 删除入口 `Invoke-SafeRemove` 先看重解析点；`rd /s` 只拆内部链接；清理路径本身是链接、或者上级文件夹是链接（被搬走了）都跳过；`Windows.old` 先拆内部链接，夺权和改权限不跟链接；程序里没有 `Remove-Item -Recurse`；扫描（`DirStat`、`DupFinder`、`PhotoHash`）不进链接 | §3、§7b Windows.old、§7c 回收模式、§7d 链接路径、§7e 上级是链接、`Remove-Item -Recurse` |
 | 3 | 系统位置、软件安装文件夹、整块盘、任何盘根下的回收站和还原点不能删 | `Get-DeleteBlock`（空间地图、残留、自定义文件夹在删除时再查一遍） | §2、§7b 盘根、§7d 自定义文件夹复查 |
 | 4 | 删除前用户必须明确确认；「放进回收站」绝不悄悄变成永久删除 | 所有删除入口都有确认框和勾选声明；每次放进回收站之前 `Test-RecycleOk` 先判断（网络位置、U 盘、回收站关闭、超过容量都不删）；回收调用带「太大就问」标志 | §7c 全部、§8「确认框」「SHFileOperation 标志」 |
 | 5 | 确认的是什么就做什么 | 清理页每行带指纹（名字加路径），后台按编号找到的项指纹对不上就不动；改了清理列表，旧的扫描结果作废 | §7d 指纹、界面自测「editing the cleanup list voids the old scan」 |
@@ -38,8 +38,8 @@
 | 路径 | 做什么 | 数据可能怎么丢 | 现在的防护 | 状态 |
 |---|---|---|---|---|
 | `Remove-Contents2` | 删目录库里缓存文件夹的内容，或整个文件夹（`whole`） | 路径展开碰到个人文件夹；路径本身是链接、或上级文件夹已经被搬走（比如 `%APPDATA%\discord` 搬到 D 盘后，Discord 缓存的路径实际在 D 盘）时顺着链接删；用户名带 `[ ]` 时通配匹配到别的账户 | `Test-Personal`、排除列表；顶层是链接或上级是链接都跳过（统计大小和删除前清单也不算）；`Get-PathItems` 只把 `* ?` 当通配；目录库测试保证没有条目指向盘根、系统根、个人文件夹 | 已修（M15、M21） |
-| `Remove-OneDir` 和其他 `rd /s` | `rd /s /q \\?\路径` | 内部链接被跟进；路径里有 `%USERNAME%` 这样的字样时 cmd 会把它换成变量值，删的是另一个文件夹 | 顶层是重解析点只 `rmdir`；`rd /s` 对内部链接只拆链接（Windows CI 真机验证）；带 `%` 或引号的路径不交给 cmd | 已修（S5） |
-| 回收模式 `Remove-Path` → `RecycleMany` | 设置里打开后，手动清理先放进回收站 | 网络位置、U 盘、回收站被关、超过回收站容量时系统直接永久删除，后台批量调用不一定弹提示；Windows.old、Installer 孤儿包这类由系统命令处理的项其实不进回收站，确认框却说能恢复 | 每一项先过 `Test-RecycleOk`，不行就不删并记日志；删完核对哪些还在；确认框点名不能进回收站的项 | 已修（M10、M20） |
+| 删除入口 `Invoke-SafeRemove` 和其他 `rd /s` | `rd /s /q \\?\路径` | 内部链接被跟进；路径里有 `%USERNAME%` 这样的字样时 cmd 会把它换成变量值，删的是另一个文件夹 | 顶层是重解析点只 `rmdir`；`rd /s` 对内部链接只拆链接（Windows CI 真机验证）；带 `%` 或引号的路径不交给 cmd | 已修（S5） |
+| 回收模式 `Remove-Path` → `Invoke-SafeRemove -Batch` → `RecycleMany` | 设置里打开后，手动清理先放进回收站 | 网络位置、U 盘、回收站被关、超过回收站容量时系统直接永久删除，后台批量调用不一定弹提示；Windows.old、Installer 孤儿包这类由系统命令处理的项其实不进回收站，确认框却说能恢复 | 每一项先过 `Test-RecycleOk`，不行就不删并记日志；删完核对哪些还在；确认框点名不能进回收站的项 | 已修（M10、M20） |
 | `Windows.old` | 删上一版 Windows | 里面有指向现在系统 `AppData`、`ProgramData` 的链接，`Remove-Item -Recurse`（5.1）和 `takeown /R`、`icacls /T` 会跟进去删、改所有者和权限 | `Remove-WindowsOld`：先拆掉内部所有链接；`takeown /SKIPSL`、`icacls /L` 不跟链接；夺权后（原来进不去的文件夹能看了）再拆一遍；再 `rd`；不进一键清理 | 已修（M1、M27） |
 | 清空回收站 | `Clear-RecycleBin` | 同一轮里刚「可恢复删除」进回收站的文件被一起清掉 | 本轮放进过回收站就不清空 | 已修；清所有盘见 D3 |
 | 需确认的操作项（搜索索引、休眠、XTU、Installer 孤儿包、旧驱动包、失效快捷方式、事件日志、DISM） | 各自的系统命令 | 一键清理把它们勾上；Windows Installer 接口读失败时只凭注册表判断孤儿包；搬走了的软件（链接指的盘没插着）的开始菜单快捷方式被当成失效 | 默认跳过，一键清理不碰；Installer 孤儿包要注册表和 Windows Installer 接口都读到才判断；快捷方式目标在链接后面的不算失效；驱动包只删 `oem*.inf`、跳过启动必需和系统自带、不加 `/force` | 已修（M12、S4、S6） |
@@ -240,11 +240,12 @@ pwsh tests/Checks.ps1           # 翻译、对话框参数、目录库格式
 ### 两类测试
 
 1. **行为测试**：在临时文件夹里搭一个假的用户目录，建好个人文件夹、缓存、目录联接、硬链接、`a[1]` 和 `a1` 这样的同名文件夹，真的调用删除函数，再检查该在的一个不少、该删的删掉了（证明守卫不是「什么都不删」）。Windows 才有的（目录联接、硬链接、`Get-DeleteBlock` 的系统路径）只在 Windows CI 上跑，Linux 上标 `skip`。
-2. **源码锁**：数源码里危险调用的个数和写法。比如 `rd /s /q` 只能有 6 处、每处 `Recycle` 调用前都要有 `Test-RecycleOk`、`pnputil` 不许带 `/force`、没有 `vssadmin delete`、计划任务不许用 SYSTEM。新加一处危险调用，测试就会失败，逼着改代码的人看一眼、在这里写明为什么安全，再改测试里的数字。
+2. **源码锁**：数源码里危险调用的个数和写法。比如 `rd /s /q` 只能有 5 处、`Recycle` 只在删除入口里调用而且前面有 `Test-RecycleOk`、`pnputil` 不许带 `/force`、没有 `vssadmin delete`、计划任务不许用 SYSTEM。新加一处危险调用，测试就会失败，逼着改代码的人看一眼、在这里写明为什么安全，再改测试里的数字。
 
 ### 改删除相关的代码时
 
-- 新的删除、搬动入口：先过 `Get-DeleteBlock`（或 `Test-Personal`）和 `IsLink`；要放进回收站的先过 `Test-RecycleOk`；确认框带勾选声明。
+- 删用户能看到的文件和文件夹，只能调用 `Invoke-SafeRemove`（engine 里）。它按 `-Scope` 过 `Get-DeleteBlock`、`Get-DupBlock` 或 `Test-Personal`，本身是链接、上级是链接的不删（清理列表里的链接只拆链接），放进回收站前过 `Test-RecycleOk`，删完核对还在不在，写操作日志。`Safety.Tests.ps1` 第 14 节用语法树找出所有删除调用（后台代码的 here-string 也解析），除了入口，只有写在名单里的几处（本工具自己的临时文件、日志、快照，搬家的步骤，自测）可以删，数量也锁着。要加一处，先在名单里写明它删什么、为什么安全。
+- 新的搬动入口：先过 `Get-DeleteBlock`（或 `Test-Personal`）和 `IsLink`；确认框带勾选声明。
 - 新的目录库条目：路径用环境变量，有 `*` 才算通配；有代价的加 `confirm` 或 `careful`；跑一遍 `Safety.Tests.ps1`，§4 会检查它没指向盘根、系统根和个人文件夹。
 - 改了上面任何一条，在 `Safety.Tests.ps1` 对应段落加一条测试，再更新本文第二节那一行的状态。
 
