@@ -29,14 +29,18 @@ foreach ($kv in $script:L10n.GetEnumerator()) {
 $x = HereString '[xml]$xaml' '"'
 $x = $x -replace '\$\(', '$('   # no expansion in this test
 [xml]$xaml = $x
-$loc = [regex]::Match($src, '(?s)if \(\$script:Lang -eq ''en''\) \{\r?\n    # 换成英文的帮助页.*?\r?\n\}\r?\n\$win =').Value
-$loc = $loc.Substring(0, $loc.LastIndexOf('$win ='))
+$loc = [regex]::Match($src, '(?s)# 换成英文的帮助页（整页替换中文的那一页）\r?\nfunction Use-EnglishHelp.*?\r?\n(?=\$win = \$null)').Value
+if (-not $loc) { 'language block not found'; exit 1 }
 Invoke-Expression $loc
+# 帮助页在打开窗口时拆出去了，第一次打开帮助时照样查表（Initialize-HelpPage）
+$hdoc = [xml]$script:helpXml; Set-XamlLang $hdoc
 $left = @()
-foreach ($el in $xaml.SelectNodes('//*')) {
-    foreach ($a in @($el.Attributes)) { if ($a.Value -match $cjk -and $a.LocalName -ne 'Tag') { $left += "$($el.LocalName).$($a.LocalName) = $($a.Value)" } }
-    foreach ($c in @($el.ChildNodes)) { if ($c.NodeType -eq 'Text' -and $c.Value -match $cjk) { $left += "$($el.LocalName) text = $($c.Value)" } }
+foreach ($d in @($xaml, $hdoc)) {
+    foreach ($el in $d.SelectNodes('//*')) {
+        foreach ($a in @($el.Attributes)) { if ($a.Value -match $cjk -and $a.LocalName -ne 'Tag') { $left += "$($el.LocalName).$($a.LocalName) = $($a.Value)" } }
+        foreach ($c in @($el.ChildNodes)) { if ($c.NodeType -eq 'Text' -and $c.Value -match $cjk) { $left += "$($el.LocalName) text = $($c.Value)" } }
+    }
 }
 "XAML Chinese left after translation: $($left.Count)"; $left | Sort-Object -Unique
 $h = $xaml.SelectNodes("//*[local-name()='Grid' and @*[local-name()='Name']='PageHelp']")
-"help pages: $($h.Count); help title: " + ($h[0].SelectNodes(".//*[local-name()='TextBlock']") | Select-Object -First 1).Text
+"help pages: $($h.Count); help title: " + ($hdoc.SelectNodes("//*[local-name()='TextBlock']") | Select-Object -First 1).Text

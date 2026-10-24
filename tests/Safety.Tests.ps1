@@ -833,6 +833,24 @@ try { & {
     $dk = @($ds | Where-Object { $_.Name -eq 'stop-process' } | ForEach-Object { [string]$_.Where } | Sort-Object)
     Check ("ARC-7 the call finder sees spps and kill (also inside a worker here-string), cmd /c rd, and ignores comments and strings ({0})" -f ($dk -join ', ')) (($dk -join '|') -eq 'Close-Holders|Other/worker/(top)' -and @($ds | Where-Object { $_.Name -eq 'taskkill' }).Count -eq 0 -and @($ds | Where-Object { $_.Name -eq 'cmd:rd' -and @($_.Args) -contains '/s' -and $_.Where -eq 'Other' }).Count -eq 1 -and ([regex]::Matches($demo, 'Stop-Process')).Count -eq 1)
     Check ("ARC-7 the safety locks read the syntax tree ({0} call sites in the program)" -f $calls.Count) ($calls.Count -gt 5000 -and ([IO.File]::ReadAllText($PSCommandPath)) -notmatch ("\[regex\]::Matches\(\`$engineText, 'Stop-" + "Process'\)"))
+    # ============ 49. 帮助页用到时才加载：打开窗口时主界面 XAML 里没有帮助的内容（3.6 架构评审） ============
+    $mainX = [regex]::Match($src, '(?s)\[xml\]\$xaml = @"\r?\n(.*?)\r?\n"@').Groups[1].Value
+    $enX = [regex]::Match($src, "(?s)\`$script:helpEnXaml = @'\r?\n(.*?)\r?\n'@").Groups[1].Value
+    $hfn = @($sAst.FindAll({ param($a) $a -is [System.Management.Automation.Language.FunctionDefinitionAst] -and @('Split-HelpPage', 'Use-EnglishHelp') -contains $a.Name }, $true))
+    $hres = & {
+        foreach ($f in $hfn) { . ([scriptblock]::Create($f.Extent.Text)) }
+        $d1 = [xml]$mainX; $n1 = $d1.OuterXml.Length; $f1 = Split-HelpPage $d1
+        $d2 = [xml]$mainX; Use-EnglishHelp $d2 $enX; $f2 = Split-HelpPage $d2
+        @{ D1 = $d1; N1 = $n1; F1 = $f1; F2 = $f2 }
+    }
+    $hp1 = $null; if ($hres.D1) { $hns = New-Object System.Xml.XmlNamespaceManager $hres.D1.NameTable; $hns.AddNamespace('w', 'http://schemas.microsoft.com/winfx/2006/xaml/presentation'); $hns.AddNamespace('x', 'http://schemas.microsoft.com/winfx/2006/xaml'); $hp1 = $hres.D1.SelectSingleNode("//w:Grid[@x:Name='PageHelp']", $hns) }
+    $fragOk = { param($f) $ok = $false; try { $null = [xml]$f; $ok = $true } catch {}; $ok -and $f -match 'x:Name="HelpNav"' -and $f -match 'x:Name="HelpSections"' -and $f -match 'x:Name="FeedbackCard"' -and $f -match 'x:Name="BtnSelfTest"' -and $f -notmatch 'StaticResource' }
+    Check ("ARC-10 the window opens without the help content: the empty help page is filled from its own XAML on first use ({0:N0} of {1:N0} characters left)" -f $(if ($hres.D1) { $hres.D1.OuterXml.Length } else { 0 }), $hres.N1) ($hfn.Count -eq 2 -and $hp1 -and @($hp1.ChildNodes | Where-Object { $_.NodeType -eq 'Element' }).Count -eq 0 -and $hres.D1.OuterXml.Length -lt $hres.N1 * 0.85 -and (& $fragOk $hres.F1) -and (& $fragOk $hres.F2) -and $hres.F2 -match 'Getting started' -and $hres.F1 -match '快速上手')
+    $helpNamesSrc = [regex]::Match($src, "\`$script:helpNames = @\(([^)]*)\)").Groups[1].Value
+    $hn = @([regex]::Matches($helpNamesSrc, "'(\w+)'") | ForEach-Object { $_.Groups[1].Value })
+    $early = @($calls | Where-Object { $_.Name -match '^\.add_' -and $_.Text -match '^\$ctl\.(\w+)\.' -and $hn -contains $Matches[1] -and (Fn $_) -ne 'Initialize-HelpPage' } | ForEach-Object { $_.Text.Substring(0, [math]::Min(40, $_.Text.Length)) })
+    $sp = [regex]::Match($src, '(?s)function Show-Page\(.*?\r?\n\}').Value
+    Check ("ARC-10 help controls get their handlers when the help page is built, not at startup ({0} names; early: {1})" -f $hn.Count, ($early -join ' | ')) ($hn.Count -ge 15 -and $early.Count -eq 0 -and $sp -match "'help'\s*\{[^}]*Initialize-HelpPage" -and $src -match '(?s)function Initialize-HelpPage.*?DynamicResource|(?s)function Initialize-HelpPage.*?XamlReader\]::Parse')
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue

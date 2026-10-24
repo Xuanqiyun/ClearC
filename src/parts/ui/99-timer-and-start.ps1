@@ -528,5 +528,6 @@ $sync.ResumeRes = $out
     if ($ans -eq (T '打开所在位置')) { Open-Location $h[0].Bak }
 }
 $global:CLEANC_UI_SHOWN = $true   # 告诉外层 exe：界面已经正常打开
+$script:helpAtStart = $script:helpReady   # 界面自测核对：帮助页没有在打开窗口时就建好
 if ($script:uiTest) { $win.WindowStartupLocation = 'Manual'; $win.Left = -32000; $win.Top = -32000; $win.ShowActivated = $false; $win.ShowInTaskbar = $false }
 $win.ShowDialog() | Out-Null

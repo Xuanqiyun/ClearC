@@ -97,7 +97,7 @@ function Apply-Mode {
     $ctl.HTabEvents.Visibility = & $v 2
     Select-HealthTab $script:healthTab
     Show-Fixes $(if ($script:healthData) { $script:healthData.Power } else { $null })
-    $ctl.FbCopyDiag.Visibility = & $v 1; $ctl.FbSelfTest.Visibility = & $v 2
+    if ($ctl.FbCopyDiag) { $ctl.FbCopyDiag.Visibility = & $v 1; $ctl.FbSelfTest.Visibility = & $v 2 }   # 帮助页还没打开时没有这两个
     Update-SetNav
     foreach ($n in 'SetCustomList', 'SetCustomEmpty', 'BtnSetCustomAdd', 'SetExcludeList', 'SetExcludeEmpty', 'BtnSetExcludeAdd', 'SetCustomHead', 'SetCustomNote', 'SetExcludeHead', 'SetExcludeNote') { $ctl[$n].Visibility = & $v 2 }
     $ctl.ModeTag.Text = (Get-ModeName $m) + (T '模式')
@@ -160,7 +160,7 @@ function Apply-Display {
     $show = @{}
     foreach ($k in $script:optPages.Keys) { $show[$k] = (-not $hp.ContainsKey($k)) -and (-not $script:pageLvl.ContainsKey($k) -or $script:pageLvl[$k] -le $m -or ($k -eq 'moves' -and $script:hasMoves)); $ctl[$script:pageList[$k][1]].Visibility = & $vis $show[$k] }
     $ctl.NavHeadManage.Visibility = & $vis ($show['moves'] -or $show['auto'] -or $show['log'])
-    if ($script:helpPanes) { Update-HelpForMode }
+    if ($script:helpReady) { Update-HelpForMode }
     $hl = Get-HiddenSet 'HideLinks'
     foreach ($k in $script:optLinks.Keys) { $ctl[$script:optLinks[$k][1]].Visibility = & $vis ((-not $hl.ContainsKey($k)) -and (-not $script:linkLvl.ContainsKey($k) -or $script:linkLvl[$k] -le $m)) }
 }
