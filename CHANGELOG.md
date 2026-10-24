@@ -1,5 +1,19 @@
 # 更新记录
 
+## 3.6
+按三份评审（安全和运维、用户体验、架构）一条一条改的，清单和每条的测试见 docs/BACKLOG.md。
+- **删除更稳**：所有删用户文件的地方都走同一个入口，删前查个人文件夹、系统位置、链接和回收站放不放得下，删后核对、写操作日志；删重复文件也一个一个记下来。存密码、证书、密钥的文件夹，电脑上所有账户的都挡住。设置文件先写到临时文件再替换，读不出来时一律不删。
+- **同一时间只做一件事**：界面只能开一个；删除、搬家、改设置时拿着锁，定时的自动清理碰上了就跳过这一次。
+- **搬家中途断电也能收拾**：每做完一步记一次，下次打开说清停在哪一步，可以接着做完或撤回；复制完核对文件个数和大小，一个都不能差。搬走的聊天记录、桌面、文档带上原来的权限，电脑上的其他账户打不开；以前搬走的可以一键改过来。C 盘加了密而目标盘没有时，确认框里写明。
+- **一键清理只删不搬**：聊天记录在清理页单独一张卡片，自己点才搬。只有 C 盘时搬家项默认跳过；搬家目标不会自动选 USB 移动硬盘，手动选时再问一次；有搬走的文件夹就显示「搬家管理」，链接断了会提醒。
+- **第一次打开**：同意说明后自动扫描，结果一张卡片、一个主按钮。清理页的选项卡写着选了几项，可以「这一类全部跳过」，合计分删除和搬走；几个确认框合成一个，主按钮写清做什么，永久删除用红色。
+- **看得清、用键盘也能用**：说明文字的对比度提到 4.5:1 以上，最小 12 号字；键盘焦点有框，图标按钮读屏软件读得出名字；帮助只讲当前模式里有的功能；「谨慎清理」「需确认」这几个容易误解的名字改了。
+- **少等、少猜**：输完管理员密码马上显示「正在打开」；帮助页第一次打开时才加载；照片指纹的代码用到时才编译。换外观、换语言重开后回到原来的页面和扫描结果。出错时先说是什么情况、下一步怎么办，系统原话放在后面。软件列表显示软件自己的图标。
+- **运维**：C 盘快满、操作日志写不进去时会说；长时间操作期间电脑不会睡着，用电池搬大文件夹先提醒；用另一个管理员账户提权运行时先说明清理和搬家会作用在哪个账户上；takeown、icacls 不再依赖系统语言；新加「改动总览」，每项写当前状态和怎么改回去，改系统设置前可以先建还原点；运行记录挪到 %LOCALAPPDATA%\CleanC\logs 并轮转；公司电脑的受限语言模式下给一句说明；「自动提醒」显示任务上次、下次运行的时间和结果。
+- **可以核对下载的文件**：「反馈和新版本」里显示本机 exe 的 SHA256，和发布页对比；导出诊断包前列出里面有什么，可以不带内存转储。计划任务改成运行复制到 Program Files\ClearC 的那份（只有管理员能改）；启动器不再按环境变量加载程序集；系统程序的路径不再取自环境变量；下载页、运行记录经资源管理器打开，不带管理员身份。
+- 内部和测试：后台任务、清理操作改用稳定的编号；后台出的错写进运行记录；统计结果不再共用静态字段；版本号只有一处；路径规则和搬家进度的状态机开始搬进 C#。安全测试的源码锁改用语法树；Windows 测试机上挂一个虚拟磁盘真的搬一次、搬回来，再模拟两次中途断电。
+- Built from three reviews (safety and operations, user experience, architecture); see docs/BACKLOG.md. Every user-file delete goes through one checked entry point and is logged; settings are written atomically and nothing is deleted if they cannot be read. Only one window runs, and scheduled cleanup skips while a delete or move is in progress. Moves write a journal after every step, so an interrupted move can be finished or undone on the next start, and the copy must match the original exactly; moved folders keep their permissions, and you are warned when moving from an encrypted C: to an unencrypted drive. One-click cleanup only deletes (chat data has its own card), USB drives are never picked as a move target automatically, and a C:-only PC no longer fails. First run scans right after you agree; tabs show what is selected; confirmations are merged and permanent delete is red. Text contrast is at least 4.5:1 with 12 pt minimum, focus is visible, icon buttons have names for screen readers, and help only describes what the current mode shows. A splash shows right after the admin prompt, help loads on first use, a theme or language change returns to the same page and results, errors say what to do next, and apps show their own icons. Also: low-disk and log-write warnings, no sleep during long jobs, battery warning, other-admin warning, language-independent takeown/icacls, a Changes overview with optional restore points, rotated logs under %LOCALAPPDATA%\CleanC\logs, a clear message under AppLocker/WDAC, last and next run of reminder tasks, the exe's SHA256 in Help, a diagnostics export that lists its contents and can leave dumps out, and scheduled tasks that run a copy under Program Files.
+
 ## 3.5.2
 - **窗口拉宽、最大化时内容跟着铺开**：帮助、省空间、自动提醒、设置、系统健康各页去掉了最大宽度，卡片占满整页；帮助里一组说明、方块和标签按宽度排成一到三列，窄了自动退回一列；活动监控、重复文件、操作日志、和上次比这几个表格的宽列（程序、位置、对象、文件夹）分到多出来的宽度；空间地图的磁盘卡片、系统健康的硬件卡片一起排满一排，用量条跟着卡片变长；空间变化的柱子铺满整个宽度。正文一行最长 860，太长读着累。
 - **常见问题修复重新排版**：每一步一张卡片，左边是第几步，中间是这一步做什么和说明，右边一个按钮（运行、打开、查看；点了会先问的带省略号）；顶上用三个标签说明「只看」「会改动」「要重启」，代替原来的一大段说明；左边问题列表加宽、行距加大。
