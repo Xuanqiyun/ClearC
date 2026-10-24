@@ -730,7 +730,8 @@ try { & {
     }
     # ============ 35. 受限语言模式（AppLocker、WDAC）下说清楚为什么打不开（3.6 运维评审） ============
     $lc = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '../build/launcher.cs'))
-    Check 'OPS-9 the exe checks the PowerShell language mode before running the script and explains a locked-down PC' ($lc -match 'LanguageMode' -and $lc.IndexOf('LanguageMode') -lt $lc.IndexOf('"AddScript"') -and $lc -match 'AppLocker')
+    # 启动器不自己探测语言模式（攻击工具常这样做，3.6.1 被 Defender 的启发式误报），只看脚本记下的 CLEANC_LANGMODE
+    Check 'OPS-9 the exe explains a locked-down PC from what the script reports, without probing the language mode itself' ($lc -notmatch '"LanguageMode"' -and $lc -match '"CLEANC_LANGMODE"' -and $lc.IndexOf('"CLEANC_LANGMODE"') -lt $lc.IndexOf('"CLEANC_UI_SHOWN"') -and $lc -match 'AppLocker' -and $src -match "(?s)LanguageMode -ne 'FullLanguage'.{0,600}CLEANC_LANGMODE = ")
     Check 'OPS-9 running the script directly checks it too, before anything needs full PowerShell' ($src -match "LanguageMode -ne 'FullLanguage'" -and $src.IndexOf("LanguageMode -ne 'FullLanguage'") -lt $src.IndexOf('Add-Type'))
     # ============ 36. 自动提醒页写明任务上次、下次什么时候运行，结果怎样（3.6 运维评审） ============
     $d1 = [datetime]'2026-10-20 12:00'; $d2 = [datetime]'2026-10-27 12:00'

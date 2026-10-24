@@ -84,11 +84,17 @@ static class CleanCLauncher {
             SetEnumProp(rs, "ThreadOptions", "UseCurrentThread");          // 就在当前（STA）主线程上执行
             Method(rs.GetType(), "Open").Invoke(rs, null);
 
+            ps = Method(psType, "Create").Invoke(null, null);
+            psType.GetProperty("Runspace").SetValue(ps, rs, null);
+            Method(psType, "AddScript", typeof(string)).Invoke(ps, new object[] { script });
+            Method(psType, "Invoke").Invoke(ps, null);
+
+            object proxy = rs.GetType().GetProperty("SessionStateProxy").GetValue(rs, null);
             // 公司电脑的应用控制策略（AppLocker、WDAC）会把 PowerShell 限制在「受限语言模式」：本工具要调用系统接口、
-            // 编译 C#、显示窗口，在这种模式下都做不了。直接说清楚，不要报一堆看不懂的错
-            object proxy0 = rs.GetType().GetProperty("SessionStateProxy").GetValue(rs, null);
-            object lang = proxy0.GetType().GetProperty("LanguageMode").GetValue(proxy0, null);
-            if (lang != null && lang.ToString() != "FullLanguage") {
+            // 编译 C#、显示窗口，在这种模式下都做不了。脚本第一句就查，停下时把模式记在 CLEANC_LANGMODE 里，这里说清楚。
+            // 启动器自己不去探测语言模式：攻击工具常这样先探测再设法绕过，杀毒软件的启发式判断可能因此误报（3.6.1 被 Defender 报成 Bearfoos.B!ml）
+            object lang = Method(proxy.GetType(), "GetVariable", typeof(string)).Invoke(proxy, new object[] { "CLEANC_LANGMODE" });
+            if (lang != null) {
                 bool zh = System.Globalization.CultureInfo.CurrentUICulture.Name.StartsWith("zh", StringComparison.OrdinalIgnoreCase);
                 string msg = zh
                     ? "这台电脑的应用控制策略（AppLocker 或 WDAC）把 PowerShell 限制在「受限语言模式」（" + lang + "）。本工具要用的功能（读文件表、调用系统接口、显示窗口）在这种模式下都用不了，所以没法运行。\r\n\r\n这通常是公司电脑的安全设置。需要用的话，请找管理员把本工具加进允许运行的列表。"
@@ -96,13 +102,6 @@ static class CleanCLauncher {
                 if (TestMode) Console.Error.WriteLine("FAIL: language mode " + lang); else MessageBoxW(IntPtr.Zero, msg, zh ? "腾挪 ClearC" : "ClearC", 0x30);
                 return 3;
             }
-
-            ps = Method(psType, "Create").Invoke(null, null);
-            psType.GetProperty("Runspace").SetValue(ps, rs, null);
-            Method(psType, "AddScript", typeof(string)).Invoke(ps, new object[] { script });
-            Method(psType, "Invoke").Invoke(ps, null);
-
-            object proxy = rs.GetType().GetProperty("SessionStateProxy").GetValue(rs, null);
             object shown = Method(proxy.GetType(), "GetVariable", typeof(string)).Invoke(proxy, new object[] { "CLEANC_UI_SHOWN" });
             if (shown == null) {
                 // 程序里设了 SilentlyContinue，错误不会进错误流，但 PowerShell 仍会记在 $Error 里（最新的在前）
