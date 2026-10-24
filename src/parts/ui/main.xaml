@@ -4,6 +4,16 @@
         WindowStartupLocation="CenterScreen" FontFamily="Segoe UI, Microsoft YaHei UI" FontSize="13" Background="#F5F5F7"
         Foreground="#1D1D1F" UseLayoutRounding="True" SnapsToDevicePixels="True" TextOptions.TextFormattingMode="Display">
   <Window.Resources>
+    <!-- 用键盘（Tab）走到哪里，哪里就有一圈蓝边；鼠标点击时不出现 -->
+    <Style x:Key="FocusRing">
+      <Setter Property="Control.Template">
+        <Setter.Value>
+          <ControlTemplate>
+            <Rectangle Margin="-3" RadiusX="9" RadiusY="9" Stroke="#0071E3" StrokeThickness="2" SnapsToDevicePixels="True"/>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
     <!-- 设置里可以关掉的显示项：改这几个资源，界面上用到的地方都跟着变 -->
     <Visibility x:Key="MapCkVis">Visible</Visibility>
     <Visibility x:Key="MapBarVis">Visible</Visibility>
@@ -235,7 +245,7 @@
       <Setter Property="Padding" Value="14,6"/>
       <Setter Property="MinHeight" Value="30"/>
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Button">
@@ -280,7 +290,7 @@
       <Setter Property="Background" Value="Transparent"/>
       <Setter Property="Padding" Value="2,2"/>
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Button">
@@ -301,7 +311,7 @@
       <Setter Property="Foreground" Value="#6E6E73"/>
       <Setter Property="FontSize" Value="12"/>
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="Padding" Value="0,3"/>
       <Setter Property="HorizontalContentAlignment" Value="Left"/>
       <Setter Property="ToolTip" Value="点一下按这一列排序，再点一下反过来"/>
@@ -329,7 +339,7 @@
       <Setter Property="Foreground" Value="#6E6E73"/>
       <Setter Property="FontSize" Value="13"/>
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="Margin" Value="0,0,22,0"/>
       <Setter Property="Template">
         <Setter.Value>
@@ -362,7 +372,7 @@
       <Setter Property="Foreground" Value="#3A3A3C"/>
       <Setter Property="FontSize" Value="13"/>
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="Margin" Value="0,0,0,1"/>
       <Setter Property="Template">
         <Setter.Value>
@@ -391,7 +401,7 @@
       <Setter Property="FontSize" Value="13"/>
       <Setter Property="FontWeight" Value="SemiBold"/>
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="Margin" Value="0,10,0,2"/>
       <Setter Property="Template">
         <Setter.Value>
@@ -427,7 +437,7 @@
       <Setter Property="Foreground" Value="#1D1D1F"/>
       <Setter Property="FontWeight" Value="SemiBold"/>
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
       <Setter Property="Margin" Value="0,0,0,2"/>
       <Setter Property="Template">
@@ -454,7 +464,7 @@
       <Setter Property="Foreground" Value="#1D1D1F"/>
       <Setter Property="FontSize" Value="13.5"/>
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="Margin" Value="0,0,0,3"/>
       <Setter Property="Template">
         <Setter.Value>
@@ -488,7 +498,7 @@
     <!-- 外观选择：每种外观一张缩略图（浅色、深色、跟随系统），下面写名字；选中的那张描蓝边 -->
     <Style x:Key="ThemeCard" TargetType="RadioButton">
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="Margin" Value="0,0,16,0"/>
       <Setter Property="Template">
         <Setter.Value>
@@ -524,7 +534,7 @@
       <Setter Property="Foreground" Value="#1D1D1F"/>
       <Setter Property="FontSize" Value="12.5"/>
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="RadioButton">
@@ -575,7 +585,7 @@
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="FontSize" Value="12.5"/>
             <Setter Property="Foreground" Value="#3A3A3C"/>
-            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
             <Setter Property="Template">
               <Setter.Value>
                 <ControlTemplate TargetType="ListBoxItem">
@@ -617,7 +627,7 @@
       <Setter Property="FontSize" Value="12.5"/>
       <Setter Property="Cursor" Value="Hand"/>
       <Setter Property="Margin" Value="0,0,6,6"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="ToggleButton">
@@ -641,7 +651,7 @@
     <Style TargetType="CheckBox">
       <Setter Property="Foreground" Value="#1D1D1F"/>
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="VerticalContentAlignment" Value="Center"/>
       <Setter Property="Template">
         <Setter.Value>
@@ -777,7 +787,7 @@
       <Setter Property="Foreground" Value="#1D1D1F"/>
       <Setter Property="MinHeight" Value="30"/>
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="ComboBox">
@@ -965,7 +975,7 @@
     </Style>
     <Style x:Key="PlainRow" TargetType="ListViewItem">
       <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="ListViewItem">
@@ -1034,7 +1044,7 @@
     </Style>
     <Style x:Key="GridRow" TargetType="ListViewItem">
       <Setter Property="Padding" Value="0,5"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="ListViewItem">
@@ -1050,7 +1060,7 @@
       </Setter>
     </Style>
     <Style x:Key="RootRow" TargetType="ListBoxItem">
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="Margin" Value="0,0,6,6"/>
       <Setter Property="Template">
         <Setter.Value>
@@ -1063,7 +1073,7 @@
       <Setter Property="Foreground" Value="#1D1D1F"/>
       <Setter Property="FontSize" Value="12.5"/>
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="CheckBox">
@@ -1083,7 +1093,8 @@
     </Style>
     <Style x:Key="PillX" TargetType="Button">
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="AutomationProperties.Name" Value="{Binding ToolTip, RelativeSource={RelativeSource Self}}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Button">
@@ -1108,7 +1119,7 @@
     <Style x:Key="Switch" TargetType="CheckBox">
       <Setter Property="Foreground" Value="#1D1D1F"/>
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="CheckBox">
@@ -1137,7 +1148,7 @@
     <!-- ===== 可以选中的列表行（空间地图、软件、搬家记录） ===== -->
     <Style x:Key="SelRow" TargetType="ListViewItem">
       <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="ListViewItem">

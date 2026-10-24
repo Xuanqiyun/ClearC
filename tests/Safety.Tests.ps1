@@ -693,6 +693,9 @@ try { & {
     Check 'UX-11 every cleanup item has a stable tier (safe, careful, confirm, chat, other, custom)' (@($cat | Where-Object { @('safe', 'careful', 'confirm', 'chat', 'other', 'custom') -notcontains [string]$_.Tier }).Count -eq 0 -and $tiers -contains 'confirm' -and $tiers -contains 'careful')
     Check 'UX-11 code decides by the tier, not by matching the Chinese group names' ($src -notmatch "StartsWith\('(需确认|谨慎清理|安全清理|聊天软件|自定义|默认不清|清后要重建)")
     Check 'UX-11 the confusing names are gone: "careful" and "needs confirmation" groups and the "run selected" button are renamed' ($engineText -notmatch "'谨慎清理（" -and $engineText -notmatch "'需确认（" -and $src -notmatch 'Content="执行所选操作"' -and $engineText -match "'清后要重建（" -and $engineText -match "'默认不清（")
+    # ============ 32. 键盘看得到焦点；读屏软件读得出图标按钮（3.6 体验评审） ============
+    Check 'UX-9 no style hides the keyboard focus any more; a visible focus ring is used instead' ($src -notmatch 'Property="FocusVisualStyle" Value="\{x:Null\}"' -and $src -match 'x:Key="FocusRing"' -and ([regex]::Matches($src, 'Value="\{StaticResource FocusRing\}"')).Count -ge 10)
+    Check 'UX-9 buttons made of an icon and text get a name screen readers can read, icon-only ones use their tooltip' ($src -match '(?s)function Set-AutoNames.*?AutomationProperties\]::SetName' -and $src -match 'Set-AutoNames \$win' -and $src -match 'x:Key="PillX"(?s:.*?)AutomationProperties\.Name')
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue

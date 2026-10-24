@@ -119,6 +119,12 @@ function Invoke-UiTest {
             $ask = @(@($ctl.FixGroups.Items) | ForEach-Object { @($_.Steps) } | Where-Object { $_.Id -eq 'sfcrepair' })[0]
             if ($ask -and $ask.Enabled -and -not ([string]$ask.Act).EndsWith([string][char]0x2026)) { throw 'a step that asks first has no ellipsis on its button' }
         }
+        & $step 'screen readers get names for icon buttons; keyboard focus shows a ring' {
+            $nm = { param($b) [string][System.Windows.Automation.AutomationProperties]::GetName($b) }
+            if (-not (& $nm $ctl.BtnTheme)) { throw 'the appearance button (icon and text) has no name' }
+            if ((& $nm $ctl.BtnMapBack) -ne [string]$ctl.BtnMapBack.ToolTip) { throw ('icon-only back button is named "{0}"' -f (& $nm $ctl.BtnMapBack)) }
+            if ($ctl.BtnRun.FocusVisualStyle -ne $win.FindResource('FocusRing')) { throw 'buttons do not use the focus ring' }
+        }
         & $step 'appearance picker shows three previews' {
             $p = New-ThemePicker 'dark'
             $rbs = @($p.Children)
