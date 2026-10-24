@@ -581,6 +581,7 @@ $ctl.BtnDupDelete.Add_Click({
 Add-Type -AssemblyName Microsoft.VisualBasic
 $done = New-Object System.Collections.ArrayList
 $i = 0; $total = $arg.Plan.Count; $freed = [double]0; $same = $false
+$how = if ($arg.Recycle) { (T '重复文件：移到回收站') } else { (T '重复文件：永久删除') }
 foreach ($p in $arg.Plan) {
     if (Stopping) { break }
     $i++
@@ -593,20 +594,20 @@ foreach ($p in $arg.Plan) {
     $fi = Get-Item -LiteralPath $p.Path -Force -ErrorAction SilentlyContinue
     if (-not $fi) { [void]$done.Add($p.Path); continue }
     if ($fi.Length -ne $p.Size -or ($p.Mtime -and $fi.LastWriteTime.Ticks -ne [long]$p.Mtime)) { Log ((T "  跳过（文件在扫描后被修改过）：{0}") -f $($p.Path)); continue }
-    $kept = $false
+    $kept = $false; $keepAt = ''
     foreach ($k in $p.Keep) {
         $ki = Get-Item -LiteralPath $k -Force -ErrorAction SilentlyContinue
         if (-not $ki) { continue }
         # 保留的那份和要删的其实是同一个文件（硬链接的两个名字，或者经过目录链接的两条路径）：删了就一份都不剩
         if ([FsTools]::SameFile($k, $p.Path)) { Log ((T "  跳过（和保留的那份是同一个文件，只是路径不同）：{0}") -f $($p.Path)); $kept = $false; $same = $true; break }
-        if ($p.Similar) { $kept = $true; break }   # 相似照片：保留的那份还在就行（大小本来就不同）
+        if ($p.Similar) { $kept = $true; $keepAt = $k; break }   # 相似照片：保留的那份还在就行（大小本来就不同）
         if ($ki.Length -ne $p.Size) { continue }
         # 保留的那份在扫描后被改过（大小没变也算）：它已经不是那份内容了，不能拿它当保留
         if ($p.KeepTicks -and $p.KeepTicks.ContainsKey([string]$k) -and $ki.LastWriteTime.Ticks -ne [long]$p.KeepTicks[[string]$k]) { continue }
-        if ($p.Verified) { $kept = $true; break }
+        if ($p.Verified) { $kept = $true; $keepAt = $k; break }
         # 抽样判定的组：和保留的那份逐字节比一遍，完全相同才删
         SetP @{ SubKind = 'verify'; Detail = $p.Path }
-        if ([DupFinder]::SameContent($k, $p.Path)) { $kept = $true; break }
+        if ([DupFinder]::SameContent($k, $p.Path)) { $kept = $true; $keepAt = $k; break }
     }
     SetP @{ SubKind = 'none' }
     if ($same) { $same = $false; continue }
@@ -623,8 +624,12 @@ foreach ($p in $arg.Plan) {
             [IO.File]::Delete($p.Path)
         }
         [void]$done.Add($p.Path); $freed += $p.Size
+        OpLog '删除' $how $p.Path ((T "{0}，保留的那份：{1}") -f (GB $p.Size), $keepAt)
         if ($total -le 200 -or $i % 100 -eq 0) { Log ((T "  [{0}/{1}] 已删除  {2}") -f $i, $total, $p.Path) }
-    } catch { Log ((T "  删除失败  {0}：{1}") -f $($p.Path), $($_.Exception.Message)) }
+    } catch {
+        Log ((T "  删除失败  {0}：{1}") -f $($p.Path), $($_.Exception.Message))
+        OpLog '删除' $how $p.Path ((T '没删掉：') + $_.Exception.Message)
+    }
 }
 Log ((T "删除完成：{0} 个文件，{1}。") -f $done.Count, $(if ($freed -ge 1GB) { "{0:N2} GB" -f ($freed / 1GB) } else { "{0:N1} MB" -f ($freed / 1MB) }))
 $sync.DupDeleted = $done
