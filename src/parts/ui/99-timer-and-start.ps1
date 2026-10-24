@@ -247,6 +247,13 @@ $timer.Add_Tick({
             if ($x) { $script:pendingDialog = @{ Title = (T '已标记为仅在线'); Kind = 'done'; Text = ((T "{0} 个文件（{1}）已改成仅在线{2}。OneDrive 会在后台释放本地空间，要等它同步一会儿。") -f $x.Done, (Fmt $x.Bytes), $(if ($x.Fail) { ((T "，{0} 个没改成（可能正被占用）") -f $x.Fail) } else { '' })) } }
             $script:odWanted = $true
         }
+        elseif ($sync.Mode -eq 'moveresume') {
+            $x = @($sync.ResumeRes)
+            End-Op (T '完成')
+            $script:movedTargets = $null
+            $bad = @($x | Where-Object { -not $_.Ok })
+            $script:pendingDialog = @{ Title = $(if ($bad.Count) { (T '有的没做成') } else { (T '处理好了') }); Kind = $(if ($bad.Count) { 'warn' } else { 'done' }); Text = (@($x | ForEach-Object { $_.Msg }) -join "`n`n") }
+        }
         elseif ($sync.Mode -eq 'aclfix') {
             $x = $sync.AclRes
             End-Op (T '完成')
@@ -784,6 +791,26 @@ $sync.AclRes = Repair-MovedAccess $arg.Items
 '@ @{ Items = $l }
 }
 function Show-HalfMoves {
+    # 有进度记录的：说清楚停在哪一步，可以接着做完或撤回
+    $js = @(); try { $js = @(Get-MoveJournal) } catch {}
+    if ($js.Count -gt 0) {
+        if ($script:worker) { return }
+        $items = @($js | ForEach-Object { Get-JournalText $_ })
+        Write-LogFile ((T '发现上次没做完的搬家：') + ($items -join (T '；')))
+        $fin = T '接着做完'; $undo = T '撤回'
+        $ans = Show-Sheet -Kind warn -Title (T '有上次没做完的搬家') -Text (T "上次搬家或搬回 C 盘时中途停了（比如关机、断电、程序被关掉）。每一步都有记录，数据都还在，没有删。`n`n「接着做完」按原来的计划做完；「撤回」恢复成搬之前的样子（已经删了一部分旧文件夹的，只能接着做完）。先退出下面这些文件夹所属的软件，再选。") `
+            -Items $items -Buttons @((T '以后再说'), $undo, $fin) -Primary $fin -Cancel (T '以后再说')
+        if ($ans -ne $fin -and $ans -ne $undo) { return }
+        $sync.Mode = 'moveresume'; $sync.ResumeRes = $null
+        Start-Op $(if ($ans -eq $fin) { (T '接着做完上次的搬家') } else { (T '撤回上次没做完的搬家') }) -NoCard; UI-Busy $true
+        Start-Worker @'
+$out = @()
+foreach ($x in $arg.Items) { $r = Resume-Move $x $arg.How; $out += @{ Ok = $r.Ok; Msg = $r.Msg }; Log ("  " + $r.Msg) }
+$sync.ResumeRes = $out
+'@ @{ Items = $js; How = $(if ($ans -eq $fin) { 'finish' } else { 'undo' }) }
+        return
+    }
+    # 没有记录的（以前的版本留下的）：只能告诉用户数据在哪
     $h = @(); try { $h = @(Find-HalfMoves) } catch { return }
     if ($h.Count -eq 0) { return }
     $items = @($h | ForEach-Object { if ($_.Kind -eq '.moved_backup') { (T "{0} 的数据在 {1}") -f $_.Src, $_.Bak } else { (T "{0}：搬回时复制回来的数据在 {1}") -f $_.Src, $_.Bak } })

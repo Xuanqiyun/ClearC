@@ -156,6 +156,57 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+有的没做成	Some of it did not work
+处理好了	Done
+接着做完	Finish it
+撤回	Undo
+上次搬家或搬回 C 盘时中途停了（比如关机、断电、程序被关掉）。每一步都有记录，数据都还在，没有删。\n\n「接着做完」按原来的计划做完；「撤回」恢复成搬之前的样子（已经删了一部分旧文件夹的，只能接着做完）。先退出下面这些文件夹所属的软件，再选。	A move to or from C: stopped halfway last time (for example the PC was shut down, lost power or ClearC was closed). Every step was recorded, and all your data is still there; nothing was deleted.\n\n"Finish it" completes the original plan. "Undo" puts things back the way they were before the move (if part of the old folder was already deleted, it can only be finished). Quit the apps these folders belong to first, then choose.
+接着做完上次的搬家	Finish the last move
+撤回上次没做完的搬家	Undo the unfinished move
+两边差一点，补复制一遍再核对	The two sides differ slightly; copying again and re-checking
+  没能写下搬家进度（{0}）：断电的话，下次打开要按 *.moved_backup 找	  Could not write the move progress ({0}). If the power goes off, look for *.moved_backup next time
+{0}：复制到 {1} 时停了，C 盘上的原文件夹没动	{0}: stopped while copying to {1}; the original folder on C: was not touched
+{0}：原文件夹已改名为 {1}，还没换成链接	{0}: the original folder was renamed to {1} but not replaced by a link yet
+{0}：已换成指向 {1} 的链接，C 盘上的旧文件夹 {2} 还没删	{0}: now a link to {1}; the old folder {2} on C: is not deleted yet
+{0}：已搬好，删 C 盘上的旧文件夹 {1} 时停了	{0}: moved; stopped while deleting the old folder {1} on C:
+{0}：搬回 C 盘时复制到一半，C 盘上的链接没动	{0}: stopped halfway while copying back to C:; the link on C: was not touched
+{0}：搬回时链接已拆掉，复制回来的数据在 {1}	{0}: the link was removed while moving back; the copied data is in {1}
+{0}：已搬回 C 盘，目标盘上的 {1} 还没删	{0}: moved back to C:; {1} on the other drive is not deleted yet
+{0}：已搬回 C 盘，删目标盘上的 {1} 时停了	{0}: moved back to C:; stopped while deleting {1} on the other drive
+{0}：已经做完了	{0}: already finished
+路径里有 % 或引号，为了不删错地方，没法在这里处理	The path contains % or quotes, so it is not handled here to avoid deleting the wrong place
+{0} 又有了新的内容（多半是软件重新建的），所以没有动。原来的数据在 {1}，副本在 {2}。先退出那个软件，把两边对比一下再决定	{0} has new content again (most likely the app recreated it), so nothing was changed. The original data is in {1} and the copy in {2}. Quit that app and compare both before deciding
+已经做完了	Already finished
+{0} 没动过。复制了一部分的副本在 {1}，再搬这一项时会接着复制；不需要的话，可以在「搬家管理」里删掉这份副本	{0} was not touched. The partial copy is in {1}; moving this item again continues from it. If you no longer need it, delete the copy in Move manager
+没做完的搬家：C 盘没动过	Unfinished move: C: was not touched
+没做完的搬家：没动	Unfinished move: left as it is
+没能把 {0} 改回 {1}：{2}	Could not rename {0} back to {1}: {2}
+撤回没做完的搬家失败	Undoing the unfinished move failed
+已撤回：{0} 恢复成搬之前的样子。复制到 {1} 的副本还在，再搬时会用上	Undone: {0} is back the way it was. The copy in {1} is kept and will be reused next time
+撤回没做完的搬家	Undid the unfinished move
+建链接失败，没改；数据在 {0}	Could not create the link; nothing changed. The data is in {0}
+接着做完搬家失败	Finishing the move failed
+{0} 现在不是指向 {1} 的链接，没动。数据在 {2}	{0} is not a link to {1} now, so nothing was changed. The data is in {2}
+C 盘上的链接拆不掉（可能被占用），没改	The link on C: could not be removed (it may be in use); nothing changed
+没能把 {0} 改回 {1}，已恢复成链接：{2}	Could not rename {0} back to {1}; the link was restored: {2}
+已撤回：{0} 恢复成搬之前的样子。目标盘上的副本 {1} 还在	Undone: {0} is back the way it was. The copy {1} on the other drive is kept
+，里面有 {0} 个文件比 C 盘上的新（链接期间写的），留在那里	; {0} files in it are newer than on C: (written while linked) and stay there
+补复制没成功（robocopy 代码 {0}），C 盘上的旧文件夹先保留：{1}	Copying the last files failed (robocopy code {0}); the old folder on C: is kept: {1}
+核对不一致：{0} 里有 {1} 个文件在目标盘上没有，先保留	Check failed: {1} files in {0} are not on the other drive, so it is kept
+已搬好，但 C 盘上的旧文件夹没删干净（可能有文件被占用），过后可以再试：{0}	Moved, but the old folder on C: was not fully deleted (a file may be in use). You can try again later: {0}
+接着做完搬家：旧文件夹没删干净	Finished the move: the old folder was not fully deleted
+已做完：{0} 的数据在 {1}，C 盘上的旧文件夹已删	Finished: the data of {0} is in {1}; the old folder on C: was deleted
+接着做完搬家	Finished the unfinished move
+建链接失败，没改；复制回来的数据在 {0}	Could not create the link; nothing changed. The copied data is in {0}
+已撤回：{0} 又是指向 {1} 的链接	Undone: {0} is a link to {1} again
+撤回没做完的搬回	Undid the unfinished move back
+{0} 已经在 C 盘上了；目标盘上的 {1} 留着没删，确认不需要的话可以自己删	{0} is on C: already; {1} on the other drive is kept. Delete it yourself if you are sure you do not need it
+没做完的搬回：保留目标盘上的那份	Unfinished move back: kept the copy on the other drive
+已搬回 C 盘；目标盘上的 {0} 先保留，确认不需要的话可以自己删	Moved back to C:; {0} on the other drive is kept. Delete it yourself if you are sure you do not need it
+接着做完搬回：保留目标盘上的那份	Finished the move back: kept the copy on the other drive
+已做完：{0} 搬回了 C 盘，目标盘上的那份已删	Finished: {0} is back on C: and the copy on the other drive was deleted
+接着做完搬回	Finished the unfinished move back
+记录看不懂，没动	The record could not be read, so nothing was changed
 没删：	Not deleted: 
 没能放进回收站（代码 {0}）：可能文件正被占用、回收站放不下，或者在提示里选了取消。没有删	Could not move it to the Recycle Bin (code {0}): a file may be in use, the Recycle Bin may be too small, or the prompt was cancelled. Nothing was deleted
 旧系统 Windows.old	Old Windows installation (Windows.old)
