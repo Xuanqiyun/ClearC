@@ -203,14 +203,15 @@ function Invoke-UiTest {
                 $sync.Sizes = $sizes; Build-Rows $sizes
                 if (-not $script:rows -or $script:rows.Count -lt 3) { throw 'no rows' }
                 Apply-OneClick
-                $bad = @($script:rows | Where-Object { $_.Action -ne (T '跳过') -and (([string]$_.Group).StartsWith('需确认') -or ([string]$_.Group).StartsWith('自定义')) })
+                $tierOf = @{}; foreach ($c in $catalog) { $tierOf[$c.Idx] = [string]$c.Tier }
+                $bad = @($script:rows | Where-Object { $_.Action -ne (T '跳过') -and @('confirm', 'custom') -contains $tierOf[$_.Idx] })
                 if ($bad.Count) { throw ("one-click picked: {0}" -f (($bad | ForEach-Object { $_.Name }) -join ', ')) }
-                if (@($script:rows | Where-Object { $_.Action -eq (T '删除') -and ([string]$_.Group).StartsWith('安全清理') }).Count -lt 3) { throw 'one-click picked no safe items' }
+                if (@($script:rows | Where-Object { $_.Action -eq (T '删除') -and $tierOf[$_.Idx] -eq 'safe' }).Count -lt 3) { throw 'one-click picked no safe items' }
                 # 一键清理只删不搬；聊天记录大的时候单独一张卡片，小的时候不出现
                 $mv0 = @($script:rows | Where-Object { $_.Action -eq (T '搬到其他盘') })
                 if ($mv0.Count) { throw ("one-click moves: {0}" -f (($mv0 | ForEach-Object { $_.Name }) -join ', ')) }
                 $big = @{}; foreach ($k in $sizes.Keys) { $big[$k] = $sizes[$k] }
-                foreach ($c in $catalog) { if ($c.Kind -eq 'move' -and ([string]$c.G).StartsWith('聊天软件')) { $big[$c.Idx] = [double]300MB } }
+                foreach ($c in $catalog) { if ($c.Kind -eq 'move' -and $c.Tier -eq 'chat') { $big[$c.Idx] = [double]300MB } }
                 Build-Rows $big
                 if ($ctl.ChatCard.Visibility -ne 'Visible' -or @($script:chatIdx).Count -lt 1 -or -not $ctl.ChatCardTitle.Text) { throw 'the chat-history card did not show' }
                 Build-Rows $sizes
@@ -379,7 +380,7 @@ function Invoke-UiTest {
         }
         & $step 'cleanup tiers: careful group, delete preview, recycle switch' {
             $care = @($catalog | Where-Object { $_.Careful })
-            if ($care.Count -lt 10 -or @($care | Where-Object { -not ([string]$_.G).StartsWith('谨慎清理') }).Count -gt 0) { throw ("careful items: {0}" -f $care.Count) }
+            if ($care.Count -lt 10 -or @($care | Where-Object { $_.Tier -ne 'careful' }).Count -gt 0) { throw ("careful items: {0}" -f $care.Count) }
             if (@($catalog | Where-Object { $_.N -eq (T '驱动存储里的旧版驱动包') }).Count -ne 1) { throw 'old driver packages item missing' }
             $d = Join-Path $script:appDir 'uitest-preview'; New-Item -ItemType Directory -Path "$d\sub" -Force | Out-Null
             [IO.File]::WriteAllText("$d\a.tmp", ('x' * 3000)); [IO.File]::WriteAllText("$d\sub\b.tmp", ('y' * 5000)); [IO.File]::WriteAllText("$d\keep.txt", 'z')

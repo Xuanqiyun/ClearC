@@ -76,7 +76,7 @@
                         <Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0"><TextBlock Text="2" Foreground="White" FontSize="12.5" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                         <StackPanel>
                           <TextBlock Style="{StaticResource HelpLead}" Text="Choose for yourself" Margin="0,1,0,0"/>
-                          <TextBlock Style="{StaticResource HelpBody}"><Run>Click "Scan", choose "Delete", "Move to another drive" or "Skip" on each row, then click "Run selected".</Run></TextBlock>
+                          <TextBlock Style="{StaticResource HelpBody}"><Run>Click "Scan", choose "Delete", "Move to another drive" or "Skip" on each row, then click "Process selected".</Run></TextBlock>
                         </StackPanel>
                       </DockPanel>
                     </Border>
@@ -120,11 +120,11 @@
                       <TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Caches, temporary files and logs. Apps rebuild them automatically.</Run></TextBlock>
                     </DockPanel>
                     <DockPanel>
-                      <Border DockPanel.Dock="Left" Width="140" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="Careful cleanup" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border></Border>
+                      <Border DockPanel.Dock="Left" Width="140" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="Rebuilt after cleaning" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border></Border>
                       <TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Browser caches, thumbnails, shader and download caches. They are generated again, so the first start is a little slower.</Run></TextBlock>
                     </DockPanel>
                     <DockPanel>
-                      <Border DockPanel.Dock="Left" Width="140" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="Needs confirmation" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border></Border>
+                      <Border DockPanel.Dock="Left" Width="140" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="Skipped by default" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border></Border>
                       <TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Items that come at a cost, skipped by default. After deleting Windows.old, for example, you can no longer go back to the previous Windows.</Run></TextBlock>
                     </DockPanel>
                     <DockPanel>
@@ -154,7 +154,7 @@
                       <TextBlock Style="{StaticResource HelpBody}"><Run>Windows' temporary files, update cache and logs, the caches of common browsers, game launchers and apps, and the download caches of developer tools. Only caches: never cookies, history, passwords or settings.</Run></TextBlock>
                     </StackPanel>
                     <StackPanel>
-                      <TextBlock Style="{StaticResource HelpLead}" Text="Items that need confirmation"/>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Items skipped by default"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>Windows.old, the Recycle Bin, orphaned Windows Installer packages, old driver packages, broken shortcuts, event logs and more. Skipped by default; read the description before selecting them.</Run></TextBlock>
                     </StackPanel>
                     <StackPanel>

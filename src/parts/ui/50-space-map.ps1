@@ -205,7 +205,7 @@ function Test-ChatPath([string]$path) {
             foreach ($d in @(Get-ChildItem -LiteralPath (Join-Path $env:LOCALAPPDATA 'Packages') -Directory -Filter $pat -Force -ErrorAction SilentlyContinue)) { $script:chatDirs.Add($d.FullName.TrimEnd('\')) }
         }
         foreach ($c in $catalog) {
-            if (-not ([string]$c.G).StartsWith('聊天软件') -or -not $c.Paths) { continue }
+            if ($c.Tier -ne 'chat' -or -not $c.Paths) { continue }
             foreach ($p in $c.Paths) { if ($p) { foreach ($it in @(Get-PathItems $p)) { if ($it.PSIsContainer) { $script:chatDirs.Add($it.FullName.TrimEnd('\')) } } } }
         }
     }
@@ -722,7 +722,7 @@ function Get-MapChatNodes {
     $out = @{ Nodes = New-Object System.Collections.Generic.List[DmNode]; Names = New-Object System.Collections.Generic.List[string] }
     if (-not $script:mapRoot) { return $out }
     foreach ($c in $catalog) {
-        if (-not ([string]$c.G).StartsWith('聊天软件') -or -not $c.Paths) { continue }
+        if ($c.Tier -ne 'chat' -or -not $c.Paths) { continue }
         $hit = $false
         foreach ($p in $c.Paths) {
             if (-not $p) { continue }

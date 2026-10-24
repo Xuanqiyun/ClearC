@@ -4087,7 +4087,7 @@ function PathHasAny([string]$path, $frags) {
 #         以及 %STEAM%（Steam 的安装目录，从注册表查）；可以用 * 通配一层文件夹；@chromium:<User Data 目录> 展开成 Chromium 系浏览器的各个缓存目录
 #   选项：filter=*.log（只删匹配的文件）  whole（整个文件夹删掉，不只是里面的东西）  confirm（放进「需确认」，默认跳过）  svc=服务,服务（删之前停掉、删完再启动）
 #         pro / expert（只在「工程师」/「开发者和 IT」模式下显示；不写的普通用户也看得到）
-#         careful（放进「谨慎清理」：删了要重新下载或重新生成，默认也清，但单独成组、执行前单独列出来）
+#         careful（放进「清后要重建」：删了要重新下载或重新生成，默认也清，但单独成组、执行前单独列出来）
 # 只删缓存：不碰 Cookie、历史记录、密码、设置和用户保存的数据。每一条的名称和说明都在翻译表里有英文
 $script:cacheLib = @(
     '用户临时文件 | %TEMP% | 各软件运行时的临时文件，关掉软件就没用了'
@@ -5391,8 +5391,8 @@ function Get-Catalog {
     $down = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders' -EA SilentlyContinue).'{374DE290-123F-4565-9164-39C4925E467B}'
     if ($down) { $down = [Environment]::ExpandEnvironmentVariables($down) } else { $down = "$env:USERPROFILE\Downloads" }
     $safeG  = '安全清理（缓存、临时文件、日志，删了程序会自动重建）'
-    $careG  = '谨慎清理（删了要重新下载或重新生成，第一次打开会慢一点；默认也清，执行前会单独列出来）'
-    $confG  = '需确认（有代价，默认跳过，看清说明再选）'
+    $careG  = '清后要重建（删了要重新下载或重新生成，第一次打开会慢一点；默认也清，执行前会单独列出来）'
+    $confG  = '默认不清（有代价，看清说明再选）'
     $chatG  = '聊天软件的聊天记录（搬到其他盘：聊天记录和文件原样保留，原位置留链接，软件照常使用）'
     $otherG = '其他可搬的文件夹（数据原样保留，原位置留链接，软件照常使用）'
     $customG = '自定义清理（你在设置里加的文件夹：删除里面的东西，文件夹本身保留）'
@@ -5403,43 +5403,43 @@ function Get-Catalog {
         if ($x.Confirm -or $x.Careful) { continue }
         $list += @{ G=$safeG; Kind='cache'; Def=(T '删除'); N=$x.N; Paths=$x.Paths; Note=$x.Note; Filter=$x.Filter; Whole=$x.Whole; Svc=$x.Svc; Lvl=$x.Lvl }
     }
-    # ---- 谨慎清理：浏览器缓存、缩略图、着色器、下载缓存这类，删了要重新下载或重新生成 ----
+    # ---- 清后要重建：浏览器缓存、缩略图、着色器、下载缓存这类，删了要重新下载或重新生成 ----
     foreach ($x in $lib) {
         if ($x.Confirm -or -not $x.Careful) { continue }
         $list += @{ G=$careG; Kind='cache'; Def=(T '删除'); N=$x.N; Paths=$x.Paths; Note=$x.Note; Filter=$x.Filter; Whole=$x.Whole; Svc=$x.Svc; Lvl=$x.Lvl; Careful=$true }
     }
     $list += @(
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); N=(T '清空回收站');            Note=(T '回收站里是你以前删掉、但还能找回的文件。清空后就永远找不回了，请先打开回收站确认里面没有要的东西')
+        @{ G=$confG; Kind='cache'; Def=(T '跳过'); N=(T '清空回收站');            Note=(T '回收站里是你以前删掉、但还能找回的文件。清空后就永远找不回了，请先打开回收站确认里面没有要的东西')
            Size={ $q = [FsTools]::RecycleBinBytes(); if ($q -ge 0) { [double]$q } else { try { $s = ((New-Object -ComObject Shell.Application).NameSpace(0xA).Items() | Measure-Object -Property Size -Sum).Sum; if ($s) { $s } else { 0 } } catch { 0 } } }
            Act ={ if ($script:recycledThisRun) { Log (T '  这一轮刚把文件放进回收站，不清空回收站（下次再清）') } else { Clear-RecycleBin -Force -ErrorAction SilentlyContinue } } }
         @{ G='安全清理（缓存、临时文件、日志，删了程序会自动重建）'; Kind='cache'; Def=(T '删除'); N=(T 'Windows 传递优化缓存'); Note=(T 'Windows 更新的点对点分发缓存'); Bg=$true
            Size={ try { $s = (Get-DeliveryOptimizationStatus -ErrorAction Stop | Measure-Object -Property FileSize -Sum).Sum; if ($s) { $s } else { 0 } } catch { 0 } }
            Act ={ Delete-DeliveryOptimizationCache -Force -ErrorAction SilentlyContinue } }
 
-        # ---- 需确认：有代价 ----
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache';  Def=(T '跳过'); One=(T '跳过'); N='Windows.old';        Paths=@('C:\Windows.old'); Whole=$true; Note=(T '上一版 Windows 的完整副本。删后不能回退到上一版系统（系统升级 10 天后会自动删）')
+        # ---- 默认不清：有代价 ----
+        @{ G=$confG; Kind='cache';  Def=(T '跳过'); One=(T '跳过'); N='Windows.old';        Paths=@('C:\Windows.old'); Whole=$true; Note=(T '上一版 Windows 的完整副本。删后不能回退到上一版系统（系统升级 10 天后会自动删）')
            Act ={ Remove-WindowsOld } }
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def=(T '跳过'); One=(T '执行'); N=(T '重建 Windows 搜索索引'); Lvl=1; Note=(T '搜索索引膨胀时可重建，重建后通常只剩 1 到 2 GB。重建期间（约 1 小时）搜文件会变慢')
+        @{ G=$confG; Kind='action'; Def=(T '跳过'); One=(T '执行'); N=(T '重建 Windows 搜索索引'); Lvl=1; Note=(T '搜索索引膨胀时可重建，重建后通常只剩 1 到 2 GB。重建期间（约 1 小时）搜文件会变慢')
            Size={ $s = 0; foreach ($f in 'C:\ProgramData\Microsoft\Search\Data\Applications\Windows\Windows.edb','C:\ProgramData\Microsoft\Search\Data\Applications\Windows\Windows.db') { $i = Get-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue; if ($i) { $s += $i.Length } }; if ($s -gt 2GB) { $s } else { 0 } }
            Act ={ Stop-Service WSearch -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 3; foreach ($f in 'C:\ProgramData\Microsoft\Search\Data\Applications\Windows\Windows.edb','C:\ProgramData\Microsoft\Search\Data\Applications\Windows\Windows.db') { [void](Invoke-SafeRemove -Path $f -Scope list -How delete -What (T '重建 Windows 搜索索引')) }; Set-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows Search' -Name SetupCompletedSuccessfully -Value 0 -ErrorAction SilentlyContinue; Start-Service WSearch -ErrorAction SilentlyContinue } }
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def=(T '跳过'); N=(T '关闭休眠 (hiberfil.sys)'); Lvl=1; Paths=@('C:\hiberfil.sys'); Note=(T '休眠文件约等于内存大小。关闭后睡眠不受影响，只是没有「休眠」和「快速启动」')
+        @{ G=$confG; Kind='action'; Def=(T '跳过'); N=(T '关闭休眠 (hiberfil.sys)'); Lvl=1; Paths=@('C:\hiberfil.sys'); Note=(T '休眠文件约等于内存大小。关闭后睡眠不受影响，只是没有「休眠」和「快速启动」')
            Act ={ & "$env:SystemRoot\System32\powercfg.exe" /h off } }
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def=(T '跳过'); One=(T '执行'); N=(T '禁用 XTU 超频日志服务'); Lvl=2; Note=(T '外星人 Command Center 的 CPU 超频组件，会持续写几 GB 日志。不超频可禁用，AWCC 的风扇和性能档位不受影响')
+        @{ G=$confG; Kind='action'; Def=(T '跳过'); One=(T '执行'); N=(T '禁用 XTU 超频日志服务'); Lvl=2; Note=(T '外星人 Command Center 的 CPU 超频组件，会持续写几 GB 日志。不超频可禁用，AWCC 的风扇和性能档位不受影响')
            Size={ $s = Get-Service XTU3SERVICE -ErrorAction SilentlyContinue; if ($s -and $s.Status -eq 'Running') { -1 } else { 0 } }
            Act ={ Stop-Service XTU3SERVICE -Force -ErrorAction SilentlyContinue; Set-Service XTU3SERVICE -StartupType Disabled -ErrorAction SilentlyContinue } }
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T 'Windows Installer 孤儿安装包'); Lvl=2; Bg=$true; Note=(T 'C:\Windows\Installer 里没有任何已装软件和补丁再引用的安装包（.msi / .msp），多半是软件升级、卸载后留下的。判断方法和 PatchCleaner 一样。删了以后，万一哪个软件修复或卸载时提示找不到安装包，重新下载安装一次即可')
+        @{ G=$confG; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T 'Windows Installer 孤儿安装包'); Lvl=2; Bg=$true; Note=(T 'C:\Windows\Installer 里没有任何已装软件和补丁再引用的安装包（.msi / .msp），多半是软件升级、卸载后留下的。判断方法和 PatchCleaner 一样。删了以后，万一哪个软件修复或卸载时提示找不到安装包，重新下载安装一次即可')
            Size={ $s = [double]0; foreach ($f in (Get-InstallerOrphans)) { $s += $f.Length }; $s }
            Act ={ $n = 0; $b = [double]0; foreach ($f in (Get-InstallerOrphans)) { $r = Invoke-SafeRemove -Item $f -Scope list -How delete -Bytes $f.Length -What (T 'Windows Installer 孤儿安装包'); if ($r.Ok) { $n++; $b += $f.Length } else { Log ((T "  没删掉：{0}（{1}）") -f $f.FullName, $r.Why) } }; Log ((T "  Windows Installer 孤儿安装包：删了 {0} 个，{1}") -f $n, (GB $b)) } }
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T '驱动存储里的旧版驱动包'); Lvl=2; Bg=$true; Note=(T '驱动更新后，旧版本的安装包还留在 C:\Windows\System32\DriverStore 里（和 Driver Store Explorer 的判断一样：同一个驱动、同一厂商有更新版本的那些）。用 pnputil 删除，正在使用的删不掉、启动必需的不碰。删了以后不能回滚到旧版驱动')
+        @{ G=$confG; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T '驱动存储里的旧版驱动包'); Lvl=2; Bg=$true; Note=(T '驱动更新后，旧版本的安装包还留在 C:\Windows\System32\DriverStore 里（和 Driver Store Explorer 的判断一样：同一个驱动、同一厂商有更新版本的那些）。用 pnputil 删除，正在使用的删不掉、启动必需的不碰。删了以后不能回滚到旧版驱动')
            Size={ $s = [double]0; foreach ($d in (Get-OldDriverPackages)) { $s += $d.Bytes }; $s }
            Act ={ $n = 0; $b = [double]0; foreach ($d in (Get-OldDriverPackages -Fresh)) { if (Stopping) { break }; $r = Remove-DriverPackage $d.Published; if ($r -eq '') { $n++; $b += $d.Bytes; Log ((T "  已删除旧版驱动包 {0}（{1} {2}）") -f $d.Published, $d.Provider, $d.Version) } else { Log ((T "  没删掉 {0}：{1}") -f $d.Published, $r) } }; Log ((T "  旧版驱动包：删了 {0} 个，{1}") -f $n, (GB $b)) } }
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T '开始菜单里失效的快捷方式'); Lvl=1; Bg=$true; Note=(T '指向的程序已经不在了的快捷方式（只看开始菜单，不碰桌面）。目标在没插着的硬盘上的不算。不占什么空间，只是清爽')
+        @{ G=$confG; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T '开始菜单里失效的快捷方式'); Lvl=1; Bg=$true; Note=(T '指向的程序已经不在了的快捷方式（只看开始菜单，不碰桌面）。目标在没插着的硬盘上的不算。不占什么空间，只是清爽')
            Size={ $s = [double]0; foreach ($f in (Get-BrokenShortcuts)) { $s += $f.Length }; $s }
            Act ={ $n = 0; foreach ($f in (Get-BrokenShortcuts)) { if ((Invoke-SafeRemove -Item $f -Scope list -How delete -What (T '失效的快捷方式')).Ok) { $n++ } }; Log ((T "  删了 {0} 个失效的快捷方式") -f $n) } }
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T 'Windows 事件日志'); Lvl=2; Note=(T '系统、应用程序、安全等日志，排查问题的工程师会看。清空后就查不到以前的记录了，不确定就跳过')
+        @{ G=$confG; Kind='cache'; Def=(T '跳过'); One=(T '跳过'); N=(T 'Windows 事件日志'); Lvl=2; Note=(T '系统、应用程序、安全等日志，排查问题的工程师会看。清空后就查不到以前的记录了，不确定就跳过')
            Size={ $s = [double]0; foreach ($f in @(Get-ChildItem -LiteralPath "$env:SystemRoot\System32\winevt\Logs" -Filter '*.evtx' -File -Force -ErrorAction SilentlyContinue)) { $s += $f.Length }; $s }
            Act ={ $n = 0; foreach ($l in @(& "$sys32\wevtutil.exe" el 2>$null)) { if (Stopping) { break }; & "$sys32\wevtutil.exe" cl "$l" 2>$null | Out-Null; if ($LASTEXITCODE -eq 0) { $n++ } }; Log ((T "  清空了 {0} 个事件日志") -f $n) } }
-        @{ G='需确认（有代价，默认跳过，看清说明再选）'; Kind='action'; Def=(T '跳过'); One=(T '执行'); N=(T 'WinSxS 组件清理 (DISM)'); Lvl=1; Note=(T '清掉系统更新替换下来的旧组件，通常能省 2 到 10 GB。耗时 10 到 20 分钟，完成后建议重启'); Last=$true
+        @{ G=$confG; Kind='action'; Def=(T '跳过'); One=(T '执行'); N=(T 'WinSxS 组件清理 (DISM)'); Lvl=1; Note=(T '清掉系统更新替换下来的旧组件，通常能省 2 到 10 GB。耗时 10 到 20 分钟，完成后建议重启'); Last=$true
            Size={ -1 }
            Act ={ & "$env:SystemRoot\System32\Dism.exe" /Online /Cleanup-Image /StartComponentCleanup /ResetBase | Out-Null }; Slow=$true }
 
@@ -5486,6 +5486,8 @@ function Get-Catalog {
             foreach ($a in $it.Apps) { $k += $apps[$a].P; if ($apps[$a].K) { $k += $apps[$a].K }; $d += $apps[$a].Dirs }
             $it.Kill = @($k | Select-Object -Unique); $it.KillDirs = @($d | Select-Object -Unique)
         }
+        # 稳定的分组编号：代码按它判断，不看界面上的组名（组名可以改、会翻译）
+        $it.Tier = if ($it.G -eq $careG) { 'careful' } elseif ($it.G -eq $confG) { 'confirm' } elseif ($it.G -eq $chatG) { 'chat' } elseif ($it.G -eq $otherG) { 'other' } elseif ($it.G -eq $customG) { 'custom' } else { 'safe' }
         $it.Actions = switch ($it.Kind) { 'cache' { @((T '删除'),(T '跳过')) } 'action' { @((T '执行'),(T '跳过')) } 'move' { @((T '搬到其他盘'),(T '跳过')) } 'flex' { @((T '搬到其他盘'),(T '删除'),(T '跳过')) } }
     }
     return $list
@@ -6052,7 +6054,7 @@ function Get-ChatDataPaths {
     $l = New-Object System.Collections.Generic.List[string]
     try {
         foreach ($c in (Get-Catalog)) {
-            if (-not ([string]$c.G).StartsWith('聊天软件') -or -not $c.Paths) { continue }
+            if ($c.Tier -ne 'chat' -or -not $c.Paths) { continue }
             foreach ($p in $c.Paths) {
                 if (-not $p) { continue }
                 $l.Add(([string]$p).TrimEnd('\'))
@@ -6881,9 +6883,9 @@ function Get-PlanTotals($rows, $sizes) {
     return $out
 }
 # 一键清理给目录里的一项选什么：只删不搬（聊天记录这类要搬的在清理页单独一张卡片，用户自己点）；
-# 有代价的（「需确认」一组）和自己加的文件夹一律跳过
+# 有代价的（「默认不清」一组）和自己加的文件夹一律跳过
 function Get-OneClickAction($it) {
-    if (([string]$it.G).StartsWith('需确认') -or $it.Custom -or $it.Kind -eq 'move') { return (T '跳过') }
+    if ($it.Tier -eq 'confirm' -or $it.Custom -or $it.Kind -eq 'move') { return (T '跳过') }
     $want = if ($it.One) { [string]$it.One } else { [string]$it.Def }
     if ($want -eq (T '搬到其他盘')) { return (T '跳过') }
     return $want
@@ -7297,11 +7299,11 @@ function ConvertFrom-WingetTable([string]$txt) {
     return $items
 }
 
-# 定期自动清理只碰这些：安全清理组里的普通缓存目录（不含谨慎清理、需确认、自定义、整个文件夹删掉的、要停服务的、操作类的）
+# 定期自动清理只碰这些：安全清理组里的普通缓存目录（不含清后要重建、默认不清、自定义、整个文件夹删掉的、要停服务的、操作类的）
 function Select-AutoCleanItems($catalog) {
     $out = @()
     foreach ($it in $catalog) {
-        if ($it.Kind -ne 'cache' -or $it.Def -ne (T '删除') -or $it.Act -or $it.Svc -or $it.Whole -or $it.Custom -or $it.Careful -or $it.Confirm -or -not ([string]$it.G).StartsWith('安全清理')) { continue }
+        if ($it.Kind -ne 'cache' -or $it.Def -ne (T '删除') -or $it.Act -or $it.Svc -or $it.Whole -or $it.Custom -or $it.Careful -or $it.Confirm -or $it.Tier -ne 'safe') { continue }
         $out += $it
     }
     return $out
@@ -7617,6 +7619,12 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+清后要重建（删了要重新下载或重新生成，第一次打开会慢一点；默认也清，执行前会单独列出来）	Rebuilt after cleaning (downloaded or generated again after deletion, so the first start is a bit slower; cleaned by default and listed separately before running)
+默认不清（有代价，看清说明再选）	Skipped by default (comes at a cost; read the description before selecting)
+开始处理所选项	Process selected
+在列表里把要处理的项目选成「删除」或「搬到其他盘」，再点「开始处理所选项」。	In the list, set the items you want to handle to "Delete" or "Move to another drive", then click "Process selected".
+\n其中 {0} 项是「清后要重建」（{1}）：删了要重新下载或重新生成，第一次打开会慢一点。不想清的，在列表里改成「跳过」。	\n{0} of them are "Rebuilt after cleaning" ({1}): they are downloaded or generated again, so the first start is a bit slower. To keep them, set them to "Skip" in the list.
+\n其中 {0} 项是「默认不清」里有代价的项目（{1}），请再看一遍说明。	\n{0} of them are items from "Skipped by default" that come at a cost ({1}); please read their descriptions again.
 从应用商店装的，由 Windows 管理，本工具不能搬；有的可以在 Windows 设置的「已安装的应用」里换盘	Installed from the Microsoft Store and managed by Windows, so ClearC cannot move it; some can be moved in Windows Settings under "Installed apps"
 不能搬	Can't move
 开始后会先替你关掉：{0}（包括屏幕右下角托盘里的）。开着的话文件被占用，搬家不会成功。关之前请确认没有正在发送或下载的文件，没保存的内容先保存；搬完照常打开，聊天记录和文件都在。	When it starts it first closes {0} for you (including from the system tray at the bottom right). While they are open the files are in use and the move cannot succeed. Before that, make sure nothing is being sent or downloaded and save any unsaved work; after the move, open them as usual and your chat history and files are all there.
@@ -10228,7 +10236,7 @@ $script:helpEnXaml = @'
                         <Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0"><TextBlock Text="2" Foreground="White" FontSize="12.5" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                         <StackPanel>
                           <TextBlock Style="{StaticResource HelpLead}" Text="Choose for yourself" Margin="0,1,0,0"/>
-                          <TextBlock Style="{StaticResource HelpBody}"><Run>Click "Scan", choose "Delete", "Move to another drive" or "Skip" on each row, then click "Run selected".</Run></TextBlock>
+                          <TextBlock Style="{StaticResource HelpBody}"><Run>Click "Scan", choose "Delete", "Move to another drive" or "Skip" on each row, then click "Process selected".</Run></TextBlock>
                         </StackPanel>
                       </DockPanel>
                     </Border>
@@ -10272,11 +10280,11 @@ $script:helpEnXaml = @'
                       <TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Caches, temporary files and logs. Apps rebuild them automatically.</Run></TextBlock>
                     </DockPanel>
                     <DockPanel>
-                      <Border DockPanel.Dock="Left" Width="140" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="Careful cleanup" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border></Border>
+                      <Border DockPanel.Dock="Left" Width="140" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="Rebuilt after cleaning" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border></Border>
                       <TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Browser caches, thumbnails, shader and download caches. They are generated again, so the first start is a little slower.</Run></TextBlock>
                     </DockPanel>
                     <DockPanel>
-                      <Border DockPanel.Dock="Left" Width="140" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="Needs confirmation" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border></Border>
+                      <Border DockPanel.Dock="Left" Width="140" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="Skipped by default" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border></Border>
                       <TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>Items that come at a cost, skipped by default. After deleting Windows.old, for example, you can no longer go back to the previous Windows.</Run></TextBlock>
                     </DockPanel>
                     <DockPanel>
@@ -10306,7 +10314,7 @@ $script:helpEnXaml = @'
                       <TextBlock Style="{StaticResource HelpBody}"><Run>Windows' temporary files, update cache and logs, the caches of common browsers, game launchers and apps, and the download caches of developer tools. Only caches: never cookies, history, passwords or settings.</Run></TextBlock>
                     </StackPanel>
                     <StackPanel>
-                      <TextBlock Style="{StaticResource HelpLead}" Text="Items that need confirmation"/>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Items skipped by default"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>Windows.old, the Recycle Bin, orphaned Windows Installer packages, old driver packages, broken shortcuts, event logs and more. Skipped by default; read the description before selecting them.</Run></TextBlock>
                     </StackPanel>
                     <StackPanel>
@@ -11079,7 +11087,7 @@ if ($script:mode -match '(?i)/check') {
         try { [Diagnostics.Process]::GetCurrentProcess().PriorityClass = 'BelowNormal' } catch {}
         $junk = [double]0
         foreach ($it in (Get-Catalog)) {
-            if ($it.Kind -ne 'cache' -or $it.Def -ne (T '删除') -or $it.Act -or -not ([string]$it.G).StartsWith('安全清理')) { continue }
+            if ($it.Kind -ne 'cache' -or $it.Def -ne (T '删除') -or $it.Act -or $it.Tier -ne 'safe') { continue }
             $junk += [double](Measure-Item $it)
         }
         if ($junk -ge $jgb * 1GB) {
@@ -12643,7 +12651,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
       </Grid>
 
       <DockPanel Grid.Row="2" Margin="0,14,0,0">
-        <Button x:Name="BtnRun" DockPanel.Dock="Right" Style="{StaticResource Primary}" Content="执行所选操作" Padding="22,8" IsEnabled="False"/>
+        <Button x:Name="BtnRun" DockPanel.Dock="Right" Style="{StaticResource Primary}" Content="开始处理所选项" Padding="22,8" IsEnabled="False"/>
         <TextBlock x:Name="Summary" Text="" VerticalAlignment="Center" FontWeight="SemiBold" TextWrapping="Wrap" Margin="2,0,16,0"/>
       </DockPanel>
     </Grid>
@@ -14571,7 +14579,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                         <Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0"><TextBlock Text="2" Foreground="White" FontSize="12.5" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                         <StackPanel>
                           <TextBlock Style="{StaticResource HelpLead}" Text="自己挑选" Margin="0,1,0,0"/>
-                          <TextBlock Style="{StaticResource HelpBody}"><Run>点「扫描」，在每一行选「删除」「搬到其他盘」或「跳过」，再点「执行所选操作」。</Run></TextBlock>
+                          <TextBlock Style="{StaticResource HelpBody}"><Run>点「扫描」，在每一行选「删除」「搬到其他盘」或「跳过」，再点「开始处理所选项」。</Run></TextBlock>
                         </StackPanel>
                       </DockPanel>
                     </Border>
@@ -14615,11 +14623,11 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                       <TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>缓存、临时文件和日志。删了软件会自动重建。</Run></TextBlock>
                     </DockPanel>
                     <DockPanel>
-                      <Border DockPanel.Dock="Left" Width="104" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="谨慎清理" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border></Border>
+                      <Border DockPanel.Dock="Left" Width="104" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="清后要重建" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border></Border>
                       <TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>浏览器缓存、缩略图、着色器和下载缓存。删了要重新生成，第一次打开会慢一点。</Run></TextBlock>
                     </DockPanel>
                     <DockPanel>
-                      <Border DockPanel.Dock="Left" Width="104" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="需确认" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border></Border>
+                      <Border DockPanel.Dock="Left" Width="104" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="默认不清" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border></Border>
                       <TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>有代价的项目，默认跳过。比如删掉 Windows.old 后，不能再退回旧系统。</Run></TextBlock>
                     </DockPanel>
                     <DockPanel>
@@ -14649,7 +14657,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                       <TextBlock Style="{StaticResource HelpBody}"><Run>Windows 的临时文件、更新缓存和日志，常见浏览器、游戏平台和软件的缓存，以及开发工具的下载缓存。只删缓存，不碰 Cookie、历史记录、密码和设置。</Run></TextBlock>
                     </StackPanel>
                     <StackPanel>
-                      <TextBlock Style="{StaticResource HelpLead}" Text="需确认的项目"/>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="默认不清的项目"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>Windows.old、回收站、Windows Installer 孤儿安装包、旧版驱动包、失效的快捷方式和事件日志等。默认跳过，看清说明再选。</Run></TextBlock>
                     </StackPanel>
                     <StackPanel>
@@ -16631,7 +16639,7 @@ function Show-FirstResult {
 $script:chatIdx = @()
 function Update-ChatCard {
     $cat = @{}; foreach ($c in $catalog) { $cat[$c.Idx] = $c }
-    $chat = @($script:rows | Where-Object { $c = $cat[$_.Idx]; $c -and $c.Kind -eq 'move' -and ([string]$c.G).StartsWith('聊天软件') -and $_.Bytes -gt 0 -and $_.Actions -contains (T '搬到其他盘') })
+    $chat = @($script:rows | Where-Object { $c = $cat[$_.Idx]; $c -and $c.Kind -eq 'move' -and $c.Tier -eq 'chat' -and $_.Bytes -gt 0 -and $_.Actions -contains (T '搬到其他盘') })
     $bytes = [double]0; foreach ($r in $chat) { $bytes += $r.Bytes }
     $script:chatIdx = @($chat | ForEach-Object { $_.Idx })
     if ($chat.Count -eq 0 -or $bytes -lt 200MB) { $ctl.ChatCard.Visibility = 'Collapsed'; return }
@@ -16876,7 +16884,7 @@ function Get-BusyApps([string[]]$apps) {
 }
 
 # $OnlyMove：只搬这几项（聊天记录卡片上的按钮），列表里其他行的选择不管
-function Invoke-RunSelected([string]$title = (T '执行所选操作'), [object[]]$OnlyMove = $null) {
+function Invoke-RunSelected([string]$title = (T '开始处理所选项'), [object[]]$OnlyMove = $null) {
     $plan = @()
     foreach ($r in $script:rows) {
         $act = $r.Action
@@ -16886,7 +16894,7 @@ function Invoke-RunSelected([string]$title = (T '执行所选操作'), [object[]
             $plan += @{ Idx = $r.Idx; Action = $act; Name = $r.Name; Bytes = [math]::Max([double]0, [double]$b); Sig = $(if ($script:rowSig) { [string]$script:rowSig[$r.Idx] } else { '' }) }
         }
     }
-    if (-not $plan) { Show-Sheet -Title (T '没有选中任何操作') -Text (T '在列表里把要处理的项目选成「删除」或「搬到其他盘」，再点「执行所选操作」。') | Out-Null; return }
+    if (-not $plan) { Show-Sheet -Title (T '没有选中任何操作') -Text (T '在列表里把要处理的项目选成「删除」或「搬到其他盘」，再点「开始处理所选项」。') | Out-Null; return }
     $dest = Get-Dest
     $cat0 = @{}; foreach ($c in $catalog) { $cat0[$c.Idx] = $c }
     $moves = @($plan | Where-Object { $_.Action -eq (T '搬到其他盘') })
@@ -16931,9 +16939,9 @@ function Invoke-RunSelected([string]$title = (T '执行所选操作'), [object[]
     if ($dels) {
         $text += (T "`n`n其中 {0} 项会删除文件，删除后可能无法恢复。请确认这些资料不再需要。") -f $dels.Count
         $careful = @($dels | Where-Object { $cat0[$_.Idx].Careful })
-        if ($careful.Count -gt 0) { $text += (T "`n其中 {0} 项是「谨慎清理」（{1}）：删了要重新下载或重新生成，第一次打开会慢一点。不想清的，在列表里改成「跳过」。") -f $careful.Count, (@($careful | ForEach-Object { $_.Name }) -join (T '、')) }
-        $conf = @($dels | Where-Object { ([string]$cat0[$_.Idx].G).StartsWith('需确认') })
-        if ($conf.Count -gt 0) { $text += (T "`n其中 {0} 项是「需确认」的高风险项目（{1}），请再看一遍说明。") -f $conf.Count, (@($conf | ForEach-Object { $_.Name }) -join (T '、')) }
+        if ($careful.Count -gt 0) { $text += (T "`n其中 {0} 项是「清后要重建」（{1}）：删了要重新下载或重新生成，第一次打开会慢一点。不想清的，在列表里改成「跳过」。") -f $careful.Count, (@($careful | ForEach-Object { $_.Name }) -join (T '、')) }
+        $conf = @($dels | Where-Object { $cat0[$_.Idx].Tier -eq 'confirm' })
+        if ($conf.Count -gt 0) { $text += (T "`n其中 {0} 项是「默认不清」里有代价的项目（{1}），请再看一遍说明。") -f $conf.Count, (@($conf | ForEach-Object { $_.Name }) -join (T '、')) }
         if ((Get-Setting 'Recycle' '0') -eq '1') {
             $text += (T "`n按设置，这次删除的文件会先放进回收站，可以从回收站恢复。")
             $acts = @($dels | Where-Object { $cat0[$_.Idx].Act })
@@ -17956,7 +17964,7 @@ function Test-ChatPath([string]$path) {
             foreach ($d in @(Get-ChildItem -LiteralPath (Join-Path $env:LOCALAPPDATA 'Packages') -Directory -Filter $pat -Force -ErrorAction SilentlyContinue)) { $script:chatDirs.Add($d.FullName.TrimEnd('\')) }
         }
         foreach ($c in $catalog) {
-            if (-not ([string]$c.G).StartsWith('聊天软件') -or -not $c.Paths) { continue }
+            if ($c.Tier -ne 'chat' -or -not $c.Paths) { continue }
             foreach ($p in $c.Paths) { if ($p) { foreach ($it in @(Get-PathItems $p)) { if ($it.PSIsContainer) { $script:chatDirs.Add($it.FullName.TrimEnd('\')) } } } }
         }
     }
@@ -18473,7 +18481,7 @@ function Get-MapChatNodes {
     $out = @{ Nodes = New-Object System.Collections.Generic.List[DmNode]; Names = New-Object System.Collections.Generic.List[string] }
     if (-not $script:mapRoot) { return $out }
     foreach ($c in $catalog) {
-        if (-not ([string]$c.G).StartsWith('聊天软件') -or -not $c.Paths) { continue }
+        if ($c.Tier -ne 'chat' -or -not $c.Paths) { continue }
         $hit = $false
         foreach ($p in $c.Paths) {
             if (-not $p) { continue }
@@ -22429,14 +22437,15 @@ function Invoke-UiTest {
                 $sync.Sizes = $sizes; Build-Rows $sizes
                 if (-not $script:rows -or $script:rows.Count -lt 3) { throw 'no rows' }
                 Apply-OneClick
-                $bad = @($script:rows | Where-Object { $_.Action -ne (T '跳过') -and (([string]$_.Group).StartsWith('需确认') -or ([string]$_.Group).StartsWith('自定义')) })
+                $tierOf = @{}; foreach ($c in $catalog) { $tierOf[$c.Idx] = [string]$c.Tier }
+                $bad = @($script:rows | Where-Object { $_.Action -ne (T '跳过') -and @('confirm', 'custom') -contains $tierOf[$_.Idx] })
                 if ($bad.Count) { throw ("one-click picked: {0}" -f (($bad | ForEach-Object { $_.Name }) -join ', ')) }
-                if (@($script:rows | Where-Object { $_.Action -eq (T '删除') -and ([string]$_.Group).StartsWith('安全清理') }).Count -lt 3) { throw 'one-click picked no safe items' }
+                if (@($script:rows | Where-Object { $_.Action -eq (T '删除') -and $tierOf[$_.Idx] -eq 'safe' }).Count -lt 3) { throw 'one-click picked no safe items' }
                 # 一键清理只删不搬；聊天记录大的时候单独一张卡片，小的时候不出现
                 $mv0 = @($script:rows | Where-Object { $_.Action -eq (T '搬到其他盘') })
                 if ($mv0.Count) { throw ("one-click moves: {0}" -f (($mv0 | ForEach-Object { $_.Name }) -join ', ')) }
                 $big = @{}; foreach ($k in $sizes.Keys) { $big[$k] = $sizes[$k] }
-                foreach ($c in $catalog) { if ($c.Kind -eq 'move' -and ([string]$c.G).StartsWith('聊天软件')) { $big[$c.Idx] = [double]300MB } }
+                foreach ($c in $catalog) { if ($c.Kind -eq 'move' -and $c.Tier -eq 'chat') { $big[$c.Idx] = [double]300MB } }
                 Build-Rows $big
                 if ($ctl.ChatCard.Visibility -ne 'Visible' -or @($script:chatIdx).Count -lt 1 -or -not $ctl.ChatCardTitle.Text) { throw 'the chat-history card did not show' }
                 Build-Rows $sizes
@@ -22605,7 +22614,7 @@ function Invoke-UiTest {
         }
         & $step 'cleanup tiers: careful group, delete preview, recycle switch' {
             $care = @($catalog | Where-Object { $_.Careful })
-            if ($care.Count -lt 10 -or @($care | Where-Object { -not ([string]$_.G).StartsWith('谨慎清理') }).Count -gt 0) { throw ("careful items: {0}" -f $care.Count) }
+            if ($care.Count -lt 10 -or @($care | Where-Object { $_.Tier -ne 'careful' }).Count -gt 0) { throw ("careful items: {0}" -f $care.Count) }
             if (@($catalog | Where-Object { $_.N -eq (T '驱动存储里的旧版驱动包') }).Count -ne 1) { throw 'old driver packages item missing' }
             $d = Join-Path $script:appDir 'uitest-preview'; New-Item -ItemType Directory -Path "$d\sub" -Force | Out-Null
             [IO.File]::WriteAllText("$d\a.tmp", ('x' * 3000)); [IO.File]::WriteAllText("$d\sub\b.tmp", ('y' * 5000)); [IO.File]::WriteAllText("$d\keep.txt", 'z')

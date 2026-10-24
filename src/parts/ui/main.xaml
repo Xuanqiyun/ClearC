@@ -1492,7 +1492,7 @@
       </Grid>
 
       <DockPanel Grid.Row="2" Margin="0,14,0,0">
-        <Button x:Name="BtnRun" DockPanel.Dock="Right" Style="{StaticResource Primary}" Content="执行所选操作" Padding="22,8" IsEnabled="False"/>
+        <Button x:Name="BtnRun" DockPanel.Dock="Right" Style="{StaticResource Primary}" Content="开始处理所选项" Padding="22,8" IsEnabled="False"/>
         <TextBlock x:Name="Summary" Text="" VerticalAlignment="Center" FontWeight="SemiBold" TextWrapping="Wrap" Margin="2,0,16,0"/>
       </DockPanel>
     </Grid>
@@ -3420,7 +3420,7 @@
                         <Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Background="#0071E3" VerticalAlignment="Top" Margin="0,0,12,0"><TextBlock Text="2" Foreground="White" FontSize="12.5" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                         <StackPanel>
                           <TextBlock Style="{StaticResource HelpLead}" Text="自己挑选" Margin="0,1,0,0"/>
-                          <TextBlock Style="{StaticResource HelpBody}"><Run>点「扫描」，在每一行选「删除」「搬到其他盘」或「跳过」，再点「执行所选操作」。</Run></TextBlock>
+                          <TextBlock Style="{StaticResource HelpBody}"><Run>点「扫描」，在每一行选「删除」「搬到其他盘」或「跳过」，再点「开始处理所选项」。</Run></TextBlock>
                         </StackPanel>
                       </DockPanel>
                     </Border>
@@ -3464,11 +3464,11 @@
                       <TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>缓存、临时文件和日志。删了软件会自动重建。</Run></TextBlock>
                     </DockPanel>
                     <DockPanel>
-                      <Border DockPanel.Dock="Left" Width="104" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="谨慎清理" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border></Border>
+                      <Border DockPanel.Dock="Left" Width="104" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="清后要重建" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border></Border>
                       <TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>浏览器缓存、缩略图、着色器和下载缓存。删了要重新生成，第一次打开会慢一点。</Run></TextBlock>
                     </DockPanel>
                     <DockPanel>
-                      <Border DockPanel.Dock="Left" Width="104" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="需确认" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border></Border>
+                      <Border DockPanel.Dock="Left" Width="104" VerticalAlignment="Top"><Border Style="{StaticResource HelpPill}" Background="#FFF1DB"><TextBlock Text="默认不清" FontSize="13" Foreground="#995700" TextWrapping="Wrap"/></Border></Border>
                       <TextBlock Style="{StaticResource HelpBody}" Margin="0"><Run>有代价的项目，默认跳过。比如删掉 Windows.old 后，不能再退回旧系统。</Run></TextBlock>
                     </DockPanel>
                     <DockPanel>
@@ -3498,7 +3498,7 @@
                       <TextBlock Style="{StaticResource HelpBody}"><Run>Windows 的临时文件、更新缓存和日志，常见浏览器、游戏平台和软件的缓存，以及开发工具的下载缓存。只删缓存，不碰 Cookie、历史记录、密码和设置。</Run></TextBlock>
                     </StackPanel>
                     <StackPanel>
-                      <TextBlock Style="{StaticResource HelpLead}" Text="需确认的项目"/>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="默认不清的项目"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>Windows.old、回收站、Windows Installer 孤儿安装包、旧版驱动包、失效的快捷方式和事件日志等。默认跳过，看清说明再选。</Run></TextBlock>
                     </StackPanel>
                     <StackPanel>

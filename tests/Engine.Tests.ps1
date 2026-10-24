@@ -66,7 +66,7 @@ try { & {
     Check 'library levels: pro and expert entries, Chrome stays basic' ((@($lib | Where-Object { $_.Lvl -eq 1 }).Count -ge 8) -and (@($lib | Where-Object { $_.Lvl -eq 2 }).Count -ge 4) -and $chrome.Lvl -eq 0)
     Check 'catalog carries levels (basic, pro and expert items)' ((@($cat | Where-Object { -not $_.Lvl }).Count -ge 20) -and (@($cat | Where-Object { $_.Lvl -eq 1 }).Count -ge 10) -and (@($cat | Where-Object { $_.Lvl -eq 2 }).Count -ge 6))
     Check 'library: careful entries (browser caches etc.)' ((@($lib | Where-Object { $_.Careful }).Count -ge 15) -and $chrome.Careful -and -not @($lib | Where-Object { $_.N -eq '用户临时文件' })[0].Careful)
-    Check 'catalog: careful group sits between safe and confirm' ((@($cat | Where-Object { $_.Careful }).Count -ge 15) -and (@($cat | Where-Object { ([string]$_.G).StartsWith('谨慎清理') -and -not $_.Careful }).Count -eq 0))
+    Check 'catalog: careful group sits between safe and confirm' ((@($cat | Where-Object { $_.Careful }).Count -ge 15) -and (@($cat | Where-Object { $_.Tier -eq 'careful' -and -not $_.Careful }).Count -eq 0))
     $fake = @(
         @{ Driver = 'oem1.inf'; OriginalFileName = 'C:\x\nvlti.inf_amd64_a\nvlti.inf'; ProviderName = 'NVIDIA'; ClassName = 'Display'; Version = '31.0.15.3598'; Date = [DateTime]'2023-06-01'; Inbox = $false; BootCritical = $false },
         @{ Driver = 'oem2.inf'; OriginalFileName = 'C:\x\nvlti.inf_amd64_b\nvlti.inf'; ProviderName = 'NVIDIA'; ClassName = 'Display'; Version = '32.0.15.5599'; Date = [DateTime]'2024-06-01'; Inbox = $false; BootCritical = $false },
