@@ -389,6 +389,9 @@ try { & {
     Check 'moves verify the copy before replacing the original (robocopy/compare step present)' ($engineText -match '(?i)robocopy' -and $engineText -match '(?i)Compare-Copy|Verify-Copy|核对|对不上')
     Check 'every delete path in the UI goes through a confirmation sheet with the risk acknowledgement' (([regex]::Matches($src, '因删除造成的后果由我自己承担')).Count -ge 2)
     Check 'auto cleanup task is registered from exactly one place (the Reminders page switch), never at startup' (([regex]::Matches($src, 'Register-CleanTask \$script:taskClean')).Count -eq 1 -and $src -notmatch 'Enable-AutoTask \$true[^\r\n]*#.*启动')
+    # ============ 9. 提权运行时不信任普通权限就能改的东西（3.6 安全评审） ============
+    $launcher = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '../build/launcher.cs'))
+    Check 'SEC-1 the launcher loads PowerShell only from the system, never from a path in an environment variable' ($launcher -notmatch 'CLEANC_SMA' -and $launcher -notmatch 'LoadFrom\(' -and $launcher -notmatch 'LoadFile\(')
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue
