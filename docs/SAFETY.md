@@ -237,12 +237,13 @@ pwsh tests/Engine.Tests.ps1     # 引擎功能
 pwsh tests/Checks.ps1           # 翻译、对话框参数、目录库格式
 ```
 
-`tests/ci.sh`（Linux）和 `tests/ci.ps1`（Windows，PowerShell 5.1）会按顺序跑上面三个，Windows 上再跑三遍界面自测（英文浅色、中文浅色、中文深色）。任何一条失败，这次推送的 CI 就是红的。测试脚本里某条检查的表达式自己出错（抛异常）也算失败，不会悄悄跳过。
+`tests/ci.sh`（Linux）和 `tests/ci.ps1`（Windows，PowerShell 5.1）会按顺序跑上面三个，Windows 上再真的挂一个虚拟磁盘跑一遍搬家（`tests/MoveDisk.Tests.ps1`），跑三遍界面自测（英文浅色、中文浅色、中文深色）。任何一条失败，这次推送的 CI 就是红的。测试脚本里某条检查的表达式自己出错（抛异常）也算失败，不会悄悄跳过。
 
-### 两类测试
+### 三类测试
 
 1. **行为测试**：在临时文件夹里搭一个假的用户目录，建好个人文件夹、缓存、目录联接、硬链接、`a[1]` 和 `a1` 这样的同名文件夹，真的调用删除函数，再检查该在的一个不少、该删的删掉了（证明守卫不是「什么都不删」）。Windows 才有的（目录联接、硬链接、`Get-DeleteBlock` 的系统路径）只在 Windows CI 上跑，Linux 上标 `skip`。
-2. **源码锁**：数源码里危险调用的个数和写法。比如 `rd /s /q` 只能有 5 处、`Recycle` 只在删除入口里调用而且前面有 `Test-RecycleOk`、`pnputil` 不许带 `/force`、没有 `vssadmin delete`、计划任务不许用 SYSTEM。新加一处危险调用，测试就会失败，逼着改代码的人看一眼、在这里写明为什么安全，再改测试里的数字。
+2. **源码锁**：数源码里危险调用的个数和写法，用语法树找（`tests/CallSites.ps1`、`tests/DeleteSites.ps1`）：注释和字符串里的字不算，`spps` 这类别名、`cmd /c` 后面的命令、后台代码 here-string 里的调用都找得到。比如 `rd /s /q` 只能有 5 处、`Recycle` 只在删除入口里调用而且前面有 `Test-RecycleOk`、`pnputil` 不许带 `/force`、没有 `vssadmin delete`、计划任务不许用 SYSTEM。新加一处危险调用，测试就会失败，逼着改代码的人看一眼、在这里写明为什么安全，再改测试里的数字。
+3. **真盘搬家**（`tests/MoveDisk.Tests.ps1`，只在 Windows 测试机上跑）：挂一个临时的虚拟磁盘当目标盘，真的把 C 盘上一个测试文件夹搬过去、搬回来，再模拟两次中途断电（改名后、建链接后），每一步核对每个文件的内容、属性和修改时间。
 
 ### 改删除相关的代码时
 
