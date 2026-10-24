@@ -36,7 +36,7 @@
     </Style>
     <Style x:Key="SetNote" TargetType="TextBlock">
       <Setter Property="FontSize" Value="12"/>
-      <Setter Property="Foreground" Value="#86868B"/>
+      <Setter Property="Foreground" Value="#6E6E73"/>
       <Setter Property="TextWrapping" Value="Wrap"/>
       <Setter Property="LineHeight" Value="18"/>
       <Setter Property="Margin" Value="0,3,0,0"/>
@@ -53,7 +53,7 @@
     </Style>
     <Style x:Key="Caption" TargetType="TextBlock">
       <Setter Property="FontSize" Value="12"/>
-      <Setter Property="Foreground" Value="#86868B"/>
+      <Setter Property="Foreground" Value="#6E6E73"/>
       <Setter Property="VerticalAlignment" Value="Center"/>
     </Style>
     <Style x:Key="Note" TargetType="TextBlock" BasedOn="{StaticResource Caption}"/>
@@ -88,7 +88,7 @@
     <Style x:Key="HelpGroup" TargetType="TextBlock">
       <Setter Property="FontSize" Value="13"/>
       <Setter Property="FontWeight" Value="SemiBold"/>
-      <Setter Property="Foreground" Value="#86868B"/>
+      <Setter Property="Foreground" Value="#6E6E73"/>
       <Setter Property="VerticalAlignment" Value="Center"/>
     </Style>
     <Style x:Key="HelpSum" TargetType="TextBlock">
@@ -138,7 +138,7 @@
                       <Border x:Name="Hd" Background="Transparent" CornerRadius="11" Padding="16,13,20,13">
                         <DockPanel>
                           <TextBlock x:Name="Chev" DockPanel.Dock="Right" Text="&#xE70D;" FontFamily="{StaticResource Icons}" FontSize="12"
-                                     Foreground="#86868B" VerticalAlignment="Center" Margin="14,0,0,0" RenderTransformOrigin="0.5,0.5">
+                                     Foreground="#6E6E73" VerticalAlignment="Center" Margin="14,0,0,0" RenderTransformOrigin="0.5,0.5">
                             <TextBlock.RenderTransform><RotateTransform Angle="0"/></TextBlock.RenderTransform>
                           </TextBlock>
                           <ContentPresenter VerticalAlignment="Center"/>
@@ -186,7 +186,7 @@
                       <Border Background="Transparent" Padding="0,17,2,17">
                         <DockPanel>
                           <TextBlock x:Name="Chev" DockPanel.Dock="Right" Text="&#xE70D;" FontFamily="{StaticResource Icons}" FontSize="11"
-                                     Foreground="#86868B" VerticalAlignment="Center" Margin="16,0,0,0" RenderTransformOrigin="0.5,0.5">
+                                     Foreground="#6E6E73" VerticalAlignment="Center" Margin="16,0,0,0" RenderTransformOrigin="0.5,0.5">
                             <TextBlock.RenderTransform><RotateTransform Angle="0"/></TextBlock.RenderTransform>
                           </TextBlock>
                           <ContentPresenter VerticalAlignment="Center"/>
@@ -298,8 +298,8 @@
 
     <!-- ===== 列表表头：点列名按这一列排序，再点一下反过来 ===== -->
     <Style x:Key="ColHead" TargetType="Button">
-      <Setter Property="Foreground" Value="#86868B"/>
-      <Setter Property="FontSize" Value="11.5"/>
+      <Setter Property="Foreground" Value="#6E6E73"/>
+      <Setter Property="FontSize" Value="12"/>
       <Setter Property="Cursor" Value="Hand"/>
       <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
       <Setter Property="Padding" Value="0,3"/>
@@ -419,7 +419,7 @@
       <Setter Property="VerticalAlignment" Value="Center"/>
     </Style>
     <Style x:Key="TabBadgeText" TargetType="TextBlock">
-      <Setter Property="FontSize" Value="11.5"/>
+      <Setter Property="FontSize" Value="12"/>
       <Setter Property="FontWeight" Value="Normal"/>
       <Setter Property="Foreground" Value="#6E6E73"/>
     </Style>
@@ -951,9 +951,9 @@
               <StackPanel Orientation="Horizontal" Margin="4,0,0,8">
                 <TextBlock Text="{Binding Items[0].GroupTitle}" FontSize="13" FontWeight="SemiBold" Foreground="#1D1D1F"/>
                 <Border Background="#E5E5EA" CornerRadius="8" Padding="7,0" Margin="8,0,0,0" VerticalAlignment="Center">
-                  <TextBlock Text="{Binding ItemCount, StringFormat='{}{0} 项'}" FontSize="11.5" Foreground="#3A3A3C"/>
+                  <TextBlock Text="{Binding ItemCount, StringFormat='{}{0} 项'}" FontSize="12" Foreground="#3A3A3C"/>
                 </Border>
-                <TextBlock Text="{Binding Items[0].GroupNote}" FontSize="12" Foreground="#86868B" Margin="10,0,0,0" VerticalAlignment="Bottom"/>
+                <TextBlock Text="{Binding Items[0].GroupNote}" FontSize="12" Foreground="#6E6E73" Margin="10,0,0,0" VerticalAlignment="Bottom"/>
               </StackPanel>
               <Border Background="White" CornerRadius="12" BorderBrush="#E5E5EA" BorderThickness="1" Padding="0,2">
                 <ItemsPresenter/>
@@ -1011,8 +1011,8 @@
     <Style TargetType="GridViewColumnHeader">
       <Setter Property="HorizontalContentAlignment" Value="Left"/>
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="Foreground" Value="#86868B"/>
-      <Setter Property="FontSize" Value="11.5"/>
+      <Setter Property="Foreground" Value="#6E6E73"/>
+      <Setter Property="FontSize" Value="12"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="GridViewColumnHeader">
@@ -1099,9 +1099,9 @@
     </Style>
     <!-- ===== 侧边栏分组标题 ===== -->
     <Style x:Key="NavHead" TargetType="TextBlock">
-      <Setter Property="FontSize" Value="11.5"/>
+      <Setter Property="FontSize" Value="12"/>
       <Setter Property="FontWeight" Value="SemiBold"/>
-      <Setter Property="Foreground" Value="#6E6E73"/>
+      <Setter Property="Foreground" Value="#636366"/>
       <Setter Property="Margin" Value="4,14,0,5"/>
     </Style>
     <!-- ===== 开关（勾选框的另一种样子） ===== -->
@@ -1193,7 +1193,7 @@
         <CheckBox x:Name="Ck" Grid.Column="0" IsChecked="{Binding Checked, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanMove}" VerticalAlignment="Top" Margin="0,2,0,0"/>
         <StackPanel Grid.Column="1" Margin="0,0,14,0">
           <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-          <TextBlock Text="{Binding PathText}" FontSize="11.5" Foreground="#86868B" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" ToolTip="{Binding PathText}"/>
+          <TextBlock Text="{Binding PathText}" FontSize="12" Foreground="#6E6E73" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" ToolTip="{Binding PathText}"/>
           <TextBlock x:Name="Nt" Text="{Binding Note}" FontSize="12" Foreground="#6E6E73" TextWrapping="Wrap" Margin="0,3,0,0"/>
           <TextBlock x:Name="St" Text="{Binding Status}" Foreground="{Binding StatusBrush}" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,4,0,0"/>
         </StackPanel>
@@ -1222,20 +1222,20 @@
         <TextBlock Grid.Column="1" Text="{Binding Glyph}" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="{Binding GlyphBrush}" VerticalAlignment="Center"/>
         <StackPanel Grid.Column="2" Margin="0,0,14,0" VerticalAlignment="Center">
           <DockPanel>
-            <TextBlock x:Name="Lk" DockPanel.Dock="Right" Text="&#xE72E;" FontFamily="{StaticResource Icons}" FontSize="11" Foreground="#86868B"
+            <TextBlock x:Name="Lk" DockPanel.Dock="Right" Text="&#xE72E;" FontFamily="{StaticResource Icons}" FontSize="11" Foreground="#6E6E73"
                        Margin="8,0,0,0" VerticalAlignment="Center" Visibility="Collapsed" ToolTip="{Binding LockTip}"/>
             <Border x:Name="Mk" DockPanel.Dock="Right" Background="#FDEBEC" CornerRadius="6" Padding="6,0,6,1" Margin="8,0,0,0" VerticalAlignment="Center" Visibility="Collapsed" ToolTip="已经在待删清单里">
-              <TextBlock Text="待删" FontSize="11" Foreground="#C0101C"/>
+              <TextBlock Text="待删" FontSize="12" Foreground="#C0101C"/>
             </Border>
             <TextBlock Text="{Binding Name}" FontSize="13.5" TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}"/>
           </DockPanel>
-          <TextBlock Text="{Binding Meta}" FontSize="11.5" Foreground="#86868B" TextTrimming="CharacterEllipsis" Margin="0,1,0,0" Visibility="{DynamicResource MapMetaVis}" ToolTip="{Binding Meta}"/>
+          <TextBlock Text="{Binding Meta}" FontSize="12" Foreground="#6E6E73" TextTrimming="CharacterEllipsis" Margin="0,1,0,0" Visibility="{DynamicResource MapMetaVis}" ToolTip="{Binding Meta}"/>
         </StackPanel>
         <Border Grid.Column="3" Height="8" Width="160" Margin="0,0,12,0" CornerRadius="4" Background="#EFEFF4" HorizontalAlignment="Left" VerticalAlignment="Center" Visibility="{DynamicResource MapBarVis}">
           <Border Width="{Binding Bar}" HorizontalAlignment="Left" CornerRadius="4" Background="#0071E3"/>
         </Border>
         <TextBlock Grid.Column="4" Text="{Binding SizeText}" FontWeight="SemiBold" TextAlignment="Right" VerticalAlignment="Center"/>
-        <TextBlock Grid.Column="5" Width="58" Text="{Binding Pct}" Foreground="#86868B" TextAlignment="Right" VerticalAlignment="Center" Visibility="{DynamicResource MapPctVis}"/>
+        <TextBlock Grid.Column="5" Width="58" Text="{Binding Pct}" Foreground="#6E6E73" TextAlignment="Right" VerticalAlignment="Center" Visibility="{DynamicResource MapPctVis}"/>
       </Grid>
       <DataTemplate.Triggers>
         <DataTrigger Binding="{Binding Locked}" Value="True"><Setter TargetName="Lk" Property="Visibility" Value="Visible"/></DataTrigger>
@@ -1272,30 +1272,30 @@
           </Border>
           <StackPanel Margin="11,0,0,0" VerticalAlignment="Center">
             <TextBlock Text="腾挪 ClearC" FontSize="15" FontWeight="SemiBold" TextOptions.TextFormattingMode="Ideal"/>
-            <TextBlock x:Name="AppVer" Text="" FontSize="11.5" Foreground="#86868B" Margin="0,1,0,0"/>
-            <TextBlock x:Name="ModeTag" Text="" FontSize="11" Foreground="#0066CC" Margin="0,1,0,0" Cursor="Hand" ToolTip="点一下到设置里换模式"/>
+            <TextBlock x:Name="AppVer" Text="" FontSize="12" Foreground="#636366" Margin="0,1,0,0"/>
+            <TextBlock x:Name="ModeTag" Text="" FontSize="12" Foreground="#0066CC" Margin="0,1,0,0" Cursor="Hand" ToolTip="点一下到设置里换模式"/>
           </StackPanel>
         </StackPanel>
         <StackPanel DockPanel.Dock="Bottom">
-          <Button x:Name="BtnTheme" Style="{StaticResource LinkButton}" Foreground="#6E6E73" Padding="11,6" HorizontalAlignment="Left">
+          <Button x:Name="BtnTheme" Style="{StaticResource LinkButton}" Foreground="#636366" Padding="11,6" HorizontalAlignment="Left">
             <StackPanel Orientation="Horizontal">
               <TextBlock Text="&#xE706;" FontFamily="{StaticResource Icons}" FontSize="13" VerticalAlignment="Center" Margin="0,0,9,0"/>
               <TextBlock x:Name="BtnThemeText" Text="外观：浅色" VerticalAlignment="Center"/>
             </StackPanel>
           </Button>
-          <Button x:Name="BtnLang" Style="{StaticResource LinkButton}" Foreground="#6E6E73" Padding="11,6" HorizontalAlignment="Left" ToolTip="中文 / English">
+          <Button x:Name="BtnLang" Style="{StaticResource LinkButton}" Foreground="#636366" Padding="11,6" HorizontalAlignment="Left" ToolTip="中文 / English">
             <StackPanel Orientation="Horizontal">
               <TextBlock Text="&#xE774;" FontFamily="{StaticResource Icons}" FontSize="13" VerticalAlignment="Center" Margin="0,0,9,0"/>
               <TextBlock x:Name="BtnLangText" Text="English" VerticalAlignment="Center"/>
             </StackPanel>
           </Button>
-          <Button x:Name="BtnFeedback" Style="{StaticResource LinkButton}" Foreground="#6E6E73" Padding="11,6" HorizontalAlignment="Left">
+          <Button x:Name="BtnFeedback" Style="{StaticResource LinkButton}" Foreground="#636366" Padding="11,6" HorizontalAlignment="Left">
             <StackPanel Orientation="Horizontal">
               <TextBlock Text="&#xE8BD;" FontFamily="{StaticResource Icons}" FontSize="13" VerticalAlignment="Center" Margin="0,0,9,0"/>
               <TextBlock Text="使用反馈" VerticalAlignment="Center"/>
             </StackPanel>
           </Button>
-          <Button x:Name="BtnLog" Style="{StaticResource LinkButton}" Foreground="#6E6E73" Padding="11,6" HorizontalAlignment="Left">
+          <Button x:Name="BtnLog" Style="{StaticResource LinkButton}" Foreground="#636366" Padding="11,6" HorizontalAlignment="Left">
             <StackPanel Orientation="Horizontal">
               <TextBlock Text="&#xE8A5;" FontFamily="{StaticResource Icons}" FontSize="13" VerticalAlignment="Center" Margin="0,0,9,0"/>
               <TextBlock x:Name="BtnLogText" Text="运行记录" VerticalAlignment="Center"/>
@@ -1357,7 +1357,7 @@
                   ToolTip="自动扫描，清掉所有安全项和默认选中的缓存、临时文件。只删不搬：聊天记录在下面单独一张卡片里，要搬自己点。不会关闭休眠、不清空回收站，个人文件夹（桌面、文档、下载等）里的东西一律不删。"/>
           <StackPanel>
             <DockPanel>
-              <TextBlock x:Name="CapTotal" DockPanel.Dock="Right" Foreground="#86868B" VerticalAlignment="Bottom" Margin="12,0,0,3"/>
+              <TextBlock x:Name="CapTotal" DockPanel.Dock="Right" Foreground="#6E6E73" VerticalAlignment="Bottom" Margin="12,0,0,3"/>
               <StackPanel Orientation="Horizontal">
                 <TextBlock x:Name="CapFree" Text="—" FontSize="24" FontWeight="SemiBold" TextOptions.TextFormattingMode="Ideal"/>
                 <TextBlock Text="可用" FontSize="14" Foreground="#6E6E73" VerticalAlignment="Bottom" Margin="8,0,0,4"/>
@@ -1437,12 +1437,12 @@
           <ControlTemplate TargetType="ListView"><ItemsPresenter/></ControlTemplate>
         </ListView.Template>
       </ListView>
-      <TextBlock x:Name="CleanFilterEmpty" Text="这一类里没有这种操作的项目，换一个操作看看" Foreground="#86868B" Margin="18,16,18,16" Visibility="Collapsed"/>
+      <TextBlock x:Name="CleanFilterEmpty" Text="这一类里没有这种操作的项目，换一个操作看看" Foreground="#6E6E73" Margin="18,16,18,16" Visibility="Collapsed"/>
       </StackPanel>
       </Border>
       <StackPanel x:Name="EmptyClean" HorizontalAlignment="Center" Margin="0,40,0,40" IsHitTestVisible="False">
         <TextBlock Text="&#xE721;" FontFamily="{StaticResource Icons}" FontSize="34" Foreground="#C7C7CC" HorizontalAlignment="Center"/>
-        <TextBlock x:Name="EmptyCleanText" Text="点「扫描」看看 C 盘里有什么可以清理" Foreground="#86868B" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center"/>
+        <TextBlock x:Name="EmptyCleanText" Text="点「扫描」看看 C 盘里有什么可以清理" Foreground="#6E6E73" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center"/>
       </StackPanel>
       </StackPanel>
       </ScrollViewer>
@@ -1656,10 +1656,10 @@
                         <StackPanel Orientation="Horizontal">
                           <Ellipse Width="8" Height="8" Margin="0,0,10,0" VerticalAlignment="Center" Fill="{Binding Items[0].TypeBrush}"/>
                           <TextBlock Text="{Binding Items[0].GroupName}" FontWeight="SemiBold" Foreground="#1D1D1F" VerticalAlignment="Center"/>
-                          <TextBlock Text="{Binding Items[0].GroupMeta}" Foreground="#86868B" Margin="12,0,0,0" VerticalAlignment="Center"/>
+                          <TextBlock Text="{Binding Items[0].GroupMeta}" Foreground="#6E6E73" Margin="12,0,0,0" VerticalAlignment="Center"/>
                           <Border CornerRadius="9" Padding="8,1,8,2" Margin="12,0,0,0" VerticalAlignment="Center"
                                   Background="{Binding Items[0].GroupBadgeBg}" ToolTip="{Binding Items[0].GroupBadgeTip}">
-                            <TextBlock Text="{Binding Items[0].GroupBadge}" FontSize="11.5" Foreground="{Binding Items[0].GroupBadgeFg}"/>
+                            <TextBlock Text="{Binding Items[0].GroupBadge}" FontSize="12" Foreground="{Binding Items[0].GroupBadgeFg}"/>
                           </Border>
                         </StackPanel>
                       </Border>
@@ -1674,7 +1674,7 @@
                       <DataTemplate>
                         <Grid>
                           <CheckBox x:Name="Chk" IsChecked="{Binding ToDelete, Mode=TwoWay}" HorizontalAlignment="Center"/>
-                          <TextBlock x:Name="Lock" Text="&#xE72E;" FontFamily="{StaticResource Icons}" FontSize="13" Foreground="#86868B" HorizontalAlignment="Center"
+                          <TextBlock x:Name="Lock" Text="&#xE72E;" FontFamily="{StaticResource Icons}" FontSize="13" Foreground="#6E6E73" HorizontalAlignment="Center"
                                      VerticalAlignment="Center" Visibility="Collapsed" ToolTip="C 盘个人文件夹里的文件受保护，不会删除"/>
                         </Grid>
                         <DataTemplate.Triggers>
@@ -1690,7 +1690,7 @@
                     <GridViewColumn.CellTemplate>
                       <DataTemplate>
                         <TextBlock ToolTip="{Binding Path}" TextTrimming="CharacterEllipsis">
-                          <Run Text="{Binding Dir, Mode=OneWay}" Foreground="#86868B"/><Run Text="{Binding FileName, Mode=OneWay}" Foreground="#1D1D1F"/>
+                          <Run Text="{Binding Dir, Mode=OneWay}" Foreground="#6E6E73"/><Run Text="{Binding FileName, Mode=OneWay}" Foreground="#1D1D1F"/>
                         </TextBlock>
                       </DataTemplate>
                     </GridViewColumn.CellTemplate>
@@ -1709,7 +1709,7 @@
             </ListView>
             <StackPanel x:Name="EmptyDup" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,10,0,30" IsHitTestVisible="False">
               <TextBlock Text="&#xE8C8;" FontFamily="{StaticResource Icons}" FontSize="32" Foreground="#C7C7CC" HorizontalAlignment="Center"/>
-              <TextBlock x:Name="EmptyDupText" Text="设置好条件后，点右上角「开始查找」" Foreground="#86868B" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center"/>
+              <TextBlock x:Name="EmptyDupText" Text="设置好条件后，点右上角「开始查找」" Foreground="#6E6E73" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center"/>
             </StackPanel>
           </Grid>
         </DockPanel>
@@ -1774,9 +1774,9 @@
                       </Grid>
                       <TextBlock Text="{Binding UsedText}" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
                       <WrapPanel Margin="0,8,0,0">
-                        <Border Background="{Binding HealthBg}" CornerRadius="6" Padding="7,2" Margin="0,0,6,4"><TextBlock Text="{Binding HealthText}" FontSize="11.5" FontWeight="SemiBold" Foreground="{Binding HealthFg}"/></Border>
-                        <Border x:Name="TempChip" Background="{Binding TempBg}" CornerRadius="6" Padding="7,2" Margin="0,0,6,4"><TextBlock Text="{Binding TempText}" FontSize="11.5" FontWeight="SemiBold" Foreground="{Binding TempFg}"/></Border>
-                        <Border x:Name="WearChip" Background="{Binding WearBg}" CornerRadius="6" Padding="7,2" Margin="0,0,6,4"><TextBlock Text="{Binding WearText}" FontSize="11.5" FontWeight="SemiBold" Foreground="{Binding WearFg}"/></Border>
+                        <Border Background="{Binding HealthBg}" CornerRadius="6" Padding="7,2" Margin="0,0,6,4"><TextBlock Text="{Binding HealthText}" FontSize="12" FontWeight="SemiBold" Foreground="{Binding HealthFg}"/></Border>
+                        <Border x:Name="TempChip" Background="{Binding TempBg}" CornerRadius="6" Padding="7,2" Margin="0,0,6,4"><TextBlock Text="{Binding TempText}" FontSize="12" FontWeight="SemiBold" Foreground="{Binding TempFg}"/></Border>
+                        <Border x:Name="WearChip" Background="{Binding WearBg}" CornerRadius="6" Padding="7,2" Margin="0,0,6,4"><TextBlock Text="{Binding WearText}" FontSize="12" FontWeight="SemiBold" Foreground="{Binding WearFg}"/></Border>
                         <TextBlock x:Name="HoursText" Text="{Binding HoursText}" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="2,0,0,4"/>
                       </WrapPanel>
                     </StackPanel>
@@ -2005,7 +2005,7 @@
           </ListView>
           <StackPanel x:Name="EmptyMap" Grid.Row="2" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,24" IsHitTestVisible="False">
             <TextBlock Text="&#xE9D9;" FontFamily="{StaticResource Icons}" FontSize="34" Foreground="#C7C7CC" HorizontalAlignment="Center"/>
-            <TextBlock x:Name="EmptyMapText" Text="点右上角「扫描」，看看这块盘的空间都去哪了" Foreground="#86868B" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center"/>
+            <TextBlock x:Name="EmptyMapText" Text="点右上角「扫描」，看看这块盘的空间都去哪了" Foreground="#6E6E73" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center"/>
           </StackPanel>
         </Grid>
       </Border>
@@ -2312,7 +2312,7 @@
                             <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                               <DataTemplate>
-                                <Border Background="{Binding Bg}" CornerRadius="6" Padding="7,2" Margin="0,0,6,4"><TextBlock Text="{Binding Text}" FontSize="11.5" FontWeight="SemiBold" Foreground="{Binding Fg}"/></Border>
+                                <Border Background="{Binding Bg}" CornerRadius="6" Padding="7,2" Margin="0,0,6,4"><TextBlock Text="{Binding Text}" FontSize="12" FontWeight="SemiBold" Foreground="{Binding Fg}"/></Border>
                               </DataTemplate>
                             </ItemsControl.ItemTemplate>
                           </ItemsControl>
@@ -2468,15 +2468,15 @@
                 <TextBlock Style="{StaticResource Body}" Foreground="#6E6E73" Margin="0,6,0,0" Text="左边选遇到的问题，右边的修法从轻到重排，从上往下试。都是 Windows 自带的命令，在看得见的窗口里运行。"/>
                 <WrapPanel Margin="0,14,0,0">
                   <StackPanel Orientation="Horizontal" Margin="0,0,28,6">
-                    <Border Background="#E5F4E9" CornerRadius="6" Padding="8,2,8,3" VerticalAlignment="Center"><TextBlock Text="只看" FontSize="11.5" FontWeight="SemiBold" Foreground="#1D7A35"/></Border>
+                    <Border Background="#E5F4E9" CornerRadius="6" Padding="8,2,8,3" VerticalAlignment="Center"><TextBlock Text="只看" FontSize="12" FontWeight="SemiBold" Foreground="#1D7A35"/></Border>
                     <TextBlock Text="不改任何东西" Style="{StaticResource Caption}" Foreground="#6E6E73" Margin="8,0,0,0"/>
                   </StackPanel>
                   <StackPanel Orientation="Horizontal" Margin="0,0,28,6">
-                    <Border Background="#FFF1DB" CornerRadius="6" Padding="8,2,8,3" VerticalAlignment="Center"><TextBlock Text="会改动" FontSize="11.5" FontWeight="SemiBold" Foreground="#995700"/></Border>
+                    <Border Background="#FFF1DB" CornerRadius="6" Padding="8,2,8,3" VerticalAlignment="Center"><TextBlock Text="会改动" FontSize="12" FontWeight="SemiBold" Foreground="#995700"/></Border>
                     <TextBlock Text="先说明要改什么，能撤销的写明怎么撤销" Style="{StaticResource Caption}" Foreground="#6E6E73" Margin="8,0,0,0"/>
                   </StackPanel>
                   <StackPanel Orientation="Horizontal" Margin="0,0,28,6">
-                    <Border Background="#FDEBEC" CornerRadius="6" Padding="8,2,8,3" VerticalAlignment="Center"><TextBlock Text="要重启" FontSize="11.5" FontWeight="SemiBold" Foreground="#C0101C"/></Border>
+                    <Border Background="#FDEBEC" CornerRadius="6" Padding="8,2,8,3" VerticalAlignment="Center"><TextBlock Text="要重启" FontSize="12" FontWeight="SemiBold" Foreground="#C0101C"/></Border>
                     <TextBlock Text="重启后才生效" Style="{StaticResource Caption}" Foreground="#6E6E73" Margin="8,0,0,0"/>
                   </StackPanel>
                 </WrapPanel>
@@ -2519,7 +2519,7 @@
                                       <StackPanel VerticalAlignment="Center">
                                         <WrapPanel>
                                           <TextBlock Text="{Binding Title}" FontSize="14.5" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,2,10,0"/>
-                                          <Border Background="{Binding TagBg}" CornerRadius="6" Padding="8,2,8,3" VerticalAlignment="Center" Margin="0,2,0,0"><TextBlock Text="{Binding Tag}" FontSize="11.5" FontWeight="SemiBold" Foreground="{Binding TagFg}"/></Border>
+                                          <Border Background="{Binding TagBg}" CornerRadius="6" Padding="8,2,8,3" VerticalAlignment="Center" Margin="0,2,0,0"><TextBlock Text="{Binding Tag}" FontSize="12" FontWeight="SemiBold" Foreground="{Binding TagFg}"/></Border>
                                         </WrapPanel>
                                         <TextBlock Text="{Binding Desc}" Style="{StaticResource Body}" Foreground="#6E6E73" Margin="0,6,0,0"/>
                                       </StackPanel>
@@ -2624,7 +2624,7 @@
         </Border>
         <TextBlock x:Name="AppsInfo" DockPanel.Dock="Right" Style="{StaticResource Caption}" Margin="14,0,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
         <DockPanel>
-          <TextBlock DockPanel.Dock="Left" Text="&#xE721;" FontFamily="{StaticResource Icons}" FontSize="12" Foreground="#86868B" VerticalAlignment="Center" Margin="0,0,8,0"/>
+          <TextBlock DockPanel.Dock="Left" Text="&#xE721;" FontFamily="{StaticResource Icons}" FontSize="12" Foreground="#6E6E73" VerticalAlignment="Center" Margin="0,0,8,0"/>
           <TextBox x:Name="AppsSearch" MaxWidth="320" HorizontalAlignment="Left" MinWidth="200" ToolTip="按名字或发行商搜索"/>
         </DockPanel>
       </DockPanel>
@@ -2708,11 +2708,11 @@
                   </Grid.ColumnDefinitions>
                   <CheckBox Grid.Column="0" IsChecked="{Binding Picked, Mode=TwoWay}" VerticalAlignment="Center" Focusable="False" Cursor="Hand"/>
                   <Border Grid.Column="1" Width="30" Height="30" CornerRadius="8" Background="#EFEFF4" HorizontalAlignment="Left" VerticalAlignment="Center">
-                    <TextBlock Text="{Binding Icon}" FontWeight="SemiBold" Foreground="#6E6E73" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding Icon}" FontWeight="SemiBold" Foreground="#636366" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                   </Border>
                   <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="0,0,12,0">
                     <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                    <TextBlock Text="{Binding Meta}" FontSize="11.5" Foreground="#86868B" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                    <TextBlock Text="{Binding Meta}" FontSize="12" Foreground="#6E6E73" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
                   </StackPanel>
                   <TextBlock Grid.Column="3" Text="{Binding SizeText}" FontWeight="SemiBold" TextAlignment="Right" VerticalAlignment="Center" Margin="0,0,14,0"/>
                   <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center">
@@ -2721,7 +2721,7 @@
                     <Button x:Name="AppOpen" Content="打开位置" Tag="{Binding}" Style="{StaticResource Small}" Margin="0,0,6,0"/>
                     <Button x:Name="AppMove" Content="搬到其他盘" Tag="{Binding}" Style="{StaticResource Small}" Margin="0,0,6,0" Visibility="{DynamicResource AppMoveVis}"
                             ToolTip="把整个安装文件夹搬到其他盘，C 盘原位置留一个链接，软件照常使用，不用重装"/>
-                    <Button x:Name="AppNoMove" Content="不能搬" Tag="{Binding}" Style="{StaticResource LinkButton}" Foreground="#86868B" Margin="0,0,12,0" Visibility="{DynamicResource AppMoveVis}"
+                    <Button x:Name="AppNoMove" Content="不能搬" Tag="{Binding}" Style="{StaticResource LinkButton}" Foreground="#6E6E73" Margin="0,0,12,0" Visibility="{DynamicResource AppMoveVis}"
                             VerticalAlignment="Center" Cursor="Help" ToolTip="{Binding MoveWhy}"/>
                     <Button x:Name="AppUninstall" Content="卸载" Tag="{Binding}" Style="{StaticResource Small}"/>
                   </StackPanel>
@@ -2749,8 +2749,8 @@
                   <CheckBox x:Name="Pk" Grid.Column="0" IsChecked="{Binding Picked, Mode=TwoWay}" VerticalAlignment="Center" Focusable="False" Cursor="Hand"/>
                   <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
                     <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                    <TextBlock Text="{Binding Meta}" FontSize="11.5" Foreground="#86868B" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
-                    <TextBlock Text="{Binding Detail}" FontSize="11.5" Foreground="#86868B" TextTrimming="CharacterEllipsis" Margin="0,1,0,0" ToolTip="{Binding Detail}"/>
+                    <TextBlock Text="{Binding Meta}" FontSize="12" Foreground="#6E6E73" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                    <TextBlock Text="{Binding Detail}" FontSize="12" Foreground="#6E6E73" TextTrimming="CharacterEllipsis" Margin="0,1,0,0" ToolTip="{Binding Detail}"/>
                   </StackPanel>
                   <TextBlock Grid.Column="2" Text="{Binding StatusText}" Foreground="{Binding StatusBrush}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,14,0"/>
                   <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
@@ -2767,7 +2767,7 @@
           </ListView>
           <StackPanel x:Name="EmptyApps" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
             <TextBlock Text="&#xE71D;" FontFamily="{StaticResource Icons}" FontSize="32" Foreground="#C7C7CC" HorizontalAlignment="Center"/>
-            <TextBlock x:Name="EmptyAppsText" Text="正在读取已安装的软件…" Foreground="#86868B" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center"/>
+            <TextBlock x:Name="EmptyAppsText" Text="正在读取已安装的软件…" Foreground="#6E6E73" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center"/>
           </StackPanel>
         </Grid>
         </DockPanel>
@@ -2838,7 +2838,7 @@
         </DockPanel>
         <StackPanel x:Name="EmptyCand" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
           <TextBlock Text="&#xE8AB;" FontFamily="{StaticResource Icons}" FontSize="32" Foreground="#C7C7CC" HorizontalAlignment="Center"/>
-          <TextBlock x:Name="EmptyCandText" Text="正在看 C 盘上还有什么能搬…" Foreground="#86868B" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center" TextWrapping="Wrap" MaxWidth="520" TextAlignment="Center"/>
+          <TextBlock x:Name="EmptyCandText" Text="正在看 C 盘上还有什么能搬…" Foreground="#6E6E73" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center" TextWrapping="Wrap" MaxWidth="520" TextAlignment="Center"/>
         </StackPanel>
         <!-- 已经搬走的 -->
         <Border x:Name="MovesCard" Style="{StaticResource Card}" Padding="0,2,0,6" Visibility="Collapsed">
@@ -2870,7 +2870,7 @@
                   </Grid.ColumnDefinitions>
                   <StackPanel Grid.Column="0" Margin="0,0,12,0">
                     <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold"/>
-                    <TextBlock FontSize="11.5" Foreground="#86868B" TextTrimming="CharacterEllipsis" Margin="0,2,0,0">
+                    <TextBlock FontSize="12" Foreground="#6E6E73" TextTrimming="CharacterEllipsis" Margin="0,2,0,0">
                       <Run Text="{Binding Src, Mode=OneWay}"/><Run Text="  →  "/><Run Text="{Binding Dst, Mode=OneWay}"/>
                     </TextBlock>
                     <TextBlock Text="{Binding Status}" Foreground="{Binding StatusBrush}" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,4,0,0"/>
@@ -2893,7 +2893,7 @@
           </ListView>
           <StackPanel x:Name="EmptyMoves" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
             <TextBlock Text="&#xE8AB;" FontFamily="{StaticResource Icons}" FontSize="32" Foreground="#C7C7CC" HorizontalAlignment="Center"/>
-            <TextBlock x:Name="EmptyMovesText" Text="还没有搬过文件夹。在「可以搬的」里勾选要搬的项目，或者在「清理 C 盘」里选「搬到其他盘」，搬好的就会出现在这里。" Foreground="#86868B" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center" TextWrapping="Wrap" MaxWidth="520" TextAlignment="Center"/>
+            <TextBlock x:Name="EmptyMovesText" Text="还没有搬过文件夹。在「可以搬的」里勾选要搬的项目，或者在「清理 C 盘」里选「搬到其他盘」，搬好的就会出现在这里。" Foreground="#6E6E73" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center" TextWrapping="Wrap" MaxWidth="520" TextAlignment="Center"/>
           </StackPanel>
         </Grid>
         </DockPanel>
@@ -3086,7 +3086,7 @@
                   <GridViewColumn.CellTemplate>
                     <DataTemplate>
                       <Border CornerRadius="9" Padding="8,1,8,2" Background="{Binding CatBg}" HorizontalAlignment="Left">
-                        <TextBlock Text="{Binding CatText}" FontSize="11.5" Foreground="{Binding CatFg}"/>
+                        <TextBlock Text="{Binding CatText}" FontSize="12" Foreground="{Binding CatFg}"/>
                       </Border>
                     </DataTemplate>
                   </GridViewColumn.CellTemplate>
@@ -3105,7 +3105,7 @@
           </ListView>
           <StackPanel x:Name="EmptyLog" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False" Margin="0,30,0,0">
             <TextBlock Text="&#xE81C;" FontFamily="{StaticResource Icons}" FontSize="32" Foreground="#C7C7CC" HorizontalAlignment="Center"/>
-            <TextBlock x:Name="EmptyLogText" Text="还没有操作记录" Foreground="#86868B" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center"/>
+            <TextBlock x:Name="EmptyLogText" Text="还没有操作记录" Foreground="#6E6E73" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center"/>
           </StackPanel>
         </Grid>
       </Border>
@@ -3384,19 +3384,19 @@
                   <StackPanel>
                     <TextBlock Text="安全风险提示" Style="{StaticResource HelpHead}" Foreground="#A1000F"/>
                     <DockPanel Margin="0,10,0,0">
-                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#6E6E73" Style="{StaticResource HelpPara}"/>
                       <TextBlock Style="{StaticResource HelpPara}"><Run>删除操作会把文件从电脑上移除。没有放进回收站的文件，删除后通常无法恢复，可能造成资料丢失。</Run></TextBlock>
                     </DockPanel>
                     <DockPanel Margin="0,10,0,0">
-                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#6E6E73" Style="{StaticResource HelpPara}"/>
                       <TextBlock Style="{StaticResource HelpPara}"><Run>每次删除前，请确认这些资料确实不再需要、删除不会给你带来损失。重要资料请先备份。</Run></TextBlock>
                     </DockPanel>
                     <DockPanel Margin="0,10,0,0">
-                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#6E6E73" Style="{StaticResource HelpPara}"/>
                       <TextBlock Style="{StaticResource HelpPara}"><Run>本工具只按你的选择执行操作。因使用本工具删除、搬移文件造成的资料丢失或其他损失，</Run><Run FontWeight="SemiBold" Foreground="#A1000F">责任由使用者自行承担，开发者不承担责任</Run><Run>。</Run></TextBlock>
                     </DockPanel>
                     <DockPanel Margin="0,10,0,0">
-                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#6E6E73" Style="{StaticResource HelpPara}"/>
                       <TextBlock Style="{StaticResource HelpPara}"><Run>继续使用本工具，即表示你已了解并接受上述风险。</Run></TextBlock>
                     </DockPanel>
                   </StackPanel>
@@ -4174,8 +4174,8 @@
         </DockPanel>
         <ProgressBar x:Name="OpBar" Height="6" Margin="0,8,0,7" Minimum="0" Maximum="100"/>
         <DockPanel>
-          <TextBlock x:Name="OpSubTime" DockPanel.Dock="Right" Foreground="#86868B" FontSize="12" Margin="12,0,0,0"/>
-          <TextBlock x:Name="OpDetail" Foreground="#86868B" FontSize="12" TextTrimming="CharacterEllipsis"/>
+          <TextBlock x:Name="OpSubTime" DockPanel.Dock="Right" Foreground="#6E6E73" FontSize="12" Margin="12,0,0,0"/>
+          <TextBlock x:Name="OpDetail" Foreground="#6E6E73" FontSize="12" TextTrimming="CharacterEllipsis"/>
         </DockPanel>
         <ProgressBar x:Name="OpSubBar" Height="4" Margin="0,6,0,0" Minimum="0" Maximum="100" Visibility="Collapsed"/>
       </StackPanel>

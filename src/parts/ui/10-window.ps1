@@ -601,7 +601,7 @@ function Move-Checklist($p) {
             $text = @{ kill = (T '关闭占用这些文件的软件'); measure = (T '统计要搬回多少'); copy = (T '复制回 ') + $p.MoveDest; verify = (T '核对复制是否完整'); link = (T '拆掉链接，换回真正的文件夹'); cleanup = (T '删除目标盘上的那份') }[$order[$i]]
         }
         elseif ($order[$i] -eq 'copy' -and $p.MoveDest) { $text = (T '复制到 ') + $p.MoveDest; if ($p.MoveReuse) { $text = (T '补复制有变化的文件到 ') + $p.MoveDest + (T '（上次的副本接着用）') } }
-        if ($i -lt $ci)      { $lines += ,@(('✓  ' + $text), '#248A3D', $false) }
+        if ($i -lt $ci)      { $lines += ,@(('✓  ' + $text), '#1D7A35', $false) }
         elseif ($i -eq $ci)  { $lines += ,@(('▶  ' + $text), '#0071E3', $true) }
         else                 { $lines += ,@(('○  ' + $text), '#AEAEB2', $false) }
     }

@@ -637,7 +637,7 @@ function Draw-MapTree {
             if ($b.Height -ge 38) {
                 [void]$tb.Inlines.Add((New-Object System.Windows.Documents.LineBreak))
                 $sz = New-Object System.Windows.Documents.Run $(if ($row) { $row.SizeText } else { Fmt $ti.Rest })
-                $sz.FontSize = 11; [void]$tb.Inlines.Add($sz)
+                $sz.FontSize = 12; [void]$tb.Inlines.Add($sz)
             }
             $b.Child = $tb
         }
@@ -1575,7 +1575,7 @@ function Compare-Snapshot($root) {
             $g.Before = if ($x.Had) { Fmt $x.B } else { (T '不到 100 MB') }
             $g.Now = if ($x.N -gt 0) { Fmt $x.N } else { (T '不到 100 MB') }
             $g.Change = $(if ($x.D -gt 0) { '+' } else { '−' }) + (Fmt ([math]::Abs($x.D)))
-            $g.ChangeBrush = if ($x.D -gt 0) { '#D70015' } else { '#248A3D' }
+            $g.ChangeBrush = if ($x.D -gt 0) { '#D70015' } else { '#1D7A35' }
             $g.BeforeBytes = [double]$x.B; $g.NowBytes = [double]$x.N
             $script:growRows.Add($g)
         }

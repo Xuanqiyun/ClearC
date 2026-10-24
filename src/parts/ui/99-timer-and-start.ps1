@@ -612,7 +612,7 @@ function Set-SegFirst($root) {
 }
 Set-SegFirst $win
 
-$script:statusColor = @{ wait = '#86868B'; run = '#0071E3'; ok = '#248A3D'; warn = '#B25000'; fail = '#D70015'; skip = '#86868B' }
+$script:statusColor = @{ wait = '#6E6E73'; run = '#0066CC'; ok = '#1D7A35'; warn = '#995700'; fail = '#D70015'; skip = '#6E6E73' }
 $script:pendingDialog = $null
 $win.TaskbarItemInfo = New-Object System.Windows.Shell.TaskbarItemInfo
 Fill-DestChoices

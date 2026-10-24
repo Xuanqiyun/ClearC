@@ -2605,13 +2605,13 @@ public static class Theme {
         } else if (l >= 0.85) {                                      // 浅的彩色底（提示框、标签）
             if (role == 'f') { L = 0.80; S = Math.Min(s, 0.7); }
             else if (role == 'd') { L = 0.34; S = Math.Min(s, 0.45); }
-            else { L = 0.24; S = Math.Min(s, 0.45); }
+            else { L = 0.21; S = Math.Min(s, 0.45); }   // 深色时标签、提示框的底再暗一点，上面的彩色字才够清楚（4.5:1）
         } else if (l >= 0.65) {                                      // 偏浅的彩色（浅边框、焦点环）
             if (role == 'b') { L = 0.28; S = Math.Min(s, 0.5); }
             else if (role == 'd') { L = 0.42; S = Math.Min(s, 0.55); }
             else L = l;
         } else {                                                     // 鲜艳的颜色
-            if (role == 'f') L = Math.Max(l, 0.62);
+            if (role == 'f') L = Math.Max(l, 0.68);
             else if (role == 'd') L = Math.Max(l, 0.50);
             else L = Math.Min(Math.Max(l, 0.42), 0.55);
         }
@@ -3313,7 +3313,7 @@ public class StartRow : INotifyPropertyChanged {
     public bool Enabled { get { return _on; } set { _on = value; Raise("Enabled"); Raise("StatusText"); Raise("StatusBrush"); Raise("ToggleText"); } }
     public string Size { get; set; }
     public string StatusText { get { if (Kind == "leftover") return Size ?? ""; return _on ? L10n.T("已启用") : L10n.T("已禁用"); } }
-    public string StatusBrush { get { return Theme.F(Kind == "leftover" ? "#1D1D1F" : (_on ? "#248A3D" : "#86868B")); } }
+    public string StatusBrush { get { return Theme.F(Kind == "leftover" ? "#1D1D1F" : (_on ? "#1D7A35" : "#6E6E73")); } }
     public string ToggleText { get { if (Kind == "leftover") return L10n.T("移到回收站"); return _on ? L10n.T("禁用") : L10n.T("启用"); } }
     void Raise(string n) { PropertyChangedEventHandler h = PropertyChanged; if (h != null) h(this, new PropertyChangedEventArgs(n)); }
     public event PropertyChangedEventHandler PropertyChanged;
@@ -3324,7 +3324,7 @@ public class MoveRow : INotifyPropertyChanged {
     public string Dst { get; set; }
     public string State { get; set; }
     private string _status = ""; public string Status { get { return _status; } set { _status = value; Raise("Status"); } }
-    private string _brush = "#86868B"; public string StatusBrush { get { return Theme.F(_brush); } set { _brush = value; Raise("StatusBrush"); } }
+    private string _brush = "#6E6E73"; public string StatusBrush { get { return Theme.F(_brush); } set { _brush = value; Raise("StatusBrush"); } }
     private string _size = L10n.T("计算中…"); public string SizeText { get { return _size; } set { _size = value; Raise("SizeText"); } }
     public long Size { get; set; }
     public bool CanBack { get; set; }
@@ -3356,7 +3356,7 @@ public class CandRow : INotifyPropertyChanged {
     public bool Partial { get; set; }    // 目标盘上已经有上次复制的一部分
     private bool _chk; public bool Checked { get { return _chk; } set { if (_chk != value) { _chk = value; Dirty = true; Raise("Checked"); } } }
     private string _status = ""; public string Status { get { return _status; } set { _status = value; Raise("Status"); } }
-    private string _brush = "#86868B"; public string StatusBrush { get { return Theme.F(_brush); } set { _brush = value; Raise("StatusBrush"); } }
+    private string _brush = "#6E6E73"; public string StatusBrush { get { return Theme.F(_brush); } set { _brush = value; Raise("StatusBrush"); } }
     void Raise(string n) { PropertyChangedEventHandler h = PropertyChanged; if (h != null) h(this, new PropertyChangedEventArgs(n)); }
     public event PropertyChangedEventHandler PropertyChanged;
 }
@@ -6451,7 +6451,7 @@ function Get-MoveState($rec) {
     $srcLink = IsLink $src
     $srcThere = Test-Path -LiteralPath $src
     $dstThere = $dst -and (Test-Path -LiteralPath $dst)
-    if ($srcLink -and $dstThere) { return @{ State = 'ok'; Text = ((T "正常：数据在 {0} 盘，C 盘这里只留了一个指向它的链接，不占 C 盘空间，软件照常使用") -f $dst.Substring(0, 1).ToUpper()); Brush = '#248A3D' } }
+    if ($srcLink -and $dstThere) { return @{ State = 'ok'; Text = ((T "正常：数据在 {0} 盘，C 盘这里只留了一个指向它的链接，不占 C 盘空间，软件照常使用") -f $dst.Substring(0, 1).ToUpper()); Brush = '#1D7A35' } }
     if ($srcLink -and -not $dstThere) {
         $fix = ''
         $leaf = Split-Path $dst -Leaf
@@ -6468,7 +6468,7 @@ function Get-MoveState($rec) {
     }
     if ($srcThere -and -not $srcLink -and $dstThere) { return @{ State = 'pending'; Text = (T '没搬完：C 盘原文件夹还在，目标盘上也有一份。可以在「可以搬的」里再搬一次，只补有变化的文件；也可以删掉这份副本，删之前会先核对，副本里有不少 C 盘上没有的文件就不删'); Brush = '#B25000' } }
     if (-not $srcThere -and $dstThere) { return @{ State = 'nosrc'; Text = (T 'C 盘上的链接不见了（软件卸载了，或者链接被删了）。软件还在用的话，可以重建链接；软件已经卸载的话，打开看看，确认不要了再自己删掉这份数据'); Brush = '#D70015'; Fix = $dst } }
-    return @{ State = 'gone'; Text = (T '已经不在了'); Brush = '#86868B' }
+    return @{ State = 'gone'; Text = (T '已经不在了'); Brush = '#6E6E73' }
 }
 
 # 搬回 C 盘：复制回来、核对、拆掉链接、换回真文件夹，最后删掉目标盘上的那份
@@ -10200,19 +10200,19 @@ $script:helpEnXaml = @'
                   <StackPanel>
                     <TextBlock Text="Safety notice" Style="{StaticResource HelpHead}" Foreground="#A1000F"/>
                     <DockPanel Margin="0,10,0,0">
-                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#6E6E73" Style="{StaticResource HelpPara}"/>
                       <TextBlock Style="{StaticResource HelpPara}"><Run>Deleting removes files from your PC. Files that aren't moved to the Recycle Bin usually can't be recovered after deletion, which may lead to data loss.</Run></TextBlock>
                     </DockPanel>
                     <DockPanel Margin="0,10,0,0">
-                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#6E6E73" Style="{StaticResource HelpPara}"/>
                       <TextBlock Style="{StaticResource HelpPara}"><Run>Before each deletion, make sure you really no longer need these files and that deleting them won't cause you any loss. Back up important files first.</Run></TextBlock>
                     </DockPanel>
                     <DockPanel Margin="0,10,0,0">
-                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#6E6E73" Style="{StaticResource HelpPara}"/>
                       <TextBlock Style="{StaticResource HelpPara}"><Run>ClearC only does what you choose. For any data loss or other damage caused by deleting or moving files with ClearC, </Run><Run FontWeight="SemiBold" Foreground="#A1000F">you are solely responsible; the developer accepts no liability</Run><Run>.</Run></TextBlock>
                     </DockPanel>
                     <DockPanel Margin="0,10,0,0">
-                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#6E6E73" Style="{StaticResource HelpPara}"/>
                       <TextBlock Style="{StaticResource HelpPara}"><Run>By continuing to use ClearC, you confirm that you understand and accept these risks.</Run></TextBlock>
                     </DockPanel>
                   </StackPanel>
@@ -11195,7 +11195,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
     </Style>
     <Style x:Key="SetNote" TargetType="TextBlock">
       <Setter Property="FontSize" Value="12"/>
-      <Setter Property="Foreground" Value="#86868B"/>
+      <Setter Property="Foreground" Value="#6E6E73"/>
       <Setter Property="TextWrapping" Value="Wrap"/>
       <Setter Property="LineHeight" Value="18"/>
       <Setter Property="Margin" Value="0,3,0,0"/>
@@ -11212,7 +11212,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
     </Style>
     <Style x:Key="Caption" TargetType="TextBlock">
       <Setter Property="FontSize" Value="12"/>
-      <Setter Property="Foreground" Value="#86868B"/>
+      <Setter Property="Foreground" Value="#6E6E73"/>
       <Setter Property="VerticalAlignment" Value="Center"/>
     </Style>
     <Style x:Key="Note" TargetType="TextBlock" BasedOn="{StaticResource Caption}"/>
@@ -11247,7 +11247,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
     <Style x:Key="HelpGroup" TargetType="TextBlock">
       <Setter Property="FontSize" Value="13"/>
       <Setter Property="FontWeight" Value="SemiBold"/>
-      <Setter Property="Foreground" Value="#86868B"/>
+      <Setter Property="Foreground" Value="#6E6E73"/>
       <Setter Property="VerticalAlignment" Value="Center"/>
     </Style>
     <Style x:Key="HelpSum" TargetType="TextBlock">
@@ -11297,7 +11297,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                       <Border x:Name="Hd" Background="Transparent" CornerRadius="11" Padding="16,13,20,13">
                         <DockPanel>
                           <TextBlock x:Name="Chev" DockPanel.Dock="Right" Text="&#xE70D;" FontFamily="{StaticResource Icons}" FontSize="12"
-                                     Foreground="#86868B" VerticalAlignment="Center" Margin="14,0,0,0" RenderTransformOrigin="0.5,0.5">
+                                     Foreground="#6E6E73" VerticalAlignment="Center" Margin="14,0,0,0" RenderTransformOrigin="0.5,0.5">
                             <TextBlock.RenderTransform><RotateTransform Angle="0"/></TextBlock.RenderTransform>
                           </TextBlock>
                           <ContentPresenter VerticalAlignment="Center"/>
@@ -11345,7 +11345,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                       <Border Background="Transparent" Padding="0,17,2,17">
                         <DockPanel>
                           <TextBlock x:Name="Chev" DockPanel.Dock="Right" Text="&#xE70D;" FontFamily="{StaticResource Icons}" FontSize="11"
-                                     Foreground="#86868B" VerticalAlignment="Center" Margin="16,0,0,0" RenderTransformOrigin="0.5,0.5">
+                                     Foreground="#6E6E73" VerticalAlignment="Center" Margin="16,0,0,0" RenderTransformOrigin="0.5,0.5">
                             <TextBlock.RenderTransform><RotateTransform Angle="0"/></TextBlock.RenderTransform>
                           </TextBlock>
                           <ContentPresenter VerticalAlignment="Center"/>
@@ -11457,8 +11457,8 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
 
     <!-- ===== 列表表头：点列名按这一列排序，再点一下反过来 ===== -->
     <Style x:Key="ColHead" TargetType="Button">
-      <Setter Property="Foreground" Value="#86868B"/>
-      <Setter Property="FontSize" Value="11.5"/>
+      <Setter Property="Foreground" Value="#6E6E73"/>
+      <Setter Property="FontSize" Value="12"/>
       <Setter Property="Cursor" Value="Hand"/>
       <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
       <Setter Property="Padding" Value="0,3"/>
@@ -11578,7 +11578,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
       <Setter Property="VerticalAlignment" Value="Center"/>
     </Style>
     <Style x:Key="TabBadgeText" TargetType="TextBlock">
-      <Setter Property="FontSize" Value="11.5"/>
+      <Setter Property="FontSize" Value="12"/>
       <Setter Property="FontWeight" Value="Normal"/>
       <Setter Property="Foreground" Value="#6E6E73"/>
     </Style>
@@ -12110,9 +12110,9 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
               <StackPanel Orientation="Horizontal" Margin="4,0,0,8">
                 <TextBlock Text="{Binding Items[0].GroupTitle}" FontSize="13" FontWeight="SemiBold" Foreground="#1D1D1F"/>
                 <Border Background="#E5E5EA" CornerRadius="8" Padding="7,0" Margin="8,0,0,0" VerticalAlignment="Center">
-                  <TextBlock Text="{Binding ItemCount, StringFormat='{}{0} 项'}" FontSize="11.5" Foreground="#3A3A3C"/>
+                  <TextBlock Text="{Binding ItemCount, StringFormat='{}{0} 项'}" FontSize="12" Foreground="#3A3A3C"/>
                 </Border>
-                <TextBlock Text="{Binding Items[0].GroupNote}" FontSize="12" Foreground="#86868B" Margin="10,0,0,0" VerticalAlignment="Bottom"/>
+                <TextBlock Text="{Binding Items[0].GroupNote}" FontSize="12" Foreground="#6E6E73" Margin="10,0,0,0" VerticalAlignment="Bottom"/>
               </StackPanel>
               <Border Background="White" CornerRadius="12" BorderBrush="#E5E5EA" BorderThickness="1" Padding="0,2">
                 <ItemsPresenter/>
@@ -12170,8 +12170,8 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
     <Style TargetType="GridViewColumnHeader">
       <Setter Property="HorizontalContentAlignment" Value="Left"/>
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="Foreground" Value="#86868B"/>
-      <Setter Property="FontSize" Value="11.5"/>
+      <Setter Property="Foreground" Value="#6E6E73"/>
+      <Setter Property="FontSize" Value="12"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="GridViewColumnHeader">
@@ -12258,9 +12258,9 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
     </Style>
     <!-- ===== 侧边栏分组标题 ===== -->
     <Style x:Key="NavHead" TargetType="TextBlock">
-      <Setter Property="FontSize" Value="11.5"/>
+      <Setter Property="FontSize" Value="12"/>
       <Setter Property="FontWeight" Value="SemiBold"/>
-      <Setter Property="Foreground" Value="#6E6E73"/>
+      <Setter Property="Foreground" Value="#636366"/>
       <Setter Property="Margin" Value="4,14,0,5"/>
     </Style>
     <!-- ===== 开关（勾选框的另一种样子） ===== -->
@@ -12352,7 +12352,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
         <CheckBox x:Name="Ck" Grid.Column="0" IsChecked="{Binding Checked, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanMove}" VerticalAlignment="Top" Margin="0,2,0,0"/>
         <StackPanel Grid.Column="1" Margin="0,0,14,0">
           <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-          <TextBlock Text="{Binding PathText}" FontSize="11.5" Foreground="#86868B" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" ToolTip="{Binding PathText}"/>
+          <TextBlock Text="{Binding PathText}" FontSize="12" Foreground="#6E6E73" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" ToolTip="{Binding PathText}"/>
           <TextBlock x:Name="Nt" Text="{Binding Note}" FontSize="12" Foreground="#6E6E73" TextWrapping="Wrap" Margin="0,3,0,0"/>
           <TextBlock x:Name="St" Text="{Binding Status}" Foreground="{Binding StatusBrush}" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,4,0,0"/>
         </StackPanel>
@@ -12381,20 +12381,20 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
         <TextBlock Grid.Column="1" Text="{Binding Glyph}" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="{Binding GlyphBrush}" VerticalAlignment="Center"/>
         <StackPanel Grid.Column="2" Margin="0,0,14,0" VerticalAlignment="Center">
           <DockPanel>
-            <TextBlock x:Name="Lk" DockPanel.Dock="Right" Text="&#xE72E;" FontFamily="{StaticResource Icons}" FontSize="11" Foreground="#86868B"
+            <TextBlock x:Name="Lk" DockPanel.Dock="Right" Text="&#xE72E;" FontFamily="{StaticResource Icons}" FontSize="11" Foreground="#6E6E73"
                        Margin="8,0,0,0" VerticalAlignment="Center" Visibility="Collapsed" ToolTip="{Binding LockTip}"/>
             <Border x:Name="Mk" DockPanel.Dock="Right" Background="#FDEBEC" CornerRadius="6" Padding="6,0,6,1" Margin="8,0,0,0" VerticalAlignment="Center" Visibility="Collapsed" ToolTip="已经在待删清单里">
-              <TextBlock Text="待删" FontSize="11" Foreground="#C0101C"/>
+              <TextBlock Text="待删" FontSize="12" Foreground="#C0101C"/>
             </Border>
             <TextBlock Text="{Binding Name}" FontSize="13.5" TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}"/>
           </DockPanel>
-          <TextBlock Text="{Binding Meta}" FontSize="11.5" Foreground="#86868B" TextTrimming="CharacterEllipsis" Margin="0,1,0,0" Visibility="{DynamicResource MapMetaVis}" ToolTip="{Binding Meta}"/>
+          <TextBlock Text="{Binding Meta}" FontSize="12" Foreground="#6E6E73" TextTrimming="CharacterEllipsis" Margin="0,1,0,0" Visibility="{DynamicResource MapMetaVis}" ToolTip="{Binding Meta}"/>
         </StackPanel>
         <Border Grid.Column="3" Height="8" Width="160" Margin="0,0,12,0" CornerRadius="4" Background="#EFEFF4" HorizontalAlignment="Left" VerticalAlignment="Center" Visibility="{DynamicResource MapBarVis}">
           <Border Width="{Binding Bar}" HorizontalAlignment="Left" CornerRadius="4" Background="#0071E3"/>
         </Border>
         <TextBlock Grid.Column="4" Text="{Binding SizeText}" FontWeight="SemiBold" TextAlignment="Right" VerticalAlignment="Center"/>
-        <TextBlock Grid.Column="5" Width="58" Text="{Binding Pct}" Foreground="#86868B" TextAlignment="Right" VerticalAlignment="Center" Visibility="{DynamicResource MapPctVis}"/>
+        <TextBlock Grid.Column="5" Width="58" Text="{Binding Pct}" Foreground="#6E6E73" TextAlignment="Right" VerticalAlignment="Center" Visibility="{DynamicResource MapPctVis}"/>
       </Grid>
       <DataTemplate.Triggers>
         <DataTrigger Binding="{Binding Locked}" Value="True"><Setter TargetName="Lk" Property="Visibility" Value="Visible"/></DataTrigger>
@@ -12431,30 +12431,30 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
           </Border>
           <StackPanel Margin="11,0,0,0" VerticalAlignment="Center">
             <TextBlock Text="腾挪 ClearC" FontSize="15" FontWeight="SemiBold" TextOptions.TextFormattingMode="Ideal"/>
-            <TextBlock x:Name="AppVer" Text="" FontSize="11.5" Foreground="#86868B" Margin="0,1,0,0"/>
-            <TextBlock x:Name="ModeTag" Text="" FontSize="11" Foreground="#0066CC" Margin="0,1,0,0" Cursor="Hand" ToolTip="点一下到设置里换模式"/>
+            <TextBlock x:Name="AppVer" Text="" FontSize="12" Foreground="#636366" Margin="0,1,0,0"/>
+            <TextBlock x:Name="ModeTag" Text="" FontSize="12" Foreground="#0066CC" Margin="0,1,0,0" Cursor="Hand" ToolTip="点一下到设置里换模式"/>
           </StackPanel>
         </StackPanel>
         <StackPanel DockPanel.Dock="Bottom">
-          <Button x:Name="BtnTheme" Style="{StaticResource LinkButton}" Foreground="#6E6E73" Padding="11,6" HorizontalAlignment="Left">
+          <Button x:Name="BtnTheme" Style="{StaticResource LinkButton}" Foreground="#636366" Padding="11,6" HorizontalAlignment="Left">
             <StackPanel Orientation="Horizontal">
               <TextBlock Text="&#xE706;" FontFamily="{StaticResource Icons}" FontSize="13" VerticalAlignment="Center" Margin="0,0,9,0"/>
               <TextBlock x:Name="BtnThemeText" Text="外观：浅色" VerticalAlignment="Center"/>
             </StackPanel>
           </Button>
-          <Button x:Name="BtnLang" Style="{StaticResource LinkButton}" Foreground="#6E6E73" Padding="11,6" HorizontalAlignment="Left" ToolTip="中文 / English">
+          <Button x:Name="BtnLang" Style="{StaticResource LinkButton}" Foreground="#636366" Padding="11,6" HorizontalAlignment="Left" ToolTip="中文 / English">
             <StackPanel Orientation="Horizontal">
               <TextBlock Text="&#xE774;" FontFamily="{StaticResource Icons}" FontSize="13" VerticalAlignment="Center" Margin="0,0,9,0"/>
               <TextBlock x:Name="BtnLangText" Text="English" VerticalAlignment="Center"/>
             </StackPanel>
           </Button>
-          <Button x:Name="BtnFeedback" Style="{StaticResource LinkButton}" Foreground="#6E6E73" Padding="11,6" HorizontalAlignment="Left">
+          <Button x:Name="BtnFeedback" Style="{StaticResource LinkButton}" Foreground="#636366" Padding="11,6" HorizontalAlignment="Left">
             <StackPanel Orientation="Horizontal">
               <TextBlock Text="&#xE8BD;" FontFamily="{StaticResource Icons}" FontSize="13" VerticalAlignment="Center" Margin="0,0,9,0"/>
               <TextBlock Text="使用反馈" VerticalAlignment="Center"/>
             </StackPanel>
           </Button>
-          <Button x:Name="BtnLog" Style="{StaticResource LinkButton}" Foreground="#6E6E73" Padding="11,6" HorizontalAlignment="Left">
+          <Button x:Name="BtnLog" Style="{StaticResource LinkButton}" Foreground="#636366" Padding="11,6" HorizontalAlignment="Left">
             <StackPanel Orientation="Horizontal">
               <TextBlock Text="&#xE8A5;" FontFamily="{StaticResource Icons}" FontSize="13" VerticalAlignment="Center" Margin="0,0,9,0"/>
               <TextBlock x:Name="BtnLogText" Text="运行记录" VerticalAlignment="Center"/>
@@ -12516,7 +12516,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                   ToolTip="自动扫描，清掉所有安全项和默认选中的缓存、临时文件。只删不搬：聊天记录在下面单独一张卡片里，要搬自己点。不会关闭休眠、不清空回收站，个人文件夹（桌面、文档、下载等）里的东西一律不删。"/>
           <StackPanel>
             <DockPanel>
-              <TextBlock x:Name="CapTotal" DockPanel.Dock="Right" Foreground="#86868B" VerticalAlignment="Bottom" Margin="12,0,0,3"/>
+              <TextBlock x:Name="CapTotal" DockPanel.Dock="Right" Foreground="#6E6E73" VerticalAlignment="Bottom" Margin="12,0,0,3"/>
               <StackPanel Orientation="Horizontal">
                 <TextBlock x:Name="CapFree" Text="—" FontSize="24" FontWeight="SemiBold" TextOptions.TextFormattingMode="Ideal"/>
                 <TextBlock Text="可用" FontSize="14" Foreground="#6E6E73" VerticalAlignment="Bottom" Margin="8,0,0,4"/>
@@ -12596,12 +12596,12 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
           <ControlTemplate TargetType="ListView"><ItemsPresenter/></ControlTemplate>
         </ListView.Template>
       </ListView>
-      <TextBlock x:Name="CleanFilterEmpty" Text="这一类里没有这种操作的项目，换一个操作看看" Foreground="#86868B" Margin="18,16,18,16" Visibility="Collapsed"/>
+      <TextBlock x:Name="CleanFilterEmpty" Text="这一类里没有这种操作的项目，换一个操作看看" Foreground="#6E6E73" Margin="18,16,18,16" Visibility="Collapsed"/>
       </StackPanel>
       </Border>
       <StackPanel x:Name="EmptyClean" HorizontalAlignment="Center" Margin="0,40,0,40" IsHitTestVisible="False">
         <TextBlock Text="&#xE721;" FontFamily="{StaticResource Icons}" FontSize="34" Foreground="#C7C7CC" HorizontalAlignment="Center"/>
-        <TextBlock x:Name="EmptyCleanText" Text="点「扫描」看看 C 盘里有什么可以清理" Foreground="#86868B" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center"/>
+        <TextBlock x:Name="EmptyCleanText" Text="点「扫描」看看 C 盘里有什么可以清理" Foreground="#6E6E73" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center"/>
       </StackPanel>
       </StackPanel>
       </ScrollViewer>
@@ -12815,10 +12815,10 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                         <StackPanel Orientation="Horizontal">
                           <Ellipse Width="8" Height="8" Margin="0,0,10,0" VerticalAlignment="Center" Fill="{Binding Items[0].TypeBrush}"/>
                           <TextBlock Text="{Binding Items[0].GroupName}" FontWeight="SemiBold" Foreground="#1D1D1F" VerticalAlignment="Center"/>
-                          <TextBlock Text="{Binding Items[0].GroupMeta}" Foreground="#86868B" Margin="12,0,0,0" VerticalAlignment="Center"/>
+                          <TextBlock Text="{Binding Items[0].GroupMeta}" Foreground="#6E6E73" Margin="12,0,0,0" VerticalAlignment="Center"/>
                           <Border CornerRadius="9" Padding="8,1,8,2" Margin="12,0,0,0" VerticalAlignment="Center"
                                   Background="{Binding Items[0].GroupBadgeBg}" ToolTip="{Binding Items[0].GroupBadgeTip}">
-                            <TextBlock Text="{Binding Items[0].GroupBadge}" FontSize="11.5" Foreground="{Binding Items[0].GroupBadgeFg}"/>
+                            <TextBlock Text="{Binding Items[0].GroupBadge}" FontSize="12" Foreground="{Binding Items[0].GroupBadgeFg}"/>
                           </Border>
                         </StackPanel>
                       </Border>
@@ -12833,7 +12833,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                       <DataTemplate>
                         <Grid>
                           <CheckBox x:Name="Chk" IsChecked="{Binding ToDelete, Mode=TwoWay}" HorizontalAlignment="Center"/>
-                          <TextBlock x:Name="Lock" Text="&#xE72E;" FontFamily="{StaticResource Icons}" FontSize="13" Foreground="#86868B" HorizontalAlignment="Center"
+                          <TextBlock x:Name="Lock" Text="&#xE72E;" FontFamily="{StaticResource Icons}" FontSize="13" Foreground="#6E6E73" HorizontalAlignment="Center"
                                      VerticalAlignment="Center" Visibility="Collapsed" ToolTip="C 盘个人文件夹里的文件受保护，不会删除"/>
                         </Grid>
                         <DataTemplate.Triggers>
@@ -12849,7 +12849,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                     <GridViewColumn.CellTemplate>
                       <DataTemplate>
                         <TextBlock ToolTip="{Binding Path}" TextTrimming="CharacterEllipsis">
-                          <Run Text="{Binding Dir, Mode=OneWay}" Foreground="#86868B"/><Run Text="{Binding FileName, Mode=OneWay}" Foreground="#1D1D1F"/>
+                          <Run Text="{Binding Dir, Mode=OneWay}" Foreground="#6E6E73"/><Run Text="{Binding FileName, Mode=OneWay}" Foreground="#1D1D1F"/>
                         </TextBlock>
                       </DataTemplate>
                     </GridViewColumn.CellTemplate>
@@ -12868,7 +12868,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
             </ListView>
             <StackPanel x:Name="EmptyDup" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,10,0,30" IsHitTestVisible="False">
               <TextBlock Text="&#xE8C8;" FontFamily="{StaticResource Icons}" FontSize="32" Foreground="#C7C7CC" HorizontalAlignment="Center"/>
-              <TextBlock x:Name="EmptyDupText" Text="设置好条件后，点右上角「开始查找」" Foreground="#86868B" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center"/>
+              <TextBlock x:Name="EmptyDupText" Text="设置好条件后，点右上角「开始查找」" Foreground="#6E6E73" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center"/>
             </StackPanel>
           </Grid>
         </DockPanel>
@@ -12933,9 +12933,9 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                       </Grid>
                       <TextBlock Text="{Binding UsedText}" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
                       <WrapPanel Margin="0,8,0,0">
-                        <Border Background="{Binding HealthBg}" CornerRadius="6" Padding="7,2" Margin="0,0,6,4"><TextBlock Text="{Binding HealthText}" FontSize="11.5" FontWeight="SemiBold" Foreground="{Binding HealthFg}"/></Border>
-                        <Border x:Name="TempChip" Background="{Binding TempBg}" CornerRadius="6" Padding="7,2" Margin="0,0,6,4"><TextBlock Text="{Binding TempText}" FontSize="11.5" FontWeight="SemiBold" Foreground="{Binding TempFg}"/></Border>
-                        <Border x:Name="WearChip" Background="{Binding WearBg}" CornerRadius="6" Padding="7,2" Margin="0,0,6,4"><TextBlock Text="{Binding WearText}" FontSize="11.5" FontWeight="SemiBold" Foreground="{Binding WearFg}"/></Border>
+                        <Border Background="{Binding HealthBg}" CornerRadius="6" Padding="7,2" Margin="0,0,6,4"><TextBlock Text="{Binding HealthText}" FontSize="12" FontWeight="SemiBold" Foreground="{Binding HealthFg}"/></Border>
+                        <Border x:Name="TempChip" Background="{Binding TempBg}" CornerRadius="6" Padding="7,2" Margin="0,0,6,4"><TextBlock Text="{Binding TempText}" FontSize="12" FontWeight="SemiBold" Foreground="{Binding TempFg}"/></Border>
+                        <Border x:Name="WearChip" Background="{Binding WearBg}" CornerRadius="6" Padding="7,2" Margin="0,0,6,4"><TextBlock Text="{Binding WearText}" FontSize="12" FontWeight="SemiBold" Foreground="{Binding WearFg}"/></Border>
                         <TextBlock x:Name="HoursText" Text="{Binding HoursText}" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="2,0,0,4"/>
                       </WrapPanel>
                     </StackPanel>
@@ -13164,7 +13164,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
           </ListView>
           <StackPanel x:Name="EmptyMap" Grid.Row="2" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,24" IsHitTestVisible="False">
             <TextBlock Text="&#xE9D9;" FontFamily="{StaticResource Icons}" FontSize="34" Foreground="#C7C7CC" HorizontalAlignment="Center"/>
-            <TextBlock x:Name="EmptyMapText" Text="点右上角「扫描」，看看这块盘的空间都去哪了" Foreground="#86868B" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center"/>
+            <TextBlock x:Name="EmptyMapText" Text="点右上角「扫描」，看看这块盘的空间都去哪了" Foreground="#6E6E73" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center"/>
           </StackPanel>
         </Grid>
       </Border>
@@ -13471,7 +13471,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                             <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                               <DataTemplate>
-                                <Border Background="{Binding Bg}" CornerRadius="6" Padding="7,2" Margin="0,0,6,4"><TextBlock Text="{Binding Text}" FontSize="11.5" FontWeight="SemiBold" Foreground="{Binding Fg}"/></Border>
+                                <Border Background="{Binding Bg}" CornerRadius="6" Padding="7,2" Margin="0,0,6,4"><TextBlock Text="{Binding Text}" FontSize="12" FontWeight="SemiBold" Foreground="{Binding Fg}"/></Border>
                               </DataTemplate>
                             </ItemsControl.ItemTemplate>
                           </ItemsControl>
@@ -13627,15 +13627,15 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                 <TextBlock Style="{StaticResource Body}" Foreground="#6E6E73" Margin="0,6,0,0" Text="左边选遇到的问题，右边的修法从轻到重排，从上往下试。都是 Windows 自带的命令，在看得见的窗口里运行。"/>
                 <WrapPanel Margin="0,14,0,0">
                   <StackPanel Orientation="Horizontal" Margin="0,0,28,6">
-                    <Border Background="#E5F4E9" CornerRadius="6" Padding="8,2,8,3" VerticalAlignment="Center"><TextBlock Text="只看" FontSize="11.5" FontWeight="SemiBold" Foreground="#1D7A35"/></Border>
+                    <Border Background="#E5F4E9" CornerRadius="6" Padding="8,2,8,3" VerticalAlignment="Center"><TextBlock Text="只看" FontSize="12" FontWeight="SemiBold" Foreground="#1D7A35"/></Border>
                     <TextBlock Text="不改任何东西" Style="{StaticResource Caption}" Foreground="#6E6E73" Margin="8,0,0,0"/>
                   </StackPanel>
                   <StackPanel Orientation="Horizontal" Margin="0,0,28,6">
-                    <Border Background="#FFF1DB" CornerRadius="6" Padding="8,2,8,3" VerticalAlignment="Center"><TextBlock Text="会改动" FontSize="11.5" FontWeight="SemiBold" Foreground="#995700"/></Border>
+                    <Border Background="#FFF1DB" CornerRadius="6" Padding="8,2,8,3" VerticalAlignment="Center"><TextBlock Text="会改动" FontSize="12" FontWeight="SemiBold" Foreground="#995700"/></Border>
                     <TextBlock Text="先说明要改什么，能撤销的写明怎么撤销" Style="{StaticResource Caption}" Foreground="#6E6E73" Margin="8,0,0,0"/>
                   </StackPanel>
                   <StackPanel Orientation="Horizontal" Margin="0,0,28,6">
-                    <Border Background="#FDEBEC" CornerRadius="6" Padding="8,2,8,3" VerticalAlignment="Center"><TextBlock Text="要重启" FontSize="11.5" FontWeight="SemiBold" Foreground="#C0101C"/></Border>
+                    <Border Background="#FDEBEC" CornerRadius="6" Padding="8,2,8,3" VerticalAlignment="Center"><TextBlock Text="要重启" FontSize="12" FontWeight="SemiBold" Foreground="#C0101C"/></Border>
                     <TextBlock Text="重启后才生效" Style="{StaticResource Caption}" Foreground="#6E6E73" Margin="8,0,0,0"/>
                   </StackPanel>
                 </WrapPanel>
@@ -13678,7 +13678,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                                       <StackPanel VerticalAlignment="Center">
                                         <WrapPanel>
                                           <TextBlock Text="{Binding Title}" FontSize="14.5" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,2,10,0"/>
-                                          <Border Background="{Binding TagBg}" CornerRadius="6" Padding="8,2,8,3" VerticalAlignment="Center" Margin="0,2,0,0"><TextBlock Text="{Binding Tag}" FontSize="11.5" FontWeight="SemiBold" Foreground="{Binding TagFg}"/></Border>
+                                          <Border Background="{Binding TagBg}" CornerRadius="6" Padding="8,2,8,3" VerticalAlignment="Center" Margin="0,2,0,0"><TextBlock Text="{Binding Tag}" FontSize="12" FontWeight="SemiBold" Foreground="{Binding TagFg}"/></Border>
                                         </WrapPanel>
                                         <TextBlock Text="{Binding Desc}" Style="{StaticResource Body}" Foreground="#6E6E73" Margin="0,6,0,0"/>
                                       </StackPanel>
@@ -13783,7 +13783,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
         </Border>
         <TextBlock x:Name="AppsInfo" DockPanel.Dock="Right" Style="{StaticResource Caption}" Margin="14,0,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
         <DockPanel>
-          <TextBlock DockPanel.Dock="Left" Text="&#xE721;" FontFamily="{StaticResource Icons}" FontSize="12" Foreground="#86868B" VerticalAlignment="Center" Margin="0,0,8,0"/>
+          <TextBlock DockPanel.Dock="Left" Text="&#xE721;" FontFamily="{StaticResource Icons}" FontSize="12" Foreground="#6E6E73" VerticalAlignment="Center" Margin="0,0,8,0"/>
           <TextBox x:Name="AppsSearch" MaxWidth="320" HorizontalAlignment="Left" MinWidth="200" ToolTip="按名字或发行商搜索"/>
         </DockPanel>
       </DockPanel>
@@ -13867,11 +13867,11 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                   </Grid.ColumnDefinitions>
                   <CheckBox Grid.Column="0" IsChecked="{Binding Picked, Mode=TwoWay}" VerticalAlignment="Center" Focusable="False" Cursor="Hand"/>
                   <Border Grid.Column="1" Width="30" Height="30" CornerRadius="8" Background="#EFEFF4" HorizontalAlignment="Left" VerticalAlignment="Center">
-                    <TextBlock Text="{Binding Icon}" FontWeight="SemiBold" Foreground="#6E6E73" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding Icon}" FontWeight="SemiBold" Foreground="#636366" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                   </Border>
                   <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="0,0,12,0">
                     <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                    <TextBlock Text="{Binding Meta}" FontSize="11.5" Foreground="#86868B" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                    <TextBlock Text="{Binding Meta}" FontSize="12" Foreground="#6E6E73" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
                   </StackPanel>
                   <TextBlock Grid.Column="3" Text="{Binding SizeText}" FontWeight="SemiBold" TextAlignment="Right" VerticalAlignment="Center" Margin="0,0,14,0"/>
                   <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center">
@@ -13880,7 +13880,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                     <Button x:Name="AppOpen" Content="打开位置" Tag="{Binding}" Style="{StaticResource Small}" Margin="0,0,6,0"/>
                     <Button x:Name="AppMove" Content="搬到其他盘" Tag="{Binding}" Style="{StaticResource Small}" Margin="0,0,6,0" Visibility="{DynamicResource AppMoveVis}"
                             ToolTip="把整个安装文件夹搬到其他盘，C 盘原位置留一个链接，软件照常使用，不用重装"/>
-                    <Button x:Name="AppNoMove" Content="不能搬" Tag="{Binding}" Style="{StaticResource LinkButton}" Foreground="#86868B" Margin="0,0,12,0" Visibility="{DynamicResource AppMoveVis}"
+                    <Button x:Name="AppNoMove" Content="不能搬" Tag="{Binding}" Style="{StaticResource LinkButton}" Foreground="#6E6E73" Margin="0,0,12,0" Visibility="{DynamicResource AppMoveVis}"
                             VerticalAlignment="Center" Cursor="Help" ToolTip="{Binding MoveWhy}"/>
                     <Button x:Name="AppUninstall" Content="卸载" Tag="{Binding}" Style="{StaticResource Small}"/>
                   </StackPanel>
@@ -13908,8 +13908,8 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                   <CheckBox x:Name="Pk" Grid.Column="0" IsChecked="{Binding Picked, Mode=TwoWay}" VerticalAlignment="Center" Focusable="False" Cursor="Hand"/>
                   <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
                     <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                    <TextBlock Text="{Binding Meta}" FontSize="11.5" Foreground="#86868B" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
-                    <TextBlock Text="{Binding Detail}" FontSize="11.5" Foreground="#86868B" TextTrimming="CharacterEllipsis" Margin="0,1,0,0" ToolTip="{Binding Detail}"/>
+                    <TextBlock Text="{Binding Meta}" FontSize="12" Foreground="#6E6E73" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                    <TextBlock Text="{Binding Detail}" FontSize="12" Foreground="#6E6E73" TextTrimming="CharacterEllipsis" Margin="0,1,0,0" ToolTip="{Binding Detail}"/>
                   </StackPanel>
                   <TextBlock Grid.Column="2" Text="{Binding StatusText}" Foreground="{Binding StatusBrush}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,14,0"/>
                   <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
@@ -13926,7 +13926,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
           </ListView>
           <StackPanel x:Name="EmptyApps" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
             <TextBlock Text="&#xE71D;" FontFamily="{StaticResource Icons}" FontSize="32" Foreground="#C7C7CC" HorizontalAlignment="Center"/>
-            <TextBlock x:Name="EmptyAppsText" Text="正在读取已安装的软件…" Foreground="#86868B" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center"/>
+            <TextBlock x:Name="EmptyAppsText" Text="正在读取已安装的软件…" Foreground="#6E6E73" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center"/>
           </StackPanel>
         </Grid>
         </DockPanel>
@@ -13997,7 +13997,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
         </DockPanel>
         <StackPanel x:Name="EmptyCand" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
           <TextBlock Text="&#xE8AB;" FontFamily="{StaticResource Icons}" FontSize="32" Foreground="#C7C7CC" HorizontalAlignment="Center"/>
-          <TextBlock x:Name="EmptyCandText" Text="正在看 C 盘上还有什么能搬…" Foreground="#86868B" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center" TextWrapping="Wrap" MaxWidth="520" TextAlignment="Center"/>
+          <TextBlock x:Name="EmptyCandText" Text="正在看 C 盘上还有什么能搬…" Foreground="#6E6E73" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center" TextWrapping="Wrap" MaxWidth="520" TextAlignment="Center"/>
         </StackPanel>
         <!-- 已经搬走的 -->
         <Border x:Name="MovesCard" Style="{StaticResource Card}" Padding="0,2,0,6" Visibility="Collapsed">
@@ -14029,7 +14029,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                   </Grid.ColumnDefinitions>
                   <StackPanel Grid.Column="0" Margin="0,0,12,0">
                     <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold"/>
-                    <TextBlock FontSize="11.5" Foreground="#86868B" TextTrimming="CharacterEllipsis" Margin="0,2,0,0">
+                    <TextBlock FontSize="12" Foreground="#6E6E73" TextTrimming="CharacterEllipsis" Margin="0,2,0,0">
                       <Run Text="{Binding Src, Mode=OneWay}"/><Run Text="  →  "/><Run Text="{Binding Dst, Mode=OneWay}"/>
                     </TextBlock>
                     <TextBlock Text="{Binding Status}" Foreground="{Binding StatusBrush}" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,4,0,0"/>
@@ -14052,7 +14052,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
           </ListView>
           <StackPanel x:Name="EmptyMoves" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
             <TextBlock Text="&#xE8AB;" FontFamily="{StaticResource Icons}" FontSize="32" Foreground="#C7C7CC" HorizontalAlignment="Center"/>
-            <TextBlock x:Name="EmptyMovesText" Text="还没有搬过文件夹。在「可以搬的」里勾选要搬的项目，或者在「清理 C 盘」里选「搬到其他盘」，搬好的就会出现在这里。" Foreground="#86868B" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center" TextWrapping="Wrap" MaxWidth="520" TextAlignment="Center"/>
+            <TextBlock x:Name="EmptyMovesText" Text="还没有搬过文件夹。在「可以搬的」里勾选要搬的项目，或者在「清理 C 盘」里选「搬到其他盘」，搬好的就会出现在这里。" Foreground="#6E6E73" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center" TextWrapping="Wrap" MaxWidth="520" TextAlignment="Center"/>
           </StackPanel>
         </Grid>
         </DockPanel>
@@ -14245,7 +14245,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                   <GridViewColumn.CellTemplate>
                     <DataTemplate>
                       <Border CornerRadius="9" Padding="8,1,8,2" Background="{Binding CatBg}" HorizontalAlignment="Left">
-                        <TextBlock Text="{Binding CatText}" FontSize="11.5" Foreground="{Binding CatFg}"/>
+                        <TextBlock Text="{Binding CatText}" FontSize="12" Foreground="{Binding CatFg}"/>
                       </Border>
                     </DataTemplate>
                   </GridViewColumn.CellTemplate>
@@ -14264,7 +14264,7 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
           </ListView>
           <StackPanel x:Name="EmptyLog" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False" Margin="0,30,0,0">
             <TextBlock Text="&#xE81C;" FontFamily="{StaticResource Icons}" FontSize="32" Foreground="#C7C7CC" HorizontalAlignment="Center"/>
-            <TextBlock x:Name="EmptyLogText" Text="还没有操作记录" Foreground="#86868B" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center"/>
+            <TextBlock x:Name="EmptyLogText" Text="还没有操作记录" Foreground="#6E6E73" FontSize="14" Margin="0,12,0,0" HorizontalAlignment="Center"/>
           </StackPanel>
         </Grid>
       </Border>
@@ -14543,19 +14543,19 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
                   <StackPanel>
                     <TextBlock Text="安全风险提示" Style="{StaticResource HelpHead}" Foreground="#A1000F"/>
                     <DockPanel Margin="0,10,0,0">
-                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#6E6E73" Style="{StaticResource HelpPara}"/>
                       <TextBlock Style="{StaticResource HelpPara}"><Run>删除操作会把文件从电脑上移除。没有放进回收站的文件，删除后通常无法恢复，可能造成资料丢失。</Run></TextBlock>
                     </DockPanel>
                     <DockPanel Margin="0,10,0,0">
-                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#6E6E73" Style="{StaticResource HelpPara}"/>
                       <TextBlock Style="{StaticResource HelpPara}"><Run>每次删除前，请确认这些资料确实不再需要、删除不会给你带来损失。重要资料请先备份。</Run></TextBlock>
                     </DockPanel>
                     <DockPanel Margin="0,10,0,0">
-                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#6E6E73" Style="{StaticResource HelpPara}"/>
                       <TextBlock Style="{StaticResource HelpPara}"><Run>本工具只按你的选择执行操作。因使用本工具删除、搬移文件造成的资料丢失或其他损失，</Run><Run FontWeight="SemiBold" Foreground="#A1000F">责任由使用者自行承担，开发者不承担责任</Run><Run>。</Run></TextBlock>
                     </DockPanel>
                     <DockPanel Margin="0,10,0,0">
-                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#6E6E73" Style="{StaticResource HelpPara}"/>
                       <TextBlock Style="{StaticResource HelpPara}"><Run>继续使用本工具，即表示你已了解并接受上述风险。</Run></TextBlock>
                     </DockPanel>
                   </StackPanel>
@@ -15333,8 +15333,8 @@ function Exit-UiLock { if ($script:uiMutex) { try { $script:uiMutex.ReleaseMutex
         </DockPanel>
         <ProgressBar x:Name="OpBar" Height="6" Margin="0,8,0,7" Minimum="0" Maximum="100"/>
         <DockPanel>
-          <TextBlock x:Name="OpSubTime" DockPanel.Dock="Right" Foreground="#86868B" FontSize="12" Margin="12,0,0,0"/>
-          <TextBlock x:Name="OpDetail" Foreground="#86868B" FontSize="12" TextTrimming="CharacterEllipsis"/>
+          <TextBlock x:Name="OpSubTime" DockPanel.Dock="Right" Foreground="#6E6E73" FontSize="12" Margin="12,0,0,0"/>
+          <TextBlock x:Name="OpDetail" Foreground="#6E6E73" FontSize="12" TextTrimming="CharacterEllipsis"/>
         </DockPanel>
         <ProgressBar x:Name="OpSubBar" Height="4" Margin="0,6,0,0" Minimum="0" Maximum="100" Visibility="Collapsed"/>
       </StackPanel>
@@ -15992,7 +15992,7 @@ function Move-Checklist($p) {
             $text = @{ kill = (T '关闭占用这些文件的软件'); measure = (T '统计要搬回多少'); copy = (T '复制回 ') + $p.MoveDest; verify = (T '核对复制是否完整'); link = (T '拆掉链接，换回真正的文件夹'); cleanup = (T '删除目标盘上的那份') }[$order[$i]]
         }
         elseif ($order[$i] -eq 'copy' -and $p.MoveDest) { $text = (T '复制到 ') + $p.MoveDest; if ($p.MoveReuse) { $text = (T '补复制有变化的文件到 ') + $p.MoveDest + (T '（上次的副本接着用）') } }
-        if ($i -lt $ci)      { $lines += ,@(('✓  ' + $text), '#248A3D', $false) }
+        if ($i -lt $ci)      { $lines += ,@(('✓  ' + $text), '#1D7A35', $false) }
         elseif ($i -eq $ci)  { $lines += ,@(('▶  ' + $text), '#0071E3', $true) }
         else                 { $lines += ,@(('○  ' + $text), '#AEAEB2', $false) }
     }
@@ -16594,7 +16594,7 @@ function Build-Rows($sizes) {
         $r = New-Object RowItem
         $script:rowSig[$it.Idx] = Get-ItemSig $it
         $r.Idx = $it.Idx; $r.Group = $it.G; $r.Name = $it.N; $r.Note = $it.Note; $r.Actions = $it.Actions; $r.Action = $it.Def
-        if ($noDest -and $it.Def -eq (T '搬到其他盘')) { $r.Action = (T '跳过'); $r.Status = (T '没有可以搬去的其他硬盘，先跳过'); $r.StatusBrush = '#86868B' }
+        if ($noDest -and $it.Def -eq (T '搬到其他盘')) { $r.Action = (T '跳过'); $r.Status = (T '没有可以搬去的其他硬盘，先跳过'); $r.StatusBrush = '#6E6E73' }
         # 组名「安全清理（缓存、临时文件……）」拆成标题和说明两行显示
         $gt = T ([string]$it.G)
         $gp = $gt.Split([char]0xFF08, 2); if ($gp.Count -lt 2) { $gp = $gt.Split([char]'(', 2) }
@@ -16998,9 +16998,9 @@ function Invoke-RunSelected([string]$title = (T '开始处理所选项'), [objec
     $planned = @{}; foreach ($x in $plan) { $planned[$x.Idx] = $true }
     $skipSet = @{}; foreach ($x in $skipped) { $skipSet[$x.Idx] = $true }
     foreach ($r in $script:rows) {
-        if ($planned.ContainsKey($r.Idx)) { $r.Status = (T '等待'); $r.StatusBrush = '#86868B' }
+        if ($planned.ContainsKey($r.Idx)) { $r.Status = (T '等待'); $r.StatusBrush = '#6E6E73' }
         elseif ($skipSet.ContainsKey($r.Idx)) { $r.Status = ((T "这次没搬：{0} 没有退出") -f $skipWho); $r.StatusBrush = '#B25000' }
-        else { $r.Status = ''; $r.StatusBrush = '#86868B' }
+        else { $r.Status = ''; $r.StatusBrush = '#6E6E73' }
     }
     $script:runFreeC0 = [double](FreeC)
     $script:runPlan = $plan
@@ -17327,7 +17327,7 @@ function Update-FilterSummary {
     elseif ($r.Min -le 1) { $size = (Size-Text $r.Max) + (T ' 以下') }
     else { $size = (T "{0} 到 {1}") -f (Size-Text $r.Min), (Size-Text $r.Max) }
     $ctl.SizeHint.Text = if ($r.Ok) { (T '留空表示不限') } else { $r.Err }
-    $ctl.SizeHint.Foreground = if ($r.Ok) { Brush '#86868B' } else { Brush '#D70015' }
+    $ctl.SizeHint.Foreground = if ($r.Ok) { Brush '#6E6E73' } else { Brush '#D70015' }
     $mode = if ($ctl.ModeName.IsChecked) { (T '文件名和内容都相同') } else { (T '只要内容相同') }
     $mode += if ($ctl.SpeedExact.IsChecked) { (T '，完整比对') } else { (T '，快速比对') }
     $n = @($script:roots | Where-Object { $_.Enabled }).Count
@@ -18396,7 +18396,7 @@ function Draw-MapTree {
             if ($b.Height -ge 38) {
                 [void]$tb.Inlines.Add((New-Object System.Windows.Documents.LineBreak))
                 $sz = New-Object System.Windows.Documents.Run $(if ($row) { $row.SizeText } else { Fmt $ti.Rest })
-                $sz.FontSize = 11; [void]$tb.Inlines.Add($sz)
+                $sz.FontSize = 12; [void]$tb.Inlines.Add($sz)
             }
             $b.Child = $tb
         }
@@ -19334,7 +19334,7 @@ function Compare-Snapshot($root) {
             $g.Before = if ($x.Had) { Fmt $x.B } else { (T '不到 100 MB') }
             $g.Now = if ($x.N -gt 0) { Fmt $x.N } else { (T '不到 100 MB') }
             $g.Change = $(if ($x.D -gt 0) { '+' } else { '−' }) + (Fmt ([math]::Abs($x.D)))
-            $g.ChangeBrush = if ($x.D -gt 0) { '#D70015' } else { '#248A3D' }
+            $g.ChangeBrush = if ($x.D -gt 0) { '#D70015' } else { '#1D7A35' }
             $g.BeforeBytes = [double]$x.B; $g.NowBytes = [double]$x.N
             $script:growRows.Add($g)
         }
@@ -19841,7 +19841,7 @@ function Start-MoveMany {
     $plan = @(); foreach ($r in $sel) { $plan += @{ Key = $r.Key; Type = $r.Type; Idx = $r.Idx; Name = $r.Name; Location = $r.Location; Bytes = [double]$r.Size; Note = $r.Note } }
     $allowed = @($cp.Names)
     $sync.Status = [hashtable]::Synchronized(@{}); $sync.StatusVer = 0; $script:statusSeen = -1; $script:candSeen = -1; $sync.WaitCount = 0
-    foreach ($r in $sel) { $r.Status = (T '等待'); $r.StatusBrush = '#86868B' }
+    foreach ($r in $sel) { $r.Status = (T '等待'); $r.StatusBrush = '#6E6E73' }
     $script:runPlan = @($plan | ForEach-Object { @{ Idx = $_.Key; Name = $_.Name } })
     $script:mmFreeC0 = [double](FreeC)
     $sync.Mode = 'movemany'; $sync.MmRes = $null
@@ -23980,7 +23980,7 @@ function Set-SegFirst($root) {
 }
 Set-SegFirst $win
 
-$script:statusColor = @{ wait = '#86868B'; run = '#0071E3'; ok = '#248A3D'; warn = '#B25000'; fail = '#D70015'; skip = '#86868B' }
+$script:statusColor = @{ wait = '#6E6E73'; run = '#0066CC'; ok = '#1D7A35'; warn = '#995700'; fail = '#D70015'; skip = '#6E6E73' }
 $script:pendingDialog = $null
 $win.TaskbarItemInfo = New-Object System.Windows.Shell.TaskbarItemInfo
 Fill-DestChoices

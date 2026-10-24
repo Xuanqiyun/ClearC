@@ -2906,7 +2906,7 @@ function Get-MoveState($rec) {
     $srcLink = IsLink $src
     $srcThere = Test-Path -LiteralPath $src
     $dstThere = $dst -and (Test-Path -LiteralPath $dst)
-    if ($srcLink -and $dstThere) { return @{ State = 'ok'; Text = ((T "正常：数据在 {0} 盘，C 盘这里只留了一个指向它的链接，不占 C 盘空间，软件照常使用") -f $dst.Substring(0, 1).ToUpper()); Brush = '#248A3D' } }
+    if ($srcLink -and $dstThere) { return @{ State = 'ok'; Text = ((T "正常：数据在 {0} 盘，C 盘这里只留了一个指向它的链接，不占 C 盘空间，软件照常使用") -f $dst.Substring(0, 1).ToUpper()); Brush = '#1D7A35' } }
     if ($srcLink -and -not $dstThere) {
         $fix = ''
         $leaf = Split-Path $dst -Leaf
@@ -2923,7 +2923,7 @@ function Get-MoveState($rec) {
     }
     if ($srcThere -and -not $srcLink -and $dstThere) { return @{ State = 'pending'; Text = (T '没搬完：C 盘原文件夹还在，目标盘上也有一份。可以在「可以搬的」里再搬一次，只补有变化的文件；也可以删掉这份副本，删之前会先核对，副本里有不少 C 盘上没有的文件就不删'); Brush = '#B25000' } }
     if (-not $srcThere -and $dstThere) { return @{ State = 'nosrc'; Text = (T 'C 盘上的链接不见了（软件卸载了，或者链接被删了）。软件还在用的话，可以重建链接；软件已经卸载的话，打开看看，确认不要了再自己删掉这份数据'); Brush = '#D70015'; Fix = $dst } }
-    return @{ State = 'gone'; Text = (T '已经不在了'); Brush = '#86868B' }
+    return @{ State = 'gone'; Text = (T '已经不在了'); Brush = '#6E6E73' }
 }
 
 # 搬回 C 盘：复制回来、核对、拆掉链接、换回真文件夹，最后删掉目标盘上的那份

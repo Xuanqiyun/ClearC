@@ -379,7 +379,7 @@ function Start-MoveMany {
     $plan = @(); foreach ($r in $sel) { $plan += @{ Key = $r.Key; Type = $r.Type; Idx = $r.Idx; Name = $r.Name; Location = $r.Location; Bytes = [double]$r.Size; Note = $r.Note } }
     $allowed = @($cp.Names)
     $sync.Status = [hashtable]::Synchronized(@{}); $sync.StatusVer = 0; $script:statusSeen = -1; $script:candSeen = -1; $sync.WaitCount = 0
-    foreach ($r in $sel) { $r.Status = (T '等待'); $r.StatusBrush = '#86868B' }
+    foreach ($r in $sel) { $r.Status = (T '等待'); $r.StatusBrush = '#6E6E73' }
     $script:runPlan = @($plan | ForEach-Object { @{ Idx = $_.Key; Name = $_.Name } })
     $script:mmFreeC0 = [double](FreeC)
     $sync.Mode = 'movemany'; $sync.MmRes = $null
