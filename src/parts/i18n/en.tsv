@@ -156,6 +156,10 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+{0}，保留的那份：{1}	{0}; the copy kept: {1}
+没删掉：	Not deleted: 
+重复文件：移到回收站	Duplicate: moved to Recycle Bin
+重复文件：永久删除	Duplicate: deleted permanently
 ，移动硬盘	, external disk
 先不搬（只找到移动硬盘）	Don't move for now (only external disks found)
 移动硬盘排在最后，不会自动选：拔掉以后，搬过去的软件会打不开。	 External disks are listed last and never picked automatically: once unplugged, the apps you moved there stop working.

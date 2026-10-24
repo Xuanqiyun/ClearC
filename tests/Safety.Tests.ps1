@@ -458,6 +458,10 @@ try { & {
     Check 'UX-2 a drive whose bus can not be read is not taken for a USB disk' (-not (Test-PluggableDrive 'Q:'))
     $fd = [regex]::Match($src, '(?s)function Fill-DestChoices\(.*?\r?\n\}').Value
     Check 'UX-2 the move target list uses these choices, and picking a USB disk by hand asks first' ($fd -match 'Get-DestChoices' -and $src -match 'function Confirm-PlugDest' -and ([regex]::Matches($src, 'Confirm-PlugDest ')).Count -ge 3)
+    # ============ 13. 重复文件的删除也记进操作日志（3.6 安全评审） ============
+    $dw = [regex]::Match($src, "(?s)\`$sync\.Mode = 'dupdel'.*?'@ @\{ Plan").Value
+    $del = $dw.IndexOf('[IO.File]::Delete(')
+    Check 'SEC-8 every duplicate that is deleted, or fails to delete, is written to the activity log' ($dw -and $del -gt 0 -and ([regex]::Matches($dw.Substring($del), "OpLog '删除'")).Count -ge 2)
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue
