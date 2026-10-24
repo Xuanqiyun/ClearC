@@ -10,6 +10,7 @@ $engineText = [regex]::Match($src, "(?s)\`$engine = @'\r?\n(.*?)\r?\n'@").Groups
 # 源码锁用语法树找调用（注释、字符串里的字不算，别名和后台代码里的也找得到），见 CallSites.ps1
 . (Join-Path $PSScriptRoot 'CallSites.ps1')
 $calls = @(Get-CallSites $src)
+# 用的时候套上 @()：只有一个结果时 PowerShell 5.1 会把它摊开成单个对象，单个对象没有 .Count
 function Calls([string[]]$names) { @($calls | Where-Object { $names -contains $_.Name }) }
 function Fn($site) { ([string]$site.Where -split '/')[-1] }
 if (-not ('DupFinder' -as [type])) { Add-Type -TypeDefinition $dupCode }
@@ -118,7 +119,7 @@ try { & {
     Check 'SameContent: identical files' ([DupFinder]::SameContent($f1, $f2))
     Check 'SameContent: one byte differs in the middle' (-not [DupFinder]::SameContent($f1, $f3))
     # ============ 7. 旧版驱动包：绝不加 /force，非 oem 不删 ============
-    $pnp = Calls 'pnputil'
+    $pnp = @(Calls 'pnputil')
     Check ("pnputil is never called with /force ({0} call sites)" -f $pnp.Count) ($pnp.Count -ge 1 -and @($pnp | Where-Object { @($_.Args) -contains '/force' -or @($_.Args) -contains '/f' }).Count -eq 0)
     Check 'Remove-DriverPackage refuses names that are not oemNN.inf' ((Remove-DriverPackage 'C:\Windows\INF\nvlti.inf') -ne '' -and (Remove-DriverPackage '..\oem1.inf') -ne '')
     # ============ 7b. 审计后补的规则 ============
@@ -293,7 +294,7 @@ try { & {
     Check ("every rd /s call is guarded against % paths ({0} of {1})" -f $rdGuarded.Count, $rdLines.Count) ($sr -match '(?s)\$isDir -and -not \(Test-CmdPathOk \$Path\).*?rd /s /q' -and ([regex]::Matches($engineText, 'Test-CmdPathOk \$(bak|dst|tmp)')).Count -ge 4)
     # 不用会跟进链接的 Remove-Item -Recurse（界面自测删它自己建的临时文件夹除外）
     $progLines = @(Calls 'remove-item' | Where-Object { @($_.Args | Where-Object { $_ -like '-r*' }).Count -gt 0 -and (Fn $_) -ne 'Invoke-UiTest' } | ForEach-Object { '{0}: {1}' -f (Fn $_), $_.Text })
-    Check ("no Remove-Item -Recurse in program code ({0})" -f ($progLines -join ' | ')) ($progLines.Count -eq 0 -and (Calls 'remove-item').Count -ge 10)
+    Check ("no Remove-Item -Recurse in program code ({0})" -f ($progLines -join ' | ')) ($progLines.Count -eq 0 -and @(Calls 'remove-item').Count -ge 10)
     # 搬家
     Check 'a reused or dropped copy must have zero files that C: lacks (no 5% tolerance any more)' (([regex]::Matches($engineText, 'if \(\$extra -ne 0\) \{')).Count -eq 2 -and $engineText -notmatch 'Max\(20, \$(haveFiles|nf) \* 0\.05\)')
     Check 'robocopy mismatches (exit bit 4) stop the move' ($engineText -match '\(\$rc\.Code -band 4\) -ne 0')
@@ -382,12 +383,12 @@ try { & {
     # ============ 8. 源码锁：改坏了就报 ============
     Check 'recycle bin: SHFileOperation asks when a file is too big instead of nuking it (ALLOWUNDO|NOCONFIRMATION|WANTNUKEWARNING)' (([regex]::Matches($dupCode, '0x40 \| 0x10 \| 0x4000')).Count -ge 2)
     $vss = @(Calls 'vssadmin', 'wmic', 'cmd:vssadmin' | Where-Object { @($_.Args) -contains 'delete' -or @($_.Args) -contains 'resize' }) + @(Calls 'remove-computerrestorepoint', 'disable-computerrestore') + @(Calls 'remove-ciminstance', 'remove-wmiobject' | Where-Object { (Fn $_) -ne 'Set-PageFile' }) + @(Calls '.delete' | Where-Object { $_.Text -match '(?i)shadow' })
-    Check 'restore points are never deleted (no vssadmin delete / Win32_ShadowCopy.Delete / Remove-ComputerRestorePoint)' ($vss.Count -eq 0 -and (Calls 'checkpoint-computer').Count -eq 1)
+    Check 'restore points are never deleted (no vssadmin delete / Win32_ShadowCopy.Delete / Remove-ComputerRestorePoint)' ($vss.Count -eq 0 -and @(Calls 'checkpoint-computer').Count -eq 1)
     Check 'no registry cleaner: no Remove-Item on HKLM/HKCU keys' (@(Calls 'remove-item' | Where-Object { ($_.Args -join ' ') -match '(^|\s)(hk(lm|cu|cr|u)|registry)::?' }).Count -eq 0 -and @(Calls 'reg' | Where-Object { @($_.Args) -contains 'delete' }).Count -eq 0)
-    $rip = Calls 'remove-itemproperty'
+    $rip = @(Calls 'remove-itemproperty')
     Check ("registry values are only removed for the context-menu block list and the UI test ({0})" -f (($rip | ForEach-Object { Fn $_ }) -join ', ')) ($rip.Count -le 2)
-    $sch = Calls 'schtasks'
-    Check 'scheduled tasks run as the current user (InteractiveToken), never SYSTEM' ($src -match 'LogonType>InteractiveToken<' -and $src -notmatch '(?i)<UserId>S-1-5-18<|NT AUTHORITY\\SYSTEM' -and $sch.Count -ge 3 -and @($sch | Where-Object { @($_.Args) -contains '/ru' -or @($_.Args) -contains '/rp' }).Count -eq 0 -and (Calls 'register-scheduledtask').Count -eq 0)
+    $sch = @(Calls 'schtasks')
+    Check 'scheduled tasks run as the current user (InteractiveToken), never SYSTEM' ($src -match 'LogonType>InteractiveToken<' -and $src -notmatch '(?i)<UserId>S-1-5-18<|NT AUTHORITY\\SYSTEM' -and $sch.Count -ge 3 -and @($sch | Where-Object { @($_.Args) -contains '/ru' -or @($_.Args) -contains '/rp' }).Count -eq 0 -and @(Calls 'register-scheduledtask').Count -eq 0)
     # 删 WMI 对象只有一处：改虚拟内存时去掉旧的页面文件设置（Win32_PageFileSetting），和还原点无关
     # 结束进程：只有搬聊天记录前关掉确认框里列出的程序（Close-Holders），以及本工具自己开的 robocopy、winget 超时或取消时
     $kills = @(Calls 'stop-process', 'taskkill', 'cmd:taskkill', '.kill', 'tskill' | ForEach-Object { '{0}:{1}' -f (Fn $_), $_.Name } | Sort-Object)
