@@ -7598,6 +7598,11 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+扫描完了	Scan finished
+C 盘上能放心删的缓存和临时文件不多（{0}）。下面的列表里有每一项的说明；左边的「空间地图」能看到是什么占着 C 盘。	There is not much cache or temporary data on C: that is safe to delete ({0}). The list below explains each item; Space map on the left shows what takes up C:.
+C 盘可以腾出约 {0}	About {0} can be freed on C:
+都是缓存、临时文件和日志，删了会自动重建；个人文件夹（桌面、文档、下载等）里的东西不碰，聊天记录也不动。\n\n点「一键清理」开始（会先列出要做的事，再确认一次）；想先看看明细，点「先看看」。	It is all caches, temporary files and logs that are rebuilt automatically. Nothing in personal folders (Desktop, Documents, Downloads and so on) is touched, and chat history is left alone.\n\nClick "One-click cleanup" to start (it lists what it will do and asks once more). To look at the details first, click "Look first".
+先看看	Look first
 本工具现在以 {0} 的身份运行，但登录桌面的是 {1}（打开时输入的是另一个管理员账户的密码）。清理的缓存、要搬的聊天记录、受保护的个人文件夹，都按 {0} 的账户算，{1} 的不会动。\n\n要整理 {1} 的，把 {1} 设成管理员后用它打开，或者登录 {0} 再用。	ClearC is running as {0}, but {1} is signed in to the desktop (the password of another administrator account was entered when it opened). The caches it cleans, the chat history it moves and the personal folders it protects all belong to {0}; nothing of {1} is touched.\n\nTo tidy up {1}, make {1} an administrator and open ClearC with it, or sign in as {0}.
 本工具没有以你的账户运行	ClearC is not running as your account
 仍然继续	Continue anyway
@@ -16559,6 +16564,25 @@ function Build-Rows($sizes) {
     UI-Status
     $ctl.Summary.Text = ((T "共 {0} 项。按当前选择，可释放约 {1}。") -f $col.Count, (GB $total))
 }
+# 第一次打开扫完：一句结论（一键清理能腾出多少），一个主按钮。点了和「一键清理」一样，会先列出要做的事再确认
+$script:firstRun = $false; $script:firstResult = $false
+function Show-FirstResult {
+    if (-not $script:rows) { return }
+    $cat = @{}; foreach ($c in $catalog) { $cat[$c.Idx] = $c }
+    $b = [double]0
+    foreach ($r in $script:rows) { $a = Get-OneClickAction $cat[$r.Idx]; if ($a -ne (T '跳过') -and $r.Actions -contains $a -and $r.Bytes -gt 0) { $b += $r.Bytes } }
+    if ($b -lt 100MB) {
+        Show-Sheet -Kind done -Title (T '扫描完了') -Text ((T "C 盘上能放心删的缓存和临时文件不多（{0}）。下面的列表里有每一项的说明；左边的「空间地图」能看到是什么占着 C 盘。") -f (Fmt $b)) | Out-Null
+        return
+    }
+    $go = T '一键清理'
+    $ans = Show-Sheet -Kind info -Title ((T "C 盘可以腾出约 {0}") -f (Fmt $b)) `
+        -Text (T "都是缓存、临时文件和日志，删了会自动重建；个人文件夹（桌面、文档、下载等）里的东西不碰，聊天记录也不动。`n`n点「一键清理」开始（会先列出要做的事，再确认一次）；想先看看明细，点「先看看」。") `
+        -Buttons @((T '先看看'), $go) -Primary $go -Cancel (T '先看看')
+    if ($ans -ne $go -or $script:worker) { return }
+    Apply-OneClick
+    Invoke-RunSelected (T '一键清理')
+}
 # 聊天记录卡片：一键清理只删不搬，聊天记录占了多少、要不要搬，在这里单独说，按钮只搬这几项
 $script:chatIdx = @()
 function Update-ChatCard {
@@ -23306,6 +23330,7 @@ $timer.Add_Tick({
             } else {
                 Build-Rows $sync.Sizes; End-Op (T '完成')
                 if ($script:oneClickPending) { $script:oneClickPending = $false; $script:runAfterScan = $true }
+                elseif ($script:firstRun) { $script:firstRun = $false; $script:firstResult = $true }
             }
         }
         elseif ($sync.Mode -eq 'run') {
@@ -23703,6 +23728,7 @@ $timer.Add_Tick({
             Apply-OneClick
             Invoke-RunSelected (T '一键清理')
         }
+        if ($script:firstResult) { $script:firstResult = $false; Show-FirstResult }
         if ($script:runAfterApps) { $script:runAfterApps = $false; Load-Apps }
         if ($script:runAfterMoves) { $script:runAfterMoves = $false; Load-Moves }
         if ($script:runAfterCand) { $script:runAfterCand = $false; if (-not $script:worker) { Start-CandScan } }
@@ -24011,7 +24037,7 @@ $win.Add_ContentRendered({
     if ($script:riskShown) { return }
     $script:riskShown = $true
     $script:prefetchTimer.Start()
-    if (Test-Path -LiteralPath $script:riskFile) { Show-AccountMismatch; Show-WriteTrouble -Startup; Show-HalfMoves; Show-LooseMoves; Show-BrokenMoves; return }
+    if (Test-Path -LiteralPath $script:riskFile) { if (-not (Show-AccountMismatch)) { return }; Show-WriteTrouble -Startup; Show-HalfMoves; Show-LooseMoves; Show-BrokenMoves; return }
     $ans = Show-Sheet -Kind warn -Title (T '使用前请先阅读安全风险提示') `
         -Text (T "本工具会按你的选择删除或搬移电脑上的文件。删除的文件可能无法恢复，存在资料丢失的风险。`n`n每次删除前，请确认这些资料确实不再需要、删除不会给你带来损失；重要资料请先备份。因使用本工具造成的资料丢失或其他损失，责任由使用者自行承担，开发者不承担责任。`n`n完整说明随时可以在左侧「帮助」里查看。") `
         -Confirm (T '我已阅读并了解上述风险，同意自行承担使用本工具的后果。') -Buttons @((T '退出'), (T '同意并继续')) -Primary (T '同意并继续') -Cancel (T '退出')
@@ -24021,7 +24047,9 @@ $win.Add_ContentRendered({
         [IO.File]::WriteAllText($script:riskFile, ((T "{0:yyyy-MM-dd HH:mm:ss}  已同意（版本 {1}）") -f (Get-Date), $script:AppVersion), [Text.Encoding]::UTF8)
     } catch {}
     Write-LogFile (T '用户已同意安全风险提示')
-    Show-AccountMismatch; Show-WriteTrouble -Startup; Show-HalfMoves; Show-BrokenMoves
+    if (-not (Show-AccountMismatch)) { return }; Show-WriteTrouble -Startup; Show-HalfMoves; Show-BrokenMoves
+    # 第一次打开：不用找从哪开始，直接扫一遍，扫完只给一句结论和一个主按钮
+    if (-not $script:worker) { $script:firstRun = $true; Show-Page 'clean'; Do-Scan }
 })
 # 打开时查一下有没有上次没做完的搬家（数据都在，只是要告诉用户在哪）
 # 以前的版本搬走的文件夹，其他账户也能打开：问一次要不要改成和在 C 盘时一样（一个月最多问一次）
@@ -24044,13 +24072,15 @@ $sync.AclRes = Repair-MovedAccess $arg.Items
 '@ @{ Items = $l }
 }
 # 以另一个管理员账户运行（登录桌面的是普通账户，打开时输了管理员密码）：每次打开说一声，可以退出
+# 返回 $false 表示用户选了退出（窗口在关）
 function Show-AccountMismatch {
     $me = [Security.Principal.WindowsIdentity]::GetCurrent().Name
     $t = Get-AccountMismatch $me (Get-DesktopUser)
-    if (-not $t) { return }
+    if (-not $t) { return $true }
     Write-LogFile $t
     $go = T '仍然继续'
-    if ((Show-Sheet -Kind warn -Title (T '本工具没有以你的账户运行') -Text $t -Buttons @((T '退出'), $go) -Primary $go -Cancel (T '退出')) -ne $go) { $win.Close() }
+    if ((Show-Sheet -Kind warn -Title (T '本工具没有以你的账户运行') -Text $t -Buttons @((T '退出'), $go) -Primary $go -Cancel (T '退出')) -ne $go) { $win.Close(); return $false }
+    return $true
 }
 # 本工具自己的记录写不进去（多半是 C 盘满了）：打开时、做完一件事后各查一次，说一次就不再说
 $script:writeTroubleShown = $false

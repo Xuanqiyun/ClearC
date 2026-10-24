@@ -660,13 +660,16 @@ try { & {
     Check 'OPS-4 the cleanup page, the move manager and app moves add the battery note' (([regex]::Matches($src, 'Get-PowerNote [$(]')).Count -ge 3)
     # ============ 25. 用另一个管理员账户的密码打开时说清楚（3.6 运维评审） ============
     Check 'OPS-5 running as another administrator than the one at the desktop is spelled out' ([bool](Get-AccountMismatch 'PC\admin' 'PC\leon') -and -not (Get-AccountMismatch 'PC\Leon' 'pc\leon') -and -not (Get-AccountMismatch 'PC\leon' ''))
-    Check 'OPS-5 the check runs when the window opens' ($src -match '(?s)function Show-AccountMismatch.*?Get-DesktopUser' -and $src -match 'Show-AccountMismatch; Show-WriteTrouble -Startup')
+    Check 'OPS-5 the check runs when the window opens' ($src -match '(?s)function Show-AccountMismatch.*?Get-DesktopUser' -and $src -match 'if \(-not \(Show-AccountMismatch\)\) \{ return \}; Show-WriteTrouble -Startup')
     # ============ 26. 不同语言的 Windows：组用 SID，确认字母从系统命令的说明里读（3.6 运维评审） ============
     $en = "TAKEOWN [/S system] [/F filename] [/A] [/R [/D prompt]]`n    /R                       Recurses.`n    /D       prompt          Default answer used when the current user`n                             does not have the ""list folder"" permission`n                             on a directory. Valid`n                             values ""Y"" to take ownership or ""N"" to skip.`n    /SKIPSL                  Do not follow symbolic links."
     $de = "    /D       Eingabeaufforderung  Standardantwort, wenn der aktuelle Benutzer`n                             nicht über die Berechtigung ""Ordner auflisten"" verfügt.`n                             Gültige Werte: ""J"" für Besitzübernahme, ""N"" zum Überspringen.`n    /SKIPSL   Symbolischen Links nicht folgen."
     $fr = "    /D       invite       Réponse par défaut ... Valeurs valides : « O » pour prendre possession ou « N » pour ignorer.`n    /SKIPSL"
     Check 'OPS-6 the "yes" letter is read from the system command''s own help (English Y, German J, French O)' ((Get-YesFromHelp $en) -eq 'Y' -and (Get-YesFromHelp $de) -eq 'J' -and (Get-YesFromHelp $fr) -eq 'O' -and (Get-YesFromHelp 'nothing here') -eq '')
     Check 'OPS-6 icacls grants by SID, takeown and chkdsk use that letter' ($engineText -notmatch 'icacls[^\r\n]*Administrators:' -and $engineText -match '\*S-1-5-32-544:F' -and $engineText -notmatch 'takeown[^\r\n]*/D Y' -and $engineText -notmatch "echo Y\|" -and ([regex]::Matches($engineText, 'Get-YesLetter')).Count -ge 3)
+    # ============ 27. 第一次打开：同意后自动扫描，然后只给结论和一个主按钮（3.6 体验评审） ============
+    Check 'UX-4 after agreeing the first time, the cleanup scan starts by itself' ($src -match "(?s)Write-LogFile \(T '用户已同意安全风险提示'\).*?\`$script:firstRun = \`$true.*?Do-Scan")
+    Check 'UX-4 when that first scan finishes, one sheet gives the result and one main button (one-click cleanup)' ($src -match '(?s)function Show-FirstResult.*?Get-OneClickAction.*?Apply-OneClick.*?Invoke-RunSelected' -and $src -match 'if \(\$script:firstResult\) \{ \$script:firstResult = \$false; Show-FirstResult \}')
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue
