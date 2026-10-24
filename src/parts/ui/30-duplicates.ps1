@@ -222,7 +222,7 @@ function Update-FilterSummary {
     elseif ($r.Min -le 1) { $size = (Size-Text $r.Max) + (T ' 以下') }
     else { $size = (T "{0} 到 {1}") -f (Size-Text $r.Min), (Size-Text $r.Max) }
     $ctl.SizeHint.Text = if ($r.Ok) { (T '留空表示不限') } else { $r.Err }
-    $ctl.SizeHint.Foreground = if ($r.Ok) { Brush '#86868B' } else { Brush '#D70015' }
+    $ctl.SizeHint.Foreground = if ($r.Ok) { Brush '#6E6E73' } else { Brush '#D70015' }
     $mode = if ($ctl.ModeName.IsChecked) { (T '文件名和内容都相同') } else { (T '只要内容相同') }
     $mode += if ($ctl.SpeedExact.IsChecked) { (T '，完整比对') } else { (T '，快速比对') }
     $n = @($script:roots | Where-Object { $_.Enabled }).Count

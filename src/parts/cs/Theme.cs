@@ -34,13 +34,13 @@ public static class Theme {
         } else if (l >= 0.85) {                                      // 浅的彩色底（提示框、标签）
             if (role == 'f') { L = 0.80; S = Math.Min(s, 0.7); }
             else if (role == 'd') { L = 0.34; S = Math.Min(s, 0.45); }
-            else { L = 0.24; S = Math.Min(s, 0.45); }
+            else { L = 0.21; S = Math.Min(s, 0.45); }   // 深色时标签、提示框的底再暗一点，上面的彩色字才够清楚（4.5:1）
         } else if (l >= 0.65) {                                      // 偏浅的彩色（浅边框、焦点环）
             if (role == 'b') { L = 0.28; S = Math.Min(s, 0.5); }
             else if (role == 'd') { L = 0.42; S = Math.Min(s, 0.55); }
             else L = l;
         } else {                                                     // 鲜艳的颜色
-            if (role == 'f') L = Math.Max(l, 0.62);
+            if (role == 'f') L = Math.Max(l, 0.68);
             else if (role == 'd') L = Math.Max(l, 0.50);
             else L = Math.Min(Math.Max(l, 0.42), 0.55);
         }

@@ -232,7 +232,7 @@ function Build-Rows($sizes) {
         $r = New-Object RowItem
         $script:rowSig[$it.Idx] = Get-ItemSig $it
         $r.Idx = $it.Idx; $r.Group = $it.G; $r.Name = $it.N; $r.Note = $it.Note; $r.Actions = $it.Actions; $r.Action = $it.Def
-        if ($noDest -and $it.Def -eq (T '搬到其他盘')) { $r.Action = (T '跳过'); $r.Status = (T '没有可以搬去的其他硬盘，先跳过'); $r.StatusBrush = '#86868B' }
+        if ($noDest -and $it.Def -eq (T '搬到其他盘')) { $r.Action = (T '跳过'); $r.Status = (T '没有可以搬去的其他硬盘，先跳过'); $r.StatusBrush = '#6E6E73' }
         # 组名「安全清理（缓存、临时文件……）」拆成标题和说明两行显示
         $gt = T ([string]$it.G)
         $gp = $gt.Split([char]0xFF08, 2); if ($gp.Count -lt 2) { $gp = $gt.Split([char]'(', 2) }
@@ -636,9 +636,9 @@ function Invoke-RunSelected([string]$title = (T '开始处理所选项'), [objec
     $planned = @{}; foreach ($x in $plan) { $planned[$x.Idx] = $true }
     $skipSet = @{}; foreach ($x in $skipped) { $skipSet[$x.Idx] = $true }
     foreach ($r in $script:rows) {
-        if ($planned.ContainsKey($r.Idx)) { $r.Status = (T '等待'); $r.StatusBrush = '#86868B' }
+        if ($planned.ContainsKey($r.Idx)) { $r.Status = (T '等待'); $r.StatusBrush = '#6E6E73' }
         elseif ($skipSet.ContainsKey($r.Idx)) { $r.Status = ((T "这次没搬：{0} 没有退出") -f $skipWho); $r.StatusBrush = '#B25000' }
-        else { $r.Status = ''; $r.StatusBrush = '#86868B' }
+        else { $r.Status = ''; $r.StatusBrush = '#6E6E73' }
     }
     $script:runFreeC0 = [double](FreeC)
     $script:runPlan = $plan

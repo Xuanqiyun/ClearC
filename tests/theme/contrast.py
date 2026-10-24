@@ -64,6 +64,8 @@ def analyze(path, winbg, winfg):
             e = parent.get(e)
         return default, None
     bad = defaultdict(list)
+    weak = defaultdict(list)   # 正文（不是图标、不是装饰用的点和箭头）对比度不到 4.5
+    small = []                 # 正文字号小于 12
     n = 0
     for el in root.iter():
         t = local(el.tag)
@@ -76,10 +78,20 @@ def analyze(path, winbg, winfg):
         if fg[3] < 255: continue
         n += 1
         r = ratio(fg, bg)
+        txt = (el.get('Text') or el.get('Content') or '')[:30]
         if r < 3.0:
-            txt = (el.get('Text') or el.get('Content') or '')[:30]
             bad[('#%02X%02X%02X' % fg[:3], '#%02X%02X%02X' % bg[:3])].append((r, t, txt))
-    return n, bad
+        ff = el.get('FontFamily') or style_val(el, 'FontFamily') or ''
+        icon = 'Icons' in ff or 'Symbol' in ff or 'MDL2' in ff
+        deco = txt.strip() in ('•', '·', '›', '‹', '—', '–', '…', '|', '/', '→', '←', '')
+        if not icon and not deco and t in ('TextBlock', 'Run'):
+            if r < 4.5:
+                weak[('#%02X%02X%02X' % fg[:3], '#%02X%02X%02X' % bg[:3])].append((r, t, txt))
+            fs = el.get('FontSize') or style_val(el, 'FontSize')
+            try:
+                if fs and '{' not in fs and float(fs) < 12: small.append((fs, txt))
+            except ValueError: pass
+    return n, bad, weak, small
 worse = 0
 for name in sys.argv[1:]:
     counts = {}
@@ -90,11 +102,17 @@ for name in sys.argv[1:]:
         wf = col(r.get('Foreground')) if r.get('Foreground') else None
         if wb is None: wb = (255, 255, 255, 255) if mode == 'light' else col('#2C2C2E')
         if wf is None: wf = (0, 0, 0, 255) if mode == 'light' else col('#F0F0F2')
-        n, bad = analyze(p, wb, wf)
+        n, bad, weak, small = analyze(p, wb, wf)
         counts[mode] = sum(len(v) for v in bad.values())
         print('== %s %s: %d text elements, %d low-contrast pairs' % (p.split('/')[-1], mode, n, len(bad)))
         for (f, b), lst in sorted(bad.items(), key=lambda kv: min(x[0] for x in kv[1])):
             print('   fg %s on bg %s  ratio %.2f  x%d  e.g. %s "%s"' % (f, b, min(x[0] for x in lst), len(lst), lst[0][1], lst[0][2]))
+        # 正文要够清楚（WCAG AA：4.5:1），字号不小于 12（3.6 体验评审 UX-8）
+        for (f, b), lst in sorted(weak.items(), key=lambda kv: min(x[0] for x in kv[1])):
+            print('   FAIL text %s on %s  ratio %.2f (needs 4.5)  x%d  e.g. "%s"' % (f, b, min(x[0] for x in lst), len(lst), lst[0][2])); worse += 1
+        if mode == 'light':
+            for fs, txt in small[:5]:
+                print('   FAIL text smaller than 12: FontSize %s "%s"' % (fs, txt)); worse += 1
     # 浅色里本来就淡的（装饰性的箭头、占位文字）深色里也淡，这不算问题；深色比浅色多出来的才算
     if counts.get('dark', 0) > counts.get('light', 0):
         print('   FAIL: dark mode has more low-contrast text than light mode'); worse += 1

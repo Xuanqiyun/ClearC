@@ -74,7 +74,7 @@ public class StartRow : INotifyPropertyChanged {
     public bool Enabled { get { return _on; } set { _on = value; Raise("Enabled"); Raise("StatusText"); Raise("StatusBrush"); Raise("ToggleText"); } }
     public string Size { get; set; }
     public string StatusText { get { if (Kind == "leftover") return Size ?? ""; return _on ? L10n.T("已启用") : L10n.T("已禁用"); } }
-    public string StatusBrush { get { return Theme.F(Kind == "leftover" ? "#1D1D1F" : (_on ? "#248A3D" : "#86868B")); } }
+    public string StatusBrush { get { return Theme.F(Kind == "leftover" ? "#1D1D1F" : (_on ? "#1D7A35" : "#6E6E73")); } }
     public string ToggleText { get { if (Kind == "leftover") return L10n.T("移到回收站"); return _on ? L10n.T("禁用") : L10n.T("启用"); } }
     void Raise(string n) { PropertyChangedEventHandler h = PropertyChanged; if (h != null) h(this, new PropertyChangedEventArgs(n)); }
     public event PropertyChangedEventHandler PropertyChanged;
@@ -85,7 +85,7 @@ public class MoveRow : INotifyPropertyChanged {
     public string Dst { get; set; }
     public string State { get; set; }
     private string _status = ""; public string Status { get { return _status; } set { _status = value; Raise("Status"); } }
-    private string _brush = "#86868B"; public string StatusBrush { get { return Theme.F(_brush); } set { _brush = value; Raise("StatusBrush"); } }
+    private string _brush = "#6E6E73"; public string StatusBrush { get { return Theme.F(_brush); } set { _brush = value; Raise("StatusBrush"); } }
     private string _size = L10n.T("计算中…"); public string SizeText { get { return _size; } set { _size = value; Raise("SizeText"); } }
     public long Size { get; set; }
     public bool CanBack { get; set; }
@@ -117,7 +117,7 @@ public class CandRow : INotifyPropertyChanged {
     public bool Partial { get; set; }    // 目标盘上已经有上次复制的一部分
     private bool _chk; public bool Checked { get { return _chk; } set { if (_chk != value) { _chk = value; Dirty = true; Raise("Checked"); } } }
     private string _status = ""; public string Status { get { return _status; } set { _status = value; Raise("Status"); } }
-    private string _brush = "#86868B"; public string StatusBrush { get { return Theme.F(_brush); } set { _brush = value; Raise("StatusBrush"); } }
+    private string _brush = "#6E6E73"; public string StatusBrush { get { return Theme.F(_brush); } set { _brush = value; Raise("StatusBrush"); } }
     void Raise(string n) { PropertyChangedEventHandler h = PropertyChanged; if (h != null) h(this, new PropertyChangedEventArgs(n)); }
     public event PropertyChangedEventHandler PropertyChanged;
 }

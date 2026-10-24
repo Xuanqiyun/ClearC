@@ -40,19 +40,19 @@
                   <StackPanel>
                     <TextBlock Text="Safety notice" Style="{StaticResource HelpHead}" Foreground="#A1000F"/>
                     <DockPanel Margin="0,10,0,0">
-                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#6E6E73" Style="{StaticResource HelpPara}"/>
                       <TextBlock Style="{StaticResource HelpPara}"><Run>Deleting removes files from your PC. Files that aren't moved to the Recycle Bin usually can't be recovered after deletion, which may lead to data loss.</Run></TextBlock>
                     </DockPanel>
                     <DockPanel Margin="0,10,0,0">
-                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#6E6E73" Style="{StaticResource HelpPara}"/>
                       <TextBlock Style="{StaticResource HelpPara}"><Run>Before each deletion, make sure you really no longer need these files and that deleting them won't cause you any loss. Back up important files first.</Run></TextBlock>
                     </DockPanel>
                     <DockPanel Margin="0,10,0,0">
-                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#6E6E73" Style="{StaticResource HelpPara}"/>
                       <TextBlock Style="{StaticResource HelpPara}"><Run>ClearC only does what you choose. For any data loss or other damage caused by deleting or moving files with ClearC, </Run><Run FontWeight="SemiBold" Foreground="#A1000F">you are solely responsible; the developer accepts no liability</Run><Run>.</Run></TextBlock>
                     </DockPanel>
                     <DockPanel Margin="0,10,0,0">
-                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#86868B" Style="{StaticResource HelpPara}"/>
+                      <TextBlock DockPanel.Dock="Left" Text="•" Width="20" Foreground="#6E6E73" Style="{StaticResource HelpPara}"/>
                       <TextBlock Style="{StaticResource HelpPara}"><Run>By continuing to use ClearC, you confirm that you understand and accept these risks.</Run></TextBlock>
                     </DockPanel>
                   </StackPanel>
