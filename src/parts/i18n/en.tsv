@@ -156,6 +156,7 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+C 盘用 BitLocker 加密了，{0} 盘没有：搬过去的聊天记录和文件在那块盘上不加密，电脑丢了或者硬盘被拆走，别人能直接读出来。介意的话，先给 {0} 盘打开 BitLocker（控制面板 →「BitLocker 驱动器加密」）再搬。	C: is encrypted with BitLocker but {0}: is not: the chat history and files you move are not encrypted on that drive, so if the PC is lost or the disk is taken out, anyone can read them. If that matters, turn on BitLocker for {0}: first (Control Panel → "BitLocker Drive Encryption"), then move.
 搬走聊天记录…	Move chat history…
 自动扫描，清掉所有安全项和默认选中的缓存、临时文件。只删不搬：聊天记录在下面单独一张卡片里，要搬自己点。不会关闭休眠、不清空回收站，个人文件夹（桌面、文档、下载等）里的东西一律不删。	Scans, then clears all safe items and the caches and temporary files selected by default. It only deletes and never moves: chat history has its own card below; move it there if you want. It never turns off hibernation, never empties the Recycle Bin, and never deletes anything in personal folders (Desktop, Documents, Downloads and so on).
 搬走聊天记录	Move chat history

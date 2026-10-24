@@ -634,6 +634,12 @@ try { & {
         $open = @($kp | Where-Object { -not (Get-DeleteBlock (Join-Path $ub $_)) })
         Check ("SEC-7 another account's key folders can not be deleted ({0})" -f ($open -join ', ')) ($open.Count -eq 0 -and -not (Get-DeleteBlock (Join-Path $ub 'Other\AppData\Local\Temp\x.tmp')))
     } else { Skip 'SEC-7 key folders of other accounts' }
+    # ============ 22. C 盘加密、目标盘没加密：搬家前写明（3.6 安全评审） ============
+    Check 'SEC-4 moving from an encrypted C: to an unencrypted drive is spelled out before the move' ([bool](Get-EncryptionWarning 'D:\CDriveMoved' $true $false))
+    Check 'SEC-4 no warning when both are encrypted, C: is not, or it can not be told' (-not (Get-EncryptionWarning 'D:\x' $true $true) -and -not (Get-EncryptionWarning 'D:\x' $false $false) -and -not (Get-EncryptionWarning 'D:\x' $true 'unknown'))
+    Check 'SEC-4 not being able to read the encryption state is not an error' ($null -eq (Get-DriveEncrypted 'Q:') -or (Get-DriveEncrypted 'Q:') -eq $false)
+    $rs = [regex]::Match($src, '(?s)function Invoke-RunSelected\(.*?\r?\n\}').Value
+    Check 'SEC-4 the cleanup page, the move manager and app moves all add the warning to their confirmation' ($rs -match 'Get-EncryptionWarning \$dest' -and ([regex]::Matches($src, 'Get-EncryptionWarning \$')).Count -ge 3)
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue

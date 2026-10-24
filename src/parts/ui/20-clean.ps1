@@ -518,7 +518,7 @@ function Invoke-RunSelected([string]$title = (T '执行所选操作'), [object[]
     $total = [double]0; foreach ($x in $plan) { $total += $x.Bytes }
     $items = @($plan | ForEach-Object { (T "{0}　{1}") -f $_.Action, $_.Name })
     $text = (T "涉及约 {0}。大文件夹搬家可能要几十分钟，进度会显示在窗口中间，做完会告诉你结果。") -f (GB $total)
-    if ($moves) { $text += ((T "`n`n要搬的东西会放到 {0}。") -f $dest) }
+    if ($moves) { $text += ((T "`n`n要搬的东西会放到 {0}。") -f $dest); $enc = Get-EncryptionWarning $dest; if ($enc) { $text += "`n`n" + $enc } }
     # 有删除项时，必须勾选「确认不会带来损失」才能开始
     $dels = @($plan | Where-Object { $_.Action -eq (T '删除') })
     $ack = ''
