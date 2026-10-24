@@ -587,54 +587,50 @@ function Invoke-RunSelected([string]$title = (T '执行所选操作'), [object[]
         }
         $ack = (T '我已确认要删除的内容不再需要，删除不会给我带来损失；因删除造成的后果由我自己承担。')
     }
-    $kind = if ($dels) { 'warn' } else { 'info' }
-    $btns = if ($dels) { @((T '取消'), (T '看文件清单'), (T '开始')) } else { @((T '取消'), (T '开始')) }
+    # 搬家要关掉的程序（开着的聊天软件、从要搬的文件夹里运行的程序）：先算好，写进同一个确认框，不再一个接一个地问
+    $skipped = @(); $skipWho = ''; $allowed = @(); $affected = @(); $who = ''; $closeText = ''
+    $chatMoves = @($moves | Where-Object { $cat0[$_.Idx].Apps })
+    if ($moves) {
+        $appKeys = @($moves | ForEach-Object { @($cat0[$_.Idx].Apps) } | Where-Object { $_ } | Select-Object -Unique)
+        $cp = Get-ClosePlan @($moves | ForEach-Object { $cat0[$_.Idx] }) $appKeys
+        $allowed = @($cp.Names); $closeText = [string]$cp.Text
+        if ($chatMoves) {
+            $busy = @(Get-BusyApps @($chatMoves | ForEach-Object { $cat0[$_.Idx].Apps } | Select-Object -Unique))
+            if ($busy.Count -gt 0) {
+                $who = @($busy | ForEach-Object { T $_ }) -join (T '、')
+                $affected = @($chatMoves | Where-Object { $x = $_; @($cat0[$x.Idx].Apps | Where-Object { $busy -contains $_ }).Count -gt 0 })
+            }
+        }
+        if ($closeText) { $text += "`n`n" + ((T "开始后会先替你关掉：{0}（包括屏幕右下角托盘里的）。开着的话文件被占用，搬家不会成功。关之前请确认没有正在发送或下载的文件，没保存的内容先保存；搬完照常打开，聊天记录和文件都在。") -f $closeText) }
+    }
+    $kind = if ($dels -or $closeText) { 'warn' } else { 'info' }
+    $go = if ($closeText) { (T '关掉并开始') } else { (T '开始') }
+    $skipBtn = if ($affected.Count) { (T "先不搬{0}的") -f $who } else { '' }
+    $btns = @((T '取消')); if ($dels) { $btns += (T '看文件清单') }; if ($skipBtn) { $btns += $skipBtn }; $btns += $go
     while ($true) {
-        $ans = Show-Sheet -Kind $kind -Title ((T "执行 {0} 项操作？") -f $plan.Count) -Text $text -Items $items -Buttons $btns -Primary (T '开始') -Cancel (T '取消') -Confirm $ack
+        $ans = Show-Sheet -Kind $kind -Title ((T "执行 {0} 项操作？") -f $plan.Count) -Text $text -Items $items -Buttons $btns -Primary $go -Cancel (T '取消') -Confirm $ack
         if ($ans -eq (T '看文件清单')) { Show-DeletePreview @($dels | ForEach-Object { $cat0[$_.Idx] }); continue }
-        if ($ans -ne (T '开始')) { return }
+        if ($skipBtn -and $ans -eq $skipBtn) {
+            # 开着的聊天软件这次不关：用到它的那几项这次不搬，其余照做
+            $skipIdx = @{}; foreach ($x in $affected) { $skipIdx[$x.Idx] = $true }
+            $skipped = @($affected); $skipWho = $who
+            $plan = @($plan | Where-Object { -not $skipIdx.ContainsKey($_.Idx) })
+            $moves = @($moves | Where-Object { -not $skipIdx.ContainsKey($_.Idx) })
+            UI-Log ((T "{0} 没有退出，这次不搬：{1}") -f $who, (($skipped | ForEach-Object { $_.Name }) -join (T '、')))
+            if (-not $plan) { return }
+            $allowed = @()
+            if ($moves) {
+                $cp = Get-ClosePlan @($moves | ForEach-Object { $cat0[$_.Idx] }) @($moves | ForEach-Object { @($cat0[$_.Idx].Apps) } | Where-Object { $_ } | Select-Object -Unique)
+                $defs = Get-ChatApps
+                $allowed = @($cp.Names | Where-Object { $n = $_; -not @($busy | Where-Object { $a = $_; @(@($defs[$a].P) + @($defs[$a].K) | Where-Object { $_ -and $n -like $_ }).Count }).Count })
+            }
+            break
+        }
+        if ($ans -ne $go) { return }
+        if ($who) { UI-Log ((T "已同意退出 {0}，开始执行后会先关掉它们") -f $who) }
         break
     }
 
-    # 要搬聊天软件的数据时，先看它们是不是开着：开着的话文件被占用，搬不成功，必须先退出
-    $skipped = @(); $skipWho = ''
-    $chatMoves = @($moves | Where-Object { $cat0[$_.Idx].Apps })
-    if ($chatMoves) {
-        $need = @($chatMoves | ForEach-Object { $cat0[$_.Idx].Apps } | Select-Object -Unique)
-        $busy = Get-BusyApps $need
-        if ($busy.Count -gt 0) {
-            $who = @($busy | ForEach-Object { T $_ }) -join (T '、')
-            $affected = @($chatMoves | Where-Object { $x = $_; @($cat0[$x.Idx].Apps | Where-Object { $busy -contains $_ }).Count -gt 0 })
-            $ans = Show-Sheet -Kind warn -Title ((T "需要先退出{0}") -f $who) `
-                -Text ((T "{0}正在使用要搬的文件夹。不退出的话里面的文件一直被占用，搬家不会成功。`n`n点「退出并继续」会替你关掉它们（包括右下角托盘里的）。退出前请确认没有正在发送或下载的文件。搬完后照常打开即可，聊天记录和文件都在。") -f $who) `
-                -Items @($affected | ForEach-Object { $_.Name }) -Buttons @((T '取消'), (T '这次不搬这几项'), (T '退出并继续')) -Primary (T '退出并继续') -Cancel (T '取消')
-            if ($ans -eq (T '取消')) { return }
-            if ($ans -eq (T '这次不搬这几项')) {
-                $skipIdx = @{}; foreach ($x in $affected) { $skipIdx[$x.Idx] = $true }
-                $skipped = @($affected); $skipWho = $who
-                $plan = @($plan | Where-Object { -not $skipIdx.ContainsKey($_.Idx) })
-                $moves = @($moves | Where-Object { -not $skipIdx.ContainsKey($_.Idx) })
-                UI-Log ((T "{0} 没有退出，这次不搬：{1}") -f $who, (($skipped | ForEach-Object { $_.Name }) -join (T '、')))
-                if (-not $plan) { return }
-            } else {
-                UI-Log ((T "已同意退出 {0}，开始执行后会先关掉它们") -f $who)
-            }
-        }
-    }
-    # 搬家时还会关掉的其他程序（后台进程、从要搬的文件夹里运行的程序）：先说清楚，确认后后台只关这些
-    $allowed = @()
-    if ($moves) {
-        $cp = Get-ClosePlan @($moves | ForEach-Object { $cat0[$_.Idx] }) @($moves | ForEach-Object { @($cat0[$_.Idx].Apps) } | Where-Object { $_ } | Select-Object -Unique)
-        $agreed = @{}; if ($chatMoves -and $busy) { $defs = Get-ChatApps; foreach ($a in $busy) { foreach ($n in $cp.Names) { foreach ($pat in (@($defs[$a].P) + @($defs[$a].K))) { if ($pat -and $n -like $pat) { $agreed[$n] = $true } } } } }
-        $extra = @($cp.Names | Where-Object { -not $agreed.ContainsKey($_) })
-        $allowed = @($cp.Names)
-        if ($extra.Count -gt 0) {
-            $ans = Show-Sheet -Kind warn -Title (T '搬家时还要关掉这些程序') -Text ((T "这些程序正在使用要搬的文件夹：{0}。不关掉的话文件被占用，这几项搬不成。`n`n点「关掉并继续」会替你关掉它们，没保存的内容请先保存；点「不关」就先不碰它们，这几项复制好后会停在最后一步，下次再搬很快。") -f ($extra -join (T '、'))) `
-                -Buttons @((T '取消'), (T '不关'), (T '关掉并继续')) -Primary (T '关掉并继续') -Cancel (T '取消')
-            if ($ans -eq (T '取消')) { return }
-            if ($ans -eq (T '不关')) { $allowed = @($cp.Names | Where-Object { $agreed.ContainsKey($_) }) }
-        }
-    }
     # 每一行先标「等待」，执行时由后台逐行改成 进行中 / 完成 / 失败
     $sync.Status = [hashtable]::Synchronized(@{}); $sync.StatusVer = 0; $script:statusSeen = -1; $sync.RunSummary = $null; $sync.WaitCount = 0
     $planned = @{}; foreach ($x in $plan) { $planned[$x.Idx] = $true }

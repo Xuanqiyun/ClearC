@@ -677,6 +677,12 @@ try { & {
     Check 'UX-5 the totals are split into deleted and moved, and each tab knows how many of its items are selected' ($pt.N -eq 3 -and $pt.Del -eq (110MB) -and $pt.Move -eq 2GB -and $pt.Groups['A'].Sel -eq 1 -and $pt.Groups['A'].Cnt -eq 2 -and $pt.Groups['B'].Sel -eq 2)
     $us = [regex]::Match($src, '(?s)function Update-CleanSummary.*?\r?\n\}').Value
     Check 'UX-5 the tabs show selected/total, and a tab can be skipped as a whole' ($us -match 'Get-PlanTotals' -and $us -match 'Update-TabBadges' -and $src -match '(?s)\$ctl\.BtnCleanSkipTab\.Add_Click\(\{.*?GroupTitle\) -eq \$script:cleanTab')
+    # ============ 29. 一个确认框说完；永久删除用红色，放进回收站不用（3.6 体验评审） ============
+    $rs = [regex]::Match($src, '(?s)function Invoke-RunSelected\(.*?\r?\n\}').Value
+    Check 'UX-6 starting a cleanup with moves asks once: the apps to close are in the same sheet, and its button says so' ($rs -notmatch '需要先退出' -and $rs -notmatch '搬家时还要关掉这些程序' -and $rs -match "Get-ClosePlan" -and $rs.IndexOf('Get-ClosePlan') -lt $rs.IndexOf('-Title ((T "执行 {0} 项操作？")') -and $rs -match "T '关掉并开始'")
+    $sh = [regex]::Match($src, '(?s)function Show-Sheet \{.*?\r?\n\}').Value
+    $md = [regex]::Match($src, '(?s)function Start-MapDelete.*?Start-Worker').Value
+    Check 'UX-6 only the permanent-delete button is red; "move to Recycle Bin" is the normal main button' ($sh -match '\$Destructive' -and $md -match "-Destructive \(T '永久删除'\)" -and ([regex]::Matches($src, "-Destructive ''")).Count -ge 3)
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue

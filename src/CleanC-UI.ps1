@@ -7614,6 +7614,9 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+开始后会先替你关掉：{0}（包括屏幕右下角托盘里的）。开着的话文件被占用，搬家不会成功。关之前请确认没有正在发送或下载的文件，没保存的内容先保存；搬完照常打开，聊天记录和文件都在。	When it starts it first closes {0} for you (including from the system tray at the bottom right). While they are open the files are in use and the move cannot succeed. Before that, make sure nothing is being sent or downloaded and save any unsaved work; after the move, open them as usual and your chat history and files are all there.
+关掉并开始	Close and start
+先不搬{0}的	Don't move {0} now
 删除约 {0}	delete about {0}
 搬走约 {0}	move about {0}
 所有选项卡一共选了 {0} 项：{1}。	{0} items selected across all tabs: {1}.
@@ -15844,7 +15847,8 @@ $ctl.BtnLogHide.Add_Click({ Set-LogVisible $false })
 #   Kind：info 蓝色信息 / warn 橙色提醒 / danger 红色删除 / done 绿色完成
 function Show-Sheet {
     param([string]$Title, [string]$Text = '', [string[]]$Items = $null, [string[]]$Buttons = @((T '好')),
-          [string]$Primary = '', [string]$Cancel = '', [string]$Kind = 'info', [string]$Confirm = '', $Extra = $null)
+          [string]$Primary = '', [string]$Cancel = '', [string]$Kind = 'info', [string]$Confirm = '', $Extra = $null, [string]$Destructive = '')
+    $redGiven = $PSBoundParameters.ContainsKey('Destructive')   # [string] 参数没法是 $null，只能看有没有传
     if (-not $Primary) { $Primary = $Buttons[-1] }
     if (-not $Cancel)  { $Cancel = $Buttons[0] }
     if ($script:uiTest) { $script:uiSheets.Add(("{0}`n{1}" -f $Title, $Text)); return $Cancel }   # 界面自测：不弹对话框，当作点了取消
@@ -15883,8 +15887,13 @@ function Show-Sheet {
         $btn = New-Object System.Windows.Controls.Button
         $btn.Content = $b; $btn.Tag = $b; $btn.MinWidth = 88
         $btn.Padding = New-Object System.Windows.Thickness 16, 7, 16, 7; $btn.Margin = New-Object System.Windows.Thickness 8, 0, 0, 0
-        if ($b -eq $Primary) { $btn.Style = $win.FindResource($(if ($Kind -eq 'danger') { 'Danger' } else { 'Primary' })); $btn.IsDefault = $true }
+        # 红色只给真正删掉、找不回来的那个按钮：给了 -Destructive 就按它（空字符串表示没有红色按钮，比如只放进回收站）；
+        # 没给时照旧：danger 对话框的主按钮是红色
+        $red = if ($redGiven) { $Destructive -and $b -eq $Destructive } else { $Kind -eq 'danger' -and $b -eq $Primary }
+        if ($red) { $btn.Style = $win.FindResource('Danger') }
+        elseif ($b -eq $Primary) { $btn.Style = $win.FindResource('Primary') }
         else { $btn.Style = $win.FindResource('Secondary') }
+        if ($b -eq $Primary) { $btn.IsDefault = $true }
         if ($b -eq $Cancel) { $btn.IsCancel = $true }
         if ($Confirm -and $b -ne $Cancel) { $btn.IsEnabled = $false; [void]$script:sheetGuarded.Add($btn) }
         $btn.Add_Click({ $script:sheetResult = [string]$this.Tag; [System.Windows.Window]::GetWindow($this).Close() })
@@ -16924,54 +16933,50 @@ function Invoke-RunSelected([string]$title = (T '执行所选操作'), [object[]
         }
         $ack = (T '我已确认要删除的内容不再需要，删除不会给我带来损失；因删除造成的后果由我自己承担。')
     }
-    $kind = if ($dels) { 'warn' } else { 'info' }
-    $btns = if ($dels) { @((T '取消'), (T '看文件清单'), (T '开始')) } else { @((T '取消'), (T '开始')) }
+    # 搬家要关掉的程序（开着的聊天软件、从要搬的文件夹里运行的程序）：先算好，写进同一个确认框，不再一个接一个地问
+    $skipped = @(); $skipWho = ''; $allowed = @(); $affected = @(); $who = ''; $closeText = ''
+    $chatMoves = @($moves | Where-Object { $cat0[$_.Idx].Apps })
+    if ($moves) {
+        $appKeys = @($moves | ForEach-Object { @($cat0[$_.Idx].Apps) } | Where-Object { $_ } | Select-Object -Unique)
+        $cp = Get-ClosePlan @($moves | ForEach-Object { $cat0[$_.Idx] }) $appKeys
+        $allowed = @($cp.Names); $closeText = [string]$cp.Text
+        if ($chatMoves) {
+            $busy = @(Get-BusyApps @($chatMoves | ForEach-Object { $cat0[$_.Idx].Apps } | Select-Object -Unique))
+            if ($busy.Count -gt 0) {
+                $who = @($busy | ForEach-Object { T $_ }) -join (T '、')
+                $affected = @($chatMoves | Where-Object { $x = $_; @($cat0[$x.Idx].Apps | Where-Object { $busy -contains $_ }).Count -gt 0 })
+            }
+        }
+        if ($closeText) { $text += "`n`n" + ((T "开始后会先替你关掉：{0}（包括屏幕右下角托盘里的）。开着的话文件被占用，搬家不会成功。关之前请确认没有正在发送或下载的文件，没保存的内容先保存；搬完照常打开，聊天记录和文件都在。") -f $closeText) }
+    }
+    $kind = if ($dels -or $closeText) { 'warn' } else { 'info' }
+    $go = if ($closeText) { (T '关掉并开始') } else { (T '开始') }
+    $skipBtn = if ($affected.Count) { (T "先不搬{0}的") -f $who } else { '' }
+    $btns = @((T '取消')); if ($dels) { $btns += (T '看文件清单') }; if ($skipBtn) { $btns += $skipBtn }; $btns += $go
     while ($true) {
-        $ans = Show-Sheet -Kind $kind -Title ((T "执行 {0} 项操作？") -f $plan.Count) -Text $text -Items $items -Buttons $btns -Primary (T '开始') -Cancel (T '取消') -Confirm $ack
+        $ans = Show-Sheet -Kind $kind -Title ((T "执行 {0} 项操作？") -f $plan.Count) -Text $text -Items $items -Buttons $btns -Primary $go -Cancel (T '取消') -Confirm $ack
         if ($ans -eq (T '看文件清单')) { Show-DeletePreview @($dels | ForEach-Object { $cat0[$_.Idx] }); continue }
-        if ($ans -ne (T '开始')) { return }
+        if ($skipBtn -and $ans -eq $skipBtn) {
+            # 开着的聊天软件这次不关：用到它的那几项这次不搬，其余照做
+            $skipIdx = @{}; foreach ($x in $affected) { $skipIdx[$x.Idx] = $true }
+            $skipped = @($affected); $skipWho = $who
+            $plan = @($plan | Where-Object { -not $skipIdx.ContainsKey($_.Idx) })
+            $moves = @($moves | Where-Object { -not $skipIdx.ContainsKey($_.Idx) })
+            UI-Log ((T "{0} 没有退出，这次不搬：{1}") -f $who, (($skipped | ForEach-Object { $_.Name }) -join (T '、')))
+            if (-not $plan) { return }
+            $allowed = @()
+            if ($moves) {
+                $cp = Get-ClosePlan @($moves | ForEach-Object { $cat0[$_.Idx] }) @($moves | ForEach-Object { @($cat0[$_.Idx].Apps) } | Where-Object { $_ } | Select-Object -Unique)
+                $defs = Get-ChatApps
+                $allowed = @($cp.Names | Where-Object { $n = $_; -not @($busy | Where-Object { $a = $_; @(@($defs[$a].P) + @($defs[$a].K) | Where-Object { $_ -and $n -like $_ }).Count }).Count })
+            }
+            break
+        }
+        if ($ans -ne $go) { return }
+        if ($who) { UI-Log ((T "已同意退出 {0}，开始执行后会先关掉它们") -f $who) }
         break
     }
 
-    # 要搬聊天软件的数据时，先看它们是不是开着：开着的话文件被占用，搬不成功，必须先退出
-    $skipped = @(); $skipWho = ''
-    $chatMoves = @($moves | Where-Object { $cat0[$_.Idx].Apps })
-    if ($chatMoves) {
-        $need = @($chatMoves | ForEach-Object { $cat0[$_.Idx].Apps } | Select-Object -Unique)
-        $busy = Get-BusyApps $need
-        if ($busy.Count -gt 0) {
-            $who = @($busy | ForEach-Object { T $_ }) -join (T '、')
-            $affected = @($chatMoves | Where-Object { $x = $_; @($cat0[$x.Idx].Apps | Where-Object { $busy -contains $_ }).Count -gt 0 })
-            $ans = Show-Sheet -Kind warn -Title ((T "需要先退出{0}") -f $who) `
-                -Text ((T "{0}正在使用要搬的文件夹。不退出的话里面的文件一直被占用，搬家不会成功。`n`n点「退出并继续」会替你关掉它们（包括右下角托盘里的）。退出前请确认没有正在发送或下载的文件。搬完后照常打开即可，聊天记录和文件都在。") -f $who) `
-                -Items @($affected | ForEach-Object { $_.Name }) -Buttons @((T '取消'), (T '这次不搬这几项'), (T '退出并继续')) -Primary (T '退出并继续') -Cancel (T '取消')
-            if ($ans -eq (T '取消')) { return }
-            if ($ans -eq (T '这次不搬这几项')) {
-                $skipIdx = @{}; foreach ($x in $affected) { $skipIdx[$x.Idx] = $true }
-                $skipped = @($affected); $skipWho = $who
-                $plan = @($plan | Where-Object { -not $skipIdx.ContainsKey($_.Idx) })
-                $moves = @($moves | Where-Object { -not $skipIdx.ContainsKey($_.Idx) })
-                UI-Log ((T "{0} 没有退出，这次不搬：{1}") -f $who, (($skipped | ForEach-Object { $_.Name }) -join (T '、')))
-                if (-not $plan) { return }
-            } else {
-                UI-Log ((T "已同意退出 {0}，开始执行后会先关掉它们") -f $who)
-            }
-        }
-    }
-    # 搬家时还会关掉的其他程序（后台进程、从要搬的文件夹里运行的程序）：先说清楚，确认后后台只关这些
-    $allowed = @()
-    if ($moves) {
-        $cp = Get-ClosePlan @($moves | ForEach-Object { $cat0[$_.Idx] }) @($moves | ForEach-Object { @($cat0[$_.Idx].Apps) } | Where-Object { $_ } | Select-Object -Unique)
-        $agreed = @{}; if ($chatMoves -and $busy) { $defs = Get-ChatApps; foreach ($a in $busy) { foreach ($n in $cp.Names) { foreach ($pat in (@($defs[$a].P) + @($defs[$a].K))) { if ($pat -and $n -like $pat) { $agreed[$n] = $true } } } } }
-        $extra = @($cp.Names | Where-Object { -not $agreed.ContainsKey($_) })
-        $allowed = @($cp.Names)
-        if ($extra.Count -gt 0) {
-            $ans = Show-Sheet -Kind warn -Title (T '搬家时还要关掉这些程序') -Text ((T "这些程序正在使用要搬的文件夹：{0}。不关掉的话文件被占用，这几项搬不成。`n`n点「关掉并继续」会替你关掉它们，没保存的内容请先保存；点「不关」就先不碰它们，这几项复制好后会停在最后一步，下次再搬很快。") -f ($extra -join (T '、'))) `
-                -Buttons @((T '取消'), (T '不关'), (T '关掉并继续')) -Primary (T '关掉并继续') -Cancel (T '取消')
-            if ($ans -eq (T '取消')) { return }
-            if ($ans -eq (T '不关')) { $allowed = @($cp.Names | Where-Object { $agreed.ContainsKey($_) }) }
-        }
-    }
     # 每一行先标「等待」，执行时由后台逐行改成 进行中 / 完成 / 失败
     $sync.Status = [hashtable]::Synchronized(@{}); $sync.StatusVer = 0; $script:statusSeen = -1; $sync.RunSummary = $null; $sync.WaitCount = 0
     $planned = @{}; foreach ($x in $plan) { $planned[$x.Idx] = $true }
@@ -17656,7 +17661,7 @@ $ctl.BtnDupDelete.Add_Click({
     if ($risky)      { $msg += ((T "`n`n其中 {0} 个文件带有「注意」提示（程序目录或微信数据），请确认确实要删。") -f $risky) }
     $btnDel = if ($recycle) { (T '移到回收站') } else { (T '永久删除') }
     $ack = (T '我已确认这些文件删除后不会给我带来损失；因删除造成的后果由我自己承担。')
-    if ((Show-Sheet -Kind danger -Title ((T "删除 {0} 个重复文件，释放 {1}？") -f $plan.Count, (Fmt $bytes)) -Text $msg -Buttons @((T '取消'), $btnDel) -Primary $btnDel -Cancel (T '取消') -Confirm $ack) -ne $btnDel) { return }
+    if ((Show-Sheet -Kind danger -Title ((T "删除 {0} 个重复文件，释放 {1}？") -f $plan.Count, (Fmt $bytes)) -Text $msg -Buttons @((T '取消'), $btnDel) -Primary $btnDel -Destructive $(if ($recycle) { '' } else { $btnDel }) -Cancel (T '取消') -Confirm $ack) -ne $btnDel) { return }
     $sync.Mode = 'dupdel'; $sync.DupDeleted = $null
     Start-Op ((T "删除 {0} 个重复文件") -f $plan.Count)
     UI-Busy $true
@@ -19376,7 +19381,7 @@ function Start-MapDelete($sel) {
         if ($rows.Count -gt 40) { $items += ((T "……另有 {0} 项") -f ($rows.Count - 40)) }
     }
     $ans = Show-Sheet -Kind danger -Title $title -Text $text -Items $items `
-        -Confirm (T '我已确认这些资料不再需要，删除不会给我带来损失；因删除造成的后果由我自己承担。') -Buttons @((T '取消'), (T '永久删除'), (T '移到回收站')) -Primary (T '移到回收站') -Cancel (T '取消')
+        -Confirm (T '我已确认这些资料不再需要，删除不会给我带来损失；因删除造成的后果由我自己承担。') -Buttons @((T '取消'), (T '永久删除'), (T '移到回收站')) -Destructive (T '永久删除') -Primary (T '移到回收站') -Cancel (T '取消')
     if ($ans -ne (T '移到回收站') -and $ans -ne (T '永久删除')) { return }
     $sync.Mode = 'mapdel'; $sync.MapDel = $null
     $script:mapDelRows = $rows
@@ -21081,7 +21086,7 @@ $ctl.BtnAppsLeft.Add_Click({
     }
     $items = @($left | ForEach-Object { (T "{0}（{1}）") -f $_.Path, (Fmt $_.Bytes) })
     $ans = Show-Sheet -Kind danger -Title ((T "「{0}」留下了 {1} 个文件夹") -f $r.Name, $left.Count) -Text (T '这些文件夹以软件名命名，多半是卸载后剩下的设置和缓存。会移到回收站，需要的话还能恢复。') -Items $items `
-        -Confirm (T '我已确认这些是已卸载软件留下的，删除不会给我带来损失。') -Buttons @((T '先不删'), (T '移到回收站')) -Primary (T '移到回收站') -Cancel (T '先不删')
+        -Confirm (T '我已确认这些是已卸载软件留下的，删除不会给我带来损失。') -Buttons @((T '先不删'), (T '移到回收站')) -Primary (T '移到回收站') -Destructive '' -Cancel (T '先不删')
     if ($ans -ne (T '移到回收站')) { return }
     $sync.Mode = 'leftdel'; $sync.LeftRes = $null; $script:leftBatch = $false
     Start-Op ((T "清理「{0}」的残留") -f $r.Name); UI-Busy $true
@@ -21241,7 +21246,7 @@ $ctl.StartList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::Click
     if ($r.Kind -eq 'leftover') {
         if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return }
         $ans = Show-Sheet -Kind danger -Title ((T "把「{0}」移到回收站？") -f $r.Name) -Text ((T "{0}（{1}）。这只是猜测：名字对不上任何已装软件、没有程序在用、一个月没动过。先点「打开位置」看一眼里面是什么。移到回收站后还能恢复。") -f $r.Detail, $r.Size) `
-            -Confirm (T '我看过了，这是已卸载软件留下的，删除不会给我带来损失。') -Buttons @((T '先不删'), (T '移到回收站')) -Primary (T '移到回收站') -Cancel (T '先不删')
+            -Confirm (T '我看过了，这是已卸载软件留下的，删除不会给我带来损失。') -Buttons @((T '先不删'), (T '移到回收站')) -Primary (T '移到回收站') -Destructive '' -Cancel (T '先不删')
         if ($ans -ne (T '移到回收站')) { return }
         $x = Invoke-SafeRemove -Path $r.Detail -Scope leftover -How recycle -What (T '残留文件夹：移到回收站') -Detail $r.Size
         if ($x.Ok) { $script:startRows['leftover'].Remove($r) | Out-Null; Filter-StartRows; UI-Log ((T "残留文件夹已移到回收站：{0}") -f $r.Detail) }
@@ -21464,7 +21469,7 @@ function Start-BatchLeftover {
     $tb = [double]0; foreach ($r in $rows) { $tb += [double]$r.Key2 }
     $items = @($rows | ForEach-Object { (T "{0}（{1}）") -f $_.Detail, $_.Size })
     $ans = Show-Sheet -Kind danger -Title ((T "把选中的 {0} 个文件夹移到回收站？") -f $rows.Count) -Text ((T "共 {0}。这些只是猜测：名字对不上任何已装软件、没有程序在用、一个月没动过。拿不准的先点「打开位置」看一眼。移到回收站后还能恢复。") -f (Fmt $tb)) -Items $items `
-        -Confirm (T '我看过了，这些是已卸载软件留下的，删除不会给我带来损失。') -Buttons @((T '先不删'), (T '移到回收站')) -Primary (T '移到回收站') -Cancel (T '先不删')
+        -Confirm (T '我看过了，这些是已卸载软件留下的，删除不会给我带来损失。') -Buttons @((T '先不删'), (T '移到回收站')) -Primary (T '移到回收站') -Destructive '' -Cancel (T '先不删')
     if ($ans -ne (T '移到回收站')) { return }
     $sync.Mode = 'leftdel'; $sync.LeftRes = $null; $script:leftBatch = $true
     Start-Op ((T "把 {0} 个残留文件夹移到回收站") -f $rows.Count); UI-Busy $true

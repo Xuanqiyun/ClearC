@@ -472,7 +472,8 @@ $ctl.BtnLogHide.Add_Click({ Set-LogVisible $false })
 #   Kind：info 蓝色信息 / warn 橙色提醒 / danger 红色删除 / done 绿色完成
 function Show-Sheet {
     param([string]$Title, [string]$Text = '', [string[]]$Items = $null, [string[]]$Buttons = @((T '好')),
-          [string]$Primary = '', [string]$Cancel = '', [string]$Kind = 'info', [string]$Confirm = '', $Extra = $null)
+          [string]$Primary = '', [string]$Cancel = '', [string]$Kind = 'info', [string]$Confirm = '', $Extra = $null, [string]$Destructive = '')
+    $redGiven = $PSBoundParameters.ContainsKey('Destructive')   # [string] 参数没法是 $null，只能看有没有传
     if (-not $Primary) { $Primary = $Buttons[-1] }
     if (-not $Cancel)  { $Cancel = $Buttons[0] }
     if ($script:uiTest) { $script:uiSheets.Add(("{0}`n{1}" -f $Title, $Text)); return $Cancel }   # 界面自测：不弹对话框，当作点了取消
@@ -511,8 +512,13 @@ function Show-Sheet {
         $btn = New-Object System.Windows.Controls.Button
         $btn.Content = $b; $btn.Tag = $b; $btn.MinWidth = 88
         $btn.Padding = New-Object System.Windows.Thickness 16, 7, 16, 7; $btn.Margin = New-Object System.Windows.Thickness 8, 0, 0, 0
-        if ($b -eq $Primary) { $btn.Style = $win.FindResource($(if ($Kind -eq 'danger') { 'Danger' } else { 'Primary' })); $btn.IsDefault = $true }
+        # 红色只给真正删掉、找不回来的那个按钮：给了 -Destructive 就按它（空字符串表示没有红色按钮，比如只放进回收站）；
+        # 没给时照旧：danger 对话框的主按钮是红色
+        $red = if ($redGiven) { $Destructive -and $b -eq $Destructive } else { $Kind -eq 'danger' -and $b -eq $Primary }
+        if ($red) { $btn.Style = $win.FindResource('Danger') }
+        elseif ($b -eq $Primary) { $btn.Style = $win.FindResource('Primary') }
         else { $btn.Style = $win.FindResource('Secondary') }
+        if ($b -eq $Primary) { $btn.IsDefault = $true }
         if ($b -eq $Cancel) { $btn.IsCancel = $true }
         if ($Confirm -and $b -ne $Cancel) { $btn.IsEnabled = $false; [void]$script:sheetGuarded.Add($btn) }
         $btn.Add_Click({ $script:sheetResult = [string]$this.Tag; [System.Windows.Window]::GetWindow($this).Close() })

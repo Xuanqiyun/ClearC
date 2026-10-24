@@ -1638,7 +1638,7 @@ function Start-MapDelete($sel) {
         if ($rows.Count -gt 40) { $items += ((T "……另有 {0} 项") -f ($rows.Count - 40)) }
     }
     $ans = Show-Sheet -Kind danger -Title $title -Text $text -Items $items `
-        -Confirm (T '我已确认这些资料不再需要，删除不会给我带来损失；因删除造成的后果由我自己承担。') -Buttons @((T '取消'), (T '永久删除'), (T '移到回收站')) -Primary (T '移到回收站') -Cancel (T '取消')
+        -Confirm (T '我已确认这些资料不再需要，删除不会给我带来损失；因删除造成的后果由我自己承担。') -Buttons @((T '取消'), (T '永久删除'), (T '移到回收站')) -Destructive (T '永久删除') -Primary (T '移到回收站') -Cancel (T '取消')
     if ($ans -ne (T '移到回收站') -and $ans -ne (T '永久删除')) { return }
     $sync.Mode = 'mapdel'; $sync.MapDel = $null
     $script:mapDelRows = $rows
