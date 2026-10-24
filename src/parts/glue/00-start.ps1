@@ -9,6 +9,8 @@ $ErrorActionPreference = 'SilentlyContinue'
 $script:AppVersion = '3.5.2'
 $script:AppBuildStamp = ''   # 构建 exe 时由 build 脚本填上构建时间（UTC）：写进诊断信息和运行记录，反馈问题时好对上是哪一次构建的
 $script:startClock = [Diagnostics.Stopwatch]::StartNew()   # 记下启动各阶段用了多久，写进运行记录
+# 构建日期只有一个来源：exe 由构建脚本填上 AppBuildStamp；直接运行脚本时用脚本文件的修改日期
+try { $env:CLEANC_BUILT = $(if ($script:AppBuildStamp) { $script:AppBuildStamp.Substring(0, 10) } elseif ($PSCommandPath) { (Get-Item -LiteralPath $PSCommandPath).LastWriteTime.ToString('yyyy-MM-dd') } else { '' }) } catch {}
 # 系统文件夹从系统接口取，不信环境变量：环境变量是启动本工具的那个程序给的，普通权限就能改，
 # 而本工具以管理员身份运行 cmd、robocopy、icacls 这些系统程序。之后用到的 SystemRoot、SystemDrive 环境变量都是这里的值
 function Use-SystemPaths {

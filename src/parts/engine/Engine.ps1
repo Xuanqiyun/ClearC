@@ -19,7 +19,9 @@ function Use-SystemPaths {
 Use-SystemPaths
 $sys32 = [Environment]::SystemDirectory
 if (-not $sys32) { $sys32 = "$env:SystemRoot\System32" }
-$script:AppBuilt = [DateTime]'2026-10-24'   # 这一版的发布日期（发版时改）：系统时间比它还早，时钟肯定不对
+# 这一版的构建日期（系统时间比它还早，时钟肯定不对）：由主程序放进环境变量 CLEANC_BUILT，后台线程里也读得到；不用手改
+$script:AppBuilt = $null
+try { if ($env:CLEANC_BUILT) { $script:AppBuilt = [DateTime]::ParseExact($env:CLEANC_BUILT, 'yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture) } } catch {}
 function GB($b) { "{0:N2} GB" -f ([double]$b / 1GB) }
 function FreeC { (Get-PSDrive C).Free }
 function DirBytes($p) { [double][DirStat]::Measure([string]$p) }

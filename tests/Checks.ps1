@@ -90,9 +90,14 @@ $bOk = $true
 foreach ($bf in 'build.ps1', 'build-roslyn.ps1') { $bt = [IO.File]::ReadAllText((Join-Path $bdir $bf)); if ($bt -notmatch 'New-VersionedSources' -or $bt -notmatch '\$vs\.Launcher' -or $bt -notmatch '\$vs\.Manifest') { $bOk = $false } }
 $lt = [IO.File]::ReadAllText((Join-Path $bdir 'launcher.cs')); $mt = [IO.File]::ReadAllText((Join-Path $bdir 'app.manifest'))
 if ($bOk -and $lt -match 'AssemblyFileVersion\("0\.0\.0\.0"\)' -and $mt -match 'assemblyIdentity version="0\.0\.0\.0"') { Ok 'exe version comes from $script:AppVersion (build/version.ps1)' } else { Bad 'exe version must come from $script:AppVersion through build/version.ps1 (no hard-coded version in launcher.cs / app.manifest)' }
-# 发布日期（判断系统时钟往回走用）：发版时要改，一年没改就报
-$bm = [regex]::Match($src, "\`$script:AppBuilt = \[DateTime\]'(\d{4}-\d\d-\d\d)'")
-if (-not $bm.Success) { Bad 'release date $script:AppBuilt not found' } elseif (([DateTime]$bm.Groups[1].Value) -gt (Get-Date).AddDays(2) -or ([DateTime]$bm.Groups[1].Value) -lt (Get-Date).AddDays(-365)) { Bad ("release date {0} is in the future or more than a year old: update it when releasing" -f $bm.Groups[1].Value) } else { Ok ("release date {0}" -f $bm.Groups[1].Value) }
+# 版本号只有一个来源：$script:AppVersion（exe 的文件版本由构建脚本从它生成）。构建日期不再手写：exe 由构建脚本填 AppBuildStamp，
+# 直接运行脚本时用脚本文件的修改日期，经环境变量 CLEANC_BUILT 交给引擎（判断系统时钟往回走用）。CHANGELOG 里要有这一版
+$vm = [regex]::Match($src, "\`$script:AppVersion = '(\d+(?:\.\d+){1,3})'")
+$cl = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '../CHANGELOG.md'))
+if ($src -match "\`$script:AppBuilt = \[DateTime\]'\d") { Bad 'the build date is still written by hand ($script:AppBuilt = [DateTime]...)' }
+elseif ($src -notmatch '\$env:CLEANC_BUILT = ' -or $src -notmatch 'ParseExact\(\$env:CLEANC_BUILT') { Bad 'the build date must come from the build stamp or the script file (CLEANC_BUILT)' }
+elseif (-not $vm.Success -or $cl -notmatch ('(?m)^## ' + [regex]::Escape($vm.Groups[1].Value) + '\b')) { Bad ("CHANGELOG.md has no section for version {0}" -f $vm.Groups[1].Value) }
+else { Ok ("one version source ({0}), build date from the build" -f $vm.Groups[1].Value) }
 $miss = @($keys | Where-Object { -not $dict.ContainsKey($_) })
 if ($miss) { Bad ("{0} strings have no English translation, e.g. {1}" -f $miss.Count, ($miss | Select-Object -First 3) -join ' | ') } else { Ok "$($keys.Count) strings all translated" }
 $fmtBad = 0
