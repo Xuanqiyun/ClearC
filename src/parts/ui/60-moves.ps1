@@ -2,6 +2,11 @@
 # 搬家管理
 # ------------------------------------------------------------
 $script:moveRows = $null
+Register-BgJob 'movesize' -ReadOnly -Done {
+    $t = $sync.MoveTotal
+    if ($t -and $script:moveRows) { Set-DoneInfo ((T "共 {0} 个文件夹，其中 {1} 个正常，已经帮 C 盘腾出约 {2}。") -f $script:moveRows.Count, $t.Count, (Fmt $t.Bytes)) }
+    if ($script:candPending) { $script:runAfterCand = $true }
+}
 function Load-Moves {
     $script:movedTargets = $null
     $col = New-Object 'System.Collections.ObjectModel.ObservableCollection[MoveRow]'
@@ -22,7 +27,7 @@ function Load-Moves {
     Set-NavCount 'MovesTabDone' $col.Count
     Set-DoneInfo $(if ($col.Count -gt 0) { (T "共 {0} 个文件夹，正在统计大小…") -f $col.Count } else { (T '还没有搬过文件夹。') })
     if ($col.Count -gt 0 -and -not $script:worker) {
-        $sync.Mode = 'movesize'
+        Use-BgJob 'movesize'
         UI-Busy $true
         Start-Worker @'
 $tot = [double]0; $n = 0
@@ -74,6 +79,20 @@ $ctl.MovesTabCand.Add_Checked({ Set-CandGroup '' })
 foreach ($n in 'MNavChat', 'MNavApp', 'MNavOther', 'MNavBlocked') { $ctl[$n].Add_Checked({ Set-CandGroup ([string]$this.Tag) }) }
 $ctl.MovesTabDone.Add_Checked({ Set-MovesTab 'done' })
 
+Register-BgJob 'movescan' -Cancel look -ReadOnly -Done {
+    End-Op $(if ($sync.WasCancelled) { (T '已中途取消') } else { (T '完成') })
+    if ($sync.WasCancelled -or $null -eq $sync.CandResult) {
+        $script:candScanned = $false
+        $ctl.EmptyCandText.Text = (T '已取消。点右上角「刷新」重新看。')
+        Set-CandInfo (T '已取消，没有看完。')
+        if ($script:movesTab -eq 'cand') { $ctl.EmptyCand.Visibility = 'Visible' }
+    } else {
+        $script:storeChat = @($sync.CandStore)
+        $ctl.CandStoreText.Text = if ($script:storeChat.Count -gt 0) { (T "{0} 是从应用商店装的，由 Windows 管理，本工具不搬。可以在 Windows 设置 → 应用 → 已安装的应用 里点它右边的「…」→「移动」，连同数据换到其他盘（要这个应用支持）。") -f ($script:storeChat -join (T '、')) } else { '' }
+        Build-CandRows $sync.CandResult
+        Set-MovesTab $script:movesTab
+    }
+}
 function Start-CandScan {
     if ($script:worker) { return }
     $script:candPending = $false; $script:candScanned = $true
@@ -82,7 +101,7 @@ function Start-CandScan {
     if ($script:movesTab -eq 'cand') { $ctl.EmptyCand.Visibility = 'Visible' }
     Set-CandInfo (T '正在看 C 盘上还有什么能搬，统计大小要一会儿…')
     foreach ($k in 'MovesTabCand', 'MNavChat', 'MNavApp', 'MNavOther', 'MNavBlocked') { Set-NavCount $k 0 }
-    $sync.Mode = 'movescan'; $sync.CandResult = $null; $sync.CandStore = $null
+    Use-BgJob 'movescan'; $sync.CandResult = $null; $sync.CandStore = $null
     Start-Op (T '看看 C 盘上还有什么能搬') -NoCard
     UI-Busy $true
     Start-Worker @'
@@ -338,6 +357,32 @@ $script:cdragTimer.Add_Tick({
 })
 $ctl.BtnCandMove.Add_Click({ Start-MoveMany })
 
+Register-BgJob 'movemany' -Cancel movemany -Moves -Done {
+    $x = $sync.MmRes
+    $after = [double](FreeC); $freed = [math]::Max([double]0, [double]($after - $script:mmFreeC0))
+    $cx = [bool]$sync.WasCancelled
+    $cardWasOpen = ($ctl.Overlay.Visibility -eq 'Visible')
+    $head = (T "C 盘剩余：{0} → {1}，腾出了 {2}") -f (GB $script:mmFreeC0), (GB $after), (GB $freed)
+    if ($cx) { $head = (T '已中途取消：还没开始的项目都没做，已经做完的不会撤销。') + "`n" + $head }
+    $waitNote = ''
+    if ([int]$sync.WaitCount -gt 0) { $waitNote = (T "有 {0} 个文件夹已经复制好，但原文件夹还被别的程序占着，没换成链接。彻底退出相关的软件（包括右下角托盘图标）后再搬一次，会接着用复制好的副本，很快完成。") -f [int]$sync.WaitCount; $head += "`n" + $waitNote }
+    End-Op ($(if ($cx) { (T "已中途取消，腾出 {0}") } else { (T "完成，腾出 {0}") }) -f (GB $freed)) -KeepCard -headline $head -reportLines (Plan-Lines)
+    # 搬好的从「可以搬的」里去掉，其余的保留这次的结果
+    if ($x -and $x.Done -and $x.Done.Count -gt 0 -and $script:candList) {
+        $gone = @{}; foreach ($k in $x.Done) { $gone[[string]$k] = $true }
+        $keep = @($script:candList | Where-Object { $k = if ($_.Type -eq 'app') { 'a:' + ([string]$_.Location).ToLowerInvariant() } else { 'c:' + $_.Idx }; -not $gone.ContainsKey($k) })
+        Build-CandRows $keep
+        $script:candSeen = -1
+    }
+    if (-not $cardWasOpen) {
+        $lines = @(); if ($x -and $x.Summary) { $lines = @($x.Summary) }
+        $script:pendingDialog = @{ Title = $(if ($cx) { (T '已中途取消') } else { (T '搬家完成') }); Kind = $(if ($waitNote -or $cx) { 'warn' } else { 'done' }); Items = @($lines | Select-Object -First 22); Text = $head }
+    }
+    try { [System.Media.SystemSounds]::Asterisk.Play() } catch {}
+    $script:pageLoaded.apps = $false
+    $script:runAfterMoves = $true
+    Fill-DestChoices
+}
 # 勾选的一起搬：先确认（列出每一项、要关掉的软件），再逐项复制、核对、换成链接
 function Start-MoveMany {
     if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return }
@@ -382,7 +427,7 @@ function Start-MoveMany {
     foreach ($r in $sel) { $r.Status = (T '等待'); $r.StatusBrush = '#6E6E73' }
     $script:runPlan = @($plan | ForEach-Object { @{ Idx = $_.Key; Name = $_.Name } })
     $script:mmFreeC0 = [double](FreeC)
-    $sync.Mode = 'movemany'; $sync.MmRes = $null
+    Use-BgJob 'movemany'; $sync.MmRes = $null
     Start-Op ((T "搬 {0} 项到其他盘") -f $plan.Count); UI-Busy $true
     UI-Log ((T "搬家目标：{0}") -f $dest)
     Start-Worker @'
@@ -431,6 +476,19 @@ $sync.MmRes = @{ Summary = $summary; Done = $doneKeys; Moved = $moved }
 }
 
 $ctl.BtnMovesRefresh.Add_Click({ if (-not $script:worker) { $script:candPending = $true; Load-Moves } })
+Register-BgJob 'moveback' -Cancel moveback -Moves -Done {
+    $script:candScanned = $false; if ($ctl.PageMoves.Visibility -eq 'Visible') { $script:candPending = $true }
+    $x = $sync.MoveRes
+    $ok = $x -and $x.Ok
+    $back = ($sync.Mode -eq 'moveback')
+    $cx = $x -and $x.Cancelled -and -not $ok
+    End-Op $(if ($ok) { (T '完成') } elseif ($cx) { (T '已取消') } else { (T '没有完成') })
+    if ($ok) { $script:pendingDialog = @{ Title = $(if ($back) { (T '已搬回 C 盘') } else { (T '多余的副本已删除') }); Kind = 'done'; Text = $(if ($x.Msg) { $x.Msg } elseif ($back) { (T "搬回了 {0}，软件照常使用。") -f (Fmt $x.Bytes) } else { (T "腾出了 {0}。") -f (Fmt $x.Bytes) }) } }
+    else { $script:pendingDialog = @{ Title = $(if ($cx) { (T '已取消') } else { (T '没有完成') }); Kind = $(if ($cx) { 'info' } else { 'warn' }); Text = $(if ($x) { $x.Msg } else { '' }) } }
+    $script:runAfterMoves = $true
+    Fill-DestChoices
+}
+Register-BgJob 'movedrop' -Done (Get-BgJob 'moveback').Done
 $ctl.MovesList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent, [System.Windows.RoutedEventHandler]{
     param($s, $e)
     $b = $e.OriginalSource
@@ -451,7 +509,7 @@ $ctl.MovesList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::Click
                 -Text ((T "C 盘上的原文件夹 {0} 还在，软件用的是它；目标盘上的 {1} 是上次没搬完留下的副本。删掉它可以腾出目标盘的空间，C 盘不受影响。") -f $r.Src, $r.Dst) `
                 -Confirm (T '我已确认 C 盘上的原文件夹还在，删掉这份副本不会给我带来损失。') -Buttons @((T '取消'), (T '删除副本')) -Primary (T '删除副本') -Cancel (T '取消')
             if ($ans -ne (T '删除副本')) { return }
-            $sync.Mode = 'movedrop'; $sync.MoveRes = $null
+            Use-BgJob 'movedrop'; $sync.MoveRes = $null
             Start-Op (T '删除多余的副本'); UI-Busy $true
             Start-Worker @'
 SetP @{ Steps = 1; Step = 1; StepName = $arg.Rec.Dst; SubKind = 'action'; SubStart = (Get-Date) }
@@ -480,7 +538,7 @@ $res = @{}; Invoke-DropCopy $arg.Rec $res; $sync.MoveRes = $res
                     if ((Show-Sheet -Kind warn -Title ((T "需要先退出{0}") -f $who) -Text ((T "{0} 正在使用这个文件夹，不退出的话没法搬回。点「退出并继续」会替你关掉它们。") -f $who) -Buttons @((T '取消'), (T '退出并继续')) -Primary (T '退出并继续') -Cancel (T '取消')) -ne (T '退出并继续')) { return }
                 }
             }
-            $sync.Mode = 'moveback'; $sync.MoveRes = $null
+            Use-BgJob 'moveback'; $sync.MoveRes = $null
             Start-Op ((T "搬回 C 盘：{0}") -f $r.Name); UI-Busy $true
             Start-Worker @'
 SetP @{ Steps = 1; Step = 1; StepName = $arg.Rec.Src }

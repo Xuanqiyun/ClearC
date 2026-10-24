@@ -671,12 +671,13 @@ function Load-Save {
 $ctl.BtnSaveRefresh.Add_Click({ Load-Save })
 # ---------- OneDrive ----------
 $script:odInfo = $null
+Register-BgJob 'odinfo' -Cancel look -ReadOnly -Done { End-Op (T '完成'); Show-OneDriveInfo $sync.OdInfo }
 function Start-OneDriveInfo {
     $folders = @(Get-OneDriveFolders)
     if ($folders.Count -eq 0) { $ctl.SaveOdState.Text = (T '这台电脑上没有登录 OneDrive。'); $ctl.BtnOdFree.IsEnabled = $false; return }
     if ($script:worker) { return }
     $ctl.SaveOdState.Text = (T '正在统计 OneDrive 文件夹里有多少本地副本…'); $ctl.BtnOdFree.IsEnabled = $false
-    $sync.Mode = 'odinfo'; $sync.OdInfo = $null
+    Use-BgJob 'odinfo'; $sync.OdInfo = $null
     Start-Op (T '统计 OneDrive 本地副本') -NoCard; UI-Busy $true
     Start-Worker @'
 $sync.OdInfo = Get-OneDriveInfo
@@ -691,12 +692,18 @@ function Show-OneDriveInfo($i) {
     $ctl.SaveOdState.Text = $t
     $ctl.BtnOdFree.IsEnabled = ($i.Local -gt 0)
 }
+Register-BgJob 'odfree' -Cancel look -Done {
+    $x = $sync.OdRes
+    End-Op (T '完成')
+    if ($x) { $script:pendingDialog = @{ Title = (T '已标记为仅在线'); Kind = 'done'; Text = ((T "{0} 个文件（{1}）已改成仅在线{2}。OneDrive 会在后台释放本地空间，要等它同步一会儿。") -f $x.Done, (Fmt $x.Bytes), $(if ($x.Fail) { ((T "，{0} 个没改成（可能正被占用）") -f $x.Fail) } else { '' })) } }
+    $script:odWanted = $true
+}
 $ctl.BtnOdFree.Add_Click({
     $i = $script:odInfo
     if (-not $i -or $script:worker) { return }
     $ans = Show-Sheet -Title (T '把 OneDrive 里的本地副本都改成仅在线？') -Text ((T "本地有副本的 {0} 会改成「仅在线」：文件还在云端，资源管理器里照常显示，打开时自动下载。什么都不删。你设了「始终保留在此设备」的文件不动。`n`n改完由 OneDrive 自己在后台释放空间，要等它同步一会儿；断网时打不开这些文件。") -f (Fmt $i.Local)) -Buttons @((T '取消'), (T '改成仅在线')) -Primary (T '改成仅在线') -Cancel (T '取消')
     if ($ans -ne (T '改成仅在线')) { return }
-    $sync.Mode = 'odfree'; $sync.OdRes = $null
+    Use-BgJob 'odfree'; $sync.OdRes = $null
     Start-Op (T 'OneDrive 文件改成仅在线'); UI-Busy $true
     Start-Worker @'
 SetP @{ Steps = 1; Step = 1; StepName = 'OneDrive'; SubKind = 'none'; Detail = (T '逐个文件标记') }
@@ -720,10 +727,18 @@ foreach ($b in @($ctl.BtnRsOn, $ctl.BtnRsOff)) {
     })
 }
 # ---------- 组件存储分析 ----------
+Register-BgJob 'csanalyze' -ReadOnly -Done {
+    $x = $sync.CsRes
+    End-Op (T '完成')
+    if ($x -and $x.Ok) {
+        $rec = if ($x.Recommended -match '(?i)^(yes|是|true)') { (T '建议清理') } else { (T '不需要清理') }
+        $ctl.SaveCsState.Text = (T "当前：资源管理器显示 {0}，实际 {1}（其中和系统共用的 {2}），可回收的旧组件 {3} 个，上次清理 {4}。Windows 的判断：{5}。") -f $x.Reported, $x.Actual, $x.Shared, $x.Reclaimable, $x.LastCleanup, $rec
+    } else { $ctl.SaveCsState.Text = (T '没分析成。') + $(if ($x) { ' ' + (($x.Out -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -Last 2) -join ' ') } else { '' }) }
+}
 $ctl.BtnCsAnalyze.Add_Click({
     if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return }
     $ctl.SaveCsState.Text = (T '正在分析（DISM，要一两分钟）…')
-    $sync.Mode = 'csanalyze'; $sync.CsRes = $null
+    Use-BgJob 'csanalyze'; $sync.CsRes = $null
     Start-Op (T '分析组件存储') -NoCard; UI-Busy $true
     Start-Worker @'
 $sync.CsRes = Get-ComponentStoreInfo
@@ -818,6 +833,12 @@ $ctl.BtnRestoreOpen.Add_Click({
     try { Start-Process -FilePath "$env:SystemRoot\System32\SystemPropertiesProtection.exe" } catch { Show-Sheet -Kind warn -Title (T '打不开系统保护设置') -Text (Get-FriendlyError $_) | Out-Null }
 })
 $ctl.BtnGoDup.Add_Click({ Show-Page 'dup' })
+Register-BgJob 'compactos' -Done {
+    $x = $sync.CosRes
+    End-Op (T '完成')
+    if ($x) { $script:pendingDialog = @{ Title = (T '系统压缩完成'); Kind = 'done'; Text = ((T "C 盘可用空间变化：{0}{1}") -f $(if ($x.Delta -ge 0) { (T '多了 ') } else { (T '少了 ') }), (Fmt ([math]::Abs($x.Delta)))) } }
+    if ($ctl.PageSave.Visibility -eq 'Visible') { Load-Save }
+}
 foreach ($b in @($ctl.BtnCosOn, $ctl.BtnCosOff)) {
     $b.Add_Click({
         if ($script:worker) { return }
@@ -826,7 +847,7 @@ foreach ($b in @($ctl.BtnCosOn, $ctl.BtnCosOff)) {
         $x = if ($on) { (T 'Windows 会把系统文件压缩存放，通常省 2 到 4 GB。要 10 到 30 分钟，期间可以照常用电脑，不需要重启。') } else { (T '系统文件会解压回原样，C 盘会多用 2 到 4 GB。要 10 到 30 分钟。') }
         $btn = if ($on) { (T '开启') } else { (T '关闭') }
         if ((Show-Sheet -Title $t -Text $x -Buttons @((T '取消'), $btn) -Primary $btn -Cancel (T '取消')) -ne $btn) { return }
-        $sync.Mode = 'compactos'; $sync.CosRes = $null
+        Use-BgJob 'compactos'; $sync.CosRes = $null
         Start-Op $(if ($on) { (T '开启系统压缩') } else { (T '关闭系统压缩') }); UI-Busy $true
         Start-Worker @'
 SetP @{ Steps = 1; Step = 1; StepName = 'compact.exe'; SubKind = 'slow'; SubStart = (Get-Date); Detail = '' }
@@ -861,6 +882,33 @@ $ctl.BtnFolderCompress.Add_Click({
     $dlg.Description = (T '选择要压缩的文件夹')
     if ($dlg.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Start-FolderCompress $dlg.SelectedPath }
 })
+Register-BgJob 'vdisk' -Done {
+    $x = $sync.VdRes
+    End-Op (T '完成')
+    if ($x) {
+        $t = if ($x.After -lt $x.Before) { (T "{0} → {1}，省了 {2}。") -f (Fmt $x.Before), (Fmt $x.After), (Fmt ($x.Before - $x.After)) } else { (T "大小没有变化（{0}）。可能里面本来就没有可回收的空间，或者虚拟磁盘还在使用中。`n`n{1}") -f (Fmt $x.After), $x.Out }
+        $script:pendingDialog = @{ Title = (T '虚拟磁盘压缩完成'); Kind = $(if ($x.After -lt $x.Before) { 'done' } else { 'info' }); Text = $t }
+    }
+    Load-Save
+}
+Register-BgJob 'wslmove' -Done {
+    $x = $sync.WslRes
+    End-Op $(if ($x -and $x.Ok) { (T '已搬') } else { (T '没搬成') })
+    if ($x -and $x.Ok) { $script:pendingDialog = @{ Title = (T 'WSL 发行版已搬到其他盘'); Kind = 'done'; Text = (T '照常用 wsl 打开即可。') } }
+    elseif ($x -and $x.Old) { $script:pendingDialog = @{ Title = (T 'WSL 版本太旧'); Kind = 'warn'; Text = ((T "这个 WSL 还没有 --move 命令。在终端里运行 wsl --update 更新 WSL 后再试。`n`n{0}") -f $x.Out) } }
+    elseif ($x) { $script:pendingDialog = @{ Title = (T '没搬成'); Kind = 'warn'; Text = $x.Out } }
+    if ($ctl.PageSave.Visibility -eq 'Visible') { Load-Save }
+}
+Register-BgJob 'vmove' -Cancel move -Done {
+    $script:candScanned = $false; if ($ctl.PageMoves.Visibility -eq 'Visible') { $script:candPending = $true }
+    $res = $sync.VmRes
+    $ok = $res -and $res.Done -gt 0
+    $cx = $res -and $res.Cancelled -and -not $ok
+    End-Op $(if ($ok) { (T "已搬 {0}") -f (GB $res.Moved) } elseif ($cx) { (T '已取消') } else { (T '没搬成') })
+    $msg = if ($res -and $res.Msgs) { ($res.Msgs -join "`n") } else { '' }
+    $script:pendingDialog = @{ Title = $(if ($ok) { (T '搬好了') } elseif ($cx) { (T '已取消') } else { (T '没搬成') }); Kind = $(if ($ok) { 'done' } elseif ($cx) { 'info' } else { 'warn' }); Text = $(if ($ok) { (T "已搬到 {0}。原位置留了链接，软件照常使用。{1}") -f ($res.Dest -join (T '；')), $msg } else { $msg }) }
+    Load-Save; Fill-DestChoices
+}
 $ctl.VdList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent, [System.Windows.RoutedEventHandler]{
     param($s, $e)
     $b = $e.OriginalSource
@@ -877,7 +925,7 @@ $ctl.VdList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickEve
             }
             $extra = if ($r.Kind -eq 'wsl' -or $r.Kind -eq 'docker') { (T '压缩前会先关闭所有 WSL（wsl --shutdown），正在 WSL 里运行的程序会被结束。') } else { (T '用这个磁盘的虚拟机要先关掉。') }
             if ((Show-Sheet -Title ((T "压缩「{0}」？") -f $r.Name) -Text ((T "{0}`n`n现在 {1}。{2}压缩不会删除里面的任何数据，只把已经空出来的部分还给 Windows，可能要几分钟。") -f $r.Path, $r.SizeText, $extra) -Buttons @((T '取消'), (T '压缩')) -Primary (T '压缩') -Cancel (T '取消')) -ne (T '压缩')) { return }
-            $sync.Mode = 'vdisk'; $sync.VdRes = $null
+            Use-BgJob 'vdisk'; $sync.VdRes = $null
             Start-Op ((T "压缩虚拟磁盘：{0}") -f $r.Name); UI-Busy $true
             Start-Worker @'
 SetP @{ Steps = 1; Step = 1; StepName = (Split-Path $arg.Path -Leaf); SubKind = 'slow'; SubStart = (Get-Date); Detail = '' }
@@ -891,7 +939,7 @@ $res = @{}; Invoke-CompactVdisk $arg.Path $arg.Kind $res; $sync.VdRes = $res
                 $to = Join-Path (Join-Path $dest 'WSL') $r.Distro
                 $ans = Show-Sheet -Title ((T "把 WSL 发行版「{0}」搬到其他盘？") -f $r.Distro) -Text ((T "用 WSL 自己的命令（wsl --manage {0} --move）把它搬到 {1}，现在 {2}。搬之前会先关闭这个发行版，里面正在运行的程序会被结束，请先保存。搬完照常用 wsl 打开，不用改任何设置。需要 WSL 2.5 以后的版本（wsl --update 可以更新）。") -f $r.Distro, $to, $r.SizeText) -Buttons @((T '取消'), (T '搬')) -Primary (T '搬') -Cancel (T '取消')
                 if ($ans -ne (T '搬')) { return }
-                $sync.Mode = 'wslmove'; $sync.WslRes = $null
+                Use-BgJob 'wslmove'; $sync.WslRes = $null
                 Start-Op ((T "搬到其他盘：WSL {0}") -f $r.Distro); UI-Busy $true
                 Start-Worker @'
 SetP @{ Steps = 1; Step = 1; StepName = $arg.Distro; SubKind = 'slow'; SubStart = (Get-Date); Detail = '' }
@@ -909,7 +957,7 @@ OpLog '搬运' (T 'WSL 发行版搬到其他盘') $arg.Distro $(if ($res.Ok) { $
             if ($cp.Names.Count -gt 0) { $text += ((T "`n`n{0} 正在运行，搬之前会替你关掉它们（正在运行的模拟器或虚拟机会被结束）。") -f $cp.Text) }
             if ((Show-Sheet -Title ((T "把「{0}」搬到其他盘？") -f $r.Name) -Text $text -Buttons @((T '取消'), (T '搬')) -Primary (T '搬') -Cancel (T '取消')) -ne (T '搬')) { return }
             $item.Restrict = $true; $item.Allowed = @($cp.Names)
-            $sync.Mode = 'vmove'; $sync.VmRes = $null
+            Use-BgJob 'vmove'; $sync.VmRes = $null
             Start-Op ((T "搬到其他盘：{0}") -f $r.Name); UI-Busy $true
             Start-Worker @'
 New-Item -ItemType Directory -Path $arg.Dest -Force | Out-Null

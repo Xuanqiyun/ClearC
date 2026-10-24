@@ -500,10 +500,52 @@ $ctl.BtnCopyDiag.Add_Click({
     try { [System.Windows.Clipboard]::SetText((($info + $tail) -join "`r`n")); Show-CopyHint (T '已复制，可以粘贴到 GitHub 的问题（Issue）里') }
     catch { Show-CopyHint (T '复制失败，可以点「打开运行记录文件」再手动复制') }
 })
+# ---------- 后台任务登记 ----------
+# 每种后台任务在启动它的代码旁边登记一次，它的情况都写在这一处，取消、加锁、做完收尾都照登记的来：
+#   -Cancel    能不能中途取消。look = 只是查看，直接停；其余的先问一句（问什么见 Request-Cancel）。
+#              不写就是不能取消：要么很快做完（删除单个文件夹、卸载），要么停在一半不安全（系统压缩、压缩虚拟磁盘）
+#   -Stop      取消时还要额外停下的（比如查重复文件的比对）
+#   -ReadOnly  只读、只统计：不拿删除和搬家的锁（自动清理可以同时进行），不阻止睡眠，做完不用把旧的目录树作废。
+#              哪些算只读由安全测试第 46 节定死
+#   -Moves     会改搬家记录：做完再看一下「搬家管理」要不要显示
+#   -Done      做完以后在界面上收尾。在计时器里运行（点号调用，和以前直接写在那里一样）
+# 启动时写 Use-BgJob '名字'：没登记的任务直接报错，不会被当成别的任务收尾
+$script:jobs = @{}
+function Register-BgJob {
+    param([Parameter(Mandatory = $true, Position = 0)][string]$Mode, [string]$Cancel = '', [scriptblock]$Stop, [switch]$ReadOnly, [switch]$Moves, [scriptblock]$Done)
+    $script:jobs[$Mode] = @{ Mode = $Mode; Cancel = $Cancel; Stop = $Stop; ReadOnly = [bool]$ReadOnly; Moves = [bool]$Moves; Done = $Done }
+}
+function Get-BgJob([string]$Mode) {
+    if ($Mode -and $script:jobs.ContainsKey($Mode)) { return $script:jobs[$Mode] }
+    return $null
+}
+function Use-BgJob([string]$Mode) {
+    if (-not ($Mode -and $script:jobs.ContainsKey($Mode))) { throw "unregistered background job: $Mode" }
+    $sync.Mode = $Mode
+}
+
 # ---------- 检查扫描功能（自检）、检查新版本 ----------
+Register-BgJob 'selftest' -Cancel look -ReadOnly -Done {
+    $r = $sync.SelfTest
+    if (-not $r) { End-Op (T '没有完成') }
+    else {
+        $text = (@($r.Lines) -join "`r`n")
+        $file = Join-Path $script:appDir 'selftest.txt'
+        try { New-Item -ItemType Directory -Force -Path $script:appDir | Out-Null; [IO.File]::WriteAllText($file, $text, (New-Object Text.UTF8Encoding $true)) } catch {}
+        $copied = $true; try { [System.Windows.Clipboard]::SetText($text) } catch { $copied = $false }
+        $x = $r.Res
+        $sum = (T "{0} 项正常，{1} 项提醒，{2} 项有问题") -f $x.Pass, $x.Warn, $x.Fail
+        End-Op $(if ($r.Stopped) { (T '已中途停止') } else { $sum })
+        UI-Log ((T "检查扫描功能：{0}；结果存在 {1}") -f $sum, $file)
+        $msg = $sum + (T '。') + $(if ($copied) { (T '结果已经复制，可以粘贴到 GitHub 的问题（Issue）里。') } else { '' }) + "`n`n" + ((T "完整结果存在 {0}") -f $file)
+        if ($x.Fail -gt 0) { $msg += "`n`n" + (T '有问题的项目，扫描时会自动改用逐个文件夹扫描，不影响使用；把结果贴到 GitHub 的问题里可以帮助修好它。') }
+        $script:pendingDialog = @{ Title = (T '扫描功能检查完了'); Kind = $(if ($x.Fail -gt 0) { 'warn' } else { 'done' }); Text = $msg
+            Buttons = @((T '好'), (T '打开结果')); Primary = (T '打开结果'); Cancel = (T '好'); Then = { [void](Open-AsUser $file) }.GetNewClosure() }
+    }
+}
 $ctl.BtnSelfTest.Add_Click({
     if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return }
-    $sync.Mode = 'selftest'; $sync.SelfTest = $null
+    Use-BgJob 'selftest'; $sync.SelfTest = $null
     Start-Op (T '检查扫描功能')
     UI-Busy $true
     UI-Log (T '开始检查扫描功能')
@@ -512,9 +554,30 @@ $sync.SelfTest = Invoke-SelfTest $arg.Version
 '@ @{ Version = $script:AppVersion }
 })
 $script:releasePage = 'https://github.com/Xuanqiyun/ClearC/releases'
+Register-BgJob 'update' -ReadOnly -Done {
+    $u = $sync.Update
+    End-Op (T '完成')
+    if ($u -and $u.Ok -and -not ([string]$u.Tag).Trim()) { $u = @{ Ok = $false; Err = (T '返回的内容里没有版本号') } }   # 比如被网络登录页拦下来了
+    # 版本号补齐到四段再比（2.6 和 2.6.0 是同一个版本）
+    $norm = { param([string]$s) $v = $null; if ([version]::TryParse(([string]$s).Trim().TrimStart('v', 'V'), [ref]$v)) { New-Object Version ([math]::Max(0, $v.Major)), ([math]::Max(0, $v.Minor)), ([math]::Max(0, $v.Build)), ([math]::Max(0, $v.Revision)) } else { $null } }
+    $cur = & $norm $script:AppVersion
+    $new = if ($u -and $u.Ok) { & $norm $u.Tag } else { $null }
+    $url = if ($u -and $u.Url -and ([string]$u.Url).StartsWith('https://github.com/')) { [string]$u.Url } else { $script:releasePage }
+    $open = { Start-Process -FilePath "$env:SystemRoot\explorer.exe" -ArgumentList $url }.GetNewClosure()   # 用资源管理器打开：浏览器不会以管理员身份运行
+    if (-not $u -or -not $u.Ok) {
+        $script:pendingDialog = @{ Title = (T '没能检查新版本'); Kind = 'warn'; Text = ((T "连不上 GitHub：{0}`n`n可以直接打开下载页面看看。") -f $(if ($u) { $u.Err } else { '' }))
+            Buttons = @((T '好'), (T '打开下载页面')); Primary = (T '打开下载页面'); Cancel = (T '好'); Then = $open }
+    } elseif ($new -and $cur -and $new -gt $cur) {
+        $notes = @(([string]$u.Body -split "`r?`n") | Where-Object { $_ -match '^\s*[-*] ' } | Select-Object -First 6 | ForEach-Object { ($_ -replace '^\s*[-*]\s*', '' -replace '\*\*', '').Trim() })
+        $script:pendingDialog = @{ Title = ((T "有新版本 {0}") -f $u.Tag); Kind = 'info'; Text = ((T "现在用的是 {0}。下载页面会在浏览器里打开，下载新的 exe 替换现在这个就好，设置都会保留。") -f $script:AppVersion); Items = $notes
+            Buttons = @((T '以后再说'), (T '打开下载页面')); Primary = (T '打开下载页面'); Cancel = (T '以后再说'); Then = $open }
+    } else {
+        $script:pendingDialog = @{ Title = (T '已经是最新版本'); Kind = 'done'; Text = ((T "现在用的是 {0}，GitHub 上最新的是 {1}。") -f $script:AppVersion, $u.Tag) }
+    }
+}
 $ctl.BtnCheckUpdate.Add_Click({
     if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return }
-    $sync.Mode = 'update'; $sync.Update = $null
+    Use-BgJob 'update'; $sync.Update = $null
     Start-Op (T '检查新版本') -NoCard
     UI-Busy $true
     Start-Worker @'
@@ -754,15 +817,12 @@ function End-Op([string]$result, [switch]$KeepCard, [string]$headline = '', $rep
 }
 
 # ---------- 中途取消 ----------
-# 能中途取消的操作。look = 只是查看，不用确认；其余先问一句。
-# 不在这里的（删除单个文件夹、系统压缩、压缩虚拟磁盘、卸载、删除多余副本）要么很快做完，要么停在一半不安全
-$script:cancelModes = @{ scan = 'look'; apps = 'look'; dup = 'look'; map = 'look'
-    run = 'run'; dupdel = 'dupdel'; dupmove = 'dupdel'; similar = 'look'; merge = 'merge'; leftdel = 'leftdel'; fcompress = 'fcompress'; moveback = 'moveback'; vmove = 'move'; appmove = 'move'
-    movescan = 'look'; movemany = 'movemany'; mapdel = 'dupdel'; selftest = 'look'; odinfo = 'look'; leftovers = 'look'; odfree = 'look'; recent = 'look' }
+# 能不能取消、取消前问什么，写在各个任务登记的地方（Register-BgJob 的 -Cancel）
 $script:cancelUi = ''
 function Update-CancelUi {
     $m = [string]$sync.Mode
-    if (-not ($script:worker -and $script:op -and $m -and $script:cancelModes.ContainsKey($m))) {
+    $job = Get-BgJob $m
+    if (-not ($script:worker -and $script:op -and $job -and $job.Cancel)) {
         $ctl.OvCancel.Visibility = 'Collapsed'; $ctl.OpCancel.Visibility = 'Collapsed'; $script:cancelUi = ''; return
     }
     $state = if ($sync.Cancel) { 'pending' } elseif ($sync.P -and $sync.P.CanCancel -eq $false) { 'hold' } else { 'ready' }
@@ -785,9 +845,10 @@ function Request-Cancel {
     $w = $script:worker
     if (-not $w -or $sync.Cancel) { return }
     $m = [string]$sync.Mode
-    if (-not $script:cancelModes.ContainsKey($m)) { return }
+    $job = Get-BgJob $m
+    if (-not ($job -and $job.Cancel)) { return }
     if ($sync.P -and $sync.P.CanCancel -eq $false) { return }
-    $kind = $script:cancelModes[$m]
+    $kind = [string]$job.Cancel
     if ($kind -ne 'look') {
         $text = switch ($kind) {
             'run'       { (T "已经做完的项目不会撤销，还没开始的都不做了。`n`n正在做的这一项会停在安全的地方：清理会停下，已经删掉的不会回来；搬家如果还在复制，C 盘上的原文件夹不动，已复制的部分留在目标盘，下次再搬会接着复制；如果正在换成链接或运行系统命令，会等这一步做完再停。") }
@@ -808,12 +869,10 @@ function Request-Cancel {
     Update-CancelUi
 }
 function Set-CancelFlags {
-    $m = [string]$sync.Mode
+    $job = Get-BgJob ([string]$sync.Mode)
     $sync.Cancel = $true
-    if ($script:cancelModes.ContainsKey($m)) { [DirStat]::Cancel = $true; [DiskMap]::Cancel = $true }   # 读文件表、统计大小都停下
-    if ($m -eq 'dup' -or $m -eq 'dupdel' -or $m -eq 'merge') { [DupFinder]::Cancel = $true }
-    if ($m -eq 'map') { [DiskMap]::Cancel = $true }
-    if ($m -eq 'scan') { $script:oneClickPending = $false }
+    if ($job -and $job.Cancel) { [DirStat]::Cancel = $true; [DiskMap]::Cancel = $true }   # 读文件表、统计大小都停下
+    if ($job -and $job.Stop) { & $job.Stop }   # 各个任务自己还要停下的（查重复文件的比对……）
 }
 
 # 每 0.3 秒刷新一次：底部进度条和中间的卡片显示同样的内容
@@ -926,7 +985,6 @@ function Update-Op {
         $sf = if ($subFrac -ne $null) { $subFrac } else { 0 }
         $frac = [math]::Min(0.99, (($step - 1) + $sf) / [double]$p.Steps)
     }
-    elseif ($sync.Mode -eq 'hogs') { $stepLine = (T '统计 C 盘各目录的大小'); $what = (T '找出 C 盘上最占地方的文件夹和大文件，目录多时要几分钟。') }
     elseif ($sync.Mode -eq 'map') {
         $stepLine = (T "扫描 {0}") -f $sync.MapRoot
         if ([string][DiskMap]::Phase -eq 'mft') {
@@ -1018,8 +1076,6 @@ function UI-Busy($b) {
     Update-CandSel
 }
 
-# 只读、只统计的后台：不用拿锁，做完也不用把旧的目录树作废
-$script:readOnlyModes = @('scan', 'movescan', 'apps', 'map', 'movesize', 'dup', 'update', 'startup', 'winget', 'odinfo', 'csanalyze', 'leftovers', 'recent', 'similar', 'selftest')
 # 后台做完时：错误流里的，加上设了 SilentlyContinue 而只记在 $Error 里的（排查问题时最有用），都写进运行记录（界面上只显示前几条）
 function Write-WorkerErrors($w, [string]$mode) {
     try {
@@ -1031,13 +1087,15 @@ function Write-WorkerErrors($w, [string]$mode) {
     } catch {}
 }
 function Start-Worker([string]$code, $arg) {
-    # 会改东西的后台（删除、搬家、改设置……）先拿锁：定时的自动清理正在后台跑时，等它做完再开始
-    if ($script:readOnlyModes -notcontains [string]$sync.Mode -and -not (Enter-BusyLock)) {
+    # 会改东西的后台（删除、搬家、改设置……）先拿锁：定时的自动清理正在后台跑时，等它做完再开始。
+    # 只有登记成 -ReadOnly 的（只读、只统计）不用拿锁；没登记的照会改东西处理
+    $job = Get-BgJob ([string]$sync.Mode); $readOnly = [bool]($job -and $job.ReadOnly)
+    if (-not $readOnly -and -not (Enter-BusyLock)) {
         UI-Busy $false; End-Op (T '没有开始')
         Show-Sheet -Kind warn -Title (T '后台的自动清理正在运行') -Text (T '定时的自动清理正在后台清理缓存，通常一两分钟就做完。等它做完再试一次。') | Out-Null
         return
     }
-    if ($script:readOnlyModes -notcontains [string]$sync.Mode) { [void][FsTools]::KeepAwake($true) }   # 做完之前电脑不睡着
+    if (-not $readOnly) { [void][FsTools]::KeepAwake($true) }   # 做完之前电脑不睡着
     $sync.Cancel = $false; $sync.WasCancelled = $false; Set-CanCancel $true
     [DirStat]::Cancel = $false; [DupFinder]::Cancel = $false; [DiskMap]::Cancel = $false
     $rs = [runspacefactory]::CreateRunspace(); $rs.ApartmentState = 'STA'; $rs.ThreadOptions = 'ReuseThread'; $rs.Open()

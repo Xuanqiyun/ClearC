@@ -459,7 +459,7 @@ try { & {
     $fd = [regex]::Match($src, '(?s)function Fill-DestChoices\(.*?\r?\n\}').Value
     Check 'UX-2 the move target list uses these choices, and picking a USB disk by hand asks first' ($fd -match 'Get-DestChoices' -and $src -match 'function Confirm-PlugDest' -and ([regex]::Matches($src, 'Confirm-PlugDest ')).Count -ge 3)
     # ============ 13. 重复文件的删除也记进操作日志（3.6 安全评审） ============
-    $dw = [regex]::Match($src, "(?s)\`$sync\.Mode = 'dupdel'.*?'@ @\{ Plan").Value
+    $dw = [regex]::Match($src, "(?s)Use-BgJob 'dupdel'.*?'@ @\{ Plan").Value
     Check 'SEC-8 every duplicate that is deleted, or fails to delete, is written to the activity log' ($dw -match 'Invoke-SafeRemove -Item \$fi -Scope dup' -and $dw -match '-What \$how' -and $sr -match "(?s)\`$finish = \{.*?OpLog '删除' \`$What \`$Path")
     # ============ 14. 删除只有一个入口（3.6 架构评审） ============
     # 用语法树找出所有会删东西的调用，按所在的函数（或后台代码、事件处理）归类。删用户数据的只能是 Invoke-SafeRemove；
@@ -766,6 +766,36 @@ try { & {
     Check 'UX-12 both restarts save the state and the window restores it (only rows whose fingerprint still matches)' (([regex]::Matches($src, 'Save-ResumeState')).Count -ge 3 -and $src -match '(?s)function Restore-ResumeState.*?Get-ItemSig.*?Build-Rows' -and $src -match 'Restore-ResumeState; if \(-not \(Show-AccountMismatch\)\)')
     # ============ 45. 后台出的错都写进运行记录，不再悄悄吞掉（3.6 架构评审） ============
     Check 'ARC-4 when a background job ends, its error stream and the errors it swallowed ($Error) go to the run log' ($src -match '(?s)function Write-WorkerErrors.*?Streams\.Error.*?GetVariable\(''Error''\).*?Write-LogFile' -and $src -match 'Write-WorkerErrors \$w')
+    # ============ 46. 后台任务：能不能取消、是不是只读、做完怎么收尾，都在登记的那一处写着（3.6 架构评审） ============
+    $sAst = [System.Management.Automation.Language.Parser]::ParseInput($src, [ref]$null, [ref]$null)
+    $cmds = @($sAst.FindAll({ param($a) $a -is [System.Management.Automation.Language.CommandAst] }, $true))
+    $regs = @($cmds | Where-Object { $_.GetCommandName() -eq 'Register-BgJob' })
+    $regModes = @($regs | ForEach-Object { [string]$_.CommandElements[1].SafeGetValue() })
+    $useModes = @($cmds | Where-Object { $_.GetCommandName() -eq 'Use-BgJob' } | ForEach-Object { [string]$_.CommandElements[1].SafeGetValue() } | Sort-Object -Unique)
+    $inUse = { param($a) $f = $a.Parent; while ($f -and $f -isnot [System.Management.Automation.Language.FunctionDefinitionAst]) { $f = $f.Parent }; $f -and $f.Name -eq 'Use-BgJob' }
+    $bare = @($sAst.FindAll({ param($a) $a -is [System.Management.Automation.Language.AssignmentStatementAst] -and $a.Left.Extent.Text -eq '$sync.Mode' -and $a.Right.Extent.Text -ne '$null' }, $true) | Where-Object { -not (& $inUse $_) })
+    $noDone = @($regs | Where-Object { $_.Extent.Text -notmatch '-Done ' })
+    Check ("ARC-5 every background job starts through Use-BgJob and is registered once, with its finish step ({0} jobs)" -f $regModes.Count) ($regModes.Count -ge 35 -and $bare.Count -eq 0 -and @($regModes | Group-Object | Where-Object Count -gt 1).Count -eq 0 -and $noDone.Count -eq 0 -and @($useModes | Where-Object { $regModes -notcontains $_ }).Count -eq 0 -and @($regModes | Where-Object { $useModes -notcontains $_ }).Count -eq 0)
+    $tick = [regex]::Match($src, '(?s)if \(\$script:worker -and \$script:worker\.Handle\.IsCompleted\) \{.*?\r?\n        if \(\$script:closeWhenDone\)').Value
+    Check 'ARC-5 cancelling, the lock and the finish step read the registry; the separate mode tables and the long if/elseif chain are gone' ($src -notmatch '\$script:cancelModes' -and $src -notmatch '\$script:readOnlyModes' -and $tick -match '\. \$job\.Done' -and $tick -notmatch '\$sync\.Mode -eq' -and $tick -notmatch "-contains \[string\]\`$sync\.Mode" -and [regex]::Match($src, '(?s)function Request-Cancel.*?\r?\n\}').Value -match 'Get-BgJob' -and [regex]::Match($src, '(?s)function Start-Worker.*?\r?\n\}').Value -match 'Get-BgJob')
+    # 只读的任务不拿删除、搬家的锁（自动清理可以同时进行），所以哪些算只读由这条测试定死：新加的只读任务要在这里写上
+    $ro = @($regs | Where-Object { $_.Extent.Text -match '(?m)^Register-BgJob [^\r\n]*-ReadOnly\b' } | ForEach-Object { [string]$_.CommandElements[1].SafeGetValue() } | Sort-Object)
+    $roWant = @('apps', 'csanalyze', 'dup', 'leftovers', 'map', 'movescan', 'movesize', 'odinfo', 'recent', 'scan', 'selftest', 'similar', 'startup', 'update', 'winget')
+    Check ("ARC-5 only jobs that just look are read-only and skip the delete/move lock: {0}" -f ($ro -join ' ')) (($ro -join ' ') -eq ($roWant -join ' '))
+    $kinds = @($regs | ForEach-Object { if ($_.Extent.Text -match '(?m)^Register-BgJob [^\r\n]*-Cancel (\w+)') { $Matches[1] } } | Sort-Object -Unique)
+    $rc = [regex]::Match($src, '(?s)function Request-Cancel.*?\r?\n\}').Value
+    Check ("ARC-5 every way of cancelling has its own warning in the cancel sheet ({0})" -f ($kinds -join ' ')) ($kinds.Count -ge 5 -and @($kinds | Where-Object { $_ -ne 'look' -and $_ -ne 'move' -and $rc -notmatch ("'" + $_ + "' +\{") }).Count -eq 0)
+    $fdefs = @($sAst.FindAll({ param($a) $a -is [System.Management.Automation.Language.FunctionDefinitionAst] -and @('Register-BgJob', 'Use-BgJob', 'Get-BgJob') -contains $a.Name }, $true))
+    $savedMode = $sync.Mode
+    & {
+        foreach ($f in $fdefs) { . ([scriptblock]::Create($f.Extent.Text)) }
+        $script:jobs = @{}
+        Register-BgJob 'zz' -Cancel look -ReadOnly -Done { 'done' }
+        $threw = $false; try { Use-BgJob 'not-registered' } catch { $threw = $true }
+        Use-BgJob 'zz'
+        Check 'ARC-5 starting a job that is not registered stops right there; a registered one sets the mode' ($threw -and $sync.Mode -eq 'zz' -and (Get-BgJob 'zz').ReadOnly -and (& (Get-BgJob 'zz').Done) -eq 'done' -and $null -eq (Get-BgJob 'nope'))
+    }
+    $sync.Mode = $savedMode
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue

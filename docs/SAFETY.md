@@ -247,6 +247,7 @@ pwsh tests/Checks.ps1           # 翻译、对话框参数、目录库格式
 ### 改删除相关的代码时
 
 - 删用户能看到的文件和文件夹，只能调用 `Invoke-SafeRemove`（engine 里）。它按 `-Scope` 过 `Get-DeleteBlock`、`Get-DupBlock` 或 `Test-Personal`，本身是链接、上级是链接的不删（清理列表里的链接只拆链接），放进回收站前过 `Test-RecycleOk`，删完核对还在不在，写操作日志。`Safety.Tests.ps1` 第 14 节用语法树找出所有删除调用（后台代码的 here-string 也解析），除了入口，只有写在名单里的几处（本工具自己的临时文件、日志、快照，搬家的步骤，自测）可以删，数量也锁着。要加一处，先在名单里写明它删什么、为什么安全。
+- 新的后台任务：在启动它的代码旁边用 `Register-BgJob` 登记，启动时写 `Use-BgJob`。会删、会搬、会改设置的不要加 `-ReadOnly`：只读的不拿删除和搬家的锁，可以和定时的自动清理同时跑。哪些是只读由 `Safety.Tests.ps1` 第 46 节定死。
 - 新的搬动入口：先过 `Get-DeleteBlock`（或 `Test-Personal`）和 `IsLink`；确认框带勾选声明。
 - 新的目录库条目：路径用环境变量，有 `*` 才算通配；有代价的加 `confirm` 或 `careful`；跑一遍 `Safety.Tests.ps1`，§4 会检查它没指向盘根、系统根和个人文件夹。
 - 改了上面任何一条，在 `Safety.Tests.ps1` 对应段落加一条测试，再更新本文第二节那一行的状态。
