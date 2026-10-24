@@ -3984,6 +3984,24 @@ function Remove-LinksInside([string]$dir) {
     }
     return $n
 }
+# 系统命令（takeown、chkdsk）问「是/否」时，「是」的字母随系统语言变（英文、中文是 Y，德文 J，法文 O……）。
+# 从 takeown /? 里 /D 那一项的说明读：第一个用引号括起来的单个字母就是「是」。读不到用 Y
+function Get-YesFromHelp([string]$txt) {
+    if (-not $txt) { return '' }
+    $seg = [regex]::Match($txt, '(?ms)^\s*/D\s.*?(?=^\s*/[A-Za-z?]|\z)').Value
+    $m = [regex]::Matches($seg, '["\u201C\u201D\u201E\u00AB\u00BB\u2018\u2019'']\s*(\w)\s*["\u201C\u201D\u201E\u00AB\u00BB\u2018\u2019'']')
+    if ($m.Count -ge 2) { return $m[0].Groups[1].Value.ToUpperInvariant() }
+    return ''
+}
+$script:yesLetter = $null
+function Get-YesLetter {
+    if ($script:yesLetter) { return $script:yesLetter }
+    $y = ''
+    try { $y = Get-YesFromHelp ((& "$sys32\takeown.exe" /? 2>$null) -join "`n") } catch {}
+    if (-not $y) { $y = 'Y' }
+    $script:yesLetter = $y
+    return $y
+}
 # Windows.old：里面 Users\<user>\Application Data 这类是指向当前系统活目录的绝对路径链接，Remove-Item -Recurse（PowerShell 5.1）和 icacls /T 会跟进去。
 # 所以先把里面的链接全部拆掉，再夺权、再 rd（rd 对剩下的链接也只拆不跟）
 function Remove-WindowsOld {
@@ -3992,10 +4010,10 @@ function Remove-WindowsOld {
     if (IsLink $p) { Log (T '  C:\Windows.old 本身是链接，不删'); return }
     $links = Remove-LinksInside $p
     if ($links -gt 0) { Log ((T "  先拆掉了 Windows.old 里的 {0} 个链接（它们指向现在系统的文件夹，不能跟进去删）") -f $links) }
-    & "$env:SystemRoot\System32\takeown.exe" /F $p /R /A /D Y /SKIPSL 2>$null | Out-Null
+    & "$env:SystemRoot\System32\takeown.exe" /F $p /R /A /D (Get-YesLetter) /SKIPSL 2>$null | Out-Null
     $more = Remove-LinksInside $p
     if ($more -gt 0) { Log ((T "  夺权后又拆掉了 {0} 个链接") -f $more) }
-    & "$env:SystemRoot\System32\icacls.exe" $p /grant Administrators:F /T /C /L /Q 2>$null | Out-Null
+    & "$env:SystemRoot\System32\icacls.exe" $p /grant *S-1-5-32-544:F /T /C /L /Q 2>$null | Out-Null   # 管理员组按 SID 写：组名随系统语言变
     [void](Remove-LinksInside $p)
     $r = Invoke-SafeRemove -Path $p -Scope list -How delete -What (T '旧系统 Windows.old')
     if (-not $r.Ok) { Log ((T "  Windows.old 没删干净：{0}") -f $r.Why) }
@@ -5082,7 +5100,7 @@ function Get-FixCatalog {
     $s.sfcrepair  = @{ Name = (T '修复系统文件…'); Kind = 'fix'; Lvl = 0; Cmd = ('echo === DISM /RestoreHealth === & DISM /Online /Cleanup-Image /RestoreHealth & echo. & echo {0} & echo. & echo === sfc /scannow === & sfc /scannow' -f (T '上不了外网时 DISM 会报错（0x800f081f、0x800f0906），不要紧：接着运行的 sfc 用的是本机的备份，照样有效。')); Desc = (T '先 DISM /RestoreHealth 修好系统映像（可能要联网下载），再 sfc /scannow 把损坏的系统文件换成正常的。只动 Windows 自己的文件，不碰你的资料。十几分钟到半小时')
                       Confirm = (T "会运行 DISM /RestoreHealth 和 sfc /scannow：把损坏的系统文件换成正常的副本。这会改动系统文件（只动 Windows 自己的文件，不碰你的资料），DISM 可能要联网下载，一共要十几分钟到半小时，中途不要关窗口。`n`n可以先用「检查系统文件」看一眼有没有问题，再决定要不要修复。") }
     $s.chkscan    = @{ Name = (T '扫描 C 盘文件系统'); Kind = 'check'; Lvl = 0; Cmd = ('chkdsk {0} /scan' -f $sd); Desc = (T 'chkdsk /scan：在线扫描 C 盘的文件系统，不用重启、不锁盘。发现问题会提示下一步') }
-    $s.chkfix     = @{ Name = (T '下次开机检查并修复 C 盘…'); Kind = 'fix'; Lvl = 1; Reboot = $true; Cmd = ('echo Y| chkdsk {0} /f & echo. & echo {1}' -f $sd, ((T '重启电脑后会先检查 {0}，期间不要断电。不想检查了可以运行 chkntfs /x {0}') -f $sd)); Desc = (T 'chkdsk /f：安排在下次开机时检查并修复 C 盘的文件系统。开机会多花几分钟到一小时，期间不能断电。可以撤销')
+    $s.chkfix     = @{ Name = (T '下次开机检查并修复 C 盘…'); Kind = 'fix'; Lvl = 1; Reboot = $true; Cmd = ('echo {2}| chkdsk {0} /f & echo. & echo {1}' -f $sd, ((T '重启电脑后会先检查 {0}，期间不要断电。不想检查了可以运行 chkntfs /x {0}') -f $sd), (Get-YesLetter)); Desc = (T 'chkdsk /f：安排在下次开机时检查并修复 C 盘的文件系统。开机会多花几分钟到一小时，期间不能断电。可以撤销')
                       Confirm = (T "会安排在下次开机时检查并修复 C 盘（chkdsk /f）。开机时会先检查，可能要几分钟到一小时，期间不要断电、不要强制关机。`n`n如果硬盘可能在坏（蓝屏诊断说硬盘掉线、硬件页里硬盘健康报警），请先把重要资料备份出来再做：检查会大量读写硬盘。`n`n不想检查了，可以用「取消开机检查」撤销。") }
     $s.chkundo    = @{ Name = (T '取消开机检查'); Kind = 'fix'; Lvl = 1; Harmless = $true; Cmd = ('chkntfs /x {0} & echo. & echo {1}' -f $sd, ((T '已取消 {0} 的开机检查。') -f $sd)); Desc = (T 'chkntfs /x：撤销上面安排的开机检查') }
     $s.memtest    = @{ Name = (T 'Windows 内存诊断'); Kind = 'open'; Lvl = 0; Exe = "$sr\System32\mdsched.exe"; Desc = (T '打开 Windows 自带的内存诊断：选「立即重新启动并检查」或「下次启动时检查」，大约 15 分钟，结果在重启后右下角提示') }
