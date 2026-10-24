@@ -32,6 +32,16 @@ foreach ($a in $out) {
         if ($b -gt 0) { $a.Size = $b; $a.Measured = $true }
     }
 }
+# 在 C 盘上的：先判断能不能搬，不能的在列表里直接写原因（系统服务和驱动的路径只读一次）
+$svc = @(); try { $svc = @(Get-ServicePaths) } catch {}
+foreach ($a in $out) {
+    $a.MoveWhy = ''
+    $l = [string]$a.Location
+    if ($a.Kind -eq 'store') { $a.MoveWhy = (T '从应用商店装的，由 Windows 管理，本工具不能搬；有的可以在 Windows 设置的「已安装的应用」里换盘'); continue }
+    if (-not $l -or -not $l.StartsWith($env:SystemDrive, [StringComparison]::OrdinalIgnoreCase)) { continue }
+    try { $a.MoveWhy = [string](Get-AppMoveBlock $a $out $svc) } catch {}
+    if ($a.MoveWhy -eq 'store') { $a.MoveWhy = '' }
+}
 $sync.AppsResult = $out
 '@ $null
 }
@@ -72,7 +82,8 @@ function Build-AppRows($list) {
             if (-not $movedTo) { $up = Get-LinkedAncestor $a.Location; if ($up) { $t = LinkTarget $up; if ($t) { $movedTo = Join-Path $t.TrimEnd('\') $a.Location.Substring($up.Length).TrimStart('\') } } }
         }
         if ($movedTo) { $r.OnC = $false }
-        $r.CanMove = $r.OnC -and [bool]$a.Location
+        $r.CanMove = $r.OnC -and [bool]$a.Location -and -not $a.MoveWhy
+        if ($r.OnC -and $a.MoveWhy -and -not $movedTo) { $r.MoveWhy = [string]$a.MoveWhy }
         $d = ''
         if ($a.Date -match '^(\d{4})(\d{2})(\d{2})$') { $d = "{0}-{1}-{2}" -f $matches[1], $matches[2], $matches[3] }
         $r.Date = $d
@@ -152,7 +163,7 @@ $ctl.AppsList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickE
     }
     if ($b.Name -eq 'AppUpgrade') { Start-WingetUpgrade $r.UpgradeId $r.Name; return }
     if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return }
-    if ($b.Name -eq 'AppMove') { Start-AppMove $r; return }
+    if ($b.Name -eq 'AppMove' -or $b.Name -eq 'AppNoMove') { Start-AppMove $r; return }   # 「不能搬」点了也是说清楚为什么
     $txt = if ($r.Kind -eq 'store') { (T "从应用商店卸载 {0}（{1}）。") -f $r.Name, $r.SizeText } else { (T "会打开 {0} 自带的卸载程序，按它的提示一步步操作即可。卸载完回到这里点「检查残留」，看看还有没有剩下的文件夹。") -f $r.Name }
     if ((Show-Sheet -Kind warn -Title ((T "卸载「{0}」？") -f $r.Name) -Text ($txt + (T "`n`n卸载会删除这个软件，它保存在软件里的数据可能一起被删掉。")) -Buttons @((T '取消'), (T '卸载')) -Primary (T '卸载') -Cancel (T '取消')) -ne (T '卸载')) { return }
     if ($r.Kind -eq 'store') {

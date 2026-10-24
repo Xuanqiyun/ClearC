@@ -156,6 +156,8 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+从应用商店装的，由 Windows 管理，本工具不能搬；有的可以在 Windows 设置的「已安装的应用」里换盘	Installed from the Microsoft Store and managed by Windows, so ClearC cannot move it; some can be moved in Windows Settings under "Installed apps"
+不能搬	Can't move
 开始后会先替你关掉：{0}（包括屏幕右下角托盘里的）。开着的话文件被占用，搬家不会成功。关之前请确认没有正在发送或下载的文件，没保存的内容先保存；搬完照常打开，聊天记录和文件都在。	When it starts it first closes {0} for you (including from the system tray at the bottom right). While they are open the files are in use and the move cannot succeed. Before that, make sure nothing is being sent or downloaded and save any unsaved work; after the move, open them as usual and your chat history and files are all there.
 关掉并开始	Close and start
 先不搬{0}的	Don't move {0} now
