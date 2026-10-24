@@ -1450,6 +1450,8 @@
       <Border x:Name="CleanBar" VerticalAlignment="Top" HorizontalAlignment="Left" Background="#F5F5F7" Visibility="Collapsed">
         <StackPanel>
           <DockPanel Margin="0,0,0,8">
+            <Button x:Name="BtnCleanSkipTab" DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="这一类全部跳过" VerticalAlignment="Center" Margin="14,0,4,0"
+                    ToolTip="把这个选项卡里的项目都改成「跳过」；再点一次恢复默认的选择"/>
             <TextBlock x:Name="CleanTabInfo" DockPanel.Dock="Right" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="14,0,4,0"/>
             <Border Style="{StaticResource SegBox}" VerticalAlignment="Center">
               <WrapPanel x:Name="CleanTabs"/>

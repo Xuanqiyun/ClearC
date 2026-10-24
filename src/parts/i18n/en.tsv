@@ -156,6 +156,13 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+删除约 {0}	delete about {0}
+搬走约 {0}	move about {0}
+所有选项卡一共选了 {0} 项：{1}。	{0} items selected across all tabs: {1}.
+大小运行后才知道	sizes known after running
+这一类恢复默认	Restore defaults for this tab
+这一类全部跳过	Skip everything in this tab
+把这个选项卡里的项目都改成「跳过」；再点一次恢复默认的选择	Sets every item in this tab to "Skip"; click again to restore the default choices
 扫描完了	Scan finished
 C 盘上能放心删的缓存和临时文件不多（{0}）。下面的列表里有每一项的说明；左边的「空间地图」能看到是什么占着 C 盘。	There is not much cache or temporary data on C: that is safe to delete ({0}). The list below explains each item; Space map on the left shows what takes up C:.
 C 盘可以腾出约 {0}	About {0} can be freed on C:

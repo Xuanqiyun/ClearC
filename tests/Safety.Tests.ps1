@@ -670,6 +670,13 @@ try { & {
     # ============ 27. 第一次打开：同意后自动扫描，然后只给结论和一个主按钮（3.6 体验评审） ============
     Check 'UX-4 after agreeing the first time, the cleanup scan starts by itself' ($src -match "(?s)Write-LogFile \(T '用户已同意安全风险提示'\).*?\`$script:firstRun = \`$true.*?Do-Scan")
     Check 'UX-4 when that first scan finishes, one sheet gives the result and one main button (one-click cleanup)' ($src -match '(?s)function Show-FirstResult.*?Get-OneClickAction.*?Apply-OneClick.*?Invoke-RunSelected' -and $src -match 'if \(\$script:firstResult\) \{ \$script:firstResult = \$false; Show-FirstResult \}')
+    # ============ 28. 清理页：每个选项卡标出已选几项，合计分删除和搬走（3.6 体验评审） ============
+    $del = T '删除'; $mvA = T '搬到其他盘'; $sk = T '跳过'
+    $pr = @([pscustomobject]@{ Idx = 1; Action = $del; GroupTitle = 'A' }, [pscustomobject]@{ Idx = 2; Action = $sk; GroupTitle = 'A' }, [pscustomobject]@{ Idx = 3; Action = $mvA; GroupTitle = 'B' }, [pscustomobject]@{ Idx = 4; Action = (T '执行'); GroupTitle = 'B' })
+    $pt = Get-PlanTotals $pr @{ 1 = 100MB; 2 = 50MB; 3 = 2GB; 4 = 10MB }
+    Check 'UX-5 the totals are split into deleted and moved, and each tab knows how many of its items are selected' ($pt.N -eq 3 -and $pt.Del -eq (110MB) -and $pt.Move -eq 2GB -and $pt.Groups['A'].Sel -eq 1 -and $pt.Groups['A'].Cnt -eq 2 -and $pt.Groups['B'].Sel -eq 2)
+    $us = [regex]::Match($src, '(?s)function Update-CleanSummary.*?\r?\n\}').Value
+    Check 'UX-5 the tabs show selected/total, and a tab can be skipped as a whole' ($us -match 'Get-PlanTotals' -and $us -match 'Update-TabBadges' -and $src -match '(?s)\$ctl\.BtnCleanSkipTab\.Add_Click\(\{.*?GroupTitle\) -eq \$script:cleanTab')
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue

@@ -123,7 +123,7 @@ function Update-CleanMore {
 # ---------- 清理页：一类一个选项卡；表头点「名称」「大小」排序，下拉框只看某一种操作；选项卡和表头滚到顶上就停住 ----------
 $script:cleanTab = ''; $script:cleanOp = ''; $script:cleanPinned = $false; $script:cleanGroups = $null
 function Update-CleanTabs {
-    $ctl.CleanTabs.Children.Clear()
+    $ctl.CleanTabs.Children.Clear(); $script:cleanBadge = @{}
     $col = $script:rows
     $has = [bool]($col -and $col.Count -gt 0)
     foreach ($n in 'CleanBar', 'CleanBarSlot', 'CleanListCard') { $ctl[$n].Visibility = $(if ($has) { 'Visible' } else { 'Collapsed' }) }
@@ -143,7 +143,7 @@ function Update-CleanTabs {
         $rb.GroupName = 'cleantab'; $rb.Style = $seg; $rb.Tag = $g
         $sp = New-Object System.Windows.Controls.StackPanel; $sp.Orientation = 'Horizontal'
         $t1 = New-Object System.Windows.Controls.TextBlock; $t1.Text = $g
-        $t2 = New-Object System.Windows.Controls.TextBlock; $t2.Text = [string]$cnt[$g]; $t2.Style = $win.FindResource('TabBadgeText')
+        $t2 = New-Object System.Windows.Controls.TextBlock; $t2.Text = [string]$cnt[$g]; $t2.Style = $win.FindResource('TabBadgeText'); $script:cleanBadge[$g] = $t2
         $bd = New-Object System.Windows.Controls.Border; $bd.Style = $win.FindResource('TabBadge'); $bd.Child = $t2
         [void]$sp.Children.Add($t1); [void]$sp.Children.Add($bd); $rb.Content = $sp
         if ($ctl.CleanTabs.Children.Count -eq 0) { $rb.Uid = 'first' }
@@ -164,6 +164,7 @@ function Update-CleanTabs {
         foreach ($it in $ctl.CleanOpFilter.Items) { if ([string]$it.Tag -eq $script:cleanOp) { $ctl.CleanOpFilter.SelectedItem = $it } }
     } finally { $script:cleanOpLoading = $false }
     Apply-CleanFilter
+    $script:planSig = ''; Update-CleanSummary   # 选项卡上的「已选 / 一共」
 }
 # 只显示选中的那一类、选中的那种操作；排序（表头）不变
 function Apply-CleanFilter {
@@ -179,6 +180,7 @@ function Apply-CleanFilter {
         $ctl.CleanTabNote.Visibility = $(if ($ctl.CleanTabNote.Text) { 'Visible' } else { 'Collapsed' })
         $ctl.CleanTabInfo.Text = $(if ($script:cleanOp) { (T "显示 {0} / {1} 项") -f $n, $gi.Cnt[$script:cleanTab] } else { (T "{0} 项，约 {1}") -f $gi.Cnt[$script:cleanTab], (Fmt $gi.Bytes[$script:cleanTab]) })
     }
+    if ($script:cleanBadge.Count) { Update-TabBadges }
 }
 function Get-CleanSlotPos { try { return $ctl.CleanBarSlot.TransformToAncestor($ctl.CleanHost).Transform((New-Object System.Windows.Point 0, 0)) } catch { return $null } }
 function Select-CleanTab([string]$g) {
@@ -299,18 +301,45 @@ $ctl.BtnChatMove.Add_Click({
 $script:planSig = ''
 function Update-CleanSummary {
     if (-not $script:rows -or $script:worker -or -not $sync.Sizes) { return }
-    $tot = [double]0; $n = 0; $sig = ''
-    foreach ($r in $script:rows) {
-        $sig += [string]$r.Action
-        if ($r.Action -ne (T '跳过')) { $n++; $b = [double]$sync.Sizes[$r.Idx]; if ($b -gt 0) { $tot += $b } }
-    }
+    $sig = ''; foreach ($r in $script:rows) { $sig += [string]$r.Action + '|' }
     if ($sig -eq $script:planSig) { return }
     $script:planSig = $sig
-    $script:reclaim = $tot
+    $pt = Get-PlanTotals $script:rows $sync.Sizes
+    $script:reclaim = $pt.Del + $pt.Move
     UI-Status
-    $ctl.Summary.Text = if ($n -gt 0) { (T "已选 {0} 项，可释放约 {1}。") -f $n, (GB $tot) } else { (T '没有选中任何项目。') }
-    $ctl.BtnRun.IsEnabled = ($n -gt 0)
+    # 执行时处理的是所有选项卡里选了的，不只是眼前这一个：合计写清楚删多少、搬多少
+    $parts = @()
+    if ($pt.Del -gt 0) { $parts += ((T "删除约 {0}") -f (GB $pt.Del)) }
+    if ($pt.Move -gt 0) { $parts += ((T "搬走约 {0}") -f (GB $pt.Move)) }
+    $ctl.Summary.Text = if ($pt.N -gt 0) { (T "所有选项卡一共选了 {0} 项：{1}。") -f $pt.N, $(if ($parts) { $parts -join (T '，') } else { (T '大小运行后才知道') }) } else { (T '没有选中任何项目。') }
+    $ctl.BtnRun.IsEnabled = ($pt.N -gt 0)
+    Update-TabBadges $pt
 }
+# 选项卡上的小数字：选了几项 / 一共几项；「这一类全部跳过」按钮跟着当前选项卡变
+function Update-TabBadges($pt) {
+    if (-not $pt) { $pt = Get-PlanTotals $script:rows $sync.Sizes }
+    foreach ($g in @($script:cleanBadge.Keys)) {
+        $x = $pt.Groups[$g]; if (-not $x) { continue }
+        $script:cleanBadge[$g].Text = '{0}/{1}' -f $x.Sel, $x.Cnt
+    }
+    $cur = $pt.Groups[$script:cleanTab]
+    $ctl.BtnCleanSkipTab.Visibility = $(if ($cur) { 'Visible' } else { 'Collapsed' })
+    $ctl.BtnCleanSkipTab.Content = $(if ($cur -and $cur.Sel -eq 0) { (T '这一类恢复默认') } else { (T '这一类全部跳过') })
+}
+$script:cleanBadge = @{}
+$ctl.BtnCleanSkipTab.Add_Click({
+    if (-not $script:rows -or $script:worker) { return }
+    $mine = @($script:rows | Where-Object { [string]($_.GroupTitle) -eq $script:cleanTab })
+    $skip = T '跳过'
+    $any = @($mine | Where-Object { $_.Action -ne $skip }).Count -gt 0
+    $cat = @{}; foreach ($c in $catalog) { $cat[$c.Idx] = $c }
+    $noDest = -not (Test-DestOk)
+    foreach ($r in $mine) {
+        if ($any) { $r.Action = $skip }
+        else { $d = [string]$cat[$r.Idx].Def; if ($noDest -and $d -eq (T '搬到其他盘')) { $d = $skip }; if (@($r.Actions) -contains $d) { $r.Action = $d } }
+    }
+    $script:planSig = ''; Update-CleanSummary; Apply-CleanFilter
+})
 
 function Do-Scan([switch]$Quiet) {
     $ctl.Summary.Text = (T '正在扫描，一般几秒钟…')
