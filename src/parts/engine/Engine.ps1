@@ -2391,7 +2391,8 @@ function OpLog([string]$cat, [string]$what, [string]$target = '', [string]$detai
     $f = Join-Path $script:opLogDir ("操作日志-{0:yyyy-MM}.txt" -f $now)
     $c = { param($x) (([string]$x) -replace "[`t`r`n]+", ' ').Trim() }
     $line = "{0:yyyy-MM-dd HH:mm:ss}`t{1}`t{2}`t{3}`t{4}" -f $now, (& $c $cat), (& $c $what), (& $c $target), (& $c $detail)
-    for ($try = 0; $try -lt 5; $try++) {
+    $tries = if ([int]$script:opLogFailed -gt 0) { 1 } else { 5 }   # 已经写不进去过（多半是 C 盘满了）：不再每条都等半秒重试
+    for ($try = 0; $try -lt $tries; $try++) {
         try {
             if (-not (Test-Path -LiteralPath $script:opLogDir)) { New-Item -ItemType Directory -Path $script:opLogDir -Force | Out-Null }
             $enc = New-Object System.Text.UTF8Encoding $true
@@ -2400,8 +2401,20 @@ function OpLog([string]$cat, [string]$what, [string]$target = '', [string]$detai
             }
             [IO.File]::AppendAllText($f, $line + "`r`n", $enc)
             return
-        } catch { Start-Sleep -Milliseconds 120 }
+        } catch { if ($tries -gt 1) { Start-Sleep -Milliseconds 120 } }
     }
+    # 写不进去：记个数，告诉界面（后台线程通过 $sync），由界面告诉用户
+    $script:opLogFailed = [int]$script:opLogFailed + 1
+    try { if ($null -ne $sync) { $sync.OpLogFail = $line } } catch {}
+}
+# 本工具自己的文件夹（设置、操作日志、空间记录）现在能不能写：试着写一个小文件再删掉
+function Test-AppDirWritable([string]$dir) {
+    try {
+        if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force -ErrorAction Stop | Out-Null }
+        $p = Join-Path $dir ('.write-test-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+        [IO.File]::WriteAllText($p, 'ok'); [IO.File]::Delete($p)
+        return $true
+    } catch { return $false }
 }
 # 删除超过保存时间的日志（$months = 0 表示永久保存）。返回删掉的条数
 function Prune-OpLog([int]$months) {

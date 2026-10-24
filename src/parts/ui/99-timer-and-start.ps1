@@ -459,6 +459,7 @@ $timer.Add_Tick({
         if ($script:runAfterMoves) { $script:runAfterMoves = $false; Load-Moves }
         if ($script:runAfterCand) { $script:runAfterCand = $false; if (-not $script:worker) { Start-CandScan } }
         if ($script:candPending -and -not $script:worker -and $ctl.PageMoves.Visibility -eq 'Visible') { Start-CandScan }
+        if (-not $script:uiTest) { Show-WriteTrouble }   # 刚才的操作有没有写进操作日志
         if ($script:pendingDialog) {
             # 先清掉再弹，避免对话框打开期间定时器再弹一次
             $d = $script:pendingDialog; $script:pendingDialog = $null
@@ -762,7 +763,7 @@ $win.Add_ContentRendered({
     if ($script:riskShown) { return }
     $script:riskShown = $true
     $script:prefetchTimer.Start()
-    if (Test-Path -LiteralPath $script:riskFile) { Show-HalfMoves; Show-LooseMoves; Show-BrokenMoves; return }
+    if (Test-Path -LiteralPath $script:riskFile) { Show-WriteTrouble -Startup; Show-HalfMoves; Show-LooseMoves; Show-BrokenMoves; return }
     $ans = Show-Sheet -Kind warn -Title (T '使用前请先阅读安全风险提示') `
         -Text (T "本工具会按你的选择删除或搬移电脑上的文件。删除的文件可能无法恢复，存在资料丢失的风险。`n`n每次删除前，请确认这些资料确实不再需要、删除不会给你带来损失；重要资料请先备份。因使用本工具造成的资料丢失或其他损失，责任由使用者自行承担，开发者不承担责任。`n`n完整说明随时可以在左侧「帮助」里查看。") `
         -Confirm (T '我已阅读并了解上述风险，同意自行承担使用本工具的后果。') -Buttons @((T '退出'), (T '同意并继续')) -Primary (T '同意并继续') -Cancel (T '退出')
@@ -793,6 +794,21 @@ function Show-LooseMoves {
     Start-Worker @'
 $sync.AclRes = Repair-MovedAccess $arg.Items
 '@ @{ Items = $l }
+}
+# 本工具自己的记录写不进去（多半是 C 盘满了）：打开时、做完一件事后各查一次，说一次就不再说
+$script:writeTroubleShown = $false
+function Show-WriteTrouble([switch]$Startup) {
+    if ($script:writeTroubleShown) { return }
+    $kind = ''
+    if ($sync.OpLogFail -or [int]$script:opLogFailed -gt 0) { $kind = 'log' }
+    elseif ($Startup -and -not (Test-AppDirWritable $script:appDir)) { $kind = 'dir' }
+    if (-not $kind) { return }
+    $script:writeTroubleShown = $true
+    $free = Fmt ([double](FreeC))
+    $t = if ($kind -eq 'log') { (T "C 盘只剩 {0}，本工具的操作日志写不进去了：刚才删了、搬了什么，有的没有记下来。先腾出一点 C 盘空间（比如清空回收站），以后的操作才会记下来。") -f $free }
+         else { (T "C 盘只剩 {0}，本工具的设置、操作日志和空间记录都写不进去：改的设置不会保存，删了、搬了什么也记不下来。先腾出一点空间再用，比如清空回收站，或者用「一键清理」。") -f $free }
+    Write-LogFile $t
+    Show-Sheet -Kind warn -Title (T '本工具的记录写不进去') -Text $t | Out-Null
 }
 # 搬走过东西的（不管什么模式）：左边列出「搬家管理」，搬走的东西在哪、链接好不好都看得到。
 # 链接断了的（目标盘拔了、盘符变了）：打开时说一声，一天最多一次

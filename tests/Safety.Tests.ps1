@@ -482,6 +482,7 @@ try { & {
         'Install-TaskExe'       = 1   # 定时任务用的副本：核对不一致时删掉刚复制的临时文件
         'Remove-TaskExeIfUnused' = 2  # Program Files\ClearC 里本工具自己的副本
         'Set-Setting'           = 1   # 设置文件的临时文件
+        'Test-AppDirWritable'   = 1   # 试写本工具文件夹时写的小文件
         'Prune-OpLog'           = 1   # 一年前的操作日志
         'Update-Growth'         = 2   # 本工具自己的空间快照
         'Register-CleanTask'    = 1   # 注册任务用的临时 XML
@@ -640,6 +641,16 @@ try { & {
     Check 'SEC-4 not being able to read the encryption state is not an error' ($null -eq (Get-DriveEncrypted 'Q:') -or (Get-DriveEncrypted 'Q:') -eq $false)
     $rs = [regex]::Match($src, '(?s)function Invoke-RunSelected\(.*?\r?\n\}').Value
     Check 'SEC-4 the cleanup page, the move manager and app moves all add the warning to their confirmation' ($rs -match 'Get-EncryptionWarning \$dest' -and ([regex]::Matches($src, 'Get-EncryptionWarning \$')).Count -ge 3)
+    # ============ 23. C 盘满了、自己的记录写不进去时要说（3.6 运维评审） ============
+    $keepLog = $script:opLogDir
+    try {
+        $blocker = Join-Path $T 'not-a-folder'; [IO.File]::WriteAllText($blocker, 'x')
+        $script:opLogDir = Join-Path $blocker 'log'; $script:opLogFailed = 0; $sync.OpLogFail = $null
+        OpLog '删除' 'OPS-3 test' 'x' ''
+        Check 'OPS-3 an activity-log line that can not be written is counted and reported, not silently dropped' ($script:opLogFailed -eq 1 -and $sync.OpLogFail)
+        Check 'OPS-3 the app folder is checked for writing at startup' (-not (Test-AppDirWritable (Join-Path $blocker 'app')) -and (Test-AppDirWritable (Join-Path $T 'appdir-ok')))
+    } finally { $script:opLogDir = $keepLog; $script:opLogFailed = 0; $sync.OpLogFail = $null }
+    Check 'OPS-3 the window tells the user when the log or its own files could not be written' ($src -match '(?s)function Show-WriteTrouble.*?OpLogFail' -and ([regex]::Matches($src, 'Show-WriteTrouble')).Count -ge 3)
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue
