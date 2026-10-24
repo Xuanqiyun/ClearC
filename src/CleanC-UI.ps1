@@ -2952,6 +2952,13 @@ public static class FsTools {
             return (a >= 0 && b > a) ? s.Substring(a, b - a + 1) : "";
         } catch { return ""; }
     }
+    [DllImport("kernel32.dll")]
+    static extern uint SetThreadExecutionState(uint flags);
+    // 删除、搬家期间不让电脑自己睡着（屏幕照样可以关）：在一直活着的线程（界面线程）上调用；做完以后放开
+    public static bool KeepAwake(bool on) {
+        if (!Win) return false;
+        try { return SetThreadExecutionState(on ? 0x80000001u /*ES_CONTINUOUS|ES_SYSTEM_REQUIRED*/ : 0x80000000u /*ES_CONTINUOUS*/) != 0; } catch { return false; }
+    }
     // 一批文件、文件夹一起放进回收站（可恢复删除）。太大放不进回收站的由系统弹窗问，不会悄悄永久删除
     public static int RecycleMany(string[] paths) {
         if (paths == null || paths.Length == 0) return 0;
@@ -6798,6 +6805,20 @@ function Get-EncryptionWarning([string]$dest, $cEnc = 'ask', $dEnc = 'ask') {
     if (-not ($dEnc -is [bool]) -or $dEnc) { return '' }
     return ((T "C 盘用 BitLocker 加密了，{0} 盘没有：搬过去的聊天记录和文件在那块盘上不加密，电脑丢了或者硬盘被拆走，别人能直接读出来。介意的话，先给 {0} 盘打开 BitLocker（控制面板 →「BitLocker 驱动器加密」）再搬。") -f $dest.Substring(0, 1).ToUpperInvariant())
 }
+# 用电池时搬东西：要搬的多（2 GB 以上）或者电量低于 30%，确认框里加一句。$ps 是测试用的：@{ Battery = 在用电池; Percent = 0~1 }
+function Get-PowerNote([double]$bytes, $ps = $null) {
+    if ($null -eq $ps) {
+        try {
+            Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
+            $s = [System.Windows.Forms.SystemInformation]::PowerStatus
+            $ps = @{ Battery = ([string]$s.PowerLineStatus -eq 'Offline'); Percent = [double]$s.BatteryLifePercent }
+        } catch { return '' }
+    }
+    if (-not $ps.Battery) { return '' }
+    $pct = [int][math]::Round([double]$ps.Percent * 100)
+    if ($bytes -lt 2GB -and $pct -ge 30) { return '' }
+    return ((T "现在用的是电池（剩 {0}%）。搬家要一段时间，中途没电会停在一半（下次打开可以接着做完或撤回，数据不会丢），最好先插上电源。") -f $pct)
+}
 # 打开网页、文本文件、报告：交给资源管理器去开。本工具以管理员身份运行，直接开的话浏览器、记事本也是管理员身份，
 # 网页里的下载、记事本里的「另存为」都带着管理员权限。资源管理器把它交给当前登录用户的桌面，用普通权限打开
 function Open-AsUser([string]$target) {
@@ -7541,6 +7562,7 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+现在用的是电池（剩 {0}%）。搬家要一段时间，中途没电会停在一半（下次打开可以接着做完或撤回，数据不会丢），最好先插上电源。	The PC is on battery ({0}% left). Moving takes a while; if the battery runs out it stops halfway (next time you can finish or undo it, and no data is lost), so it is better to plug in first.
 C 盘只剩 {0}，本工具的操作日志写不进去了：刚才删了、搬了什么，有的没有记下来。先腾出一点 C 盘空间（比如清空回收站），以后的操作才会记下来。	C: has only {0} left and ClearC can no longer write its activity log: some of what was just deleted or moved was not recorded. Free a little space on C: first (for example empty the Recycle Bin) so later actions are recorded.
 C 盘只剩 {0}，本工具的设置、操作日志和空间记录都写不进去：改的设置不会保存，删了、搬了什么也记不下来。先腾出一点空间再用，比如清空回收站，或者用「一键清理」。	C: has only {0} left and ClearC cannot write its settings, activity log or space history: changed settings are not saved and what you delete or move is not recorded. Free a little space first, for example empty the Recycle Bin or use One-click cleanup.
 本工具的记录写不进去	ClearC cannot write its records
@@ -11022,6 +11044,7 @@ if ($script:mode -match '(?i)/selftest') {
 if ($script:mode -match '(?i)/autoclean') {
     if (-not (Enter-BusyLock)) { OpLog '删除' (T '这次自动清理跳过：本工具的窗口里正在删除或搬家') '' (T '下次到时间再做'); $global:CLEANC_UI_SHOWN = $true; return }
     [void](Prune-OpLog (Get-LogMonths))
+    [void][FsTools]::KeepAwake($true)   # 清完之前电脑不睡着（进程结束时自动放开）
     $r = Invoke-AutoClean
     Add-History
     OpLog '删除' (T '每周自动清理完成') '' ((T "C 盘多出 {0}；{1}") -f (GB $r.Freed), ($r.Items -join (T '；')))
@@ -16231,6 +16254,7 @@ function Start-Worker([string]$code, $arg) {
         Show-Sheet -Kind warn -Title (T '后台的自动清理正在运行') -Text (T '定时的自动清理正在后台清理缓存，通常一两分钟就做完。等它做完再试一次。') | Out-Null
         return
     }
+    if ($script:readOnlyModes -notcontains [string]$sync.Mode) { [void][FsTools]::KeepAwake($true) }   # 做完之前电脑不睡着
     $sync.Cancel = $false; $sync.WasCancelled = $false; Set-CanCancel $true
     [DirStat]::Cancel = $false; [DupFinder]::Cancel = $false; [DiskMap]::Cancel = $false
     $rs = [runspacefactory]::CreateRunspace(); $rs.ApartmentState = 'STA'; $rs.ThreadOptions = 'ReuseThread'; $rs.Open()
@@ -16762,7 +16786,11 @@ function Invoke-RunSelected([string]$title = (T '执行所选操作'), [object[]
     $total = [double]0; foreach ($x in $plan) { $total += $x.Bytes }
     $items = @($plan | ForEach-Object { (T "{0}　{1}") -f $_.Action, $_.Name })
     $text = (T "涉及约 {0}。大文件夹搬家可能要几十分钟，进度会显示在窗口中间，做完会告诉你结果。") -f (GB $total)
-    if ($moves) { $text += ((T "`n`n要搬的东西会放到 {0}。") -f $dest); $enc = Get-EncryptionWarning $dest; if ($enc) { $text += "`n`n" + $enc } }
+    if ($moves) {
+        $text += ((T "`n`n要搬的东西会放到 {0}。") -f $dest)
+        $enc = Get-EncryptionWarning $dest; if ($enc) { $text += "`n`n" + $enc }
+        $pw = Get-PowerNote $moveBytes; if ($pw) { $text += "`n`n" + $pw }
+    }
     # 有删除项时，必须勾选「确认不会带来损失」才能开始
     $dels = @($plan | Where-Object { $_.Action -eq (T '删除') })
     $ack = ''
@@ -19667,6 +19695,7 @@ function Start-MoveMany {
     if ($who) { $text += ((T "`n`n{0} 正在运行，搬之前会替你关掉（包括屏幕右下角托盘里的）。没保存的内容请先保存。") -f $who) }
     $text += (T "`n`n要注意：目标盘要一直接着；不要删除、改名或移动目标盘上的 CDriveMoved 文件夹。")
     $enc = Get-EncryptionWarning $dest; if ($enc) { $text += "`n`n" + $enc }
+    $pw = Get-PowerNote $total; if ($pw) { $text += "`n`n" + $pw }
     $items = @($sel | ForEach-Object { (T "{0}（{1}）") -f $_.Name, $_.SizeText })
     $btn = if ($who) { (T '关掉并搬走') } else { (T '搬到其他盘') }
     if ((Show-Sheet -Title ((T "把 {0} 项搬到其他盘？") -f $sel.Count) -Text $text -Items $items -Buttons @((T '取消'), $btn) -Primary $btn -Cancel (T '取消')) -ne $btn) { return }
@@ -20809,6 +20838,7 @@ function Start-AppMove($r) {
     if ($running.Count -gt 0) { $text += (T "`n`n{0} 正在运行，搬之前会替你关掉（没保存的内容请先保存）。") -f ($running -join (T '、')) }
     $text += (T "`n`n要注意：{0} 盘要一直接着；以后软件大版本升级时，个别安装程序会把它重新装回 C 盘，到时在这里再搬一次就好。要搬回来，到「搬家管理」点「搬回 C 盘」。") -f $dest.Substring(0, 1)
     $enc = Get-EncryptionWarning $dest; if ($enc) { $text += "`n`n" + $enc }
+    $pw = Get-PowerNote ([double]$r.Size); if ($pw) { $text += "`n`n" + $pw }
     $btn = if ($running.Count -gt 0) { (T '关掉并搬走') } else { (T '搬到其他盘') }
     if ((Show-Sheet -Title ((T "把「{0}」搬到其他盘？") -f $r.Name) -Text $text -Buttons @((T '取消'), $btn) -Primary $btn -Cancel (T '取消')) -ne $btn) { return }
     $item = @{ N = $r.Name; Paths = @($loc); Apps = @(); Kill = @(); KillDirs = @(); Restrict = $true; Allowed = @($running)
@@ -23213,7 +23243,7 @@ $timer.Add_Tick({
 
     if ($script:worker -and $script:worker.Handle.IsCompleted) {
         $w = $script:worker; $script:worker = $null
-        Exit-BusyLock
+        Exit-BusyLock; [void][FsTools]::KeepAwake($false)
         $script:movedTargets = $null
         try { $w.PS.EndInvoke($w.Handle) | Out-Null } catch { UI-Log ((T "后台出错：{0}") -f $($_.Exception.Message)) }
         foreach ($er in @($w.PS.Streams.Error | Select-Object -First 5)) { UI-Log ((T "后台出错：{0}") -f $er) }
