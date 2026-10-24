@@ -392,6 +392,15 @@ try { & {
     # ============ 9. 提权运行时不信任普通权限就能改的东西（3.6 安全评审） ============
     $launcher = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '../build/launcher.cs'))
     Check 'SEC-1 the launcher loads PowerShell only from the system, never from a path in an environment variable' ($launcher -notmatch 'CLEANC_SMA' -and $launcher -notmatch 'LoadFrom\(' -and $launcher -notmatch 'LoadFile\(')
+    $reg = [regex]::Match($src, '(?s)function Register-CleanTask.*?\r?\n\}').Value
+    $rep = [regex]::Match($src, '(?s)function Repair-AutoTasks.*?\r?\n\}').Value
+    Check 'SEC-2 scheduled tasks run the copy in Program Files (only admins can change it), never the exe the user started' ($reg -match 'Install-TaskExe' -and $reg -notmatch '<Command>\$\(\$esc::Escape\(\$exe\)\)' -and $src -match "GetFolderPath\('ProgramFiles'\)" -and $rep -notmatch '\$repoint')
+    if ($win) {
+        Check 'SEC-2 Program Files is not writable by ordinary users' (-not (Test-UserWritable ([Environment]::GetFolderPath('ProgramFiles'))))
+        $pub = Join-Path $T 'pubdir'; New-Item -ItemType Directory -Force -Path $pub | Out-Null
+        $acl = Get-Acl -LiteralPath $pub; $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule ((New-Object System.Security.Principal.SecurityIdentifier 'S-1-5-32-545'), 'Modify', 'Allow'))); Set-Acl -LiteralPath $pub -AclObject $acl
+        Check 'SEC-2 a folder where Users can write is refused for the task copy' (Test-UserWritable $pub)
+    } else { Skip 'SEC-2 folder permission checks' }
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue

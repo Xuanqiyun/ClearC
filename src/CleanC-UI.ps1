@@ -6389,6 +6389,57 @@ function Get-ModuleHolders([string]$dir) {
     }
     return ,@($out | Select-Object -Unique)
 }
+# 普通用户能不能往这个文件夹里写（Users、Authenticated Users、Everyone、Interactive 有写入、删除、改权限之类的权限）。
+# 读不到权限就当能写：拿不准的时候不信任它
+function Test-UserWritable([string]$dir) {
+    try {
+        $acl = [IO.Directory]::GetAccessControl($dir)
+        $w = [Security.AccessControl.FileSystemRights]::WriteData -bor [Security.AccessControl.FileSystemRights]::AppendData -bor [Security.AccessControl.FileSystemRights]::Delete -bor
+             [Security.AccessControl.FileSystemRights]::DeleteSubdirectoriesAndFiles -bor [Security.AccessControl.FileSystemRights]::ChangePermissions -bor [Security.AccessControl.FileSystemRights]::TakeOwnership -bor
+             [Security.AccessControl.FileSystemRights]::WriteAttributes -bor [Security.AccessControl.FileSystemRights]::WriteExtendedAttributes
+        foreach ($r in $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
+            if ($r.AccessControlType -ne [Security.AccessControl.AccessControlType]::Allow) { continue }
+            if ($r.PropagationFlags -band [Security.AccessControl.PropagationFlags]::InheritOnly) { continue }
+            if (@('S-1-5-32-545', 'S-1-5-11', 'S-1-1-0', 'S-1-5-4') -notcontains $r.IdentityReference.Value) { continue }
+            if (([int]$r.FileSystemRights -band [int]$w) -ne 0) { return $true }
+        }
+        return $false
+    } catch { return $true }
+}
+# 定时任务运行的那一份 exe：放在 Program Files\ClearC 里，只有管理员能改。任务以最高权限运行，
+# 要是指向下载文件夹这类普通权限就能改的地方，有人换掉那个 exe，到点就能不经确认拿到管理员权限
+function Get-TaskExePath { $pf = [Environment]::GetFolderPath('ProgramFiles'); if (-not $pf) { return '' }; return (Join-Path $pf 'ClearC\ClearC.exe') }
+# 把现在运行的 exe 复制成定时任务用的那一份（内容一样就不复制）；返回 @{ Path } 或 @{ Err }
+function Install-TaskExe {
+    $src = [string]$env:CLEANC_SELF; $dst = Get-TaskExePath
+    if (-not $src -or -not (Test-Path -LiteralPath $src)) { return @{ Err = (T '只有 exe 版本支持定时任务') } }
+    if (-not $dst) { return @{ Err = (T '找不到 Program Files 文件夹') } }
+    $dir = Split-Path $dst
+    try {
+        if ([IO.Path]::GetFullPath($src) -ieq [IO.Path]::GetFullPath($dst)) { return @{ Path = $dst } }   # 现在运行的就是这一份
+        if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+        if (Test-UserWritable $dir) { return @{ Err = ((T "{0} 的权限让普通用户也能改里面的文件，定时任务不能从这里运行。删掉这个文件夹后再开。") -f $dir) } }
+        $h = (Get-FileHash -LiteralPath $src -Algorithm SHA256).Hash
+        if ((Test-Path -LiteralPath $dst) -and (Get-FileHash -LiteralPath $dst -Algorithm SHA256).Hash -eq $h) { return @{ Path = $dst } }
+        $tmp = $dst + '.new'
+        [IO.File]::Copy($src, $tmp, $true)
+        if ((Get-FileHash -LiteralPath $tmp -Algorithm SHA256).Hash -ne $h) { [IO.File]::Delete($tmp); return @{ Err = (T '复制后核对不一致，没有改') } }
+        if (Test-Path -LiteralPath $dst) { [IO.File]::Replace($tmp, $dst, $null) } else { [IO.File]::Move($tmp, $dst) }
+        OpLog '系统设置' (T '复制本工具给定时任务用') $dst ((T "来自 {0}") -f $src)
+        return @{ Path = $dst }
+    } catch { return @{ Err = ((T "没能把本工具复制到 {0}：{1}") -f $dir, $_.Exception.Message) } }
+}
+# 两个任务都关了：删掉 Program Files 里那一份（正在运行的就是它时不删）
+function Remove-TaskExeIfUnused {
+    $dst = Get-TaskExePath
+    if (-not $dst -or -not (Test-Path -LiteralPath $dst)) { return }
+    if ([string]$env:CLEANC_SELF -and [IO.Path]::GetFullPath([string]$env:CLEANC_SELF) -ieq $dst) { return }
+    try {
+        [IO.File]::Delete($dst)
+        $d = Split-Path $dst; if (@(Get-ChildItem -LiteralPath $d -Force -ErrorAction SilentlyContinue).Count -eq 0) { [IO.Directory]::Delete($d) }
+        OpLog '系统设置' (T '删除定时任务用的那一份本工具') $dst ''
+    } catch {}
+}
 # 让搬过去的文件夹和原来在 C 盘时的访问权限一样（Program Files 里只有管理员能改，其他盘默认所有用户都能改）
 function Set-DirAccess([string]$dir, [string]$sddl) {
     try {
@@ -7026,6 +7077,17 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+不用开着本工具，也不用设置开机启动。开启后会在 Windows「任务计划程序」里建一个任务（{0}）：每次登录电脑 2 分钟后、以及每天中午 12 点，Windows 会在后台运行一下本工具检查 C 盘，空间够就什么都不显示，查完马上退出。关掉开关就删除这个任务。\n任务运行的是复制到 {1} 的那一份（那里只有管理员能改，别人换不掉它）；两个开关都关掉后这一份会删掉。	ClearC does not need to stay open or start with Windows. Turning this on creates a task in Windows Task Scheduler ({0}): 2 minutes after each sign-in and every day at noon, Windows runs ClearC in the background to check C:. If there is enough space nothing is shown and it exits right away. Turning the switch off deletes the task.\nThe task runs the copy placed in {1} (only administrators can change it, so nobody can swap it); the copy is removed when both switches are off.
+改成从 Program Files 里那一份运行（那里只有管理员能改）	Run the copy in Program Files instead (only administrators can change it)
+Program Files 里那一份不在了，重新复制	The copy in Program Files was missing; copied again
+换成新版本 {0}	Updated to version {0}
+找不到 Program Files 文件夹	The Program Files folder was not found
+{0} 的权限让普通用户也能改里面的文件，定时任务不能从这里运行。删掉这个文件夹后再开。	The permissions on {0} let ordinary users change the files in it, so the scheduled task cannot run from there. Delete this folder and turn it on again.
+复制后核对不一致，没有改	The copy did not match after copying, so nothing was changed
+复制本工具给定时任务用	Copied ClearC for the scheduled tasks
+来自 {0}	From {0}
+没能把本工具复制到 {0}：{1}	Could not copy ClearC to {0}: {1}
+删除定时任务用的那一份本工具	Removed the copy of ClearC used by the scheduled tasks
 深色适合在暗的环境里用；跟随系统会照 Windows 设置里「选择应用模式」来。换了以后本工具会关闭，再自动打开。	Dark suits dim surroundings; Follow Windows uses the "Choose your app mode" setting in Windows. After a change ClearC closes and opens again.
 应用	Apply
  · 点方块在下面的列表里找到这一行，勾上的方块会描边；双击进入	 · Clicking a block finds its row in the list below; checked rows get an outline; double-click to enter
@@ -10036,7 +10098,7 @@ $script:helpEnXaml = @'
                       <TextBlock DockPanel.Dock="Left" Text="&#xE946;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Top" Margin="0,3,14,0"/>
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="Both are off by default"/>
-                        <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>Once turned on, Windows Task Scheduler runs ClearC on time. Keep ClearC in a permanent place.</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>Turning one on copies ClearC to C:\Program Files\ClearC, and Windows Task Scheduler runs it from there on time. The copy is removed when both are off.</Run></TextBlock>
                       </StackPanel>
                     </DockPanel>
                   </Border>
@@ -14343,7 +14405,7 @@ if ($script:mode -match '(?i)/autoclean') {
                       <TextBlock DockPanel.Dock="Left" Text="&#xE946;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Top" Margin="0,3,14,0"/>
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="默认都关着"/>
-                        <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>打开后由 Windows 的任务计划程序按时运行本工具，请把本工具放在固定的位置。</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>打开后会把本工具复制一份到 C:\Program Files\ClearC，由 Windows 的任务计划程序从那里按时运行；两个都关掉后这一份会删掉。</Run></TextBlock>
                       </StackPanel>
                     </DockPanel>
                   </Border>
@@ -20682,7 +20744,9 @@ function Get-ExeVersion([string]$path) { try { return [version]([Diagnostics.Fil
 function Register-CleanTask([string]$name, [string]$desc, [string]$argsText, [string]$trigger) {
     $exe = [string]$env:CLEANC_SELF
     if (-not $exe -or -not (Test-Path -LiteralPath $exe)) { return (T '只有 exe 版本支持定时任务') }
-    if (Test-TempPath $exe) { return ((T "本工具现在是从临时文件夹运行的（{0}），比如直接在压缩包里双击打开的。这个位置过后会被清掉，任务就找不到本工具了。`n`n请先把本工具复制到一个固定的位置（比如 D:\工具），从那里打开，再开启。") -f $exe) }
+    $inst = Install-TaskExe
+    if ($inst.Err) { return $inst.Err }
+    $taskExe = [string]$inst.Path
     $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
     $esc = [Security.SecurityElement]
     $xml = @"
@@ -20699,7 +20763,7 @@ function Register-CleanTask([string]$name, [string]$desc, [string]$argsText, [st
     <ExecutionTimeLimit>PT1H</ExecutionTimeLimit>
     <Enabled>true</Enabled>
   </Settings>
-  <Actions Context="Author"><Exec><Command>$($esc::Escape($exe))</Command><Arguments>$argsText</Arguments></Exec></Actions>
+  <Actions Context="Author"><Exec><Command>$($esc::Escape($taskExe))</Command><Arguments>$argsText</Arguments></Exec></Actions>
 </Task>
 "@
     $tmp = Join-Path $env:TEMP ("cleanc-task-{0}.xml" -f (Get-Random))
@@ -20723,10 +20787,14 @@ function Enable-AutoTask([bool]$isRemind) {
             else { $d = $days[$when]; if (-not $d) { $d = 'Sunday' }; "<CalendarTrigger><StartBoundary>2026-01-04T12:30:00</StartBoundary><ScheduleByWeek><DaysOfWeek><$d/></DaysOfWeek><WeeksInterval>1</WeeksInterval></ScheduleByWeek></CalendarTrigger>" }
     return (Register-CleanTask $script:taskClean (T '腾挪 ClearC：定期自动清理临时文件、缓存和日志（不搬家、不清空回收站、不碰个人文件夹）。在工具的「自动提醒」页关掉开关即可删除本任务。') '/autoclean' $trig)
 }
-# 打开工具时检查一次：本工具挪了位置、或者任务是旧版本建的（提醒没有「登录后检查」），就按现在的位置和设置重建
+# 打开工具时检查一次（这时本工具是以管理员身份打开的，你确认过）：
+#   旧版本建的任务指向你自己放 exe 的地方 → 改成 Program Files 里那一份；
+#   Program Files 里那一份不在了、或者比现在打开的这个旧 → 换成现在这个；
+#   提醒任务是旧版本建的（没有「登录后检查」）→ 按现在的设置重建
 function Repair-AutoTasks {
     $exe = [string]$env:CLEANC_SELF
-    if (-not $exe -or -not (Test-Path -LiteralPath $exe) -or (Test-TempPath $exe)) { return }
+    $dst = Get-TaskExePath
+    if (-not $exe -or -not (Test-Path -LiteralPath $exe) -or -not $dst) { return }
     $myVer = Get-ExeVersion $exe
     foreach ($isRemind in @($true, $false)) {
         $tn = if ($isRemind) { $script:taskRemind } else { $script:taskClean }
@@ -20734,21 +20802,20 @@ function Repair-AutoTasks {
         try { $raw = (& "$env:SystemRoot\System32\schtasks.exe" /Query /TN $tn /XML 2>$null) -join "`n"; if ($LASTEXITCODE -eq 0 -and $raw) { $x = [xml]$raw } } catch {}
         if (-not $x) { continue }
         $cmd = [string]$x.Task.Actions.Exec.Command
-        $noLogon = $isRemind -and -not $x.Task.Triggers.LogonTrigger
-        $repoint = $false
-        if ($cmd -and $cmd -ine $exe) {
-            # 只在原来那个 exe 不在了、或者比现在这个旧的时候才改用现在这个，别的副本（比如下载文件夹里的另一份）不抢
-            $oldExists = Test-Path -LiteralPath $cmd
-            $oldVer = if ($oldExists) { Get-ExeVersion $cmd } else { $null }
-            $repoint = (-not $oldExists) -or ($myVer -and $oldVer -and $myVer -gt $oldVer)
-        }
-        if ($repoint -or ($noLogon -and $cmd -ieq $exe)) {
-            $err = Enable-AutoTask $isRemind
-            if (-not $err) { OpLog '系统设置' (T '更新任务计划') $tn $(if ($repoint) { ((T "改用 {0}（原来的 {1} 不在了或版本更旧）") -f $exe, $cmd) } else { (T '加上「登录电脑后检查」') }) }
-        }
+        $why = ''
+        if ($cmd -ine $dst) { $why = (T '改成从 Program Files 里那一份运行（那里只有管理员能改）') }
+        elseif (-not (Test-Path -LiteralPath $dst)) { $why = (T 'Program Files 里那一份不在了，重新复制') }
+        else { $v = Get-ExeVersion $dst; if ($myVer -and $v -and $myVer -gt $v) { $why = ((T "换成新版本 {0}") -f $myVer) } }
+        if (-not $why -and $isRemind -and -not $x.Task.Triggers.LogonTrigger) { $why = (T '加上「登录电脑后检查」') }
+        if (-not $why) { continue }
+        $err = Enable-AutoTask $isRemind
+        if (-not $err) { OpLog '系统设置' (T '更新任务计划') $tn $why }
     }
 }
-function Remove-CleanTask([string]$name) { & "$env:SystemRoot\System32\schtasks.exe" /Delete /TN $name /F 2>$null | Out-Null }
+function Remove-CleanTask([string]$name) {
+    & "$env:SystemRoot\System32\schtasks.exe" /Delete /TN $name /F 2>$null | Out-Null
+    if (-not (Test-CleanTask $script:taskRemind) -and -not (Test-CleanTask $script:taskClean)) { Remove-TaskExeIfUnused }
+}
 $script:autoSync = $false
 # 选项卡上的开关状态：开着是绿色的「已开启」，关着是灰色的「已关闭」
 function Set-TabState($badge, $text, [bool]$on) {
@@ -20770,11 +20837,8 @@ function Load-Auto {
     $ctl.AutoJunkGB.SelectedIndex = $idx
     $idx = [array]::IndexOf(@('sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'daily'), (Get-Setting 'CleanWhen' 'sun')); if ($idx -lt 0) { $idx = 0 }
     $ctl.AutoCleanWhen.SelectedIndex = $idx
-    $where = (T "不用开着本工具，也不用设置开机启动。开启后会在 Windows「任务计划程序」里建一个任务（{0}）：每次登录电脑 2 分钟后、以及每天中午 12 点，Windows 会在后台运行一下本工具（{1}）检查 C 盘，空间够就什么都不显示，查完马上退出。关掉开关就删除这个任务。`n请把本工具放在固定的位置，不要删掉；挪了位置后打开一次，任务会自动改用新位置。")
-    $ctl.AutoRemindNote.Text = if ($hasExe) { $where -f $script:taskRemind, $exe } else { (T '只有 exe 版本支持自动提醒。') }
-    $moved = ''
-    foreach ($t in @($script:taskRemind, $script:taskClean)) { if (Test-CleanTask $t) { $c = Get-TaskCommand $t; if ($c -and $hasExe -and ($c -ine $exe)) { $moved = (T '本工具的位置变了，请把开关关掉再打开一次，让任务改用现在的位置。') } } }
-    if ($moved) { $ctl.AutoRemindNote.Text += "`n" + $moved }
+    $where = (T "不用开着本工具，也不用设置开机启动。开启后会在 Windows「任务计划程序」里建一个任务（{0}）：每次登录电脑 2 分钟后、以及每天中午 12 点，Windows 会在后台运行一下本工具检查 C 盘，空间够就什么都不显示，查完马上退出。关掉开关就删除这个任务。`n任务运行的是复制到 {1} 的那一份（那里只有管理员能改，别人换不掉它）；两个开关都关掉后这一份会删掉。")
+    $ctl.AutoRemindNote.Text = if ($hasExe) { $where -f $script:taskRemind, (Get-TaskExePath) } else { (T '只有 exe 版本支持自动提醒。') }
     $last = ''
     foreach ($row in (Read-OpLog)) { if ($row.What -in @('每周自动清理完成', (T '每周自动清理完成'))) { $last = (T "上次自动清理：{0}，{1}") -f $row.Time, $row.Detail; break } }
     $ctl.AutoCleanNote.Text = if ($hasExe) { ((T "任务名：{0}。") -f $script:taskClean) + $(if ($last) { "`n$last" } else { '' }) } else { (T '只有 exe 版本支持每周自动清理。') }
@@ -20848,7 +20912,7 @@ foreach ($sw in @($ctl.AutoRemindOn, $ctl.AutoCleanOn)) {
         $err = Enable-AutoTask $isRemind
         if ($isRemind) { $what = (T '开启空间不足提醒'); $tn = $script:taskRemind } else { $what = (T '开启每周自动清理'); $tn = $script:taskClean }
         if ($err) { Show-Sheet -Kind warn -Title (T '没开成') -Text $err | Out-Null; Load-Auto; return }
-        OpLog '系统设置' $what $tn ((T "任务计划：{0}") -f [string]$env:CLEANC_SELF)
+        OpLog '系统设置' $what $tn ((T "任务计划：{0}") -f (Get-TaskExePath))
         Load-Auto
     })
     $sw.Add_Unchecked({
@@ -22918,7 +22982,7 @@ function Ask-EnableRemind {
     if ($ans -ne (T '开启提醒')) { return }
     $err = Enable-AutoTask $true
     if ($err) { Show-Sheet -Kind warn -Title (T '没开成') -Text $err | Out-Null; return }
-    OpLog '系统设置' (T '开启空间不足提醒') $script:taskRemind ((T "任务计划：{0}") -f $exe)
+    OpLog '系统设置' (T '开启空间不足提醒') $script:taskRemind ((T "任务计划：{0}") -f (Get-TaskExePath))
     Show-Sheet -Kind done -Title (T '提醒已开启') -Text (T '在「自动提醒」页可以改提醒的界限，或者关掉。') | Out-Null
 }
 

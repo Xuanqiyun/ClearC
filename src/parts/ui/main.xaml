@@ -3934,7 +3934,7 @@
                       <TextBlock DockPanel.Dock="Left" Text="&#xE946;" FontFamily="{StaticResource Icons}" FontSize="16" Foreground="#0071E3" VerticalAlignment="Top" Margin="0,3,14,0"/>
                       <StackPanel>
                         <TextBlock Style="{StaticResource HelpLead}" Text="默认都关着"/>
-                        <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>打开后由 Windows 的任务计划程序按时运行本工具，请把本工具放在固定的位置。</Run></TextBlock>
+                        <TextBlock Style="{StaticResource HelpBody}" MaxWidth="Infinity"><Run>打开后会把本工具复制一份到 C:\Program Files\ClearC，由 Windows 的任务计划程序从那里按时运行；两个都关掉后这一份会删掉。</Run></TextBlock>
                       </StackPanel>
                     </DockPanel>
                   </Border>
