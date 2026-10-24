@@ -1417,7 +1417,7 @@ $ctl.BtnMapReport.Add_Click({
     if (-not $dlg.ShowDialog($win)) { return }
     $win.Cursor = [System.Windows.Input.Cursors]::Wait
     try { $html = New-MapReport; [IO.File]::WriteAllText($dlg.FileName, $html, (New-Object Text.UTF8Encoding $true)) }
-    catch { $win.Cursor = $null; Show-Sheet -Kind warn -Title (T '没能保存') -Text $_.Exception.Message | Out-Null; return }
+    catch { $win.Cursor = $null; Show-Sheet -Kind warn -Title (T '没能保存') -Text (Get-FriendlyError $_) | Out-Null; return }
     finally { $win.Cursor = $null }
     UI-Log ((T "空间地图：报告已保存到 {0}") -f $dlg.FileName)
     $ans = Show-Sheet -Kind done -Title (T '报告已保存') -Text ((T "{0}`n`n用浏览器打开就能看；想要 PDF，在浏览器里按 Ctrl+P，打印机选「另存为 PDF」。") -f $dlg.FileName) -Buttons @((T '打开所在位置'), (T '打开报告')) -Primary (T '打开报告') -Cancel (T '打开所在位置')
@@ -1447,7 +1447,7 @@ $ctl.BtnMapExport.Add_Click({
         }
     }
     try { [IO.File]::WriteAllLines($dlg.FileName, $lines.ToArray(), (New-Object Text.UTF8Encoding $true)) }
-    catch { Show-Sheet -Kind warn -Title (T '没能保存') -Text $_.Exception.Message | Out-Null; return }
+    catch { Show-Sheet -Kind warn -Title (T '没能保存') -Text (Get-FriendlyError $_) | Out-Null; return }
     UI-Log ((T "空间地图：已导出 {0} 行到 {1}") -f $list.Count, $dlg.FileName)
     $ans = Show-Sheet -Kind done -Title (T '已导出') -Text ((T "{0:N0} 行，已保存到：`n{1}") -f $list.Count, $dlg.FileName) -Buttons @((T '打开所在位置'), (T '好')) -Primary (T '好') -Cancel (T '好')
     if ($ans -eq (T '打开所在位置')) { Open-Location $dlg.FileName }

@@ -747,6 +747,13 @@ try { & {
     # ============ 42. 软件列表显示软件自己的图标（3.6 体验评审） ============
     Check 'UX-15 the app list reads each app''s own icon (DisplayIcon), a few at a time, and keeps the letter when there is none' ($engineText -match 'IconFile = ' -and $src -match '(?s)function Get-AppIconImage.*?ExtractAssociatedIcon.*?CreateBitmapSourceFromHIcon' -and $src -match '<Image Source="\{Binding IconImage\}"' -and $src -match 'function Start-AppIcons' -and $src -match 'public object IconImage')
     Check 'UX-15 the icon path is only read from the app''s own registry entry and only from exe, dll or ico files' ([regex]::Match($src, '(?s)function Get-AppIconImage.*?\r?\n\}').Value -match '\\\.\(exe\|dll\|ico\)\$')
+    # ============ 43. 出错时先说下一步怎么办，系统原话放在后面（3.6 体验评审） ============
+    $e1 = Get-FriendlyError (New-Object System.UnauthorizedAccessException 'Access to the path is denied.')
+    $e2 = Get-FriendlyError (New-Object System.IO.IOException ('The process cannot access the file because it is being used by another process.', -2147024864))
+    $e3 = Get-FriendlyError (New-Object System.IO.FileNotFoundException 'Could not find file x')
+    $e4 = Get-FriendlyError 'something odd'
+    Check 'UX-14 common errors are put into words with a next step (no permission, file in use, not found), the original message stays at the end' ($e1 -ne $e2 -and $e2 -ne $e3 -and $e1 -match 'Access to the path is denied' -and $e1.IndexOf('Access to the path') -gt 10 -and $e4 -match 'something odd')
+    Check 'UX-14 the dialogs that used to show the raw system message use it' ($src -notmatch '-Text \$_\.Exception\.Message' -and ([regex]::Matches($src, 'Get-FriendlyError \$_')).Count -ge 11)
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue

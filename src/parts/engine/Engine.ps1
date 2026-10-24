@@ -3388,6 +3388,23 @@ function Get-TaskRunInfo([string]$name) {
         return (Format-TaskRunInfo $info.LastRunTime ([long]$info.LastTaskResult) $info.NextRunTime)
     } catch { return '' }
 }
+# 出错时给人看的话：先说是什么情况、下一步怎么办，系统的原话放在最后（反馈问题时用得上）。$err 可以是异常、错误记录或一句话
+function Get-FriendlyError($err) {
+    $ex = if ($err -is [System.Management.Automation.ErrorRecord]) { $err.Exception } elseif ($err -is [Exception]) { $err } else { $null }
+    while ($ex -and $ex.InnerException -and ($ex -is [System.Management.Automation.MethodInvocationException] -or $ex -is [System.Reflection.TargetInvocationException])) { $ex = $ex.InnerException }
+    $msg = if ($ex) { [string]$ex.Message } else { [string]$err }
+    $hr = if ($ex) { $ex.HResult } else { 0 }
+    $tip = ''
+    if ($ex -is [UnauthorizedAccessException] -or $hr -eq -2147024891) { $tip = (T '没有权限：这个文件或设置被系统保护，或者正被别的程序占着。关掉相关的程序再试；还不行就重启电脑后再试。') }
+    elseif ($hr -eq -2147024864 -or $hr -eq -2147024863) { $tip = (T '文件正被别的程序使用：关掉打开着它的程序（包括右下角托盘里的）再试。') }
+    elseif ($ex -is [IO.FileNotFoundException] -or $ex -is [IO.DirectoryNotFoundException] -or $hr -eq -2147024894 -or $hr -eq -2147024893) { $tip = (T '找不到这个文件或文件夹：它可能已经被删了、改名了或者搬走了。刷新一下再看。') }
+    elseif ($hr -eq -2147024784 -or $hr -eq -2147024857) { $tip = (T '磁盘空间不够：先在别处腾出一点空间再试。') }
+    elseif ($ex -is [IO.PathTooLongException] -or $hr -eq -2147024690) { $tip = (T '路径太长：把这个文件夹挪到浅一点的位置，或者给它起个短一点的名字再试。') }
+    elseif ($ex -is [TimeoutException]) { $tip = (T '等了太久没有回应：过一会儿再试。') }
+    else { $tip = (T '没做成。可以再试一次；还不行的话，在「帮助」→「反馈和新版本」里复制诊断信息，提交问题时附上。') }
+    if (-not $msg) { return $tip }
+    return ($tip + "`n`n" + (T '系统的原话：') + $msg)
+}
 # 打开网页、文本文件、报告：交给资源管理器去开。本工具以管理员身份运行，直接开的话浏览器、记事本也是管理员身份，
 # 网页里的下载、记事本里的「另存为」都带着管理员权限。资源管理器把它交给当前登录用户的桌面，用普通权限打开
 function Open-AsUser([string]$target) {

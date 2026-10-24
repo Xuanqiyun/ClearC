@@ -156,6 +156,14 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+没有权限：这个文件或设置被系统保护，或者正被别的程序占着。关掉相关的程序再试；还不行就重启电脑后再试。	No permission: the file or setting is protected by Windows or held by another program. Close the related programs and try again; if that does not help, restart the PC and try again.
+文件正被别的程序使用：关掉打开着它的程序（包括右下角托盘里的）再试。	The file is in use by another program: close the program that has it open (including from the system tray) and try again.
+找不到这个文件或文件夹：它可能已经被删了、改名了或者搬走了。刷新一下再看。	The file or folder cannot be found: it may have been deleted, renamed or moved. Refresh and look again.
+磁盘空间不够：先在别处腾出一点空间再试。	Not enough disk space: free some space first and try again.
+路径太长：把这个文件夹挪到浅一点的位置，或者给它起个短一点的名字再试。	The path is too long: move the folder higher up or give it a shorter name, then try again.
+等了太久没有回应：过一会儿再试。	No response for too long: try again in a while.
+没做成。可以再试一次；还不行的话，在「帮助」→「反馈和新版本」里复制诊断信息，提交问题时附上。	That did not work. You can try again; if it keeps failing, copy the diagnostic information under Help → Feedback and updates and attach it when you report the problem.
+系统的原话：	Message from Windows: 
 核对这个文件	Check this file
 本工具没有代码签名。把下面这串 SHA256 和 GitHub 发布页上写的对比，一样就说明你下载的 exe 没被改过。	ClearC is not code-signed. Compare the SHA256 below with the one on the GitHub release page; if they match, the exe you downloaded has not been changed.
 复制 SHA256	Copy SHA256

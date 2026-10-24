@@ -438,7 +438,7 @@ function Invoke-FixStep([string]$id, [switch]$Quiet) {
                     $ans = Show-Sheet -Title (T '打开快速启动？') -Text (T '会重新打开快速启动：「关机」变成半休眠，下次开机快几秒。') -Buttons @((T '取消'), (T '打开')) -Primary (T '打开') -Cancel (T '取消')
                     if ($ans -ne (T '打开')) { return }
                 }
-                try { New-RestorePointIfWanted (T '快速启动'); Set-FastStartup ($cur -ne 'on'); UI-Log $(if ($cur -eq 'on') { (T '已关闭快速启动') } else { (T '已打开快速启动') }) } catch { Show-Sheet -Kind warn -Title (T '没能改') -Text $_.Exception.Message | Out-Null }
+                try { New-RestorePointIfWanted (T '快速启动'); Set-FastStartup ($cur -ne 'on'); UI-Log $(if ($cur -eq 'on') { (T '已关闭快速启动') } else { (T '已打开快速启动') }) } catch { Show-Sheet -Kind warn -Title (T '没能改') -Text (Get-FriendlyError $_) | Out-Null }
                 Refresh-FixState
             }
         }
@@ -458,7 +458,7 @@ function Invoke-FixStep([string]$id, [switch]$Quiet) {
         elseif ($s.Exe) { Start-Process -FilePath $s.Exe }
         if ($s.Kind -in 'fix', 'check') { OpLog '系统设置' $name '' $(if ($s.Cmd) { $s.Cmd } else { $s.Exe }) }
         UI-Log ((T "已打开：{0}") -f $name)
-    } catch { Show-Sheet -Kind warn -Title ((T '没能打开：{0}') -f $name) -Text $_.Exception.Message | Out-Null }
+    } catch { Show-Sheet -Kind warn -Title ((T '没能打开：{0}') -f $name) -Text (Get-FriendlyError $_) | Out-Null }
 }
 foreach ($ic in @($ctl.HealthVerdicts, $ctl.FixRec, $ctl.FixDetail)) {
     $ic.AddHandler([System.Windows.Controls.Button]::ClickEvent, [System.Windows.RoutedEventHandler]{ param($s, $e) $b = $e.OriginalSource; if ($b -is [System.Windows.Controls.Button] -and $b.Tag -is [string] -and $b.Tag) { $t = [string]$b.Tag; if ($t.StartsWith('plan:')) { Invoke-RepairPlan $t.Substring(5) } else { Invoke-FixStep $t } } })
@@ -510,7 +510,7 @@ function Start-DiagPack {
 $ctl.BtnDiagPack.Add_Click({ Start-DiagPack })
 $ctl.BtnCopyReport.Add_Click({
     if (-not $script:healthData) { return }
-    try { [System.Windows.Clipboard]::SetText((Get-HealthReportText $script:healthData)); UI-Log (T '诊断报告已复制，可以直接粘贴') ; $ctl.HealthNote.Text = (T '诊断报告已复制，可以直接粘贴给别人。') } catch { Show-Sheet -Kind warn -Title (T '没能复制') -Text $_.Exception.Message | Out-Null }
+    try { [System.Windows.Clipboard]::SetText((Get-HealthReportText $script:healthData)); UI-Log (T '诊断报告已复制，可以直接粘贴') ; $ctl.HealthNote.Text = (T '诊断报告已复制，可以直接粘贴给别人。') } catch { Show-Sheet -Kind warn -Title (T '没能复制') -Text (Get-FriendlyError $_) | Out-Null }
 })
 Show-Fixes $null
 # 活动监控：后台线程每 3 秒采一次样，把结果放进共享表；界面每秒看一眼
@@ -738,7 +738,7 @@ foreach ($b in @($ctl.BtnDumpSmall, $ctl.BtnDumpAuto)) {
         $x = if ($small) { (T '以后蓝屏只保存 256 KB 的小内存转储（C:\Windows\Minidump），够看出是哪个驱动出的问题，不再生成几个 GB 的 MEMORY.DMP。') } else { (T '恢复 Windows 默认的「自动」：蓝屏时可能生成和内存差不多大的 MEMORY.DMP。') }
         $btn = (T '好')
         if ((Show-Sheet -Title $t -Text $x -Buttons @((T '取消'), $btn) -Primary $btn -Cancel (T '取消')) -ne $btn) { return }
-        try { Set-CrashDumpMode $(if ($small) { 3 } else { 7 }) } catch { Show-Sheet -Kind warn -Title (T '没改成') -Text $_.Exception.Message | Out-Null; return }
+        try { Set-CrashDumpMode $(if ($small) { 3 } else { 7 }) } catch { Show-Sheet -Kind warn -Title (T '没改成') -Text (Get-FriendlyError $_) | Out-Null; return }
         OpLog '系统设置' (T '蓝屏转储类型') $(if ($small) { (T '小内存转储') } else { (T '自动') }) ''
         Load-Save
     })
@@ -757,13 +757,13 @@ $ctl.BtnTmpMove.Add_Click({
         New-Item -ItemType Directory -Path $p -Force | Out-Null
         $mk = Join-Path $p '.cleanc-temp'; [IO.File]::WriteAllText($mk, (T '腾挪 ClearC 建的临时文件夹：有这个文件，清理时才会把它当临时文件夹清。')); try { (Get-Item -LiteralPath $mk -Force).Attributes = 'Hidden' } catch {}
         Set-UserTemp $p
-    } catch { Show-Sheet -Kind warn -Title (T '没改成') -Text $_.Exception.Message | Out-Null; return }
+    } catch { Show-Sheet -Kind warn -Title (T '没改成') -Text (Get-FriendlyError $_) | Out-Null; return }
     OpLog '系统设置' (T '临时文件夹位置') $p ''
     Load-Save
 })
 $ctl.BtnTmpAuto.Add_Click({
     if ((Show-Sheet -Title (T '临时文件夹恢复默认？') -Text (T '改回 C 盘用户目录里的 AppData\Local\Temp。注销再登录后对所有程序生效。') -Buttons @((T '取消'), (T '恢复')) -Primary (T '恢复') -Cancel (T '取消')) -ne (T '恢复')) { return }
-    try { Set-UserTemp '' } catch { Show-Sheet -Kind warn -Title (T '没改成') -Text $_.Exception.Message | Out-Null; return }
+    try { Set-UserTemp '' } catch { Show-Sheet -Kind warn -Title (T '没改成') -Text (Get-FriendlyError $_) | Out-Null; return }
     OpLog '系统设置' (T '临时文件夹位置') (T '系统默认') ''
     Load-Save
 })
@@ -815,7 +815,7 @@ function Show-RestoreInfo($r) {
         else { (T "当前：{0} 个还原点和卷影副本，占 {1}，最多可以用到 {2}") -f $r.Count, (Fmt $r.Used), $(if ($r.Unbounded -or $r.Max -le 0) { (T '没有上限') } else { Fmt $r.Max }) }
 }
 $ctl.BtnRestoreOpen.Add_Click({
-    try { Start-Process -FilePath "$env:SystemRoot\System32\SystemPropertiesProtection.exe" } catch { Show-Sheet -Kind warn -Title (T '打不开系统保护设置') -Text $_.Exception.Message | Out-Null }
+    try { Start-Process -FilePath "$env:SystemRoot\System32\SystemPropertiesProtection.exe" } catch { Show-Sheet -Kind warn -Title (T '打不开系统保护设置') -Text (Get-FriendlyError $_) | Out-Null }
 })
 $ctl.BtnGoDup.Add_Click({ Show-Page 'dup' })
 foreach ($b in @($ctl.BtnCosOn, $ctl.BtnCosOff)) {
