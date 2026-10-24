@@ -625,7 +625,33 @@ if ($pruned -gt 0) { OpLog '日志' (T '自动删除超过保存时间的旧记�
 $timer.Start()
 
 # 重新打开本工具（换语言、换外观后）
+# 重开前：记下在看的页面和清理页的扫描结果（重开后由 Restore-ResumeState 读回来）
+function Save-ResumeState {
+    $sizes = @{}; $sigs = @{}; $acts = @{}
+    if ($script:rows -and $sync.Sizes) {
+        foreach ($r in $script:rows) { $sizes[$r.Idx] = [double]$sync.Sizes[$r.Idx]; $sigs[$r.Idx] = [string]$script:rowSig[$r.Idx]; $acts[$r.Idx] = [string]$r.Action }
+    }
+    Write-ResumeData (Join-Path $script:appDir 'resume.txt') ([string]$script:curPage) $sizes $sigs $acts
+}
+function Restore-ResumeState {
+    $d = Read-ResumeData (Join-Path $script:appDir 'resume.txt') 120
+    if (-not $d) { return }
+    if ($d.Page -and $script:pageList.Contains($d.Page) -and $ctl[$script:pageList[$d.Page][1]].Visibility -eq 'Visible') { Show-Page $d.Page }
+    if ($d.Sizes.Count -and -not $script:rows) {
+        # 每一行的指纹（名字加路径）对得上才用上次的大小；对不上的（清理列表改过）不显示，重新扫描就有
+        $cat = @{}; foreach ($c in $catalog) { $cat[$c.Idx] = $c }
+        $sizes = @{}
+        foreach ($k in $d.Sizes.Keys) { if ($cat.ContainsKey($k) -and (Get-ItemSig $cat[$k]) -eq $d.Sigs[$k]) { $sizes[$k] = $d.Sizes[$k] } }
+        if ($sizes.Count) {
+            $sync.Sizes = $sizes; Build-Rows $sizes
+            foreach ($r in $script:rows) { $a = $d.Acts[$r.Idx]; if ($a -and @($r.Actions) -contains $a) { $r.Action = $a } }
+            $script:planSig = ''; Update-CleanSummary
+            UI-Log (T '重开前的扫描结果已经恢复；要最新的数字，点「扫描」')
+        }
+    }
+}
 function Restart-App {
+    Save-ResumeState
     Exit-UiLock
     try {
         if ($env:CLEANC_SELF -and (Test-Path -LiteralPath $env:CLEANC_SELF)) { Start-Process -FilePath $env:CLEANC_SELF }
@@ -726,6 +752,7 @@ function Request-Lang {
     if ((Show-Sheet -Title $t -Text $x -Buttons @($no, $ok) -Primary $ok -Cancel $no) -ne $ok) { return $false }
     Set-Setting 'Lang' $to
     OpLog '系统设置' (T '切换界面语言') $to ''
+    Save-ResumeState
     Exit-UiLock
     try {
         if ($env:CLEANC_SELF -and (Test-Path -LiteralPath $env:CLEANC_SELF)) { Start-Process -FilePath $env:CLEANC_SELF }
@@ -766,7 +793,7 @@ $win.Add_ContentRendered({
     if ($script:riskShown) { return }
     $script:riskShown = $true
     $script:prefetchTimer.Start()
-    if (Test-Path -LiteralPath $script:riskFile) { if (-not (Show-AccountMismatch)) { return }; Show-WriteTrouble -Startup; Show-HalfMoves; Show-LooseMoves; Show-BrokenMoves; return }
+    if (Test-Path -LiteralPath $script:riskFile) { Restore-ResumeState; if (-not (Show-AccountMismatch)) { return }; Show-WriteTrouble -Startup; Show-HalfMoves; Show-LooseMoves; Show-BrokenMoves; return }
     $ans = Show-Sheet -Kind warn -Title (T '使用前请先阅读安全风险提示') `
         -Text (T "本工具会按你的选择删除或搬移电脑上的文件。删除的文件可能无法恢复，存在资料丢失的风险。`n`n每次删除前，请确认这些资料确实不再需要、删除不会给你带来损失；重要资料请先备份。因使用本工具造成的资料丢失或其他损失，责任由使用者自行承担，开发者不承担责任。`n`n完整说明随时可以在左侧「帮助」里查看。") `
         -Confirm (T '我已阅读并了解上述风险，同意自行承担使用本工具的后果。') -Buttons @((T '退出'), (T '同意并继续')) -Primary (T '同意并继续') -Cancel (T '退出')
