@@ -1020,6 +1020,16 @@ function UI-Busy($b) {
 
 # 只读、只统计的后台：不用拿锁，做完也不用把旧的目录树作废
 $script:readOnlyModes = @('scan', 'movescan', 'apps', 'map', 'movesize', 'dup', 'update', 'startup', 'winget', 'odinfo', 'csanalyze', 'leftovers', 'recent', 'similar', 'selftest')
+# 后台做完时：错误流里的，加上设了 SilentlyContinue 而只记在 $Error 里的（排查问题时最有用），都写进运行记录（界面上只显示前几条）
+function Write-WorkerErrors($w, [string]$mode) {
+    try {
+        $lines = New-Object System.Collections.Generic.List[string]
+        foreach ($er in @($w.PS.Streams.Error)) { $pos = ([string]$er.InvocationInfo.PositionMessage) -replace "[`r`n]+", ' '; $lines.Add(('stream: {0} @ {1}' -f $er, $pos)) }
+        $all = $w.RS.SessionStateProxy.GetVariable('Error')
+        if ($all) { foreach ($er in @($all | Select-Object -First 30)) { $t = [string]$er; if ($t -and -not @($lines | Where-Object { $_.Contains($t) }).Count) { $lines.Add('swallowed: ' + $t) } } }
+        if ($lines.Count) { Write-LogFile (("worker {0}: {1} error(s)`r`n    " -f $mode, $lines.Count) + ((@($lines | Select-Object -First 40)) -join "`r`n    ")) }
+    } catch {}
+}
 function Start-Worker([string]$code, $arg) {
     # 会改东西的后台（删除、搬家、改设置……）先拿锁：定时的自动清理正在后台跑时，等它做完再开始
     if ($script:readOnlyModes -notcontains [string]$sync.Mode -and -not (Enter-BusyLock)) {

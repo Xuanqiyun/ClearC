@@ -764,6 +764,8 @@ try { & {
     $old = (Get-Date).AddMinutes(-10); (Get-Item -LiteralPath $rf).LastWriteTime = $old
     Check 'UX-12 an old resume file (not from a restart just now) is ignored' ($null -eq (Read-ResumeData $rf 120))
     Check 'UX-12 both restarts save the state and the window restores it (only rows whose fingerprint still matches)' (([regex]::Matches($src, 'Save-ResumeState')).Count -ge 3 -and $src -match '(?s)function Restore-ResumeState.*?Get-ItemSig.*?Build-Rows' -and $src -match 'Restore-ResumeState; if \(-not \(Show-AccountMismatch\)\)')
+    # ============ 45. 后台出的错都写进运行记录，不再悄悄吞掉（3.6 架构评审） ============
+    Check 'ARC-4 when a background job ends, its error stream and the errors it swallowed ($Error) go to the run log' ($src -match '(?s)function Write-WorkerErrors.*?Streams\.Error.*?GetVariable\(''Error''\).*?Write-LogFile' -and $src -match 'Write-WorkerErrors \$w')
 } } finally {
     $env:USERPROFILE = $savedProfile
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue
