@@ -82,7 +82,7 @@ foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageM
                'BtnMovesRefresh','MovesInfo','MovesList','EmptyMoves','EmptyMovesText',
                'AutoRemindOn','AutoRemindGB','AutoRemindNote','AutoCleanOn','AutoCleanNote','HistInfo','HistChart','HistLast','HistFirst','ATabRemind','ATabClean','ATabHist','ATabRemindState','ATabCleanState','ATabHistState','ATabRemindB','ATabCleanB','ATabHistB','AutoViewRemind','AutoViewClean','AutoViewHist',
                'BtnLogOpenDir','BtnLogRefresh','LogKeep','LogKeepNote','LogCats','LogRange','LogSearch','LogCount','LogList','EmptyLog','EmptyLogText',
-               'BtnLang','BtnLangText','BtnTheme','BtnThemeText','NavHelp','PageHelp','HelpScroll','HelpSections','HelpFaq','HelpNav','HelpPaneStart','HelpPaneFaq','BtnHelpPrev','BtnHelpNext','FeedbackCard','RiskCard','BtnFeedback','BtnGitHub','BtnIssue','BtnCopyDiag','BtnOpenLog','CopyHint','BtnSelfTest','BtnCheckUpdate','MapFast','MapChat',
+               'BtnLang','BtnLangText','BtnTheme','BtnThemeText','NavHelp','PageHelp','HelpScroll','HelpSections','HelpFaq','HelpNav','HelpPaneStart','HelpPaneFaq','BtnHelpPrev','BtnHelpNext','FeedbackCard','RiskCard','BtnFeedback','BtnGitHub','BtnIssue','BtnCopyDiag','BtnOpenLog','CopyHint','BtnSelfTest','BtnCheckUpdate','SelfHash','BtnCopyHash','MapFast','MapChat',
                'NavClean','NavDup','PageClean','PageDup','AppVer','BtnLog','BtnLogText','BtnLogHide','LogPanel','Dim',
                'CapFree','CapTotal','CapBar','CapReclaim','EmptyClean','EmptyCleanText','EmptyDup','EmptyDupText','SizeCustomRow',
                'DestPick','BtnDestBrowse','DestHint','ChatCard','ChatCardTitle','ChatCardText','BtnChatMove','BtnOneClick','BtnScan','BtnRun','BtnHogs','Hint','List','CleanMenu','CmOpen','CmOpenAll','CmCopy','Summary','Log',
@@ -417,7 +417,20 @@ function Select-HelpPane([string]$k, [switch]$NoRemember) {
     $ctl.BtnHelpPrev.Visibility = if ($prev) { 'Visible' } else { 'Collapsed' }; $ctl.BtnHelpNext.Visibility = if ($next) { 'Visible' } else { 'Collapsed' }
     $ctl.HelpScroll.ScrollToTop()
     if (-not $NoRemember) { $script:helpPick = $k; Set-Setting 'HelpPane' $k }
+    if ($k -eq 'fb') { Show-SelfHash }
 }
+# 本机 exe 的 SHA256：和发布页上写的对比，一样就说明下载的文件没被改过（本工具没有代码签名）
+$script:selfHash = ''
+function Show-SelfHash {
+    if (-not $script:selfHash) {
+        if ($env:CLEANC_SELF -and (Test-Path -LiteralPath $env:CLEANC_SELF)) {
+            try { $script:selfHash = (Get-FileHash -LiteralPath $env:CLEANC_SELF -Algorithm SHA256).Hash } catch { $script:selfHash = '' }
+        }
+    }
+    $ctl.SelfHash.Text = if ($script:selfHash) { $script:selfHash } else { (T '现在运行的是脚本，不是 exe，没有可以核对的文件') }
+    $ctl.BtnCopyHash.IsEnabled = [bool]$script:selfHash
+}
+$ctl.BtnCopyHash.Add_Click({ if ($script:selfHash) { try { [System.Windows.Clipboard]::SetText($script:selfHash); Show-CopyHint (T 'SHA256 已复制') } catch {} } })
 foreach ($x in @($script:helpPanes.Values)) { $x.Nav.Add_Checked({ if ($script:helpNavQuiet) { return }; Select-HelpPane ([string]$this.Tag) }) }
 # 帮助只讲当前模式里有的功能：标着 lvl:1、lvl:2 的说明在低一级的模式里藏起来；这个模式没有的页面（重复文件、搬家管理……），
 # 帮助目录里那一项也不列；一组里都藏了，组名也不列

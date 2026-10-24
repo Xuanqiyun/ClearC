@@ -156,6 +156,11 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+核对这个文件	Check this file
+本工具没有代码签名。把下面这串 SHA256 和 GitHub 发布页上写的对比，一样就说明你下载的 exe 没被改过。	ClearC is not code-signed. Compare the SHA256 below with the one on the GitHub release page; if they match, the exe you downloaded has not been changed.
+复制 SHA256	Copy SHA256
+现在运行的是脚本，不是 exe，没有可以核对的文件	Running as a script, not the exe, so there is no file to check
+SHA256 已复制	SHA256 copied
 蓝屏转储：导出时选了不带	Crash dumps: left out when exporting
 腾挪 ClearC 诊断包里的文件（大小是压缩前的字节数）：	Files in this ClearC diagnostics package (sizes are uncompressed bytes):
 健康报告：硬件、Windows 和硬盘的状态	Health report: hardware, Windows and disk status
