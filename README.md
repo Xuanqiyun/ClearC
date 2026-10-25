@@ -88,6 +88,20 @@
 
 exe 暂时没有代码签名，Windows SmartScreen 可能提示「Windows 已保护你的电脑」，点「更多信息」→「仍要运行」即可。不放心的话可以按下面的方法自己从源码构建。
 
+每个版本的发布说明（含 exe 的 SHA256）在 [docs/releases](docs/releases/README.md)。下载后可以在 PowerShell 里运行 `Get-FileHash .\ClearC-vX.exe` 核对，和说明里写的一样，就说明文件没被改过。
+
+### 被杀毒软件拦截、删除怎么办
+
+exe 没有代码签名，又是把 PowerShell 脚本打包成的程序，Windows Defender 的机器学习判断有时会把新版本误报成木马，下载后就被删掉（3.6.1 被报成 `Trojan:Win32/Bearfoos.B!ml`，结尾的 `!ml` 表示是机器学习的启发式判断）。每个版本发布前都会提交给微软复核，3.6.2 已经确认是误报。遇到被拦时：
+
+- 不要关掉杀毒软件。等一两天再下载，或者在 Windows 安全中心 →「病毒和威胁防护更新」里点「检查更新」后再下载。
+- 着急用的话，下载源码，双击 `src/run-from-source.bat` 直接运行，不经过 exe。
+- 也可以自己把文件提交给微软：<https://www.microsoft.com/wdsi/filesubmission>（选 Software developer，再选 Incorrectly detected）。
+
+双击没反应：3.6.3 以前，窗口关掉后程序有时会留在后台，再双击时以为已经开着一个就直接退出了。3.6.3 起窗口一关程序就结束；万一还有卡住的，双击时会问要不要结束它再打开。旧版本可以在任务管理器里结束 `ClearC` 开头的进程。
+
+维护者发版的流程（包括提交微软复核的每一项怎么填）见 [docs/RELEASING.md](docs/RELEASING.md)。
+
 ## 从源码运行或构建
 
 整个程序就是一个 PowerShell 脚本 `src/CleanC-UI.ps1`，exe 只是把它包起来。这个脚本由 `src/parts/` 下按功能分开的文件拼成（见 [src/parts/README.md](src/parts/README.md)）：改代码时改 `src/parts/` 里的文件，再运行 `build\merge.ps1`。
@@ -194,6 +208,8 @@ The screenshots are taken by the automated UI test on a GitHub test machine, so 
 Developers: the source is split by function under `src/parts/` and merged into `src/CleanC-UI.ps1` by `build/merge.ps1`; tests are in `tests/` (checks, engine tests, real NTFS image tests on Linux, dark-mode contrast). `build/build.ps1` signs the exe when a certificate is configured.
 
 Download the latest `ClearC-vX.X.exe` from [Releases](../../releases). The exe is not code-signed, so SmartScreen may warn; choose "More info → Run anyway", or build it yourself with `build\build.ps1`.
+
+If Windows Defender deletes the download as a trojan (3.6.1 was flagged as `Trojan:Win32/Bearfoos.B!ml`, a machine-learning heuristic), it is a false positive caused by the missing signature: each release is submitted to Microsoft for review, and 3.6.2 was confirmed as a false positive. Don't turn off your antivirus; wait a day or update Defender's definitions and download again, or run `src/run-from-source.bat` from the source. Release notes with each exe's SHA256 are in [docs/releases](docs/releases/README.md); the maintainer's release steps are in [docs/RELEASING.md](docs/RELEASING.md).
 
 **Disclaimer:** deleting files can lose data. Back up anything important. You use ClearC at your own risk, and the developer accepts no liability for any loss.
 

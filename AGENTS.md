@@ -49,5 +49,6 @@
 
 ## 发布
 
-版本号只改一处：`$script:AppVersion`（exe 的文件版本由构建脚本从它生成，构建日期也是构建时自动填的）。在 `CHANGELOG.md` 加这一版的中英文说明（检查会核对有没有这一节），在功能分支上提交。CI 通过后，`git checkout main && git merge --ff-only <分支> && git push origin main`，再打 exe，写 `out/ClearC-vX-release-notes.md`，附上 exe 的 SHA256。
+版本号只改一处：`$script:AppVersion`（exe 的文件版本由构建脚本从它生成，构建日期也是构建时自动填的）。在 `CHANGELOG.md` 加这一版的中英文说明（检查会核对有没有这一节），在功能分支上提交。CI 通过后，`git checkout main && git merge --ff-only <分支> && git push origin main`，再打 exe，把发布说明写进 `docs/releases/vX.md`，附上 exe 的 SHA256。
 CI 的产物和日志下载不了，只能看注释，每一步最多 10 条。推 tag 会被拒绝，Release 由维护者手动发。
+exe 没签名，发布前要把它装进密码为 `infected` 的 zip 提交微软复核（Defender 会把新 exe 误报成木马），每一步怎么做见 `docs/RELEASING.md`。启动器里不要加「先探测 PowerShell 语言模式」这类攻击工具常用的写法。
