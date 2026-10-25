@@ -390,9 +390,16 @@ try { & {
     $sch = @(Calls 'schtasks')
     Check 'scheduled tasks run as the current user (InteractiveToken), never SYSTEM' ($src -match 'LogonType>InteractiveToken<' -and $src -notmatch '(?i)<UserId>S-1-5-18<|NT AUTHORITY\\SYSTEM' -and $sch.Count -ge 3 -and @($sch | Where-Object { @($_.Args) -contains '/ru' -or @($_.Args) -contains '/rp' }).Count -eq 0 -and @(Calls 'register-scheduledtask').Count -eq 0)
     # 删 WMI 对象只有一处：改虚拟内存时去掉旧的页面文件设置（Win32_PageFileSetting），和还原点无关
-    # 结束进程：只有搬聊天记录前关掉确认框里列出的程序（Close-Holders），以及本工具自己开的 robocopy、winget 超时或取消时
+    # 结束进程：只有搬聊天记录前关掉确认框里列出的程序（Close-Holders）、本工具自己开的 robocopy 和 winget 超时或取消时，
+    # 以及卡在后台、没有窗口的本工具自己（Stop-StaleInstance，用户点了「是」才结束）
     $kills = @(Calls 'stop-process', 'taskkill', 'cmd:taskkill', '.kill', 'tskill' | ForEach-Object { '{0}:{1}' -f (Fn $_), $_.Name } | Sort-Object)
-    Check ("processes are only stopped in the chat-app close flow, or our own child process ({0})" -f ($kills -join ' ')) (($kills -join ' ') -eq 'Close-Holders:stop-process Close-Holders:stop-process Get-WingetUpgrades:.kill Invoke-Tool:.kill Invoke-Tool:.kill')
+    Check ("processes are only stopped in the chat-app close flow, our own child process, or a stuck ClearC the user agreed to end ({0})" -f ($kills -join ' ')) (($kills -join ' ') -eq 'Close-Holders:stop-process Close-Holders:stop-process Get-WingetUpgrades:.kill Invoke-Tool:.kill Invoke-Tool:.kill Stop-StaleInstance:.kill')
+    $goc = [regex]::Match($src, '(?s)function Get-OtherClearC.*?\r?\n\}').Value
+    $ssi = @(Calls 'stop-staleinstance')
+    $stale = [regex]::Match($src, '(?s)\$others = @\(Get-OtherClearC\).*?Stop-StaleInstance \$alive').Value
+    Check 'a stuck ClearC is only ended when it is ClearC (product name), not a scheduled run, has no window, and the user said yes' ($goc -match 'ProductName' -and $goc -match 'check\|autoclean' -and $ssi.Count -eq 1 -and $stale -match 'MainWindowHandle' -and $stale -match "MessageBox\]::Show\(\`$text, \`$title, 'YesNo', 'Warning', 'No'\)" -and $stale -match "\`$ans -ne 'Yes'\) \{ \`$global:CLEANC_UI_SHOWN = \`$true; return \}" -and $stale -match 'ClearC-Busy')
+    $lc2 = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '../build/launcher.cs'))
+    Check 'closing the window ends the whole process, so no ClearC is left behind without a window' ($lc2 -match '(?s)static int Main\(string\[\] args\) \{\s*int code = Run\(args\);.*?Environment\.Exit\(code\);')
     Check 'no self-deleting scripts or boot-time tasks' (@($sch | Where-Object { @($_.Args) -contains 'onstart' -or @($_.Args) -contains 'onlogon' }).Count -eq 0 -and $src -notmatch 'RunOnce' -and @(Calls 'remove-item' | Where-Object { ($_.Args -join ' ') -match 'pscommandpath|cleanc_self' }).Count -eq 0)
     # rd /s 的调用点：删除入口（先看是不是链接）、搬家收尾删备份、搬回来 / 删多余副本（核对过才删）、撤回没搬完的副本。全部调用点见第 14 节
     $rds = @(Calls 'cmd:rd', 'cmd:rmdir' | Where-Object { @($_.Args) -contains '/s' } | ForEach-Object { Fn $_ } | Sort-Object)

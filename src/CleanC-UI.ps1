@@ -7867,6 +7867,10 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+腾挪 ClearC 已经开着一个（可能在别的窗口后面）。如果找不到它，重启电脑后再打开。	ClearC is already open (perhaps behind another window). If you cannot find it, restart the PC and open it again.
+上一次打开的腾挪 ClearC 还在后台运行，但一直没有窗口，多半是卡住了（比如被杀毒软件拦在了一半）。\n\n要结束它，再重新打开吗？	The ClearC you opened last time is still running in the background but never showed a window. It is probably stuck (for example, antivirus stopped it halfway).\n\nEnd it and open ClearC again?
+它可能正在删除或搬家，现在结束会停在一半；下次打开时会说明停在哪一步，可以接着做完或撤回。不着急的话，可以先等几分钟再试。	It may be deleting or moving files. Ending it now stops that halfway; the next start explains where it stopped so you can finish or undo it. If it is not urgent, wait a few minutes and try again.
+没能结束上一次的腾挪 ClearC。重启电脑后再打开。	Could not end the previous ClearC. Restart the PC and open it again.
 已用 {0} / {1} · {2:N0}%	{0} used of {1} · {2:N0}%
 剩 {0}	{0} free
 已用的空间里都是什么	What the used space is made of
@@ -11475,19 +11479,72 @@ if ($script:mode -match '(?i)/autoclean') {
 # ============================================================
 # 界面
 # ============================================================
-# 只开一个窗口：已经开着的话，把那个窗口拉到前面，这一个直接退出（两个窗口同时删、同时搬会互相打架）
+# 只开一个窗口：已经开着的话，把那个窗口拉到前面，这一个直接退出（两个窗口同时删、同时搬会互相打架）。
+# 已经有一个在运行、却一直没有窗口（卡住了，比如上次被杀毒软件拦在一半）：不悄悄退出，说清楚，问要不要结束它再打开
 $script:uiMutex = $null
+# 正在运行的其他 ClearC 界面：按 exe 里的产品名认（文件改过名、新旧版本都认得出），定时任务在后台跑的（/check、/autoclean）不算
+function Get-OtherClearC {
+    $out = @()
+    $me = [Diagnostics.Process]::GetCurrentProcess()
+    foreach ($p in @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Id -ne $me.Id -and ($_.ProcessName -like 'ClearC*' -or $_.ProcessName -like 'CleanC*' -or $_.ProcessName -eq $me.ProcessName) })) {
+        $prod = ''; try { $prod = [string]$p.MainModule.FileVersionInfo.ProductName } catch {}
+        if ($prod -notmatch 'ClearC') { continue }
+        $cmd = ''; try { $cmd = [string](Get-CimInstance Win32_Process -Filter ('ProcessId={0}' -f $p.Id) -ErrorAction Stop).CommandLine } catch {}
+        if ($cmd -match '(?i)\s/(check|autoclean|selftest)\b') { continue }
+        $out += $p
+    }
+    return ,$out
+}
+# 结束卡住的本工具：只在用户点了「是」以后，只结束 Get-OtherClearC 认出来的那几个（它们都没有窗口）
+function Stop-StaleInstance($procs) {
+    foreach ($p in @($procs)) { try { $p.Kill(); [void]$p.WaitForExit(10000) } catch {} }
+}
 if (-not $script:uiTest) {
     $first = $true
     try { $script:uiMutex = [System.Threading.Mutex]::new($true, 'Local\ClearC-UI', [ref]$first) } catch { $first = $true }
     if (-not $first) {
-        try {
-            foreach ($p in @(Get-Process -Name ([Diagnostics.Process]::GetCurrentProcess().ProcessName) -ErrorAction SilentlyContinue)) {
-                if ($p.Id -ne $PID -and $p.MainWindowHandle -ne [IntPtr]::Zero) { [Microsoft.VisualBasic.Interaction]::AppActivate($p.Id); break }
+        $others = @(Get-OtherClearC)
+        # 刚双击过一次、那一个还在启动：等它的窗口出来，最多 20 秒
+        $until = (Get-Date).AddSeconds(20); $shown = $null
+        while ($true) {
+            foreach ($p in $others) { try { $p.Refresh(); if (-not $p.HasExited -and $p.MainWindowHandle -ne [IntPtr]::Zero) { $shown = $p } } catch {} }
+            if ($shown -or (Get-Date) -ge $until -or @($others | Where-Object { -not $_.HasExited }).Count -eq 0) { break }
+            Start-Sleep -Milliseconds 500
+        }
+        if ($shown) {
+            try { [Microsoft.VisualBasic.Interaction]::AppActivate($shown.Id) } catch {}
+            $global:CLEANC_UI_SHOWN = $true
+            return
+        }
+        # 等的时候那一个自己退出了：接着打开
+        $got = $false
+        try { $got = $script:uiMutex.WaitOne(0) } catch [System.Threading.AbandonedMutexException] { $got = $true } catch {}
+        if (-not $got) {
+            Close-Splash
+            $title = (T '腾挪 ClearC')
+            $alive = @($others | Where-Object { -not $_.HasExited })
+            if ($alive.Count -eq 0) {
+                [void][System.Windows.MessageBox]::Show((T '腾挪 ClearC 已经开着一个（可能在别的窗口后面）。如果找不到它，重启电脑后再打开。'), $title, 'OK', 'Information')
+                $global:CLEANC_UI_SHOWN = $true
+                return
             }
-        } catch {}
-        $global:CLEANC_UI_SHOWN = $true
-        return
+            # 那一个正拿着删除、搬家的锁：可能正在删或搬，结束会停在一半
+            $busy = $false
+            try { $bm = New-Object System.Threading.Mutex($false, 'Local\ClearC-Busy'); try { if ($bm.WaitOne(0)) { $bm.ReleaseMutex() } else { $busy = $true } } catch [System.Threading.AbandonedMutexException] { try { $bm.ReleaseMutex() } catch {} }; $bm.Dispose() } catch {}
+            $text = (T "上一次打开的腾挪 ClearC 还在后台运行，但一直没有窗口，多半是卡住了（比如被杀毒软件拦在了一半）。`n`n要结束它，再重新打开吗？")
+            if ($busy) { $text += "`n`n" + (T '它可能正在删除或搬家，现在结束会停在一半；下次打开时会说明停在哪一步，可以接着做完或撤回。不着急的话，可以先等几分钟再试。') }
+            $ans = [System.Windows.MessageBox]::Show($text, $title, 'YesNo', 'Warning', 'No')
+            if ([string]$ans -ne 'Yes') { $global:CLEANC_UI_SHOWN = $true; return }
+            Stop-StaleInstance $alive
+            try { $got = $script:uiMutex.WaitOne(10000) } catch [System.Threading.AbandonedMutexException] { $got = $true } catch {}
+            if (-not $got) {
+                [void][System.Windows.MessageBox]::Show((T '没能结束上一次的腾挪 ClearC。重启电脑后再打开。'), $title, 'OK', 'Warning')
+                $global:CLEANC_UI_SHOWN = $true
+                return
+            }
+            Write-LogFile ('ended {0} ClearC process(es) that had no window, after the user agreed' -f $alive.Count)
+            Show-Splash
+        }
     }
 }
 # 重新打开本工具（换外观、换语言）之前先放开：不然新开的那个以为已经有窗口开着，直接退出

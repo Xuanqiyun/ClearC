@@ -52,6 +52,14 @@ static class CleanCLauncher {
 
     [STAThread]
     static int Main(string[] args) {
+        int code = Run(args);
+        // 窗口关了就结束整个进程：还没做完的后台读取（磁盘健康、预读文件表……）不能把进程拖在后台。
+        // 不然看不到窗口、进程却还在，下次双击时以为已经开着一个，就打不开了（3.6.2 用户遇到过）
+        Environment.Exit(code);
+        return code;
+    }
+
+    static int Run(string[] args) {
         // 允许超过 260 字符的长路径（Windows 10 开启长路径支持后生效）
         try {
             AppContext.SetSwitch("Switch.System.IO.UseLegacyPathHandling", false);
