@@ -28,6 +28,7 @@
 ## 改代码的约定
 
 - 改单文件用 `tools/ed.py`，按原文精确替换，匹配次数不对就停下。文件是 CRLF，带 BOM。
+- 提交说明（commit message）一律用英文：第一行一句话说清改了什么，需要时空一行再写细节。代码注释和界面文字照旧用中文。
 - 界面文字用中文写在 `T '…'` 里，英文加进翻译表：`python3 tools/i18n_add.py '中文' 'English'`。中文原文就是翻译键，改了中文措辞，英文那条也要跟着改。
 - C# 只用 C# 5 的语法，因为 Windows 自带的 csc 只支持到 5。`$rowCode`、`$dupCode` 两段编进 exe；`$script:photoCode` 要引用 WPF，是运行时现场编译的。
 - 主窗口 XAML 在 `[xml]$xaml = @"…"@` 里，是可以展开变量的字符串：XAML 里不要写 `$`。
