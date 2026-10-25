@@ -1,76 +1,76 @@
-# 改进清单
+# Improvement backlog
 
-来源：2026-10-24 的三份评审（安全和运维、用户体验、架构），基于 3.5.2。一条一条做。
+Source: the three reviews of 2026-10-24 (safety and operations, user experience, architecture), based on 3.5.2. Done one item at a time.
 
-做法：
-1. 每条先写一个会失败的测试，再改到它通过。
-2. 一条一个提交，提交说明里写上编号。
-3. 做完在「状态」一栏写上版本号。
+How:
+1. For each item, first write a test that fails, then change the code until it passes.
+2. One commit per item, with the item number in the commit message.
+3. When done, write the version number in the "Status" column.
 
-先后顺序：先做 P0，再做 P1、P2。同一优先级里，按「先后」一栏，数字小的先做。
+Order: P0 first, then P1, then P2. Within the same priority, follow the "Priority" column, lower numbers first.
 
-## 安全（SEC）
+## Security (SEC)
 
-| 编号 | 先后 | 问题 | 改法 | 状态 |
+| ID | Priority | Problem | Fix | Status |
 |---|---|---|---|---|
-| SEC-1 | P0 | 管理员身份的 exe 会加载环境变量 `CLEANC_SMA` 指的程序集 | 启动器去掉这个开关 | 3.6 |
-| SEC-2 | P0 | 计划任务以最高权限运行，指向用户能改的 exe，还会自动改指向更新的 exe | 开任务时把 exe 复制到 `Program Files\ClearC`，任务指向那里；改指向前核对 | 3.6 |
-| SEC-3 | P0 | 搬走的聊天记录、桌面、文档继承 D 盘根目录的权限，其他账户能读能改 | 所有搬家都带上原权限；CDriveMoved 只给本人、系统、管理员；已经搬走的可以修正 | 3.6 |
-| SEC-4 | P1 | C 盘加密、目标盘没加密时，搬家等于把数据放到不加密的盘 | 确认框里写明 | 3.6 |
-| SEC-5 | P1 | 系统程序的路径取自环境变量 `SystemRoot` | 改用 `[Environment]::SystemDirectory`、`GetFolderPath('Windows')` | 3.6 |
-| SEC-6 | P1 | 厂商下载页、运行记录用管理员身份打开浏览器、记事本 | 都经资源管理器打开 | 3.6 |
-| SEC-7 | P1 | 存密码、证书、密钥的文件夹只挡了当前账户 | 对所有账户的 `AppData\…\Microsoft\Protect` 等生效 | 3.6 |
-| SEC-8 | P1 | 重复文件删除不写操作日志 | 每删一个写一条 | 3.6 |
-| SEC-9 | P2 | exe 没签名、没公布 SHA256 | 发布说明附 SHA256，「关于」里显示本机 exe 的哈希；签名要维护者申请证书 | 3.6（签名要维护者申请证书） |
-| SEC-10 | P2 | 诊断包里有内存转储、用户名、电脑名 | 导出前列出内容，可以不带转储 | 3.6 |
+| SEC-1 | P0 | The exe, running as administrator, loads the assembly named by the environment variable `CLEANC_SMA` | Remove this switch from the launcher | 3.6 |
+| SEC-2 | P0 | The scheduled task runs with the highest privileges, points to an exe the user can change, and automatically repoints itself to newer exes | When turning the task on, copy the exe to `Program Files\ClearC` and point the task there; check before repointing | 3.6 |
+| SEC-3 | P0 | Moved chat data, Desktop and Documents inherit the permissions of the D: root, so other accounts can read and change them | Every move carries the original permissions; CDriveMoved is only for the user, SYSTEM and administrators; earlier moves can be fixed | 3.6 |
+| SEC-4 | P1 | When C: is encrypted and the target drive isn't, a move puts the data on an unencrypted drive | Say so in the confirmation | 3.6 |
+| SEC-5 | P1 | System program paths are taken from the `SystemRoot` environment variable | Use `[Environment]::SystemDirectory` and `GetFolderPath('Windows')` | 3.6 |
+| SEC-6 | P1 | Vendor download pages and the run log open the browser and Notepad as administrator | Open them all through File Explorer | 3.6 |
+| SEC-7 | P1 | Folders that hold passwords, certificates and keys were only blocked for the current account | Apply to `AppData\…\Microsoft\Protect` and the like for every account | 3.6 |
+| SEC-8 | P1 | Deleting duplicates doesn't write the activity log | Write one entry per deleted file | 3.6 |
+| SEC-9 | P2 | The exe is unsigned and no SHA256 is published | Release notes include the SHA256, and "About" shows the hash of the exe on this PC; signing needs the maintainer to apply for a certificate | 3.6 (signing needs the maintainer to apply for a certificate) |
+| SEC-10 | P2 | The diagnostics package contains memory dumps, the user name and the computer name | List the contents before exporting, with the option to leave out dumps | 3.6 |
 
-## 运维（OPS）
+## Operations (OPS)
 
-| 编号 | 先后 | 问题 | 改法 | 状态 |
+| ID | Priority | Problem | Fix | Status |
 |---|---|---|---|---|
-| OPS-1 | P0 | 能同时开两个窗口；自动清理可能和界面里的删除、搬家同时进行 | 界面单实例；删除和搬家期间加锁，自动清理拿不到锁就跳过这一次 | 3.6 |
-| OPS-2 | P0 | 设置文件每次整份重写，C 盘满或两个进程同时写会截断；读不出来时排除列表为空，照样删除 | 先写临时文件再替换；文件在但读不出就不删 | 3.6 |
-| OPS-3 | P1 | C 盘快满时自己的日志、快照、设置写不进去，也不说 | 启动时提示；操作日志写不进去要在界面上说 | 3.6 |
-| OPS-4 | P1 | 长时间操作期间电脑会睡眠；用电池搬大文件夹不提示 | 操作期间阻止睡眠；用电池、电量低时先提醒 | 3.6 |
-| OPS-5 | P1 | 用另一个管理员账户提权运行时，清理、搬家作用在那个账户上 | 启动时比对，不一致就说明 | 3.6 |
-| OPS-6 | P1 | icacls 用英文组名；takeown、chkdsk 的确认字母随系统语言变 | 用 SID `*S-1-5-32-544`；按系统语言取确认字母 | 3.6 |
-| OPS-7 | P1 | 没有「本工具改过什么」的总览 | 加「改动总览」：每项写当前状态和怎么改回去；改系统设置前可选先建还原点 | 3.6 |
-| OPS-8 | P2 | 运行记录放在 %TEMP%，本工具自己会清这个目录，也不轮转 | 挪到 `%LOCALAPPDATA%\CleanC\logs` 并轮转 | 3.6 |
-| OPS-9 | P2 | AppLocker、WDAC 下 PowerShell 进入受限语言模式，程序直接报错 | 启动时检测，给一句说明 | 3.6 |
-| OPS-10 | P2 | 「自动提醒」页看不到任务上次的运行结果 | 显示上次、下次运行时间和结果 | 3.6 |
+| OPS-1 | P0 | Two windows can be open at once; automatic cleanup can run at the same time as a delete or move in the window | Single-instance window; a lock during deletes and moves, and automatic cleanup skips that run if it can't get the lock | 3.6 |
+| OPS-2 | P0 | The settings file is rewritten in full every time, so a full C: or two processes writing at once truncates it; when it can't be read, the exclusion list is empty and deletes go ahead anyway | Write a temporary file first, then swap it in; if the file exists but can't be read, don't delete | 3.6 |
+| OPS-3 | P1 | When C: is nearly full, ClearC's own log, snapshots and settings can't be written, silently | Warn at startup; say so in the window when the activity log can't be written | 3.6 |
+| OPS-4 | P1 | The PC can sleep during long operations; moving a large folder on battery gives no warning | Prevent sleep during operations; warn first on battery or low charge | 3.6 |
+| OPS-5 | P1 | When elevated with a different administrator account, cleanup and moves act on that account | Compare at startup and explain if they differ | 3.6 |
+| OPS-6 | P1 | icacls uses English group names; the confirmation letters of takeown and chkdsk change with the system language | Use the SID `*S-1-5-32-544`; take the confirmation letter from the system language | 3.6 |
+| OPS-7 | P1 | There is no overview of "what ClearC changed" | Add a change overview: each item shows its current state and how to undo it; optionally create a restore point before changing system settings | 3.6 |
+| OPS-8 | P2 | The run log is in %TEMP%, which ClearC itself cleans, and isn't rotated | Move it to `%LOCALAPPDATA%\CleanC\logs` and rotate it | 3.6 |
+| OPS-9 | P2 | Under AppLocker or WDAC, PowerShell enters the constrained language mode and the program just errors out | Detect it at startup and give a one-line explanation | 3.6 |
+| OPS-10 | P2 | The "Reminders" page doesn't show the task's last run result | Show the last and next run times and the result | 3.6 |
 
-## 用户体验（UX）
+## User experience (UX)
 
-| 编号 | 先后 | 问题 | 改法 | 状态 |
+| ID | Priority | Problem | Fix | Status |
 |---|---|---|---|---|
-| UX-1 | P0 | 只有 C 盘时，一键清理整单失败（聊天记录默认要搬，找不到目标就退出） | 没有目标盘时搬家项默认跳过；目标失效时给「跳过搬家，只做清理」 | 3.6 |
-| UX-2 | P0 | 搬家目标会自动选 USB 移动硬盘 | 认出 USB 盘，不参与自动选择；手动选时再确认 | 3.6 |
-| UX-3 | P0 | 一键清理顺带搬聊天记录，按钮上看不出；普通用户模式看不到搬家状态 | 一键清理只删；聊天记录单独成卡片；有搬家记录就显示搬家管理；断链提醒 | 3.6 |
-| UX-4 | P1 | 第一次打开没有明确的第一步 | 同意后自动扫描，首屏只留结论和一个主按钮 | 3.6 |
-| UX-5 | P1 | 清理页一次只显示一类，执行时却处理全部 | 选项卡标出已选数；「这一类全部跳过」；合计分删除和搬走 | 3.6 |
-| UX-6 | P1 | 确认框连环弹；空间地图删除框颜色反了 | 合成一个确认框，主按钮写清做什么；永久删除用红色 | 3.6 |
-| UX-7 | P1 | 软件管理里不能搬的也有「搬到其他盘」按钮 | 不能搬的直接显示原因 | 3.6 |
-| UX-8 | P1 | 说明文字对比度 3.6:1，有 11 号字 | 改用 #6E6E73，最小 12 号，测试阈值 4.5 | 3.6 |
-| UX-9 | P1 | 键盘看不到焦点，读屏软件读不出图标按钮 | 焦点环、AutomationProperties.Name | 3.6 |
-| UX-10 | P1 | 帮助里有当前模式看不到的功能 | 按模式隐藏或标注 | 3.6 |
-| UX-11 | P1 | 「谨慎清理」「需确认」「执行所选操作」容易误解 | 改名 | 3.6 |
-| UX-12 | P2 | 换外观、换语言要重启，扫描结果丢了 | 重开后回到原来的页面和结果 | 3.6 |
-| UX-13 | P2 | 输完管理员密码后几秒没有反馈 | 启动器先显示「正在打开」 | 3.6 |
-| UX-14 | P2 | 出错时显示系统原文 | 分类写成下一步怎么办 | 3.6 |
-| UX-15 | P2 | 软件列表的图标是首字母 | 读软件自己的图标 | 3.6 |
+| UX-1 | P0 | With only C:, one-click cleanup fails entirely (chat data is moved by default, and with no target it quits) | With no target drive, move items are skipped by default; when the target is gone, offer "Skip moving, only clean" | 3.6 |
+| UX-2 | P0 | The move target can be an automatically picked USB drive | Recognize USB drives and leave them out of the automatic choice; confirm again when picked by hand | 3.6 |
+| UX-3 | P0 | One-click cleanup also moves chat data, which the button doesn't show; Home user mode can't see the move status | One-click cleanup only deletes; chat data gets its own card; show Moved folders once there is a move record; warn about broken links | 3.6 |
+| UX-4 | P1 | The first start has no clear first step | Scan automatically after agreeing; the first screen shows only the conclusion and one main button | 3.6 |
+| UX-5 | P1 | The cleanup page shows one group at a time but runs all of them | Tabs show the selected count; "Skip all in this group"; totals split into delete and move | 3.6 |
+| UX-6 | P1 | Confirmation dialogs pop up one after another; the colors of the space map's delete dialog are reversed | Merge into one confirmation whose main button says what it does; permanent delete is red | 3.6 |
+| UX-7 | P1 | Apps that can't be moved still have a "Move to another drive" button in Apps | Show the reason directly for those that can't be moved | 3.6 |
+| UX-8 | P1 | Description text has a contrast of 3.6:1, and some text is 11 pt | Use #6E6E73, a 12 pt minimum, and a test threshold of 4.5 | 3.6 |
+| UX-9 | P1 | Keyboard focus is invisible, and screen readers can't read icon buttons | Focus ring, AutomationProperties.Name | 3.6 |
+| UX-10 | P1 | Help describes features the current mode doesn't show | Hide or label them by mode | 3.6 |
+| UX-11 | P1 | "Careful cleanup", "needs confirmation" and "run selected actions" are easily misread | Rename them | 3.6 |
+| UX-12 | P2 | Changing the appearance or language needs a restart, and the scan results are lost | Return to the same page and results after reopening | 3.6 |
+| UX-13 | P2 | No feedback for several seconds after entering the administrator password | The launcher first shows "Opening" | 3.6 |
+| UX-14 | P2 | Errors show Windows' original text | Group them and say what to do next | 3.6 |
+| UX-15 | P2 | App list icons are first letters | Read each app's own icon | 3.6 |
 
-## 架构（ARC）
+## Architecture (ARC)
 
-| 编号 | 先后 | 问题 | 改法 | 状态 |
+| ID | Priority | Problem | Fix | Status |
 |---|---|---|---|---|
-| ARC-1 | P0 | 删除的检查和执行在六处各写一遍 | 收成一个 `Invoke-SafeRemove`，测试锁定只有它能删 | 3.6 |
-| ARC-2 | P0 | 搬家不是事务，中途断电只能人工处理 | 每步写记录，下次打开可以继续或撤回；核对改成零差异 | 3.6 |
-| ARC-3 | P0 | `DirStat` 的计数是静态字段，并发统计会互相覆盖，搬家的安全判断读的就是它 | 每次统计返回自己的结果 | 3.6 |
-| ARC-4 | P1 | 错误被吞，后台线程的错误没人读；`Write-LogFile` 在定义之前被调用 | 后台错误写进日志；日志函数提前定义 | 3.6 |
-| ARC-5 | P1 | 后台任务靠 Mode 字符串在四处串起来 | 启动、取消、完成写在一起 | 3.6（进度卡片上的文字还按名字分） |
-| ARC-6 | P1 | 界面文字兼作数据（按翻译后的「删除」判断分支） | 稳定的编号和枚举 | 3.6 |
-| ARC-7 | P1 | 安全测试靠正则数源码；搬家没有真跑过的测试 | 用语法树断言；CI 挂虚拟盘真跑搬家 | 3.6（还有一部分检查写法的锁用正则） |
-| ARC-8 | P1 | 照片指纹的 C# 每次启动都现场编译 | 用到时再编 | 3.6 |
-| ARC-9 | P1 | 源码两份、版本号两处手改 | 版本号只有一个来源 | 3.6 |
-| ARC-10 | P2 | 主界面 XAML 一次解析完；深色模式靠替换字符串 | 按页拆开，用到时再加载 | 3.6（先拆了最大的帮助页，打开窗口时要解析的 XAML 少了约五分之一；其他页和深色模式的做法没动） |
-| ARC-11 | P2 | 长远迁到 C# | 先做核心库（路径规则、删除入口、搬家状态机） | 3.6（路径规则、搬家进度的状态机已在 `cs/Core.cs`；删除入口还在 PowerShell 里） |
+| ARC-1 | P0 | The checks and the execution of deletes are written separately in six places | Merge them into one `Invoke-SafeRemove`, with a test locking it as the only thing that deletes | 3.6 |
+| ARC-2 | P0 | A move isn't a transaction, so a power cut midway can only be fixed by hand | Record each step, so the next start can continue or undo it; verification requires zero differences | 3.6 |
+| ARC-3 | P0 | `DirStat`'s counters are static fields, so concurrent measurements overwrite each other, and the move's safety check reads exactly those | Each measurement returns its own result | 3.6 |
+| ARC-4 | P1 | Errors are swallowed, and nobody reads background threads' errors; `Write-LogFile` is called before it is defined | Write background errors to the log; define the log functions earlier | 3.6 |
+| ARC-5 | P1 | Background jobs are strung together in four places by the Mode string | Declare start, cancel and completion together | 3.6 (the text on the progress card is still chosen by name) |
+| ARC-6 | P1 | UI text doubles as data (branches decided by the translated "Delete") | Stable identifiers and enumerations | 3.6 |
+| ARC-7 | P1 | Safety tests count the source with regular expressions; moving has no test that really runs it | Assert on the syntax tree; CI mounts a virtual disk and really runs a move | 3.6 (some of the locks on coding patterns still use regular expressions) |
+| ARC-8 | P1 | The photo fingerprint C# is compiled at every start | Compile it when first used | 3.6 |
+| ARC-9 | P1 | Two copies of the source, and the version number changed by hand in two places | One source for the version number | 3.6 |
+| ARC-10 | P2 | The main window XAML is parsed all at once; dark mode relies on string replacement | Split it by page and load each page when first used | 3.6 (the largest, the help page, was split off first, so about a fifth less XAML is parsed when the window opens; the other pages and the dark-mode approach are unchanged) |
+| ARC-11 | P2 | Move to C# in the long run | Start with the core library (path rules, the delete entry point, the move state machine) | 3.6 (the path rules and the move-progress state machine are in `cs/Core.cs`; the delete entry point is still in PowerShell) |

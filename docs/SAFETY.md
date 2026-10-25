@@ -1,273 +1,270 @@
-# 腾挪 ClearC 数据安全：风险清单、缺陷清单、自动化测试
+# ClearC data safety: risk list, defect list, automated tests
 
-适用版本 3.5（2026-10）。这份文档回答三个问题：哪些功能会动用户的数据、每条路径上数据可能怎么丢、现在靠什么挡住；哪些问题必须修、哪些可以推迟；每次改代码时，哪些测试会自动检查核心安全规则有没有被破坏。
+Applies to version 3.5 (2026-10). This document answers three questions: which features touch the user's data, how data can be lost on each path, and what guards it now; which problems must be fixed and which can be postponed; and which tests automatically check, on every code change, that the core safety rules haven't been broken.
 
-代码位置以 `src/parts/` 为准（由 `src/CleanC-UI.ps1` 拆出来，只用来阅读）。测试在 `tests/`，每次推送 GitHub Actions 都在 Linux（PowerShell 7）和 Windows（Windows PowerShell 5.1，真机）上各跑一遍。
+Code locations refer to `src/parts/` (split out of `src/CleanC-UI.ps1`, for reading only). The tests are in `tests/`; on every push GitHub Actions runs them once on Linux (PowerShell 7) and once on Windows (Windows PowerShell 5.1, a real machine).
 
 ---
 
-## 一、安全规则
+## 1. Safety rules
 
-这些是产品对用户的承诺，任何改动都不能破。每一条后面是现在靠什么保证、哪些测试守着它。
+These are the product's promises to users, and no change may break them. Each is followed by what guarantees it now and which tests guard it.
 
-| # | 规则 | 怎么保证 | 测试（`tests/Safety.Tests.ps1` 的段落） |
+| # | Rule | How it is guaranteed | Tests (sections of `tests/Safety.Tests.ps1`) |
 |---|---|---|---|
-| 1 | C 盘个人文件夹（桌面、文档、下载、图片、视频、音乐、收藏夹、OneDrive、其他账户和公用的同名文件夹）里的东西从不删；桌面和下载只能搬，默认跳过 | 所有删除都过 `Test-Personal`；空间地图、残留、自定义文件夹过 `Get-DeleteBlock`；重复文件默认保护 | §1 全部、§4 目录库、§5「桌面和下载默认跳过」 |
-| 2 | 删除从不跟进链接（目录联接、符号链接）；删链接只删链接本身 | 删除入口 `Invoke-SafeRemove` 先看重解析点；`rd /s` 只拆内部链接；清理路径本身是链接、或者上级文件夹是链接（被搬走了）都跳过；`Windows.old` 先拆内部链接，夺权和改权限不跟链接；程序里没有 `Remove-Item -Recurse`；扫描（`DirStat`、`DupFinder`、`PhotoHash`）不进链接 | §3、§7b Windows.old、§7c 回收模式、§7d 链接路径、§7e 上级是链接、`Remove-Item -Recurse` |
-| 3 | 系统位置、软件安装文件夹、整块盘、任何盘根下的回收站和还原点不能删；这台电脑上每个账户存密码、证书、密钥的文件夹（`AppData\…\Microsoft\Protect`、`Credentials`、`Crypto`、`SystemCertificates`、`Vault`）不能删 | `Get-DeleteBlock`（空间地图、残留、自定义文件夹在删除时再查一遍） | §2、§7b 盘根、§7d 自定义文件夹复查、§21 |
-| 4 | 删除前用户必须明确确认；「放进回收站」绝不悄悄变成永久删除 | 所有删除入口都有确认框和勾选声明；每次放进回收站之前 `Test-RecycleOk` 先判断（网络位置、U 盘、回收站关闭、超过容量都不删）；回收调用带「太大就问」标志 | §7c 全部、§8「确认框」「SHFileOperation 标志」 |
-| 5 | 确认的是什么就做什么 | 清理页每行带指纹（名字加路径），后台按编号找到的项指纹对不上就不动；改了清理列表，旧的扫描结果作废 | §7d 指纹、界面自测「editing the cleanup list voids the old scan」 |
-| 6 | 聊天软件的数据只能搬，不能删 | 目录里聊天记录只有「搬到其他盘」；`Get-DeleteBlock` 挡住聊天记录文件夹、它们搬走后的位置、商店版聊天软件的数据，以及把它们包在里面的文件夹，所以空间地图、软件残留、自定义清理、重复文件都删不了；重复文件里不受个人文件夹开关影响 | §5「只能搬的项没有删除」、§7d 商店版、§7e 聊天数据 |
-| 7 | 搬家先复制、核对，再换成链接；核对不过不动原文件夹；能搬回；不碰 OneDrive 同步目录 | `Invoke-Move` 的复制→核对→改名→建链接→补复制流程；OneDrive 同步目录拒绝；复用旧副本只有零差异时才用 `/MIR`；搬回只删本工具搬过去的那份 | §7b OneDrive、/MIR、回滚；§7d 搬回 |
-| 8 | 重复文件每组至少留一份；删除和合并前再核对；同一个文件的两个名字不算重复；删不得的位置（系统、软件、搬家后的数据、聊天记录）一律不能勾 | 全勾的组不动；删前核对要删的和保留的两边的大小、修改时间、文件身份（`SameFile`，读不到就当同一个、不删），抽样组逐字节比；查找根是链接或 subst 虚拟盘的不进；`Get-DupBlock` 在列表和后台各查一遍 | §6、§7b、§7e 重复文件 |
-| 9 | 自动清理（计划任务）只碰「安全清理」里的普通缓存，一天内写过的文件不碰；临时文件夹只清 Windows 默认的和本工具建的 | `Select-AutoCleanItems` 过滤；`autoMinAge`（文件夹按里面最近一次写入算）；`Test-TempOk` | §5、§7b 自动清理、§7e 临时文件夹、§8 计划任务 |
-| 10 | 不删还原点，不清注册表，不随便结束进程，计划任务只用当前用户身份 | 源码里没有这些调用（测试数调用点） | §8 |
-| 11 | 一键清理只勾「安全清理」和「清后要重建」 | `Apply-OneClick` 对「默认不清」和自定义文件夹一律跳过 | §7d 一键清理、界面自测同一步 |
-| 12 | 系统健康的修复不删文件、不结束进程；会改动的先确认；能撤销的先留底 | 修复步骤是一张表（`Get-FixCatalog`），命令只用 Windows 自带的工具、在看得见的终端里跑；会改动的步骤有自己的确认文字；Windows 更新缓存改名留底（带时间戳），不删；硬盘省电先把原值存进设置再改，「恢复」原样写回；快速启动只写 `HiberbootEnabled`；诊断包不覆盖已有文件、临时文件逐个删、不递归 | §7f 全部；界面自测「health tabs, verdicts and repair steps」 |
-| 13 | 一次处理几个（卸载、禁用、移走残留、待删清单）都先列出全部、确认一次，走的检查和一个一个做时一样；批量卸载用每个软件自己的卸载程序，一个走完再开下一个，不加静默参数 | `Start-BatchUninstall` 先确认再排队，`Step-UninstQueue` 等上一个退出；残留走 `$script:leftDelCode`；待删清单走 `Start-MapDelete`；批量禁用跳过本工具自己的项 | §7f「batch …」「the space-map delete list …」；界面自测「apps: tick several…」「space map: back and forward…」 |
-| 14 | 为了快而做的事只用于读和统计，不改变删什么：几件事同时做（`Start-Parallel`）只用来读、统计大小；Windows Installer 登记的安装包一次问完，结果必须和原来一条一条问的完全一样；查重复文件从文件表列出的文件，算指纹前核对大小；清理扫描时上级文件夹是不是链接只查一次，删除时照旧每次现查 | 同时做的代码里没有删除、改动；`InstallerRefs` 读的注册表位置、接口调用和原来一样，接口读不了照旧不判断；`DupFinder` 列出的路径去重，`fs.Length` 和列出的大小不一样就不比，删前核对不变；`$script:linkMemo` 只在扫描后台里有 | §7d「Installer orphans」；界面自测「installer orphans …the same as asking one by one」、测速「file-table listing」和逐个列举结果相同 |
+| 1 | Nothing inside the personal folders on C: (Desktop, Documents, Downloads, Pictures, Videos, Music, Favorites, OneDrive, and the folders of the same name of other accounts and Public) is ever deleted; Desktop and Downloads can only be moved, and are skipped by default | Every delete goes through `Test-Personal`; the space map, leftovers and custom folders go through `Get-DeleteBlock`; duplicates are protected by default | All of §1, §4 catalog, §5 "Desktop and Downloads skipped by default" |
+| 2 | Deletes never follow links (directory junctions, symbolic links); deleting a link only deletes the link itself | The delete entry point `Invoke-SafeRemove` checks reparse points first; `rd /s` only removes inner links; a cleanup path that is itself a link, or whose parent folder is a link (it was moved away), is skipped; `Windows.old` removes inner links first, and taking ownership and changing permissions don't follow links; the program has no `Remove-Item -Recurse`; scans (`DirStat`, `DupFinder`, `PhotoHash`) don't enter links | §3, §7b Windows.old, §7c recycle mode, §7d link paths, §7e parent is a link, `Remove-Item -Recurse` |
+| 3 | System locations, software install folders, whole drives, and the Recycle Bin and restore points under any drive root can't be deleted; neither can the folders where each account on this PC stores passwords, certificates and keys (`AppData\…\Microsoft\Protect`, `Credentials`, `Crypto`, `SystemCertificates`, `Vault`) | `Get-DeleteBlock` (checked again at delete time for the space map, leftovers and custom folders) | §2, §7b drive roots, §7d custom folder recheck, §21 |
+| 4 | The user must explicitly confirm before a delete; "move to Recycle Bin" never silently becomes a permanent delete | Every delete entry point has a confirmation dialog and a tick-box declaration; before each move to the Recycle Bin, `Test-RecycleOk` decides first (network locations, USB drives, a disabled Recycle Bin and exceeding the capacity are never deleted); the recycle call carries the "ask if too big" flag | All of §7c, §8 "confirmation dialog" and "SHFileOperation flags" |
+| 5 | It does what was confirmed | Every row on the cleanup page carries a fingerprint (name plus path); if the item the background finds by identifier doesn't match the fingerprint, it isn't touched; changing the cleanup list voids the old scan result | §7d fingerprint, UI self-test "editing the cleanup list voids the old scan" |
+| 6 | Chat apps' data can only be moved, never deleted | In the catalog, chat data only has "Move to another drive"; `Get-DeleteBlock` blocks chat data folders, where they went after a move, Store chat apps' data, and the folders that contain them, so the space map, app leftovers, custom cleanup and duplicates can't delete them; in duplicates this is unaffected by the personal-folder switch | §5 "move-only items have no delete", §7d Store versions, §7e chat data |
+| 7 | A move copies and verifies first, then replaces with a link; if verification fails the original folder is untouched; it can be moved back; OneDrive-synced folders are not touched | `Invoke-Move`'s copy → verify → rename → create link → copy the rest flow; OneDrive-synced folders are refused; an old copy is reused with `/MIR` only when there are zero differences; moving back only deletes the copy ClearC itself moved there | §7b OneDrive, /MIR, rollback; §7d move back |
+| 8 | Duplicates keep at least one copy per group; everything is checked again before deleting and merging; two names of the same file don't count as duplicates; locations that may not be deleted (system, software, moved data, chat data) can never be ticked | Groups with everything ticked are left alone; before deleting, the size, modified time and file identity (`SameFile`; if it can't be read, treated as the same file and not deleted) of both the file to delete and the one kept are checked, and sampled groups are compared byte by byte; search roots that are links or subst virtual drives aren't entered; `Get-DupBlock` checks once in the list and once in the background | §6, §7b, §7e duplicates |
+| 9 | Automatic cleanup (the scheduled task) only touches the ordinary caches under "safe cleanup" and never files written within a day; temp folders are cleaned only if they are Windows' default ones or ones ClearC created | `Select-AutoCleanItems` filters; `autoMinAge` (a folder counts by the latest write inside it); `Test-TempOk` | §5, §7b automatic cleanup, §7e temp folders, §8 scheduled tasks |
+| 10 | No deleting restore points, no registry cleaning, no ending processes at will, and scheduled tasks only run as the current user | The source has no such calls (the tests count call sites) | §8 |
+| 11 | One-click cleanup only ticks "Safe to clean" and "Rebuilt after cleaning" | `Apply-OneClick` always skips "Skipped by default" and custom folders | §7d one-click cleanup, the same step in the UI self-test |
+| 12 | System health repairs delete no files and end no processes; anything that changes something asks first; anything that can be undone saves the old state first | Repair steps are a table (`Get-FixCatalog`); commands only use tools that come with Windows and run in a visible terminal; steps that change something have their own confirmation text; the Windows Update cache is renamed and kept (with a timestamp), not deleted; drive power saving saves the original values to settings before changing them, and "Restore" writes them back exactly; Fast Startup only writes `HiberbootEnabled`; the diagnostics package never overwrites existing files and deletes its temporary files one by one, never recursively | All of §7f; UI self-test "health tabs, verdicts and repair steps" |
+| 13 | Acting on several at once (uninstalling, disabling, moving leftovers, the delete list) always lists everything first and confirms once, with the same checks as doing them one at a time; batch uninstall uses each app's own uninstaller, the next only after the previous finishes, with no silent switches | `Start-BatchUninstall` confirms before queuing, and `Step-UninstQueue` waits for the previous one to exit; leftovers go through `$script:leftDelCode`; the delete list goes through `Start-MapDelete`; batch disable skips ClearC's own items | §7f "batch …" and "the space-map delete list …"; UI self-test "apps: tick several…" and "space map: back and forward…" |
+| 14 | Things done for speed are only used for reading and measuring and never change what is deleted: doing several things at once (`Start-Parallel`) is only for reading and measuring sizes; the installer packages registered with Windows Installer are queried in one go, and the result must be exactly the same as the old one-by-one queries; duplicate search files listed from the file table have their sizes checked before fingerprinting; during the cleanup scan, whether a parent folder is a link is checked only once, while deletes still check every time | The code that runs in parallel has no deletes or changes; `InstallerRefs` reads the same registry locations and makes the same interface calls as before, and still judges nothing if the interface can't be read; paths listed by `DupFinder` are de-duplicated, files whose `fs.Length` differs from the listed size aren't compared, and the checks before deleting are unchanged; `$script:linkMemo` only exists in the scan's background job | §7d "Installer orphans"; UI self-test "installer orphans …the same as asking one by one", and the speed test's "file-table listing" matching folder-by-folder listing |
 
 ---
 
-（3.6 起「谨慎清理」改名「清后要重建」，「需确认」改名「默认不清」；代码按分组编号 `Tier`（safe、careful、confirm、chat、other、custom）判断，不看组名。下面的历史记录保留原来的名字。）
+(From 3.6 on, "careful cleanup" is renamed "Rebuilt after cleaning" and "needs confirmation" "Skipped by default"; the code decides by the group identifier `Tier` (safe, careful, confirm, chat, other, custom), not by the group name. The history below keeps the old names.)
 
-## 二、功能风险清单
+## 2. Feature risk list
 
-每一行是一条会删除、搬动、覆盖、改名、换成链接、压缩或改系统设置的执行路径。「状态」一栏：**已修** = 3.0 审计里修掉的；**防护到位** = 看过，现有守卫够；**推迟 Dn** = 见第三节的可推迟清单。
+Each row is an execution path that deletes, moves, overwrites, renames, replaces with a link, compresses or changes system settings. The "Status" column: **Fixed** = fixed in the 3.0 audit; **Guarded** = reviewed, the existing guards are enough; **Postponed Dn** = see the postponable list in section 3.
 
-### 1. 清理 C 盘（`ui/20-clean.ps1` → `Invoke-Delete` → `Remove-Contents`）
+### 1. Clean up C: (`ui/20-clean.ps1` → `Invoke-Delete` → `Remove-Contents`)
 
-| 路径 | 做什么 | 数据可能怎么丢 | 现在的防护 | 状态 |
+| Path | What it does | How data could be lost | Current guards | Status |
 |---|---|---|---|---|
-| `Remove-Contents2` | 删目录库里缓存文件夹的内容，或整个文件夹（`whole`） | 路径展开碰到个人文件夹；路径本身是链接、或上级文件夹已经被搬走（比如 `%APPDATA%\discord` 搬到 D 盘后，Discord 缓存的路径实际在 D 盘）时顺着链接删；用户名带 `[ ]` 时通配匹配到别的账户 | `Test-Personal`、排除列表；顶层是链接或上级是链接都跳过（统计大小和删除前清单也不算）；`Get-PathItems` 只把 `* ?` 当通配；目录库测试保证没有条目指向盘根、系统根、个人文件夹 | 已修（M15、M21） |
-| 删除入口 `Invoke-SafeRemove` 和其他 `rd /s` | `rd /s /q \\?\路径` | 内部链接被跟进；路径里有 `%USERNAME%` 这样的字样时 cmd 会把它换成变量值，删的是另一个文件夹 | 顶层是重解析点只 `rmdir`；`rd /s` 对内部链接只拆链接（Windows CI 真机验证）；带 `%` 或引号的路径不交给 cmd | 已修（S5） |
-| 回收模式 `Remove-Path` → `Invoke-SafeRemove -Batch` → `RecycleMany` | 设置里打开后，手动清理先放进回收站 | 网络位置、U 盘、回收站被关、超过回收站容量时系统直接永久删除，后台批量调用不一定弹提示；Windows.old、Installer 孤儿包这类由系统命令处理的项其实不进回收站，确认框却说能恢复 | 每一项先过 `Test-RecycleOk`，不行就不删并记日志；删完核对哪些还在；确认框点名不能进回收站的项 | 已修（M10、M20） |
-| `Windows.old` | 删上一版 Windows | 里面有指向现在系统 `AppData`、`ProgramData` 的链接，`Remove-Item -Recurse`（5.1）和 `takeown /R`、`icacls /T` 会跟进去删、改所有者和权限 | `Remove-WindowsOld`：先拆掉内部所有链接；`takeown /SKIPSL`、`icacls /L` 不跟链接；夺权后（原来进不去的文件夹能看了）再拆一遍；再 `rd`；不进一键清理 | 已修（M1、M27） |
-| 清空回收站 | `Clear-RecycleBin` | 同一轮里刚「可恢复删除」进回收站的文件被一起清掉 | 本轮放进过回收站就不清空 | 已修；清所有盘见 D3 |
-| 需确认的操作项（搜索索引、休眠、XTU、Installer 孤儿包、旧驱动包、失效快捷方式、事件日志、DISM） | 各自的系统命令 | 一键清理把它们勾上；Windows Installer 接口读失败时只凭注册表判断孤儿包；搬走了的软件（链接指的盘没插着）的开始菜单快捷方式被当成失效 | 默认跳过，一键清理不碰；Installer 孤儿包要注册表和 Windows Installer 接口都读到才判断；快捷方式目标在链接后面的不算失效；驱动包只删 `oem*.inf`、跳过启动必需和系统自带、不加 `/force` | 已修（M12、S4、S6） |
-| 一键清理 `Apply-OneClick` | 按条目的 `One` 设选择 | 把「需确认」库条目（NuGet 全局包、Gradle、Maven 等）和 Windows.old 勾成删除 | 「需确认」和自定义文件夹一律跳过 | 已修 |
-| 执行 `Invoke-RunSelected` → 后台 | 后台重新建目录、按编号取项 | 扫描后改了自定义清理列表，编号挪位，行上写 A 实际删 B | 每行带指纹，后台核对；改清理列表让旧扫描作废 | 已修 |
-| 目录库 `%TEMP%` | 清空用户临时文件夹 | TEMP 被改到 `D:\Work` 这类地方时把整个文件夹清空 | TEMP 展开后的文件夹名不像临时文件夹就不清 | 已修 |
-| 目录库 `found.*` | 删 chkdsk 抢救出来的碎片 | 通配到 `C:\found.photos` 这类用户文件夹 | 只认 `found.???`，并移到「需确认」 | 已修 |
-| 自定义清理文件夹 | 删用户自己加的文件夹的内容 | 加进来以后它变成了链接或别的东西；加的是聊天记录文件夹（比如 `%APPDATA%\Signal`）；搬家目标选在了它里面 | 加入时和删除时都过 `Get-DeleteBlock`（含聊天数据）和 `IsLink`；搬家目标不能选在清理列表里的文件夹或临时文件夹里面 | 已修（M15、M24、S3） |
-| 删除前清单 `Get-DeletePreview` | 只读 | — | 规则和真删一样 | 防护到位 |
+| `Remove-Contents2` | Deletes the contents of a cache folder from the catalog, or the whole folder (`whole`) | Path expansion reaches a personal folder; the path is itself a link, or a parent folder has already been moved away (for example after `%APPDATA%\discord` moves to D:, the Discord cache path is really on D:) and the delete follows the link; a user name containing `[ ]` makes a wildcard match another account | `Test-Personal` and the exclusion list; skipped when the top level is a link or a parent is a link (not counted in size statistics or the pre-delete list either); `Get-PathItems` only treats `* ?` as wildcards; catalog tests make sure no entry points at a drive root, the system root or a personal folder | Fixed (M15, M21) |
+| The delete entry point `Invoke-SafeRemove` and other `rd /s` | `rd /s /q \\?\path` | Inner links are followed; when the path contains text such as `%USERNAME%`, cmd replaces it with the variable's value and deletes a different folder | A top level that is a reparse point is only `rmdir`ed; `rd /s` only removes inner links (verified on a real machine in Windows CI); paths with `%` or quotes are never handed to cmd | Fixed (S5) |
+| Recycle mode `Remove-Path` → `Invoke-SafeRemove -Batch` → `RecycleMany` | When turned on in Settings, manual cleanup goes to the Recycle Bin first | For network locations, USB drives, a disabled Recycle Bin or more than its capacity, Windows deletes permanently, and a batch call from the background may not show a prompt; items handled by system commands, such as Windows.old and orphaned Installer packages, don't actually go to the Recycle Bin even though the confirmation said they could be restored | Every item goes through `Test-RecycleOk` first, and if it fails it isn't deleted and the log says so; afterwards it checks which are still there; the confirmation names the items that can't go to the Recycle Bin | Fixed (M10, M20) |
+| `Windows.old` | Deletes the previous Windows | It contains links to the current system's `AppData` and `ProgramData`, and `Remove-Item -Recurse` (5.1), `takeown /R` and `icacls /T` follow them to delete and change owners and permissions | `Remove-WindowsOld`: first removes every inner link; `takeown /SKIPSL` and `icacls /L` don't follow links; after taking ownership (folders that couldn't be entered become visible) it removes links again; then `rd`; not part of one-click cleanup | Fixed (M1, M27) |
+| Emptying the Recycle Bin | `Clear-RecycleBin` | Files just "deleted recoverably" into the Recycle Bin in the same run are emptied with it | Not emptied if anything went into the Recycle Bin in this run | Fixed; emptying every drive, see D3 |
+| Action items that need confirmation (search index, hibernation, XTU, orphaned Installer packages, old driver packages, broken shortcuts, event logs, DISM) | Their own system commands | One-click cleanup ticks them; when the Windows Installer interface fails, orphaned packages are judged from the registry alone; Start menu shortcuts of moved apps (whose link points to a drive that isn't plugged in) are treated as broken | Skipped by default and untouched by one-click cleanup; orphaned Installer packages are judged only when both the registry and the Windows Installer interface are read; shortcuts whose target is behind a link don't count as broken; driver packages: only `oem*.inf` is deleted, boot-critical and inbox ones are skipped, and `/force` is never added | Fixed (M12, S4, S6) |
+| One-click cleanup `Apply-OneClick` | Sets choices from each entry's `One` | Ticks "needs confirmation" catalog entries (NuGet global packages, Gradle, Maven and so on) and Windows.old for deletion | "Needs confirmation" and custom folders are always skipped | Fixed |
+| Running `Invoke-RunSelected` → background | The background rebuilds the catalog and takes items by identifier | After a scan the custom cleanup list changes, identifiers shift, and a row that says A actually deletes B | Every row carries a fingerprint checked by the background; changing the cleanup list voids the old scan | Fixed |
+| Catalog `%TEMP%` | Empties the user's temp folder | When TEMP was changed to somewhere like `D:\Work`, the whole folder is emptied | Not cleaned if the expanded TEMP folder name doesn't look like a temp folder | Fixed |
+| Catalog `found.*` | Deletes the fragments chkdsk recovered | The wildcard matches user folders such as `C:\found.photos` | Only `found.???` is recognized, and it moved to "needs confirmation" | Fixed |
+| Custom cleanup folders | Deletes the contents of folders the user added | After being added it became a link or something else; what was added is a chat data folder (for example `%APPDATA%\Signal`); the move target was chosen inside it | Both when added and when deleted it goes through `Get-DeleteBlock` (including chat data) and `IsLink`; a move target can't be chosen inside a folder on the cleanup list or a temp folder | Fixed (M15, M24, S3) |
+| The pre-delete list `Get-DeletePreview` | Read only | — | Same rules as the real delete | Guarded |
 
-### 2. 自动清理和定时检查（`glue/05-scheduled-modes.ps1`、`ui/90-reminders.ps1`）
+### 2. Automatic cleanup and scheduled checks (`glue/05-scheduled-modes.ps1`, `ui/90-reminders.ps1`)
 
-| 路径 | 做什么 | 数据可能怎么丢 | 现在的防护 | 状态 |
+| Path | What it does | How data could be lost | Current guards | Status |
 |---|---|---|---|---|
-| `/autoclean` → `Select-AutoCleanItems` | 每周或每天清一次缓存，永久删除 | 刚写的临时文件还在用（文件夹本身的修改时间只反映它那一层）；碰到谨慎、需确认、自定义的项；`%TEMP%` 指向用户自己的文件夹 | 只跑「安全清理」里无操作、无服务、非整目录的项；一天内写过的不碰，文件夹按里面最近一次写入算；`%TEMP%` 只认 Windows 默认的和本工具建的 | 已修（S7、M22） |
-| `/check` | 只读统计、提醒 | — | — | 防护到位 |
-| 计划任务注册 | `schtasks /Create /XML` | 以 SYSTEM 身份运行、开机自动跑 | 只用当前用户 SID、InteractiveToken；只在「自动提醒」页打开开关时注册 | 防护到位；不问就更新任务路径见 D15 |
+| `/autoclean` → `Select-AutoCleanItems` | Cleans caches once a week or every day, permanently | Freshly written temporary files are still in use (a folder's own modified time only reflects its own level); careful, needs-confirmation and custom items are touched; `%TEMP%` points to the user's own folder | Only runs "safe cleanup" items with no action, no service and not whole folders; anything written within a day is untouched, with a folder counted by the latest write inside it; `%TEMP%` is only recognized if it is Windows' default or one ClearC created | Fixed (S7, M22) |
+| `/check` | Read-only measuring and reminders | — | — | Guarded |
+| Scheduled task registration | `schtasks /Create /XML` | Runs as SYSTEM or automatically at startup | Only the current user's SID and InteractiveToken; registered only when the switch on the "Reminders" page is turned on | Guarded; updating the task path without asking, see D15 |
 
-### 3. 搬家（`Invoke-Move`、`Invoke-MoveBack`、`Invoke-DropCopy`、`Invoke-FixLink`）
+### 3. Moving (`Invoke-Move`, `Invoke-MoveBack`, `Invoke-DropCopy`, `Invoke-FixLink`)
 
-| 路径 | 做什么 | 数据可能怎么丢 | 现在的防护 | 状态 |
+| Path | What it does | How data could be lost | Current guards | Status |
 |---|---|---|---|---|
-| `Invoke-Move` 主流程 | 复制 → 核对 → 原文件夹改名备份 → 建链接 → 补复制 → 删备份 | 核对不严；同名的一边是文件一边是文件夹时那几项没复制过去（robocopy 代码 4），数量核对照样通过；删备份没删干净时用 `Remove-Item -Recurse` 兜底，会跟进后来出现的链接；中途断电后备份文件夹没人知道 | robocopy 退出码 ≥ 8 或带 4 都不动原文件夹；核对文件数和字节；建链接前后都可回退；删备份前链接必须建好，兜底改成先拆链接再 `rd`；这几步不能取消；打开时查有没有留下的 `*.moved_backup`，告诉用户数据在哪；两边的文件个数、大小用每次统计自己的结果（`DirCount`），别处同时在统计也不会串（ARC-3） | 已修（M25、M26、S2）；核对精度见 D8 |
-| 建链接失败的回滚 | 把备份改回原名 | 改回失败被吞掉，日志写「已改回」，数据其实在 `*.moved_backup` | 改回失败如实报告数据在哪 | 已修 |
-| 复用旧副本 | 上次没搬完的副本接着用 | `/MIR` 删掉副本里 C 盘没有的文件；`/E` 用 C 盘上的旧版本覆盖副本里更新的文件（链接被软件换成新文件夹之后） | 副本里只要有一个 C 盘没有或比 C 盘新的文件，就不复用，搬到新文件夹 | 已修（M7、M25） |
-| OneDrive 同步目录 | 搬「文档」里的聊天记录、虚拟机 | 同步目录里出现链接，OneDrive 当成删除同步到云端和其他设备 | 源在任何 OneDrive 根之下一律不搬 | 已修 |
-| `Close-Holders` | 结束占用文件夹的进程 | 结束确认框里没列出的程序 | 只结束确认框里列出的进程名 | 防护到位；按名字放行见 D19 |
-| `Stop-StaleInstance` | 双击打开时，结束卡在后台、一直没有窗口的本工具自己 | 结束了别的程序；结束了正在删除、搬家的本工具 | 只结束按 exe 产品名认出来的 ClearC 界面进程（定时任务那种不算），等 20 秒还没有窗口才问；用户点「是」才结束；拿着删除和搬家的锁时提醒会停在一半，默认「否」；停在一半的搬家有进度记录，下次打开可以接着做完或撤回 | 防护到位（Safety.Tests 数着结束进程的调用点） |
-| `Invoke-MoveBack` | 复制回 C 盘 → 核对 → 拆链接 → 换回 → 删目标盘那份 | 用户自己建的链接（比如指向 `E:\WeChat`）也被当成搬家记录，搬回后删掉 `E:\WeChat`；记录过时（链接现在指向别处） | 只有在本工具搬家目标文件夹里、而且没有别的链接用着的才删；链接现在指的和记录不一样就不动 | 已修（M19、S8） |
-| `Invoke-DropCopy` | 删目标盘上没用上的副本 | 副本里有 C 盘没有的文件（原来允许 20 个或 5%，十万个文件的微信副本可以有五千个独有文件没被列出就删掉）；别的搬家记录的链接还在用它 | C 盘原文件夹在、没有任何链接（目录里的和搬家记录里的）指向它、副本里一个独有文件都没有、勾选声明 | 已修（M25） |
-| `Invoke-FixLink` | 断掉的链接重新指向一个副本 | 按文件夹名找到另一项正在用的副本，两个软件写进同一个文件夹，之后搬回时还可能删掉共用的那份 | 候选副本不能是别的链接正在用的；搬回只删没有别的链接用着的 | 已修（S1、M19）；内容相似度见 D14 |
-| `Invoke-AppMove` | 整个软件文件夹搬走 | 别的程序加载着它的组件；带服务、驱动 | 有加载就拒绝；带服务、驱动、微软软件、系统目录、嵌套软件的拒绝 | 防护到位 |
-| `Invoke-WslMove` | `wsl --manage --move` | — | WSL 自己复制；失败不动 | 防护到位 |
+| `Invoke-Move` main flow | Copy → verify → rename the original folder as a backup → create link → copy the rest → delete the backup | Loose verification; items where one side is a file and the other a folder of the same name aren't copied (robocopy code 4) while the count check still passes; when the backup isn't fully deleted, `Remove-Item -Recurse` is used as a fallback and follows links that appeared later; after a power cut midway, nobody knows about the backup folder | robocopy exit codes ≥ 8 or including 4 leave the original folder untouched; file counts and bytes are verified; it can roll back both before and after creating the link; the backup is deleted only once the link exists, and the fallback now removes links first and then `rd`s; these steps can't be cancelled; at startup it looks for leftover `*.moved_backup` folders and tells the user where the data is; file counts and sizes on both sides use each measurement's own result (`DirCount`), so measurements running elsewhere at the same time don't mix in (ARC-3) | Fixed (M25, M26, S2); verification precision, see D8 |
+| Rolling back a failed link | Renames the backup back to its original name | A failed rename back is swallowed and the log says "renamed back" while the data is really in `*.moved_backup` | A failed rename back reports truthfully where the data is | Fixed |
+| Reusing an old copy | Continues with the copy from an unfinished move | `/MIR` deletes the files in the copy that C: doesn't have; `/E` overwrites newer files in the copy with old versions from C: (after the app replaced the link with a new folder) | If the copy has even one file that C: lacks or that is newer than C:'s, it isn't reused and the move goes to a new folder | Fixed (M7, M25) |
+| OneDrive-synced folders | Moving chat data or virtual machines inside "Documents" | A link appears in a synced folder, and OneDrive treats it as a deletion and syncs that to the cloud and other devices | A source under any OneDrive root is never moved | Fixed |
+| `Close-Holders` | Ends the processes holding the folder | Ends programs not listed in the confirmation | Only ends the process names listed in the confirmation | Guarded; allowing by name, see D19 |
+| `Stop-StaleInstance` | On double-click, ends a copy of ClearC itself that is stuck in the background with no window | Ends another program; ends a ClearC that is deleting or moving | Only ends ClearC UI processes recognized by the exe's product name (not the scheduled-task kind), and asks only if there is still no window after 20 seconds; ends it only when the user clicks "Yes"; while it holds the delete and move lock, it warns that it will stop halfway and defaults to "No"; a move stopped halfway has a progress record, so the next start can finish or undo it | Guarded (Safety.Tests counts the process-ending call sites) |
+| `Invoke-MoveBack` | Copy back to C: → verify → remove the link → swap back → delete the copy on the target drive | A link the user created (for example pointing to `E:\WeChat`) is also treated as a move record, and `E:\WeChat` is deleted after moving back; the record is out of date (the link now points elsewhere) | Only deleted if it is inside ClearC's move target folder and no other link uses it; if the link now points somewhere other than the record, nothing is touched | Fixed (M19, S8) |
+| `Invoke-DropCopy` | Deletes an unused copy on the target drive | The copy has files C: doesn't (it used to allow 20 or 5%, so a WeChat copy of a hundred thousand files could be deleted with five thousand unique files never listed); another move record's link still uses it | The original folder on C: exists, no link at all (in the catalog or the move records) points to it, the copy has not a single unique file, and the declaration is ticked | Fixed (M25) |
+| `Invoke-FixLink` | Points a broken link at a copy again | Finding by folder name picks a copy another item is using, two apps write into the same folder, and a later move back might delete the shared copy | A candidate copy can't be one another link is using; moving back only deletes copies no other link uses | Fixed (S1, M19); content similarity, see D14 |
+| `Invoke-AppMove` | Moves a whole app folder | Another program has its components loaded; it comes with services or drivers | Refused if anything has it loaded; refused for services, drivers, Microsoft apps, system folders and nested apps | Guarded |
+| `Invoke-WslMove` | `wsl --manage --move` | — | WSL copies it itself; a failure changes nothing | Guarded |
 
-### 4. 重复文件（`ui/30-duplicates.ps1`、`ui/92-merge.ps1`、`cs/DupFinder.cs`、相似照片）
+### 4. Duplicates (`ui/30-duplicates.ps1`, `ui/92-merge.ps1`, `cs/DupFinder.cs`, similar photos)
 
-| 路径 | 做什么 | 数据可能怎么丢 | 现在的防护 | 状态 |
+| Path | What it does | How data could be lost | Current guards | Status |
 |---|---|---|---|---|
-| 列出文件 | 逐个文件夹列举，或者（NTFS 盘、1 MB 以上）从读进内存的文件表列出 | 文件表里的大小、属性过时，或者同一个文件从两个查找位置各列了一次，自己和自己算重复 | 从文件表列时规则和逐个列举一样（跳过系统、软件、开发环境的文件夹，链接、云端文件夹不进，系统、脱机、云端占位、重解析点文件不比）；同一个路径只留一次；算指纹时文件大小和列出的不一样就不比；删前照旧核对；Windows 测速核对两种列法结果完全相同 | 防护到位 |
-| 删除 | 删或放进回收站 | 同一个文件经两条路径（硬链接、目录链接、subst 虚拟盘）进了同一组，删的是唯一一份；扫描后要删的或保留的那份被改过但长度没变；整盘查找时扫到搬家后的数据（`D:\CDriveMoved` 里的桌面、微信记录）、聊天记录，能勾能删 | 每组至少留一份；删前核对两边的大小、修改时间、`SameFile` 文件身份（读不到就当同一个）；抽样组逐字节比；查找根是链接或 subst 盘的不进；`Get-DupBlock`（含 `Get-DeleteBlock` 和聊天数据）挡住的行不能勾，后台再查；删掉的和没删掉的每个文件都写进操作日志，带保留的那份在哪（SEC-8） | 已修（M2、M8、M23、M28、M29） |
-| 放进回收站 | `FsTools.Recycle` | 原来用的 VisualBasic 调用在回收站放不下时直接永久删除，不弹提示 | 改用带「太大就问」标志的调用；先过 `Test-RecycleOk`；没进回收站就不删 | 已修 |
-| 相似照片 | 只能放进回收站 | 同一张照片从两个根（D 盘「图片」和整个 D 盘）各进来一次，勾掉一份就是唯一一份 | 根去重、链接根不进；只在云端的占位文件不读 | 已修 |
-| 合并成硬链接 | 副本换成指向保留那份的硬链接 | 扫描后改过的副本、或者保留的那份被改过；跨盘；搬家后的数据、聊天记录 | 只在同一块 NTFS 盘；删前核对两边修改时间和文件身份，抽样组逐字节比；`Get-DupBlock` | 已修（M8、M23、M28） |
-| 归档 | 勾选的副本移到一个文件夹 | 移动失败两边都丢；把搬家后的数据、聊天记录移走 | 跨盘先复制后删，删源失败两边都在；核对大小；`Get-DupBlock` | 已修（M23）；UNC 路径见 D16 |
+| Listing files | Lists folder by folder, or (NTFS drives, 1 MB or more) from the file table read into memory | Sizes and attributes in the file table are out of date, or the same file is listed once from each of two search locations and counts as its own duplicate | Listing from the file table follows the same rules as folder by folder (system, software and development folders skipped, links and cloud folders not entered, system, offline, cloud placeholder and reparse-point files not compared); each path is kept once; a file whose size differs from the listing isn't compared when fingerprinting; the checks before deleting still apply; the Windows speed test verifies both listing methods give exactly the same result | Guarded |
+| Deleting | Deletes or moves to the Recycle Bin | The same file enters the same group through two paths (hard link, directory link, subst virtual drive), and the only copy is deleted; after the scan the file to delete or the one kept is changed without its length changing; a whole-drive search finds moved data (Desktop and WeChat data inside `D:\CDriveMoved`) or chat data, which can then be ticked and deleted | Each group keeps at least one copy; before deleting, both sides' size, modified time and `SameFile` identity are checked (if unreadable, treated as the same file); sampled groups are compared byte by byte; search roots that are links or subst drives aren't entered; rows blocked by `Get-DupBlock` (which includes `Get-DeleteBlock` and chat data) can't be ticked, and the background checks again; every file deleted or not deleted is written to the activity log, along with where the kept copy is (SEC-8) | Fixed (M2, M8, M23, M28, M29) |
+| Moving to the Recycle Bin | `FsTools.Recycle` | The VisualBasic call used before deleted permanently, without a prompt, when the Recycle Bin couldn't hold the file | Uses a call with the "ask if too big" flag; `Test-RecycleOk` first; not deleted if it didn't go to the Recycle Bin | Fixed |
+| Similar photos | Can only go to the Recycle Bin | The same photo comes in once from each of two roots (D:'s "Pictures" and all of D:), so unticking one leaves the only copy ticked | Roots are de-duplicated and link roots not entered; cloud-only placeholder files aren't read | Fixed |
+| Merging into hard links | Replaces copies with hard links to the kept file | A copy, or the kept file, was changed after the scan; across drives; moved data and chat data | Only on the same NTFS drive; before deleting, both sides' modified times and file identities are checked and sampled groups compared byte by byte; `Get-DupBlock` | Fixed (M8, M23, M28) |
+| Archiving | Moves the ticked copies into a folder | A failed move loses both sides; moving away moved data or chat data | Across drives it copies first and deletes after, so a failed delete of the source leaves both; sizes are verified; `Get-DupBlock` | Fixed (M23); UNC paths, see D16 |
 
-### 5. 空间地图（`ui/50-space-map.ps1`）
+### 5. Space map (`ui/50-space-map.ps1`)
 
-| 路径 | 做什么 | 数据可能怎么丢 | 现在的防护 | 状态 |
+| Path | What it does | How data could be lost | Current guards | Status |
 |---|---|---|---|---|
-| 待删清单 | 在几个文件夹里挑好的一起删 | 清单里的项目是之前看到的，可能已经变了；文件夹是 git 仓库，没提交、没推送的改动删了找不回 | 只是先记下，删除照样走 `Start-MapDelete`（下一行的全部检查），先确认、能选回收站；放进一个文件夹时清单里它里面的项目合进它，不会重复删；git 仓库在确认框里提醒 | 防护到位 |
-| `Start-MapDelete` | 删或放进回收站选中的文件、文件夹 | 扫描结果是估算、可能过时；任何盘的回收站、还原点；链接；聊天记录，以及包着聊天记录的上级文件夹（删 `Local\LINE` 就把 `LINE\Data` 一起删了） | 行上锁；删前和后台各查一遍 `Get-DeleteBlock`（含聊天数据的里外两个方向）、`IsLink`、`Get-LinkedAncestor`；任何盘根下的系统文件夹都拦；回收前 `Test-RecycleOk`；带 `%` 的路径不交给 cmd | 已修（M5、M18、M24、S5） |
-| 压缩文件夹 | `compact /c /s` | 不改内容 | 系统目录、含虚拟磁盘的不压 | 防护到位 |
+| Delete list | Deletes together what was picked in several folders | The items on the list were seen earlier and may have changed; a folder is a git repository, and uncommitted or unpushed changes are lost for good when deleted | It only records them; deleting still goes through `Start-MapDelete` (all the checks in the next row), confirmed first, with the Recycle Bin option; when a folder is added, list items inside it are merged into it so nothing is deleted twice; git repositories get a warning in the confirmation | Guarded |
+| `Start-MapDelete` | Deletes the selected files and folders or moves them to the Recycle Bin | Scan results are estimates and may be out of date; any drive's Recycle Bin and restore points; links; chat data, and the parent folders containing it (deleting `Local\LINE` deletes `LINE\Data` too) | Locked rows; `Get-DeleteBlock` (chat data in both directions, inside and containing), `IsLink` and `Get-LinkedAncestor` are checked before deleting and again in the background; system folders under any drive root are blocked; `Test-RecycleOk` before recycling; paths with `%` are never handed to cmd | Fixed (M5, M18, M24, S5) |
+| Compressing folders | `compact /c /s` | Doesn't change content | System folders and folders containing virtual disks aren't compressed | Guarded |
 
-### 6. 软件管理（`ui/80-apps.ps1`）
+### 6. Apps (`ui/80-apps.ps1`)
 
-| 路径 | 做什么 | 数据可能怎么丢 | 现在的防护 | 状态 |
+| Path | What it does | How data could be lost | Current guards | Status |
 |---|---|---|---|---|
-| 卸载 | 调软件自己的卸载程序 | 由软件决定 | 确认框写明软件里的数据可能一起删 | 防护到位 |
-| 一次卸载几个 | 依次打开每个软件自己的卸载程序；应用商店的用 `Remove-AppxPackage` | 一下子开好几个卸载程序互相打架；悄悄卸载（静默参数）用户看不到卸了什么 | 先列出全部、确认一次；一个卸载程序（连同它复制到临时文件夹的那个）退出 1.5 秒后才开下一个；只用登记的卸载命令，不加静默参数；可以随时停下；界面自测只记录不启动 | 防护到位 |
-| 卸载后的残留 | 放进回收站 | 别的版本还在用；卸载 Signal、LINE、Telegram 等之后把聊天记录当成「设置和缓存」列出来 | 别的已装软件用着的不列；`Get-DeleteBlock -Leftover`（含聊天数据）；回收前 `Test-RecycleOk` | 已修（M24） |
-| 残留文件夹视图 | 放进回收站 | 驱动配套软件没有卸载登记，被当成残留 | 30 天没动、没进程在用、≥ 1 MB；只能放进回收站；勾几个一起移时先列出确认一次，走和卸载后残留同一段后台代码（`Get-DeleteBlock -Leftover`、`IsLink`、`Test-RecycleOk`） | 推迟 D9 |
-| 开机启动、计划任务、右键菜单 | 只禁用 | 可逆 | 本工具自己的不能改；勾几个一起禁用或启用时先列出确认一次 | 防护到位 |
+| Uninstalling | Runs the app's own uninstaller | Up to the app | The confirmation says the app's data may be deleted with it | Guarded |
+| Uninstalling several | Opens each app's own uninstaller in turn; Store apps use `Remove-AppxPackage` | Several uninstallers open at once and get in each other's way; silent uninstalling (silent switches) hides what was removed from the user | Everything is listed and confirmed once first; the next uninstaller opens only 1.5 seconds after the previous one (including the copy it put in a temp folder) exits; only the registered uninstall command is used, with no silent switches; it can be stopped at any time; the UI self-test only records, never starts | Guarded |
+| Leftovers after uninstalling | Moves them to the Recycle Bin | Another version is still using them; after uninstalling Signal, LINE, Telegram and the like, chat data is listed as "settings and cache" | Folders used by other installed apps aren't listed; `Get-DeleteBlock -Leftover` (including chat data); `Test-RecycleOk` before recycling | Fixed (M24) |
+| Leftover folders view | Moves them to the Recycle Bin | Driver companion software has no uninstall registration and is treated as a leftover | Untouched for 30 days, no process using it, ≥ 1 MB; can only go to the Recycle Bin; moving several together lists them and confirms once first, using the same background code as leftovers after uninstalling (`Get-DeleteBlock -Leftover`, `IsLink`, `Test-RecycleOk`) | Postponed D9 |
+| Startup items, scheduled tasks, context menus | Only disables | Reversible | ClearC's own items can't be changed; disabling or enabling several together lists them and confirms once first | Guarded |
 
-### 7. 省空间和系统设置（`ui/70-save-space.ps1`）
+### 7. Save space and system settings (`ui/70-save-space.ps1`)
 
-| 路径 | 做什么 | 数据可能怎么丢 | 现在的防护 | 状态 |
+| Path | What it does | How data could be lost | Current guards | Status |
 |---|---|---|---|---|
-| 压缩虚拟磁盘 | diskpart `compact vdisk` | Hyper-V 磁盘下面挂着检查点（`.avhdx`）时，压缩父磁盘会让检查点失效 | 有检查点的磁盘不列可压缩，压缩前再查一次 | 已修 |
-| OneDrive「仅在线」 | 只改文件属性 | 不删 | 跳过真正的链接、已固定的；OneDrive 自己的文件（云端类型的重解析点）照常处理 | 防护到位；原来把所有带重解析点的文件都跳过，按需下载打开时（Windows 默认）这个功能什么都不做，见 S9 |
-| 临时文件夹改到其他盘 | 改当前用户的 TEMP、TMP | 原来改到 `D:\Temp`：那里已经有用户自己的文件时直接接管，之后清理和自动清理会把它清空 | 改到本工具专用的 `CleanC-Temp`，里面放标记；已经存在而且有东西、又没有标记的不用；清理只认 Windows 默认的和有标记的临时文件夹 | 已修（M22） |
-| 页面文件、休眠、蓝屏转储、保留的存储、CompactOS | 系统设置 | 可逆 | 确认框；失败恢复自动管理 | 防护到位；USB 盘见 D18 |
-| 搬虚拟机、模拟器文件夹 | 走搬家流程 | 同搬家；在 OneDrive 里 | 同搬家 | 已修（OneDrive） |
+| Compacting virtual disks | diskpart `compact vdisk` | When a Hyper-V disk has checkpoints (`.avhdx`) below it, compacting the parent disk invalidates the checkpoints | Disks with checkpoints aren't listed as compactable, and it checks again before compacting | Fixed |
+| OneDrive "online-only" | Only changes file attributes | Deletes nothing | Real links and pinned files are skipped; OneDrive's own files (cloud-type reparse points) are handled as usual | Guarded; it used to skip every file with a reparse point, so with Files On-Demand on (the Windows default) the feature did nothing, see S9 |
+| Moving the temp folder to another drive | Changes the current user's TEMP and TMP | It used to move it to `D:\Temp`: if the user's own files were already there it simply took over, and later cleanup and automatic cleanup would empty it | Moves it to ClearC's own `CleanC-Temp` with a marker inside; an existing folder that has content and no marker isn't used; cleanup only recognizes Windows' default temp folders and marked ones | Fixed (M22) |
+| Page file, hibernation, crash dumps, reserved storage, CompactOS | System settings | Reversible | Confirmation dialog; on failure it goes back to automatic management | Guarded; USB drives, see D18 |
+| Moving virtual machine and emulator folders | Uses the move flow | Same as moving; inside OneDrive | Same as moving | Fixed (OneDrive) |
 
-### 8. 系统健康的「常见问题修复」和诊断包（`ui/70-save-space.ps1` 的系统健康部分、引擎里的 `Get-FixCatalog`、`Set-DiskPowerFix`、`Export-DiagPack`）
+### 8. System health's "Common fixes" and the diagnostics package (the System health part of `ui/70-save-space.ps1`, and `Get-FixCatalog`, `Set-DiskPowerFix` and `Export-DiagPack` in the engine)
 
-| 路径 | 做什么 | 数据可能怎么丢 | 现在的防护 | 状态 |
+| Path | What it does | How data could be lost | Current guards | Status |
 |---|---|---|---|---|
-| 修复系统文件 | DISM /RestoreHealth，再 sfc /scannow | 只换 Windows 自己的文件，不碰用户数据 | 确认框；终端窗口里跑，过程看得见 | 防护到位 |
-| 下次开机检查 C 盘 | `echo Y\| chkdsk C: /f` | 硬盘在坏的时候，检查会大量读写，可能让坏盘更快坏掉 | 确认框里写明硬盘可能在坏时先备份；能用 `chkntfs /x` 撤销；只对系统盘 | 防护到位 |
-| 重置 Windows 更新组件 | 停 4 个服务，`ren` 两个更新缓存文件夹，再启动服务 | 原来常见的做法是删掉 SoftwareDistribution；正在装更新时做会让这次更新失败 | 只改名（带时间戳，不会和上一次的撞名），不删；四个服务都重新启动；确认框写明「正在安装更新时不要做」 | 防护到位 |
-| 重置网络 | netsh winsock reset、netsh int ip reset、ipconfig /flushdns | 手动设置的固定 IP 和 DNS 会恢复成自动 | 确认框写明要先记下固定 IP；要重启才生效 | 防护到位 |
-| 关闭硬盘省电 | powercfg 改当前电源计划的 3 项 | 不涉及数据；笔记本续航少一点 | 改之前把原值写进设置，写不进去就不改；已经存过就保留最早那份；「恢复硬盘省电」原样写回 | 防护到位 |
-| 关闭 / 打开快速启动 | 写 `HiberbootEnabled` | 不涉及数据 | 确认框；随时能改回来 | 防护到位 |
-| 同步时间、清 DNS 缓存、重启音频服务、刷新图标缓存、重置商店缓存、取消开机检查 | 都是缓存或服务 | 不涉及数据 | 不弹确认（测试里限定只有这几项能这样） | 防护到位 |
-| 导出诊断包 | 读转储、导出最近 30 天的日志、systeminfo、驱动列表，打成 zip | 覆盖用户已有的同名文件；包里有电脑名、用户名、装过的软件和内存片段 | `FileMode.CreateNew`，已有同名文件就不导出；临时文件放在 TEMP 下自己建的文件夹，逐个删除、空文件夹不递归删；导出后提醒只发给信任的人 | 防护到位 |
-| 按建议处理 | 一次做完结论里本工具能直接做的几步 | 做了用户没想到的事 | 只能用能撤销、不删东西的步骤（关闭硬盘省电、关闭快速启动、同步时间、打开日期和时间、修复系统文件、内存诊断），测试数着；做之前列出全部步骤确认一次；做完列出做了什么、没做成什么；记操作日志 | 防护到位 |
-| 改用 Windows 自带的硬盘驱动 | 只显示步骤 | 照着改 BIOS 后开不了机；RAID 阵列改了读不出来；BitLocker 要恢复密钥 | 本工具不运行 bcdedit、不改 BIOS（测试锁着）；先查是不是单块盘、BitLocker 开没开，RAID 阵列或不在 RST 上的直接说「不要改」；写明改回 RAID On 就一切照旧 | 防护到位 |
-| 清理页双击、右键打开文件夹；空间地图点盘卡片扫描 | 只打开资源管理器、只读扫描 | 不涉及数据 | 源码锁：这一段里没有删除、移动、写文件的调用 | 防护到位 |
+| Repairing system files | DISM /RestoreHealth, then sfc /scannow | Only replaces Windows' own files, never user data | Confirmation dialog; runs in a terminal window where the process is visible | Guarded |
+| Checking C: at the next startup | `echo Y\| chkdsk C: /f` | When the drive is failing, the check reads and writes a lot and may make a failing drive die faster | The confirmation says to back up first if the drive may be failing; it can be undone with `chkntfs /x`; system drive only | Guarded |
+| Resetting the Windows Update components | Stops 4 services, `ren`s two update cache folders, then starts the services | The usual approach deletes SoftwareDistribution; doing it while an update is installing makes that update fail | Only renames (with a timestamp, so it never clashes with the previous one), never deletes; all four services are started again; the confirmation says "don't do this while updates are installing" | Guarded |
+| Resetting the network | netsh winsock reset, netsh int ip reset, ipconfig /flushdns | Manually set static IPs and DNS go back to automatic | The confirmation says to note down static IPs first; needs a restart to take effect | Guarded |
+| Turning off drive power saving | powercfg changes 3 settings of the current power plan | No data involved; a laptop's battery life is a little shorter | The original values are written to settings before the change, and nothing is changed if they can't be written; if already saved, the earliest copy is kept; "Restore drive power saving" writes them back exactly | Guarded |
+| Turning Fast Startup off / on | Writes `HiberbootEnabled` | No data involved | Confirmation dialog; can be changed back at any time | Guarded |
+| Syncing the time, flushing the DNS cache, restarting the audio service, refreshing the icon cache, resetting the Store cache, cancelling the startup check | All caches or services | No data involved | No confirmation (the tests limit this to exactly these items) | Guarded |
+| Exporting the diagnostics package | Reads dumps, exports the last 30 days of logs, systeminfo and the driver list, and zips them | Overwrites the user's existing file of the same name; the package contains the computer name, user name, installed software and memory fragments | `FileMode.CreateNew`, so nothing is exported if a file of the same name exists; temporary files go into its own folder under TEMP and are deleted one by one, and the empty folder isn't deleted recursively; after exporting it reminds you to send it only to people you trust | Guarded |
+| Fix as suggested | Does in one go the steps from a finding that ClearC can do directly | Does something the user didn't expect | Only steps that can be undone and delete nothing (turning off drive power saving, turning off Fast Startup, syncing the time, opening Date and Time, repairing system files, memory diagnostics), counted by the tests; all steps are listed and confirmed once before; afterwards it lists what was done and what didn't work; recorded in the activity log | Guarded |
+| Switching to Windows' own disk driver | Only shows the steps | Following them to change the BIOS leaves the PC unbootable; a RAID array becomes unreadable after the change; BitLocker asks for the recovery key | ClearC doesn't run bcdedit or change the BIOS (locked by tests); it first checks whether there is a single drive and whether BitLocker is on, and says "don't change it" for a RAID array or a drive not on RST; it says that switching back to RAID On restores everything | Guarded |
+| Double-click and right-click to open folders on the cleanup page; clicking a drive card in the space map to scan | Only opens File Explorer, read-only scans | No data involved | Source lock: this section has no calls that delete, move or write files | Guarded |
 
 ---
 
-## 三、缺陷清单
+## 3. Defect list
 
-### 必须修（3.0 已全部修掉，每条都有测试）
+### Must fix (all fixed in 3.0, each with a test)
 
-判定标准：会删掉用户没有选择删除的数据，或者破坏第一节的规则。
+Criterion: deletes data the user didn't choose to delete, or breaks a rule in section 1.
 
-| # | 问题 | 后果 | 修法 | 测试 |
+| # | Problem | Consequence | Fix | Test |
 |---|---|---|---|---|
-| M1 | `Windows.old` 用 `Remove-Item -Recurse`，`takeown /R`、`icacls /T` 穿过内部链接 | 删掉、改掉当前系统的 `AppData`、`ProgramData` | 先拆内部链接再 `rd`；不进一键清理 | §7b |
-| M2 | 同一个文件以两条路径进了重复文件的同一组 | 删掉唯一一份 | 删、合并、归档前比 `SameFile`；查找根是链接的不进 | §7b |
-| M3 | 重复文件放回收站用的 VisualBasic 调用不带「太大就问」 | 回收站放不下时悄悄永久删除 | 改用 `FsTools.Recycle`，没进回收站就不删 | §7b、§8 |
-| M4 | 相似照片的根不去重 | 同一张照片列两次，勾一份就是唯一一份 | 根去重、链接根不进、云端占位文件不读 | §7d（相似照片，Windows） |
-| M5 | 只拦系统盘根下的 `$Recycle.Bin`、`System Volume Information` 等 | 空间地图能删掉 D 盘所有用户的回收站 | 任何盘根下都拦 | §7b |
-| M6 | 只有桌面和下载检查 OneDrive | 「文档」在 OneDrive 里时，搬聊天记录会让 OneDrive 把它当成删除 | 源在任何 OneDrive 根之下一律不搬 | §7b |
-| M7 | 复用旧副本用 `/MIR` | 删掉副本里独有的旧文件 | 只有零差异才 `/MIR` | §7b |
-| M8 | 删除、合并前只比大小 | 扫描后改过的文件被删、被换成硬链接 | 加修改时间核对 | §7b |
-| M9 | 建链接失败后改回原名的异常被吞 | 用户以为数据还在原处 | 如实报告数据所在位置 | §7b |
-| M10 | 回收模式在后台批量调用，网络位置、U 盘、回收站关闭、超过容量时会变成永久删除 | 「放进回收站」悄悄变成永久删除 | `Test-RecycleOk` 先判断，不行就不删；所有回收调用点都先问它 | §7c |
-| M11 | 改了自定义清理列表后，旧扫描结果的编号挪位 | 行上写 A，实际删 B | 每行指纹，后台核对；旧扫描作废 | §7d、界面自测 |
-| M12 | 一键清理勾上「需确认」的库条目和 Windows.old | 普通用户点一下就删掉要重新下载几十 GB 的依赖、上一版系统 | 「需确认」和自定义文件夹一律跳过 | §7d、界面自测 |
-| M13 | 用户名带 `[ ]` 时路径被当通配 | 清到别的账户的临时文件夹 | `Get-PathItems` | §7d |
-| M14 | TEMP 指向 `D:\Work` 这类地方 | 清空用户的工作文件夹 | 文件夹名不像临时文件夹就不清 | §7d |
-| M15 | 清理路径本身是链接时 `Get-ChildItem` 列的是目标的内容 | 顺着链接删目标（目前因为大小算 0 不出现在列表里，属于潜在路径） | 顶层是链接直接跳过；自定义文件夹删除时再查 | §7d |
-| M16 | `found.*` 通配过宽且在安全组 | 删掉 `C:\found.photos` 这类用户文件夹 | `found.???`，移到需确认 | §7d |
-| M17 | Hyper-V 有检查点的磁盘也能压缩 | 检查点失效，虚拟机丢掉检查点之后的改动 | 有检查点的不压 | §7d |
-| M18 | 商店版聊天软件的数据在空间地图里能删 | 违背「聊天数据只能搬」 | 加进只看不删的范围 | §7d |
-| M19 | 搬回 C 盘后删目标盘那份时不看是不是本工具搬的 | 删掉用户自己建的链接所指向的文件夹 | 只删搬家目标文件夹里、没有别的链接在用的 | §7d |
+| M1 | `Windows.old` uses `Remove-Item -Recurse`, and `takeown /R` and `icacls /T` go through inner links | Deletes or changes the current system's `AppData` and `ProgramData` | Remove inner links first, then `rd`; not part of one-click cleanup | §7b |
+| M2 | The same file enters the same duplicate group through two paths | The only copy is deleted | Compare `SameFile` before deleting, merging and archiving; search roots that are links aren't entered | §7b |
+| M3 | Duplicates' move to the Recycle Bin uses a VisualBasic call without "ask if too big" | Silently deletes permanently when the Recycle Bin can't hold the file | Use `FsTools.Recycle`, and don't delete if it didn't go to the Recycle Bin | §7b, §8 |
+| M4 | Similar photos' roots aren't de-duplicated | The same photo is listed twice, and ticking one leaves the only copy | De-duplicate roots, don't enter link roots, don't read cloud placeholder files | §7d (similar photos, Windows) |
+| M5 | Only `$Recycle.Bin`, `System Volume Information` and the like under the system drive's root are blocked | The space map can delete every user's Recycle Bin on D: | Blocked under any drive root | §7b |
+| M6 | Only Desktop and Downloads are checked for OneDrive | When "Documents" is in OneDrive, moving chat data makes OneDrive treat it as a deletion | A source under any OneDrive root is never moved | §7b |
+| M7 | Reusing an old copy uses `/MIR` | Deletes old files that exist only in the copy | `/MIR` only with zero differences | §7b |
+| M8 | Only sizes are compared before deleting and merging | Files changed after the scan are deleted or replaced by hard links | Also check modified times | §7b |
+| M9 | The exception from renaming back after a failed link is swallowed | The user thinks the data is still in the original place | Report truthfully where the data is | §7b |
+| M10 | Recycle mode makes batch calls from the background, which become permanent deletes for network locations, USB drives, a disabled Recycle Bin or more than its capacity | "Move to Recycle Bin" silently becomes a permanent delete | `Test-RecycleOk` decides first and nothing is deleted if it fails; every recycle call site asks it first | §7c |
+| M11 | After the custom cleanup list changes, the old scan result's identifiers shift | A row says A and actually deletes B | Per-row fingerprints checked by the background; the old scan is voided | §7d, UI self-test |
+| M12 | One-click cleanup ticks "needs confirmation" catalog entries and Windows.old | One click from a home user deletes dozens of GB of dependencies that must be downloaded again, or the previous Windows | "Needs confirmation" and custom folders are always skipped | §7d, UI self-test |
+| M13 | A path is treated as a wildcard when the user name contains `[ ]` | Cleans another account's temp folder | `Get-PathItems` | §7d |
+| M14 | TEMP points to somewhere like `D:\Work` | Empties the user's work folder | Not cleaned if the folder name doesn't look like a temp folder | §7d |
+| M15 | When a cleanup path is itself a link, `Get-ChildItem` lists the target's contents | Follows the link and deletes the target (currently it doesn't appear in the list because its size counts as 0, so it's a latent path) | Skip when the top level is a link; check custom folders again at delete time | §7d |
+| M16 | The `found.*` wildcard is too broad and in the safe group | Deletes user folders such as `C:\found.photos` | `found.???`, moved to needs confirmation | §7d |
+| M17 | Hyper-V disks with checkpoints can be compacted | The checkpoints become invalid, and the virtual machine loses the changes after them | Disks with checkpoints aren't compacted | §7d |
+| M18 | Store chat apps' data can be deleted in the space map | Breaks "chat data can only be moved" | Added to the view-only scope | §7d |
+| M19 | After moving back to C:, deleting the copy on the target drive doesn't check whether ClearC moved it | Deletes the folder a user's own link points to | Only delete copies inside the move target folder that no other link uses | §7d |
+| M20 | With the Recycle Bin on, items handled by system commands, such as Windows.old, orphaned Installer packages and broken shortcuts, are actually deleted directly | The confirmation says they can be restored from the Recycle Bin, but they can't | The confirmation names these items as deleted directly | §7e |
+| M21 | Cleanup only checks whether the path itself is a link, not its parents | After an app moves to D:, its cache path is really on D:, so cleanup, one-click cleanup and automatic cleanup follow the link and delete there, freeing nothing on C: | Also skip when a parent is a link, likewise for size statistics and the pre-delete list | §7e |
+| M22 | Moving the temp folder to `D:\Temp` takes over an existing folder of that name | The user's own `D:\Temp` is treated as a temp folder, and automatic cleanup deletes everything older than a day | A dedicated `CleanC-Temp` with a marker; folders with existing content aren't used; cleanup only recognizes default and marked ones | §7e |
+| M23 | Duplicates only check "is it in a personal folder on C:" and don't go through `Get-DeleteBlock` | A whole-drive search finds the moved Desktop and WeChat data in `D:\CDriveMoved`, which can be ticked and deleted, merged or archived | The list and all three background jobs go through `Get-DupBlock` | §7e |
+| M24 | "Chat data can only be moved" is only checked in the space map's UI, and only blocks what is inside chat folders | Deleting `Local\LINE` in the space map deletes `LINE\Data` too; uninstall leftovers list Signal and LINE data as cache; custom cleanup can add chat folders | Blocked uniformly in `Get-DeleteBlock`: inside chat folders, folders containing them, where they went after a move, and Store versions | §7e |
+| M25 | Reusing an old copy and deleting an extra copy allow 20 or 5% unique files; robocopy code 4 (names don't match) isn't counted as a failure | Newer files in the copy are overwritten by old versions from C:; a copy of a hundred thousand files is deleted with thousands of unique files never listed; items whose names don't match aren't copied, yet the original folder is deleted | Not a single unique file allowed; stop on any code including 4 | §7e |
+| M26 | When the backup isn't fully deleted after a move, `Remove-Item -Recurse` is the fallback | Windows PowerShell 5.1 follows links that appeared later | Remove links first, then `rd`; the program no longer has `Remove-Item -Recurse` | §7e |
+| M27 | `takeown /R` and `icacls /T` on Windows.old go through links that weren't removed (inside folders that couldn't be entered) | Changes the owners and permissions of the current system's folders | `/SKIPSL` and `/L`, and remove links again after taking ownership | §7e |
+| M28 | Before deleting and merging duplicates, only the copy to delete is checked, not the one kept | The kept copy was changed after the scan (same size), so the only copy of the old content is deleted | Check modified times on both sides | §7e |
+| M29 | `SameFile` treats unreadable files as different; subst virtual drives are treated as separate drives | When a file is opened exclusively by another program or can't be read due to permissions, two paths to the same file count as duplicates and the only copy is deleted | Only read attributes, without read or write access, and treat unreadable as the same file and don't delete; subst drives aren't search locations | §7e |
 
-| M20 | 回收站开着时，Windows.old、Installer 孤儿包、失效快捷方式这类由系统命令处理的项其实直接删 | 确认框说能从回收站恢复，其实不能 | 确认框点名这些项会直接删除 | §7e |
-| M21 | 清理只看路径本身是不是链接，不看上级 | 软件被搬到 D 盘后，它的缓存路径实际在 D 盘，清理、一键清理、自动清理都会顺着链接删，C 盘一点不腾 | 上级是链接也跳过，统计大小和删除前清单同样 | §7e |
-| M22 | 临时文件夹改到 `D:\Temp` 时直接接管已有的同名文件夹 | 用户自己的 `D:\Temp` 被当成临时文件夹，自动清理把一天前的东西全删了 | 专用的 `CleanC-Temp` 加标记；已有东西的不用；清理只认默认的和有标记的 | §7e |
-| M23 | 重复文件只看「是不是 C 盘个人文件夹」，不过 `Get-DeleteBlock` | 整盘查找扫到 `D:\CDriveMoved` 里搬走的桌面、微信记录，勾上就删、合并或归档 | 列表和三个后台都过 `Get-DupBlock` | §7e |
-| M24 | 「聊天记录只能搬」只在空间地图的界面里检查，而且只挡聊天文件夹里面的 | 空间地图删 `Local\LINE` 会连 `LINE\Data` 一起删；卸载残留把 Signal、LINE 的记录当缓存列出；自定义清理能加聊天文件夹 | `Get-DeleteBlock` 里统一挡：聊天文件夹里面的、包着它的、搬走后的位置、商店版的 | §7e |
-| M25 | 复用旧副本和删多余副本允许 20 个或 5% 的独有文件；robocopy 代码 4（名字对不上）不算失败 | 副本里更新的文件被 C 盘旧版本覆盖；十万个文件的副本里几千个独有文件没列出就删；名字对不上的项没复制过去，原文件夹却被删 | 一个独有文件都不许；代码带 4 就停 | §7e |
-| M26 | 搬家后删备份没删干净时用 `Remove-Item -Recurse` 兜底 | Windows PowerShell 5.1 会跟进后来出现的链接 | 先拆链接再 `rd`；程序里不再有 `Remove-Item -Recurse` | §7e |
-| M27 | Windows.old 的 `takeown /R`、`icacls /T` 会穿过没拆掉的链接（进不去的文件夹里的） | 改掉当前系统文件夹的所有者和权限 | `/SKIPSL`、`/L`，夺权后再拆一遍链接 | §7e |
-| M28 | 重复文件删、合并前只核对要删的那份，不核对保留的那份 | 保留的那份在扫描后被改了（大小没变），删掉的是旧内容的唯一一份 | 两边都核对修改时间 | §7e |
-| M29 | `SameFile` 读不到时当成不同的文件；subst 虚拟盘被当成另一块盘 | 被别的程序独占打开、或者权限读不了时，同一个文件的两条路径被当成重复，删掉唯一一份 | 只看属性不要读写权限，读不到就当同一个、不删；subst 盘不当查找位置 | §7e |
+M20 to M29 were found by an independent review (a reviewer who hadn't seen the first two rounds' conclusions); the first 19 were found in the first two rounds.
 
-M20 到 M29 是独立审查（没看过前两轮结论的另一个审查）找出来的，前 19 条是前两轮自己找的。
+### Should fix (rare conditions, also fixed in 3.0)
 
-### 应该修（条件少见，3.0 也一起修了）
+Criterion: loses data or gets something wrong, but only under uncommon conditions.
 
-判定标准：会丢数据或弄错，但要碰上不太常见的条件。
-
-| # | 问题 | 修法 | 测试 |
+| # | Problem | Fix | Test |
 |---|---|---|---|
-| S1 | 修复断掉的链接时，按文件夹名找到的可能是另一项正在用的副本 | 别的链接正在用的不选 | §7e |
-| S2 | 搬家改名成 `*.moved_backup` 后断电，数据在备份里但没人知道，软件新建了空文件夹 | 打开时查找并告诉用户数据在哪。3.6 起每一步写进 `%LOCALAPPDATA%\CleanC\搬家进度`，打开时可以「接着做完」或「撤回」（`Resume-Move`）；C 盘那个位置已经有新内容时两样都不做；核对改成个数、大小零差异，差一点先补复制一遍再核对 | §7e、§16 |
-| S3 | 搬家目标可以选在清理列表里的文件夹或临时文件夹里面 | 不让选 | §7e |
-| S4 | 软件搬到 D 盘后 D 盘没插着，它的开始菜单快捷方式被当成失效删掉 | 目标在链接后面的不算失效 | §7e |
-| S5 | `cmd` 会把路径里的 `%名字%` 换成变量值，删到别的文件夹 | 带 `%` 或引号的路径不交给 cmd | §7e（Windows 上真的建一个叫 `%USERNAME%` 的文件夹试） |
-| S6 | Installer 孤儿包在 Windows Installer 接口读失败时只凭注册表判断 | 两边都读到才判断 | §7e |
-| S7 | 自动清理的「一天内写过的不碰」对文件夹只看它自己这一层 | 看整棵树里最近一次写入 | §7e（Windows） |
-| S8 | 搬回 C 盘用的是界面上可能过时的记录 | 链接现在指的和记录不一样就不动 | §7e |
-| S9 | OneDrive「仅在线」把所有带重解析点的文件都跳过（不是丢数据，是功能失效：按需下载开着时什么都不做） | 区分 OneDrive 自己的云端类型和真正的链接 | §7e；需要真机确认，见第五节 |
+| S1 | When repairing a broken link, finding by folder name may pick a copy another item is using | Don't pick copies another link is using | §7e |
+| S2 | A power cut after a move renames to `*.moved_backup` leaves the data in the backup with nobody knowing, and the app creates an empty folder | Look for it at startup and tell the user where the data is. From 3.6 on each step is written to `%LOCALAPPDATA%\CleanC\搬家进度`, and at startup you can "finish it" or "undo it" (`Resume-Move`); if that location on C: already has new content, neither is done; verification now requires zero differences in count and size, and on a small difference it copies the rest once more before verifying | §7e, §16 |
+| S3 | The move target can be chosen inside a folder on the cleanup list or a temp folder | Not allowed | §7e |
+| S4 | After an app moves to D: and D: isn't plugged in, its Start menu shortcuts are deleted as broken | Shortcuts whose target is behind a link don't count as broken | §7e |
+| S5 | `cmd` replaces `%name%` in a path with the variable's value and deletes another folder | Paths with `%` or quotes are never handed to cmd | §7e (really creates a folder called `%USERNAME%` on Windows to try it) |
+| S6 | Orphaned Installer packages are judged from the registry alone when the Windows Installer interface fails | Judge only when both are read | §7e |
+| S7 | Automatic cleanup's "not if written within a day" only looks at a folder's own level | Look at the latest write in the whole tree | §7e (Windows) |
+| S8 | Moving back to C: uses a record in the UI that may be out of date | If the link now points somewhere other than the record, nothing is touched | §7e |
+| S9 | OneDrive "online-only" skips every file with a reparse point (not data loss but a broken feature: it does nothing with Files On-Demand on) | Distinguish OneDrive's own cloud type from real links | §7e; needs confirming on a real machine, see section 5 |
 
-### 需要你决定
+### Your decision needed
 
-| # | 问题 | 现状 |
+| # | Problem | Current state |
 |---|---|---|
-| P1 | 重复文件页有一个开关「允许删除 C 盘个人文件夹里的文件」（默认关，打开要确认危险提示）。它和规则 1「个人文件夹里的东西从不删」字面上冲突 | 保留原样，没改。聊天记录不受这个开关影响，一直不能删。要么去掉这个开关，要么把规则 1 写成「默认不删，用户在重复文件页明确打开后可以删重复的那份」 |
+| P1 | The duplicates page has a switch "Allow deleting files in personal folders on C:" (off by default, turning it on needs confirming a danger warning). It conflicts on its face with rule 1, "nothing in personal folders is ever deleted" | Left as it is, unchanged. Chat data is unaffected by this switch and can never be deleted. Either remove the switch, or rewrite rule 1 as "not deleted by default; after the user explicitly turns it on in the duplicates page, the duplicate copy can be deleted" |
 
+### Can be postponed
 
+Criterion: doesn't lose data the user didn't choose to delete (at worst it is recoverable, has to be downloaded again, or is a usability problem), or needs conditions that almost never occur in normal use.
 
-### 可以推迟
-
-判定标准：不会丢用户没选择删除的数据（最坏是可恢复、要重新下载、或者体验问题），或者需要的条件在正常使用中几乎碰不到。
-
-| # | 问题 | 为什么可以推迟 | 以后怎么改 |
+| # | Problem | Why it can be postponed | How to change it later |
 |---|---|---|---|
-| D3 | 「清空回收站」清所有盘的回收站 | 列表上显示的大小就是所有盘的，确认框说清了；同一轮放进去的已经不清 | 只清系统盘，或在说明里写明 |
-| D8 | 搬家核对只比文件数和总字节，不逐个比 | robocopy 有错就整项不换；软件已关；漏掉一个、又多出一个大小抵消的概率极低 | 改成 robocopy `/L` 零差异核对 |
-| D9 | 残留文件夹可能把驱动配套软件的数据当残留 | 只能放进回收站，可以恢复；有猜测提示和勾选声明 | 结合服务的 `ImagePath` 排除 |
-| D12 | 排除列表只对清理页生效（空间地图、重复文件不看） | 设置页写的是「清理时不碰」，范围一致；其他地方删除都要逐项确认 | 统一在 `Get-DeleteBlock` 里查 |
-| D13 | `$WINDOWS.~BT` 在功能更新等待重启时也会被清 | 不丢数据，只是更新要重新下载 | 检测待重启状态 |
-| D14 | 修复断掉的链接时按文件夹名找副本 | 只改链接、不删东西；可以再修一次 | 修复前比顶层内容相似度 |
-| D15 | 打开新版本时不问就把计划任务指向新 exe | 任务内容不变，只是路径 | 提示后再改 |
-| D16 | 归档对网络路径（UNC）推出的目标路径不对 | 不丢数据，只是放的位置怪 | 单独处理 UNC |
-| D17 | 几处写死 `C:\`（Windows.old、搜索索引） | 系统盘不是 C 时这些项找不到东西，不会删错地方 | 统一用 `$env:SystemDrive` |
-| D18 | 页面文件能放到 USB 硬盘 | 拔盘后 Windows 自己建临时页面文件 | 排除 USB 总线的盘 |
-| D19 | 搬家时按进程名结束程序，确认后新开的同名程序也会被结束 | 只限确认框列出的名字，时间窗口很短 | 改成按 PID |
-| D20 | 删多余副本时，副本里少量只存在于副本的文件（门槛内）不逐个列出 | 原文件夹在 C 盘、勾选声明里写明 | 列出差异文件 |
-| D21 | 回收站满了时，放进去的新东西会挤掉回收站里更早的东西 | Windows 本来的行为；设置页可以说明 | 设置页加一句说明 |
-| D23 | `Test-Personal`、`Get-DeleteBlock` 不处理 `\\?\` 前缀和 8.3 短文件名 | 只有手改设置文件才会碰到；清理、搬家用到的路径都是程序自己展开的长路径 | 先统一成长路径再判断 |
-| D24 | 清理页的「搬到其他盘」不要求源在 C 盘（桌面、下载被重定向到网络路径时） | 搬家流程本身照常核对，能搬回 | 只允许 C 盘上的源 |
-| D25 | 计划任务以当前用户身份、最高权限运行 | 不是 SYSTEM、要登录才跑；清系统临时文件需要管理员 | 保持，说明里写清 |
-| D26 | 压缩文件夹（`compact /s`）会不会跟进里面的链接没有核对 | 只是 NTFS 压缩，不删不改内容 | 压缩前拒绝含链接的文件夹 |
-| D27 | 合并成硬链接后，副本的权限、时间戳变成保留那份的；替换失败时只读属性没改回去 | 内容一样，不丢数据 | 失败时恢复只读属性 |
-| D28 | 统计用的计数器是全局的，两处同时统计会互相干扰 | 现在同一时间只有一个后台在跑，界面也挡着 | 改成每次调用自己的计数 |
-| D29 | `IsLink` 读不到时返回「不是链接」 | 后面接的都是 `rd`，`rd` 本身不跟进链接 | 读不到就当是链接 |
-| D22 | 「搬家管理 → 可以搬的」也按编号找目录项 | 可搬的项排在自定义清理组前面，改清理列表不会让它们挪位；搬家是复制核对后换链接，不删数据 | 同样带指纹核对 |
+| D3 | "Empty Recycle Bin" empties the Recycle Bins of all drives | The size shown in the list is that of all drives, and the confirmation says so; whatever went in during the same run is no longer emptied | Only empty the system drive's, or say so in the description |
+| D8 | Move verification only compares the file count and total bytes, not file by file | Any robocopy error stops the swap for the whole item; the app is closed; the odds of missing one file and gaining another whose sizes cancel out are very low | Verify with robocopy `/L` for zero differences |
+| D9 | Leftover folders may treat driver companion software's data as leftovers | They can only go to the Recycle Bin and can be restored; there is a "this is a guess" note and a declaration to tick | Exclude using services' `ImagePath` |
+| D12 | The exclusion list only applies to the cleanup page (the space map and duplicates ignore it) | The Settings page says "not touched during cleanup", which matches; deletes elsewhere all need item-by-item confirmation | Check it in `Get-DeleteBlock` everywhere |
+| D13 | `$WINDOWS.~BT` is also cleaned while a feature update is waiting for a restart | No data is lost; the update just has to be downloaded again | Detect the pending-restart state |
+| D14 | Repairing a broken link finds copies by folder name | Only changes the link and deletes nothing; it can be repaired again | Compare the top-level content similarity before repairing |
+| D15 | Opening a new version repoints the scheduled task to the new exe without asking | The task's content is unchanged, only the path | Ask before changing |
+| D16 | Archiving derives the wrong target path for network (UNC) paths | No data is lost; the files just end up in an odd place | Handle UNC separately |
+| D17 | A few places hard-code `C:\` (Windows.old, the search index) | When the system drive isn't C:, these items find nothing, and nothing is deleted in the wrong place | Use `$env:SystemDrive` everywhere |
+| D18 | The page file can be put on a USB drive | After unplugging, Windows creates a temporary page file itself | Exclude drives on the USB bus |
+| D19 | Moving ends programs by process name, so a program of the same name opened after confirming is also ended | Limited to the names listed in the confirmation, and the time window is very short | Use PIDs instead |
+| D20 | When deleting an extra copy, a few files that exist only in the copy (within the threshold) aren't listed one by one | The original folder is on C:, and the declaration says so | List the differing files |
+| D21 | When the Recycle Bin is full, new items push out older ones | Windows' own behavior; the Settings page can explain it | Add a sentence to the Settings page |
+| D23 | `Test-Personal` and `Get-DeleteBlock` don't handle the `\\?\` prefix or 8.3 short names | Only hand-edited settings files would hit it; the paths used by cleanup and moving are long paths the program expands itself | Normalize to long paths before judging |
+| D24 | The cleanup page's "Move to another drive" doesn't require the source to be on C: (when Desktop and Downloads are redirected to a network path) | The move flow still verifies as usual and can move it back | Only allow sources on C: |
+| D25 | The scheduled task runs as the current user with the highest privileges | Not SYSTEM, and it only runs when signed in; cleaning system temporary files needs administrator rights | Keep it, and say so clearly in the description |
+| D26 | Whether compressing folders (`compact /s`) follows links inside hasn't been checked | It is only NTFS compression, which neither deletes nor changes content | Refuse folders containing links before compressing |
+| D27 | After merging into hard links, the copies' permissions and timestamps become the kept file's; when the swap fails the read-only attribute isn't restored | The content is the same, and no data is lost | Restore the read-only attribute on failure |
+| D28 | The counters used for statistics are global, so two measurements at the same time interfere with each other | At present only one background job runs at a time, and the UI blocks it too | Give each call its own counters |
+| D29 | `IsLink` returns "not a link" when it can't read | What follows is always `rd`, and `rd` itself doesn't follow links | Treat unreadable as a link |
+| D22 | "Moved folders → Can be moved" also finds catalog items by identifier | Movable items come before the custom cleanup group, so changing the cleanup list doesn't shift them; a move copies and verifies before swapping in a link and deletes no data | Check them with fingerprints too |
 
 ---
 
-## 四、自动化测试
+## 4. Automated tests
 
-### 怎么跑
+### How to run them
 
 ```
-pwsh tests/Safety.Tests.ps1     # 核心安全规则（本文第一节）
-pwsh tests/Engine.Tests.ps1     # 引擎功能
-pwsh tests/Checks.ps1           # 翻译、对话框参数、目录库格式
+pwsh tests/Safety.Tests.ps1     # the core safety rules (section 1 of this document)
+pwsh tests/Engine.Tests.ps1     # engine features
+pwsh tests/Checks.ps1           # translations, dialog parameters, catalog format
 ```
 
-`tests/ci.sh`（Linux）和 `tests/ci.ps1`（Windows，PowerShell 5.1）会按顺序跑上面三个，Windows 上再真的挂一个虚拟磁盘跑一遍搬家（`tests/MoveDisk.Tests.ps1`），跑三遍界面自测（英文浅色、中文浅色、中文深色）。任何一条失败，这次推送的 CI 就是红的。测试脚本里某条检查的表达式自己出错（抛异常）也算失败，不会悄悄跳过。
+`tests/ci.sh` (Linux) and `tests/ci.ps1` (Windows, PowerShell 5.1) run the three above in order; on Windows they also really mount a virtual disk and run a move (`tests/MoveDisk.Tests.ps1`), and run the UI self-test three times (English light, Chinese light, Chinese dark). If any check fails, CI for that push is red. A check whose expression itself errors (throws) in the test script also counts as a failure and is never silently skipped.
 
-### 三类测试
+### Three kinds of tests
 
-1. **行为测试**：在临时文件夹里搭一个假的用户目录，建好个人文件夹、缓存、目录联接、硬链接、`a[1]` 和 `a1` 这样的同名文件夹，真的调用删除函数，再检查该在的一个不少、该删的删掉了（证明守卫不是「什么都不删」）。Windows 才有的（目录联接、硬链接、`Get-DeleteBlock` 的系统路径）只在 Windows CI 上跑，Linux 上标 `skip`。
-2. **源码锁**：数源码里危险调用的个数和写法，用语法树找（`tests/CallSites.ps1`、`tests/DeleteSites.ps1`）：注释和字符串里的字不算，`spps` 这类别名、`cmd /c` 后面的命令、后台代码 here-string 里的调用都找得到。比如 `rd /s /q` 只能有 5 处、`Recycle` 只在删除入口里调用而且前面有 `Test-RecycleOk`、`pnputil` 不许带 `/force`、没有 `vssadmin delete`、计划任务不许用 SYSTEM。新加一处危险调用，测试就会失败，逼着改代码的人看一眼、在这里写明为什么安全，再改测试里的数字。
-3. **真盘搬家**（`tests/MoveDisk.Tests.ps1`，只在 Windows 测试机上跑）：挂一个临时的虚拟磁盘当目标盘，真的把 C 盘上一个测试文件夹搬过去、搬回来，再模拟两次中途断电（改名后、建链接后），每一步核对每个文件的内容、属性和修改时间。
+1. **Behavior tests**: build a fake user profile in a temporary folder, with personal folders, caches, directory junctions, hard links, and look-alike folders such as `a[1]` and `a1`, really call the delete functions, then check that nothing that should stay is missing and that what should be deleted is gone (proving the guards aren't simply "delete nothing"). Windows-only things (directory junctions, hard links, `Get-DeleteBlock`'s system paths) run only in Windows CI and are marked `skip` on Linux.
+2. **Source locks**: count the number and form of dangerous calls in the source, found with the syntax tree (`tests/CallSites.ps1`, `tests/DeleteSites.ps1`): words in comments and strings don't count, and aliases such as `spps`, the command after `cmd /c` and calls inside background-code here-strings are all found. For example, `rd /s /q` may appear in only 5 places, `Recycle` is only called in the delete entry point and only after `Test-RecycleOk`, `pnputil` may not have `/force`, there is no `vssadmin delete`, and scheduled tasks may not use SYSTEM. Adding a dangerous call makes the tests fail, forcing whoever changes the code to take a look, write down here why it is safe, and then change the number in the test.
+3. **Real-disk moves** (`tests/MoveDisk.Tests.ps1`, only on the Windows test machine): mount a temporary virtual disk as the target drive, really move a test folder on C: there and back, then simulate two power cuts midway (after the rename and after creating the link), checking every file's content, attributes and modified time at each step.
 
-### 改删除相关的代码时
+### When changing delete-related code
 
-- 删用户能看到的文件和文件夹，只能调用 `Invoke-SafeRemove`（engine 里）。它按 `-Scope` 过 `Get-DeleteBlock`、`Get-DupBlock` 或 `Test-Personal`，本身是链接、上级是链接的不删（清理列表里的链接只拆链接），放进回收站前过 `Test-RecycleOk`，删完核对还在不在，写操作日志。`Safety.Tests.ps1` 第 14 节用语法树找出所有删除调用（后台代码的 here-string 也解析），除了入口，只有写在名单里的几处（本工具自己的临时文件、日志、快照，搬家的步骤，自测）可以删，数量也锁着。要加一处，先在名单里写明它删什么、为什么安全。
-- 新的后台任务：在启动它的代码旁边用 `Register-BgJob` 登记，启动时写 `Use-BgJob`。会删、会搬、会改设置的不要加 `-ReadOnly`：只读的不拿删除和搬家的锁，可以和定时的自动清理同时跑。哪些是只读由 `Safety.Tests.ps1` 第 46 节定死。
-- 新的搬动入口：先过 `Get-DeleteBlock`（或 `Test-Personal`）和 `IsLink`；确认框带勾选声明。
-- 新的目录库条目：路径用环境变量，有 `*` 才算通配；有代价的加 `confirm` 或 `careful`；跑一遍 `Safety.Tests.ps1`，§4 会检查它没指向盘根、系统根和个人文件夹。
-- 改了上面任何一条，在 `Safety.Tests.ps1` 对应段落加一条测试，再更新本文第二节那一行的状态。
+- Deleting files and folders the user can see may only call `Invoke-SafeRemove` (in the engine). Depending on `-Scope` it goes through `Get-DeleteBlock`, `Get-DupBlock` or `Test-Personal`; it doesn't delete things that are links or whose parent is a link (links on the cleanup list only have the link removed); it goes through `Test-RecycleOk` before moving to the Recycle Bin, checks afterwards whether things are still there, and writes the activity log. Section 14 of `Safety.Tests.ps1` uses the syntax tree to find every delete call (parsing background-code here-strings too); apart from the entry point, only the few places on its list (ClearC's own temporary files, logs and snapshots, the steps of a move, the self-test) may delete, and their number is locked too. To add one, first write on the list what it deletes and why that is safe.
+- New background jobs: register them with `Register-BgJob` next to the code that starts them, and start them with `Use-BgJob`. Jobs that delete, move or change settings must not have `-ReadOnly`: read-only jobs don't take the delete and move lock and can run at the same time as the scheduled automatic cleanup. Section 46 of `Safety.Tests.ps1` fixes which ones are read-only.
+- New move entry points: go through `Get-DeleteBlock` (or `Test-Personal`) and `IsLink` first; the confirmation dialog has a declaration to tick.
+- New catalog entries: use environment variables in paths, and only `*` makes a wildcard; add `confirm` or `careful` to items that come at a cost; run `Safety.Tests.ps1`, whose §4 checks that the entry doesn't point at a drive root, the system root or a personal folder.
+- If you change any of the above, add a test to the matching section of `Safety.Tests.ps1`, then update the status of that row in section 2 of this document.
 
 ---
 
-## 五、要在真机上确认的行为
+## 5. Behavior to confirm on a real machine
 
-代码本身看不出结论、依赖 Windows 组件实际行为的几件事，以及现在的处理：
+A few things whose outcome can't be read from the code and that depend on how Windows components actually behave, and how they are handled now:
 
-| 行为 | 现在 |
+| Behavior | Now |
 |---|---|
-| `rd /s /q` 对内部目录联接只拆链接 | Windows CI 上测（§3「整个文件夹里有指向文档的链接，文档还在」） |
-| 回收模式清理一个含目录联接的文件夹，联接目标不动 | Windows CI 上测（§7c） |
-| Windows PowerShell 5.1 的 `Remove-Item -Recurse` 会不会进目录联接 | 不再依赖：Windows.old 改成先拆链接再 `rd`，源码锁禁止再用 `Remove-Item -Recurse` 删它 |
-| 后台线程、无窗口、带静默标志调用回收时，放不下会不会弹提示 | 不再依赖：`Test-RecycleOk` 事先判断，放不下就不删 |
-| OneDrive 同步目录里出现目录联接时客户端怎么处理 | 不再依赖：OneDrive 同步目录里的一律不搬 |
-| OneDrive 按需下载的文件设了「仅在线」（`+U`）后会不会马上释放空间 | 还没在真机上确认（CI 上没有 OneDrive）。判断「是不是 OneDrive 自己的文件」的部分在 CI 上测了 |
-| `powercfg /q` 的输出在各种语言的 Windows 上，最后两个 `0x` 数都是当前的交流、直流值 | 英文和中文 Windows 上看过；读不到就不改（`Set-DiskPowerFix` 返回「当前电源计划里没有这几项设置」） |
-| 0x7A 转储里的状态码、EPROCESS.ImageFileName 的位置 | 拿真机的 Win10 1903 转储核对过（状态码 0xC000000E、svchost.exe），ImageFileName 先试各版本已知的位置再按特征找；单元测试用拼出来的转储（不提交用户的转储文件：里面有内存内容） |
-| `takeown /SKIPSL`、`icacls /L` 在 Windows 10 / 11 上都有 | 微软文档有这两个参数；Windows CI 上跑的是 Windows Server 2025，删 Windows.old 本身没法在 CI 上测 |
+| `rd /s /q` only removes inner directory junctions | Tested in Windows CI (§3 "a whole folder with a link to Documents inside; Documents is still there") |
+| Recycle mode cleaning a folder that contains a directory junction leaves the junction's target untouched | Tested in Windows CI (§7c) |
+| Whether Windows PowerShell 5.1's `Remove-Item -Recurse` enters directory junctions | No longer relied on: Windows.old now removes links first and then `rd`s, and a source lock forbids using `Remove-Item -Recurse` to delete it again |
+| Whether recycling from a background thread, with no window and a silent flag, shows a prompt when the Recycle Bin can't hold the files | No longer relied on: `Test-RecycleOk` decides in advance and nothing is deleted if it can't hold them |
+| How the OneDrive client handles a directory junction appearing in a synced folder | No longer relied on: nothing inside OneDrive-synced folders is moved |
+| Whether OneDrive Files On-Demand files set to "online-only" (`+U`) free their space right away | Not yet confirmed on a real machine (CI has no OneDrive). The part that decides "is this OneDrive's own file" is tested in CI |
+| Whether in `powercfg /q` output on Windows in any language the last two `0x` numbers are the current AC and DC values | Checked on English and Chinese Windows; nothing is changed if they can't be read (`Set-DiskPowerFix` returns "these settings aren't in the current power plan") |
+| The location of the status code and EPROCESS.ImageFileName in 0x7A dumps | Checked against real Win10 1903 dumps (status code 0xC000000E, svchost.exe); ImageFileName tries the known locations of each version first, then searches by pattern; unit tests use assembled dumps (users' dump files are never committed: they contain memory contents) |
+| Whether `takeown /SKIPSL` and `icacls /L` exist on both Windows 10 and 11 | Microsoft's documentation lists both parameters; Windows CI runs Windows Server 2025, and deleting Windows.old itself can't be tested in CI |

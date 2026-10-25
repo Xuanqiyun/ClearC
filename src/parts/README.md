@@ -1,25 +1,25 @@
-# 源码的各个部分
+# The parts of the source
 
-`src/CleanC-UI.ps1` 是由这里的文件**按 `order.txt` 的顺序原样拼起来**的，拼出来和原来的单文件逐字节相同。
+`src/CleanC-UI.ps1` is these files **joined verbatim in the order given by `order.txt`**; the result is byte-for-byte identical to the single file.
 
-改代码时改这里的文件，然后运行：
+Edit the files here, then run:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File build\merge.ps1
 ```
 
-`build\build.ps1` 构建 exe 前会检查两边是否一致，不一致就停下；`tests\Checks.ps1` 会检查 `src\CleanC-UI.ps1` 是不是最新的。
+`build\build.ps1` checks that the two sides match before it builds the exe and stops if they don't; `tests\Checks.ps1` checks that `src\CleanC-UI.ps1` is up to date.
 
-| 文件夹 | 内容 |
+| Folder | Contents |
 |---|---|
-| `glue/` | 把各部分接起来的 PowerShell：管理员权限、加载 C# 类型、定时任务的后台模式（`/check`、`/autoclean`、`/selftest`）等 |
-| `cs/` | C# 部分。`RowTypes.cs` 是 `$rowCode`；其余几个按顺序拼成 `$dupCode`，一起编译：重复文件查找、批量读目录和多线程统计（`DirReader.cs`）、直接读 NTFS 文件表和变更日志（`Mft.cs`）、空间地图的文件夹树（`DiskMap.cs`）、深色模式配色（`Theme.cs`）、文件系统小工具、核心规则（`Core.cs`：路径规则、搬家进度的状态机，纯函数，引擎调用它们）、各页面列表的行 |
-| `engine/` | `$engine`：清理、搬家、删除保护、日志、自检等核心逻辑，界面线程和每个后台任务共用 |
-| `i18n/en.tsv` | 英文界面的翻译表：每行「中文原文<Tab>英文」，`\n` 表示换行 |
-| `ui/` | `main.xaml` 是主窗口，`help-en.xaml` 是英文帮助页；`10-…` 到 `99-…` 是各页面的界面逻辑，按页面分开 |
+| `glue/` | The PowerShell that joins the parts together: administrator rights, loading the C# types, the background modes for scheduled tasks (`/check`, `/autoclean`, `/selftest`) and so on |
+| `cs/` | The C# code. `RowTypes.cs` is `$rowCode`; the others are joined in order into `$dupCode` and compiled together: duplicate finding, batched folder reads and multi-threaded statistics (`DirReader.cs`), reading the NTFS file table and change journal directly (`Mft.cs`), the space map's folder tree (`DiskMap.cs`), dark-mode colors (`Theme.cs`), small file-system helpers, the core rules (`Core.cs`: path rules and the state machine for move progress, pure functions the engine calls), and the rows of each page's lists |
+| `engine/` | `$engine`: the core logic for cleaning, moving, delete protection, logging and the self-check, shared by the UI thread and every background job |
+| `i18n/en.tsv` | The English UI translation table: one "Chinese original<Tab>English" pair per line, `\n` for a line break |
+| `ui/` | `main.xaml` is the main window and `help-en.xaml` the English help page; `10-…` to `99-…` hold each page's UI logic, one file per page |
 
-注意：
+Notes:
 
-- 这些文件是**片段**，不能单独运行或编译，拼起来才是完整的程序。
-- `cs/RowTypes.cs` 和 `ui/main.xaml` 在双引号的 here-string 里，不要在里面写 `$` 和反引号。
-- 文件用 UTF-8、CRLF 换行；`glue/00-start.ps1` 开头带 BOM（Windows PowerShell 5.1 要靠它认出中文）。
+- These files are **fragments**. They can't run or compile on their own; only the joined file is the complete program.
+- `cs/RowTypes.cs` and `ui/main.xaml` sit inside double-quoted here-strings: don't write `$` or backticks in them.
+- The files are UTF-8 with CRLF line endings; `glue/00-start.ps1` starts with a BOM (Windows PowerShell 5.1 needs it to read Chinese).

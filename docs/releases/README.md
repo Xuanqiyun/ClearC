@@ -1,12 +1,12 @@
-# 各版本的发布说明
+# Release notes for each version
 
-发 GitHub Release 时，把对应那一份的全文贴进说明栏，exe 作为附件上传。每份里都写着那个 exe 的 SHA256，下载的人可以核对文件有没有被改过。
+When publishing a GitHub Release, paste the whole of the matching file into the description and upload the exe as an attachment. Each file gives that exe's SHA256 so downloaders can check the file hasn't been altered.
 
-| 版本 | 说明 | 状态 |
+| Version | Notes | Status |
 |---|---|---|
-| 3.6.3 | [v3.6.3.md](v3.6.3.md) | 最新。双击打不开（旧进程卡在后台）的问题修好了 |
-| 3.6.2 | [v3.6.2.md](v3.6.2.md) | 已发到 Releases；微软已确认 Defender 报的 Trojan:Win32/Bearfoos.B!ml 是误报 |
-| 3.6.1 | [v3.6.1.md](v3.6.1.md) | 没有发布：下载时被 Defender 误报删除 |
-| 3.6 | [v3.6.md](v3.6.md) | 没有发布，内容都包含在后面的版本里 |
+| 3.6.3 | [v3.6.3.md](v3.6.3.md) | Latest. Fixes ClearC not opening when an old process was stuck in the background |
+| 3.6.2 | [v3.6.2.md](v3.6.2.md) | Published on Releases; Microsoft confirmed that Defender's Trojan:Win32/Bearfoos.B!ml was a false positive |
+| 3.6.1 | [v3.6.1.md](v3.6.1.md) | Not published: Defender deleted it on download as a false positive |
+| 3.6 | [v3.6.md](v3.6.md) | Not published; everything in it is included in the later versions |
 
-每一份都包含前面几个版本的更新内容，直接发最新的一版就行。怎么发版、发版前怎么提交微软复核，见 [../RELEASING.md](../RELEASING.md)。
+Each file includes the changes of the versions before it, so publishing just the latest one is enough. Each file has the English notes first and the Chinese notes (中文说明) after them. How to release, and how to submit to Microsoft for review before a release: see [../RELEASING.md](../RELEASING.md).

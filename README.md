@@ -1,214 +1,179 @@
 
-<p align="center"><img src="docs/icon.png" width="96" alt="腾挪 ClearC"></p>
+<p align="center"><img src="docs/icon.png" width="96" alt="ClearC"></p>
 
-<h1 align="center">腾挪 ClearC</h1>
+<h1 align="center">ClearC (腾挪 ClearC)</h1>
 
-<p align="center">Windows 10 / 11 上给 C 盘腾空间的小工具（原名「C盘清理工具」）：清缓存、把聊天记录和软件搬到其他盘、找出大文件和重复文件。<br>单个 exe，双击就能用，不用安装。</p>
+<p align="center">A small tool that frees up space on drive C: on Windows 10 / 11 (formerly "C盘清理工具"): it cleans caches, moves chat data and apps to another drive, and finds large and duplicate files.<br>A single exe: double-click it and it runs, with nothing to install.</p>
 
-<p align="center">中文 · <a href="#english">English</a></p>
+<p align="center">English · <a href="README.zh-CN.md">中文</a></p>
 
 ---
 
-## 能做什么
+## What it does
 
-| 页面 | 做什么 |
+| Page | What it does |
 |---|---|
-| **清理 C 盘** | 扫描后按类分成选项卡列出可以处理的项目（选项卡往下滚时停在顶上，换一类不用来回滚），每一项都可以选「删除」「搬到其他盘」或「跳过」，表头可以按名称、大小排序，下拉框可以只看某一种操作。缓存、临时文件、日志这类删了会自动重建的，默认选中；Windows.old、回收站、Windows Installer 孤儿安装包、驱动解压残留、失效快捷方式、事件日志这类有代价的，默认跳过。也可以「一键清理」：只删不搬；聊天记录占得多时清理页上单独一张卡片，点「搬走聊天记录」才搬。清理分四档：安全清理（默认删）、清后要重建（浏览器缓存、着色器、下载缓存这类删了要重新生成的，默认也删但单独成组、执行前单独列出）、默认不清、受保护（一律不碰）。执行前可以「看文件清单」，设置里可以让删除先进回收站；每一项删前删后的剩余空间都记在操作日志里。扫描一般几秒钟：文件夹大小从文件表里查，要问系统的几项（孤儿安装包、旧版驱动包、传递优化缓存）同时问；打开本工具后空闲时就在后台把 C 盘的文件表读好。清理项来自一张几十条的缓存目录库：Windows 自己的临时文件、更新缓存和日志，Chrome、Edge、Firefox、Brave、360、QQ 等浏览器的网页缓存，显卡着色器缓存，Steam、Epic、Adobe、Teams、Discord、Slack、VS Code、Spotify、网易云音乐等软件的缓存，pip、npm、NuGet、Go、Rust 等开发工具的下载缓存。只删缓存，不碰 Cookie、历史记录、密码和保存的数据。也可以自己加文件夹、排除文件夹。 |
-| **聊天记录搬家** | 微信（新版和旧版）、QQ、企业微信、腾讯会议、飞书、钉钉，以及 Telegram、Discord、Slack、Signal、LINE、Viber、KakaoTalk、Zoom 的聊天记录和数据，整个搬到其他硬盘，C 盘原位置留一个链接，软件照常使用。软件开着时会先问你要不要替你关掉。 |
-| **重复文件** | 找出内容完全相同的文件。查找条件分成四个选项卡，开始查找后自动收起，结果占满页面。NTFS 盘上找 1 MB 以上的文件时，直接从文件表列出文件，不用一个个文件夹去看。可以删掉多余的，也可以「合并为一份」（硬链接，每个位置的文件都还在，只占一份空间）。「相似照片」按 64 位指纹找看起来一样的照片（不同分辨率、重新压缩、轻微裁剪的也算），只能进回收站或归档。留法：留最新 / 最早 / C 盘以外 / 某个文件夹里的 / 路径最短的；「归档勾选的」不删，搬到一个文件夹里按原路径放。 |
-| **省空间** | 左边目录选一项，右边只显示那一项。不删文件也能省：系统压缩（CompactOS）、NTFS 压缩文件夹、页面文件改到其他盘、休眠文件精简、压缩 WSL / Docker 的虚拟磁盘、把 WSL 发行版（wsl --manage --move）、模拟器和虚拟机整个搬走、OneDrive 同步文件改成「仅在线」、关掉 Windows 保留的存储、蓝屏只存小转储、临时文件夹改到其他盘、让 DISM 分析组件存储能回收多少。还能看系统还原点占了多少（只看不删，要调整打开 Windows 的「系统保护」）。 |
-| **空间地图** | 扫描整块盘，一层层点进去看是哪些文件夹占了空间，也可以看成「方块图」。NTFS 格式的盘直接读盘上的文件表（MFT），几十万个文件一般几秒到十几秒就扫完；读不了时自动改回逐个文件夹扫描（也可以关掉「快速扫描」）。「找文件」按大小、多久没改过、类型、名称筛选大文件，可以多选一起删，也可以只看聊天记录里的大文件（只看不删）；「和上次比」看哪些文件夹在变大。每一行前面有复选框（像资源管理器的「项目复选框」），也可以按住鼠标左键或右键上下拖一次选中连着的几行，右键菜单里能打开、复制路径、压缩、删除。快速扫描时会注明实际占用（压缩、稀疏、只在云端的文件比文件大小占得少）和硬链接（WinSxS 里很多文件和 System32 是同一份），「空间明细」说清已用空间分成哪几块、为什么和按文件大小相加对不上。页面上方每块盘一张健康卡片：用量、健康状态，固态硬盘还有温度、磨损和通电时间，按档位标色。上方一行概览：已用 / 总量和系统与软件、个人文件、可清理缓存、其他、剩余的分段条；方块图和列表联动（点方块选中行，选中行方块描边）；「按类型」把全盘文件按扩展名分成十类；「找文件」最多 1000 个，可按大小或时间排序、按所有者筛选；「最近改动」读变更日志（USN）列出这几天新建、改写的文件最集中的文件夹；「和上次比」的快照带日期保留，可以和几天前的比，并用一句话说清已用空间多了多少、主要在哪（Docker、WSL、浏览器缓存、Windows 更新…）。后退、前进（鼠标侧键、Alt+← / Alt+→）和可以点的路径；「待删清单」在不同文件夹里挑好要删的再一起删，下面一直写着删完这块盘大约剩多少，删完写明实际多出了多少；「值得一看」列出名字一看就是缓存、依赖包、构建产物、虚拟环境的大文件夹；方块图按文件夹装的东西上色，缓存带斜线。列表可以导出成 CSV，整块盘的情况可以导出成网页报告（在浏览器里能存成 PDF）。 |
-| **软件管理** | 已装软件按占用大小排列。可以卸载，卸载后检查残留文件夹；装在 C 盘的还可以整个搬到其他盘，不用重装。「检查新版本」用 Windows 自带的 winget 查哪些软件有新版本，点「升级」在终端里升级。另外四个视图：开机启动（和任务管理器一样的来源）、第三方的计划任务、第三方的右键菜单扩展（都可以禁用和重新启用，不删任何东西），以及已卸载软件可能留下的残留文件夹（只是猜测，看过再移到回收站）。每一行都能勾选（或按住左键拖选），一次卸载几个软件（依次打开各自的卸载程序，一个走完再开下一个）、一次禁用或启用几项、一次把几个残留移到回收站，都先确认一次。 |
-| **系统健康** | 标题旁一排选项卡，点哪一项只显示哪一项；蓝屏和崩溃再分三个小选项卡，常见问题修复左边选问题、右边看修法。**硬件**：CPU（负载、频率、性能计数器判断降频、ACPI 温度）、内存（已用、提交、硬错误、WHEA 内存错误）、每块盘（SMART 健康、温度、磨损、读错误）、电池、显卡、Windows（版本、开机时长、等待重启、最近更新、有问题的设备、时钟是否被往回调），读不到的明说读不到。**开机用时**和拖慢开机的程序。**蓝屏和崩溃**：自己解析 Minidump（错误码、参数、读盘失败的状态码、出事的进程、可能的驱动、栈上的驱动），每次蓝屏一句话说明；「诊断结论」把几次蓝屏、事件日志、硬盘健康、时钟和系统版本放在一起看（比如读盘失败 + 系统进程反复退出 = 系统盘掉线），每条下面有「按建议处理」（本工具能做的几步一次做完，先确认、能撤销）和「需要你自己做的」（备份、更新 BIOS 和驱动、厂商硬件检测……，写明这台电脑的版本有多旧），还有按服务编号直达的厂商驱动下载页；可以复制报告、导出诊断包（转储、30 天日志、systeminfo、驱动列表）。**常见问题修复**：按问题列出论坛里最常用的修法（蓝屏、掉盘、系统文件、Windows 更新、网络、时间、睡眠唤醒、声音、图标和商店、开机慢），全是 Windows 自带命令，在看得见的终端里跑，会改动的先确认，能撤销的先留底，不删文件、不结束程序。**活动监控**（点列名按 CPU、内存、写入速度、写入量排序）和 **Windows 事件**。打开本工具后在后台先把这些读好，点进来不用等；中途插拔硬盘会自动刷新。 |
-| **搬家管理** | 「可以搬的」自动列出 C 盘上还能搬走的聊天记录、软件和其他大文件夹，勾选后一次搬好几项；不适合搬的软件单独列出并写明原因。左边目录一次只看一组。「已经搬走的」显示每个搬走的文件夹现在的状态，可以搬回 C 盘、修复断掉的链接、删掉没搬完留下的多余副本。 |
-| **自动提醒** | C 盘剩余空间低于设定值、或者可以清理的缓存超过设定值时在右下角提醒（每次登录电脑后和每天中午各检查一次）；定期自动清一次缓存，每周某一天或每天。两项默认关闭，由 Windows 任务计划运行，不用一直开着本工具。 |
-| **操作日志** | 每一次删除、搬运、合并、压缩、卸载和系统设置改动都记成 txt，可以按类别和时间查看。默认保存半年，可以改。 |
-| **设置** | 左边目录分「常用」「界面」「清理和扫描」，点哪一项只显示哪一项。**使用模式**：普通用户、工程师、开发者和 IT 三档，决定界面上有多少东西（第一次打开时问一句，随时可以换，不丢设置）。外观、语言，以及界面上显示什么：用不上的页面、左下角的按钮、页面说明、空间地图的复选框和各列都可以关掉；快速扫描的开关；查重复文件时让着其他程序（Windows 的后台模式，磁盘和内存都用低优先级）；清理列表：删除时先放进回收站、自己加要清理的文件夹、排除不想碰的文件夹。 |
+| **Clean up C:** | After a scan, the items that can be handled are listed in tabs by group (the tabs stick to the top as you scroll, so switching groups doesn't mean scrolling back up). Each item can be set to Delete, Move to another drive or Skip; the headers sort by name and size, and a drop-down shows only one kind of action. Things that are rebuilt automatically after deletion, such as caches, temporary files and logs, are selected by default; things that come at a cost, such as Windows.old, the Recycle Bin, orphaned Windows Installer packages, leftover driver extracts, broken shortcuts and event logs, are skipped by default. There is also One-click cleanup, which only deletes and never moves; when chat data takes a lot of space it gets its own card on the cleanup page and is only moved when you click "Move chat history". Cleanup has four tiers: Safe to clean (deleted by default), Rebuilt after cleaning (browser caches, shader caches, download caches and other things that have to be regenerated; also deleted by default, but grouped separately and listed separately before running), Skipped by default, and Protected (never touched). Before running you can open "View file list", and in Settings you can have deletes go to the Recycle Bin first; the free space before and after each item is written to the activity log. A scan usually takes a few seconds: folder sizes come from the file table, the few items that need to ask Windows (orphaned installer packages, old driver packages, the Delivery Optimization cache) are asked at the same time, and the C: file table is read in the background whenever ClearC is idle. The items come from a cache library with dozens of entries: Windows' own temporary files, update cache and logs; the web cache of Chrome, Edge, Firefox, Brave, 360, QQ and other browsers; graphics shader caches; the caches of Steam, Epic, Adobe, Teams, Discord, Slack, VS Code, Spotify, NetEase Cloud Music and other apps; and the download caches of developer tools such as pip, npm, NuGet, Go and Rust. Only caches are deleted, never cookies, history, passwords or saved data. You can also add your own folders and exclude folders. |
+| **Moving chat data** | The chat history and data of WeChat (new and old versions), QQ, WeCom, Tencent Meeting, Feishu, DingTalk, Telegram, Discord, Slack, Signal, LINE, Viber, KakaoTalk and Zoom are moved as a whole to another drive, and a link is left in the original location on C:, so the apps keep working as usual. If an app is open, ClearC first asks whether it should close it for you. |
+| **Duplicates** | Finds files with exactly the same content. The search options are in four tabs that fold away once the search starts, so the results fill the page. When looking for files of 1 MB or more on an NTFS drive, files are listed straight from the file table instead of reading folder by folder. You can delete the extra copies, or use "Merge into one copy" (hard links: the file is still in every location but takes the space of one copy). "Similar photos" finds photos that look the same by a 64-bit fingerprint (including different resolutions, re-compression and slight crops); these can only go to the Recycle Bin or be archived. Keep rules: keep the newest / the oldest / the one outside C: / the one in a given folder / the one with the shortest path. "Archive checked…" doesn't delete anything: it moves the files into one folder, keeping their original paths. |
+| **Save space** | Pick an item in the contents list on the left and only that item is shown on the right. Space can be saved without deleting files: system compression (CompactOS), NTFS folder compression, moving the page file to another drive, a smaller hibernation file, compacting WSL / Docker virtual disks, moving WSL distributions (wsl --manage --move), emulators and virtual machines as a whole, making OneDrive files online-only, turning off Windows reserved storage, keeping only small crash dumps, moving the temp folder to another drive, and letting DISM analyze how much the component store can reclaim. It also shows how much space system restore points take (view only, never deleted; to change it, open Windows' "System Protection"). |
+| **Space map** | Scans a whole drive and lets you click down level by level to see which folders take the space, also as a treemap. On NTFS drives it reads the file table (MFT) on the disk directly, so hundreds of thousands of files are usually scanned in a few seconds to a dozen or so; when that isn't possible it falls back to scanning folder by folder (you can also turn off "Fast scan"). "Find files" filters large files by size, how long since they changed, type and name; you can select several and delete them together, or look only at the large files inside chat data (view only). "Since last scan" shows which folders are growing. Every row has a check box (like File Explorer's item check boxes), you can also hold the left or right mouse button and drag up or down to select a run of rows, and the right-click menu can open, copy the path, compress and delete. With the fast scan, the actual size on disk (compressed, sparse and cloud-only files take less than their size) and hard links (many files in WinSxS are the same copy as in System32) are noted, and "Space breakdown" explains what the used space consists of and why it doesn't match the sum of file sizes. At the top of the page each drive has a health card: usage, health status and, for SSDs, temperature, wear and power-on time, colored by level. One overview line shows used / total and a segmented bar of system and apps, personal files, cleanable caches, other, and free space; the treemap and the list are linked (clicking a tile selects its row, and the selected row's tile is outlined); "By type" sorts every file on the drive into ten groups by extension; "Find files" shows up to 1,000 files, sorted by size or time and filtered by owner; "Recent changes" reads the change journal (USN) and lists the folders where files were created or rewritten most in the last few days; "Since last scan" keeps dated snapshots so you can compare with a few days ago, and says in one sentence how much the used space grew and where (Docker, WSL, browser caches, Windows Update…). There are back and forward (mouse side buttons, Alt+← / Alt+→) and a clickable path; the "Delete list" collects files to delete from different folders and deletes them together, showing all along roughly how much space the drive will have left and, afterwards, how much was actually freed; "Worth a look" lists large folders whose names say they are caches, dependency packages, build output or virtual environments; the treemap is colored by what the folders hold, with caches hatched. Lists can be exported to CSV, and the whole drive can be exported as a web report (which the browser can save as a PDF). |
+| **Apps** | Installed apps sorted by the space they take. They can be uninstalled, after which ClearC checks for leftover folders; apps installed on C: can also be moved as a whole to another drive without reinstalling. "Check for updates" uses winget, which comes with Windows, to see which apps have new versions, and "Update" upgrades them in a terminal. Four more views: startup items (the same sources as Task Manager), third-party scheduled tasks, third-party context menu extensions (all of which can be disabled and re-enabled without deleting anything), and folders that uninstalled apps may have left behind (only a guess; look first, then move them to the Recycle Bin). Every row can be ticked (or dragged over with the left button), so you can uninstall several apps in one go (each app's own uninstaller opens in turn, the next one after the previous one finishes), disable or enable several items, or move several leftovers to the Recycle Bin, each with one confirmation first. |
+| **System health** | A row of tabs next to the title; click one and only that section is shown. Blue screens and crashes has three smaller tabs, and in Common fixes you pick a problem on the left and see the fixes on the right. **Hardware**: CPU (load, clock speed, throttling judged from performance counters, ACPI temperature), memory (used, committed, hard faults, WHEA memory errors), each drive (SMART health, temperature, wear, read errors), battery, graphics card, and Windows (version, uptime, pending restart, recent updates, devices with problems, whether the clock was set back); anything that can't be read is shown as unreadable. **Boot time** and the programs that slow down startup. **Blue screens and crashes**: ClearC parses minidumps itself (the bug check code, parameters, disk-read status codes, the process involved, the probable driver, drivers on the stack) and explains each blue screen in one sentence; "Diagnosis" looks at several blue screens, the event logs, drive health, the clock and the Windows version together (for example, disk-read failures plus a system process exiting repeatedly means the system drive dropped out), and under each finding there are "Fix as suggested" (the steps ClearC can do, done in one go, confirmed first and undoable) and "Things to do yourself" (backups, BIOS and driver updates, the vendor's hardware diagnostics…, with how old this PC's versions are), plus a link to the vendor's driver download page for the service tag; the report can be copied and a diagnostics package exported (dumps, 30 days of logs, systeminfo, the driver list). **Common fixes**: the fixes most often recommended on forums, listed by problem (blue screens, drives dropping out, system files, Windows Update, network, time, sleep and wake, sound, icons and the Store, slow startup); all of them are commands that come with Windows, run in a visible terminal; anything that changes something asks first, anything that can be undone saves the old state first, and nothing deletes files or ends programs. **Activity monitor** (click a column name to sort by CPU, memory, write speed or amount written) and **Windows events**. All of this is read in the background after ClearC opens, so there is no wait when you open the page; plugging or unplugging a drive refreshes it automatically. |
+| **Moved folders** | "Can be moved" lists the chat data, apps and other large folders on C: that can still be moved; tick several and move them in one go. Apps that aren't suitable for moving are listed separately with the reason. The contents list on the left shows one group at a time. "Moved" shows the current state of every folder that was moved; each can be moved back to C:, have its broken link repaired, or have an extra copy left by an unfinished move deleted. |
+| **Reminders** | A notification in the bottom-right corner when free space on C: drops below a set value or cleanable caches exceed a set value (checked after each sign-in and once a day at noon); and an automatic cache cleanup on a schedule, on one day a week or every day. Both are off by default and run from Windows Task Scheduler, so ClearC doesn't need to stay open. |
+| **Activity log** | Every delete, move, merge, compression, uninstall and system setting change is recorded as a txt file and can be viewed by category and time. Logs are kept for six months by default; this can be changed. |
+| **Settings** | The contents list on the left is split into "General", "Interface" and "Cleanup and scanning"; click an item and only that item is shown. **Mode**: Home user, Engineer, and Developer and IT decide how much the window shows (asked once on first start, changeable at any time without losing settings). Appearance and language, and what the window shows: pages you don't use, the buttons at the bottom left, page descriptions, and the space map's check boxes and columns can all be turned off; the fast scan switch; letting other programs go first while finding duplicates (Windows background mode, with low disk and memory priority); the cleanup list: send deletes to the Recycle Bin first, add your own folders to clean, exclude folders you don't want touched. |
 
-**三种使用模式**，功能一级比一级多，换模式不丢任何设置和记录：
+**Three modes**, each with more features than the one before; switching modes keeps every setting and record:
 
-| 模式 | 给谁 | 有什么 |
+| Mode | For | What it has |
 |---|---|---|
-| **普通用户** | 只想把 C 盘清干净 | 清理 C 盘、省空间、空间地图、软件管理、系统健康（硬件、蓝屏和崩溃、常见问题修复）、帮助。清理列表里只有常见的缓存和临时文件，删了软件会自动重建；有代价的项目仍然默认跳过。 |
-| **工程师** | 自己维护电脑的人 | 再加上重复文件、搬家管理、自动提醒、操作日志；空间地图的找文件、和上次比、最近改动、导出、压缩；省空间的页面文件、还原点、压缩文件夹、虚拟磁盘、合并重复文件；软件管理的开机启动、残留文件夹、检查新版本、搬到其他盘；系统健康的开机用时、活动监控和改动较大的几步修复（重置网络、重置更新组件、开机检查 C 盘、关闭硬盘省电、关闭快速启动）；清理列表里多出开发工具的缓存和驱动残留。 |
-| **开发者和 IT** | 开发者、运维、IT 支持 | 全部功能。再加上计划任务、右键菜单、保留的存储、组件存储分析、蓝屏转储、临时文件夹位置、自定义清理列表和排除、快速扫描开关、空间明细、检查扫描功能、运行记录、修复系统文件、Windows 事件汇总，以及 Installer 孤儿安装包、事件日志、旧版驱动包、NuGet / Gradle / Maven / JetBrains 缓存这类项目。 |
+| **Home user** | People who just want a clean C: | Clean up C:, Save space, Space map, Apps, System health (hardware, blue screens and crashes, common fixes) and Help. The cleanup list only has common caches and temporary files that apps rebuild automatically; items that come at a cost are still skipped by default. |
+| **Engineer** | People who maintain their own PC | Adds Duplicates, Moved folders, Reminders and the Activity log; Find files, Since last scan, Recent changes, export and compression in the space map; the page file, restore points, compressed folders, virtual disks and merging duplicates in Save space; startup items, leftover folders, Check for updates and moving apps to another drive in Apps; boot time, the activity monitor and the fixes that change more (resetting the network, resetting the update components, checking C: at startup, turning off drive power saving, turning off Fast Startup) in System health; developer tool caches and driver leftovers in the cleanup list. |
+| **Developer and IT** | Developers, operations, IT support | Everything. Adds scheduled tasks, context menus, reserved storage, component store analysis, blue-screen dumps, the temp folder location, a custom cleanup list and exclusions, the fast scan switch, Space breakdown, Check scanning, the run log, repairing system files, the Windows event summary, and items such as orphaned Installer packages, event logs, old driver packages and the NuGet / Gradle / Maven / JetBrains caches. |
 
-界面支持**中文和英文**、**浅色和深色**，在「设置」里或左侧栏底部的「English / 中文」「外观」切换。「帮助」页里可以**检查新版本**（只在点的时候联网），以及**检查扫描功能**：在你的电脑上核对快速扫描是否准确，结果可以发给开发者。
+The interface comes in **Chinese and English**, **light and dark**; switch in Settings or with "English / 中文" and "Appearance" at the bottom of the sidebar. On the Help page you can **check for updates** (it only goes online when you click it) and run **Check scanning**, which verifies the fast scan on your PC and gives a result you can send to the developer.
 
-## 界面截图
+## Screenshots
 
-<p align="center"><img src="docs/screenshots/clean.png" width="860" alt="清理 C 盘：扫描后分组列出可以处理的项目"></p>
+<p align="center"><img src="docs/screenshots/clean-en.png" width="860" alt="Clean up C:: the items that can be handled, listed by group after a scan"></p>
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/map.png" width="100%" alt="空间地图"><br><sub>空间地图：一层层看是哪些文件夹占了空间，每行前面有复选框</sub></td>
-    <td width="50%"><img src="docs/screenshots/map-tree.png" width="100%" alt="空间地图的方块图"><br><sub>方块图：方块越大，占的空间越多</sub></td>
+    <td width="50%"><img src="docs/screenshots/map-en.png" width="100%" alt="Space map"><br><sub>Space map: see level by level which folders take the space; every row has a check box</sub></td>
+    <td width="50%"><img src="docs/screenshots/map-tree.png" width="100%" alt="The space map's treemap"><br><sub>Treemap: the bigger the tile, the more space it takes</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/save.png" width="100%" alt="省空间"><br><sub>省空间：系统压缩、页面文件、休眠文件、还原点，不删文件</sub></td>
-    <td><img src="docs/screenshots/settings.png" width="100%" alt="设置"><br><sub>设置：外观、语言，以及界面上显示什么</sub></td>
+    <td><img src="docs/screenshots/save.png" width="100%" alt="Save space"><br><sub>Save space: system compression, page file, hibernation file and restore points, without deleting files</sub></td>
+    <td><img src="docs/screenshots/settings.png" width="100%" alt="Settings"><br><sub>Settings: appearance, language and what the window shows</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/help.png" width="100%" alt="帮助"><br><sub>帮助：左边目录，点哪一项右边看哪一项</sub></td>
-    <td><img src="docs/screenshots/dark.png" width="100%" alt="深色模式"><br><sub>深色模式</sub></td>
+    <td><img src="docs/screenshots/help-en.png" width="100%" alt="Help"><br><sub>Help: contents on the left; click an item to read it on the right</sub></td>
+    <td><img src="docs/screenshots/dark.png" width="100%" alt="Dark mode"><br><sub>Dark mode</sub></td>
   </tr>
 </table>
 
-截图是 GitHub 上的自动测试机拍的（界面自测时顺便扫一遍那台机器的 C 盘，只统计不删），所以文件夹和大小是测试机上的，和普通电脑不太一样。
+The screenshots are taken by an automated test machine on GitHub (the UI self-test also scans that machine's C: drive, measuring only and deleting nothing), so the folders and sizes are the test machine's and differ from an ordinary PC. Some of them show the Chinese interface.
 
-## 安全原则
+## Safety rules
 
-- **个人文件夹里的东西一律不删**：桌面、文档、下载、图片、视频、音乐、收藏夹、OneDrive，包括这台电脑上其他账户的个人文件夹和「公用」文件夹。即使误选也会自动跳过。
-- **删除前必须确认**：每次删除都要先勾选「我已确认这些资料不再需要」才能点删除。
-- **系统位置不让删**：Windows 文件夹、软件的安装文件夹（请到「软件管理」卸载）、保存密码和证书的位置、软件安装包缓存、搬家后的数据，都会被挡住并说明原因。
-- **搬家先核对再删**：复制到目标盘后，两边的文件个数和大小核对一致，才把原位置换成链接、删除 C 盘上的那份。核对不过、文件被占用，原文件夹都原样不动。
-- **可以中途取消**：耗时的操作随时能点「取消」，停在安全的地方。搬家时还在复制就取消，C 盘上的原文件夹不动；正在换成链接这类不能停在一半的步骤，会做完这一步再停。
-- **有记录可查**：所有改动都写进操作日志。
-- **放进回收站就是放进回收站**：网络位置、U 盘、回收站被关掉、文件比回收站还大时，Windows 会改成永久删除；本工具事先判断，这种情况不删并说明原因。
-- **确认的是什么就做什么**：执行时逐项核对是不是扫描时列出的那一项；扫描后改了清理列表，要重新扫描。
-- **不跟进链接**：删除时遇到目录联接、符号链接只拆链接本身，指向的文件夹一个文件都不动；OneDrive 同步文件夹里的东西不搬。
+- **Nothing in personal folders is ever deleted**: Desktop, Documents, Downloads, Pictures, Videos, Music, Favorites and OneDrive, including the personal folders of other accounts on this PC and the "Public" folders. Even if selected by mistake, they are skipped automatically.
+- **Deletes must be confirmed**: every delete requires ticking the box confirming that the files are no longer needed before the Delete button can be clicked.
+- **System locations can't be deleted**: the Windows folder, software install folders (uninstall from "Apps" instead), the places that store passwords and certificates, software installer caches, and moved data are all blocked, with the reason shown.
+- **Moves verify before deleting**: after copying to the target drive, the file count and total size on both sides must match before the original location is replaced by a link and the copy on C: is deleted. If the check fails or a file is in use, the original folder is left exactly as it was.
+- **Can be cancelled midway**: long operations can be cancelled at any time and stop at a safe point. Cancelling a move while it is still copying leaves the original folder on C: untouched; steps that can't stop halfway, such as replacing a folder with a link, finish that step first and then stop.
+- **Everything is on record**: every change is written to the activity log.
+- **"Move to Recycle Bin" means the Recycle Bin**: for network locations, USB drives, a disabled Recycle Bin, or files bigger than the Recycle Bin, Windows silently deletes permanently instead; ClearC checks beforehand, and in those cases doesn't delete and explains why.
+- **It does what you confirmed**: at run time each item is checked against what the scan listed; if the cleanup list changed after the scan, scan again.
+- **Links are not followed**: when a delete meets a directory junction or symbolic link, only the link itself is removed and not a single file in the folder it points to is touched; items inside OneDrive-synced folders are not moved.
 
-每条执行路径可能怎么丢数据、现在靠什么挡住、哪些问题修了哪些推迟、每次改代码自动跑哪些安全测试，见 [docs/SAFETY.md](docs/SAFETY.md)。
+How each path can lose data, what guards it now, which problems were fixed and which postponed, and which safety tests run automatically on every code change: see [docs/SAFETY.md](docs/SAFETY.md).
 
-## 搬家是怎么工作的
+## How moving works
 
-软件去哪里读写数据，是软件自己决定的，大多数没法改（比如 `AppData\Roaming\Tencent`）。所以搬家时，工具把整个文件夹复制到其他盘（默认放在空闲最多那块盘的 `CDriveMoved` 文件夹里），核对一致后，在 C 盘原位置放一个 **目录链接（junction）**，再删掉 C 盘上的原文件夹。
+Where an app reads and writes its data is decided by the app itself, and most of them can't be changed (for example `AppData\Roaming\Tencent`). So to move it, ClearC copies the whole folder to another drive (by default into the `CDriveMoved` folder on the drive with the most free space), verifies the copy, puts a **directory junction** in the original location on C:, and then deletes the original folder on C:.
 
-链接几乎不占空间。软件打开原来的路径时，Windows 自动转到目标盘上读写，软件察觉不到任何变化，不用改设置，也不用重装。
+The link takes almost no space. When the app opens its old path, Windows redirects it to the target drive; the app notices no change, and there is nothing to reconfigure or reinstall.
 
-需要注意：目标盘要一直接着；请不要删除、改名或移动 `CDriveMoved` 文件夹。在「搬家管理」里随时可以把它们搬回 C 盘。
+Keep in mind: the target drive must stay connected, and please don't delete, rename or move the `CDriveMoved` folder. You can move things back to C: from "Moved folders" at any time.
 
-## 下载和使用
+## Download and use
 
-1. 到 [Releases](../../releases) 下载最新的 `ClearC-vX.X.exe`（就是腾挪 ClearC，用英文文件名是因为 GitHub 不支持中文的下载文件名）。
-2. 放到一个固定的位置（比如 `D:\工具\`），双击运行。需要管理员权限，会弹出 UAC 确认。
-3. 第一次打开会显示安全风险提示，同意后才能使用。左侧「帮助」里有完整的使用说明。
+1. Download the latest `ClearC-vX.X.exe` from [Releases](../../releases) (it is 腾挪 ClearC; the file name is in English because GitHub doesn't support Chinese download file names).
+2. Put it somewhere permanent (for example `D:\Tools\`) and double-click it. It needs administrator rights, so a UAC prompt appears.
+3. The first start shows a risk notice that you must agree to before using it. "Help" in the sidebar has the full instructions.
 
-系统要求：Windows 10 或 11。用的是系统自带的 Windows PowerShell 5.1 和 .NET Framework 4.8，不需要另装任何东西。
+Requirements: Windows 10 or 11. It uses the Windows PowerShell 5.1 and .NET Framework 4.8 that come with Windows, so nothing else needs to be installed.
 
-exe 暂时没有代码签名，Windows SmartScreen 可能提示「Windows 已保护你的电脑」，点「更多信息」→「仍要运行」即可。不放心的话可以按下面的方法自己从源码构建。
+The exe is not code-signed yet, so Windows SmartScreen may say "Windows protected your PC"; click "More info" → "Run anyway". If you'd rather not, build it yourself from the source as described below.
 
-每个版本的发布说明（含 exe 的 SHA256）在 [docs/releases](docs/releases/README.md)。下载后可以在 PowerShell 里运行 `Get-FileHash .\ClearC-vX.exe` 核对，和说明里写的一样，就说明文件没被改过。
+The release notes for each version (with the exe's SHA256) are in [docs/releases](docs/releases/README.md). After downloading, run `Get-FileHash .\ClearC-vX.exe` in PowerShell; if it matches the notes, the file hasn't been altered.
 
-### 被杀毒软件拦截、删除怎么办
+### If your antivirus blocks or deletes it
 
-exe 没有代码签名，又是把 PowerShell 脚本打包成的程序，Windows Defender 的机器学习判断有时会把新版本误报成木马，下载后就被删掉（3.6.1 被报成 `Trojan:Win32/Bearfoos.B!ml`，结尾的 `!ml` 表示是机器学习的启发式判断）。每个版本发布前都会提交给微软复核，3.6.2 已经确认是误报。遇到被拦时：
+The exe has no code signature and is a PowerShell script packaged as a program, so Windows Defender's machine-learning detection sometimes reports a new version as a trojan by mistake and deletes it after download (3.6.1 was reported as `Trojan:Win32/Bearfoos.B!ml`; the `!ml` at the end means a machine-learning heuristic). Each version is submitted to Microsoft for review before it is published, and 3.6.2 has been confirmed as a false positive. If it gets blocked:
 
-- 不要关掉杀毒软件。等一两天再下载，或者在 Windows 安全中心 →「病毒和威胁防护更新」里点「检查更新」后再下载。
-- 着急用的话，下载源码，双击 `src/run-from-source.bat` 直接运行，不经过 exe。
+- Don't turn off your antivirus. Wait a day or two and download again, or click "Check for updates" under Windows Security → "Virus & threat protection updates" and then download again.
+- If you need it right away, download the source and double-click `src/run-from-source.bat` to run it directly, without the exe.
 
-双击没反应：3.6.3 以前，窗口关掉后程序有时会留在后台，再双击时以为已经开着一个就直接退出了。3.6.3 起窗口一关程序就结束；万一还有卡住的，双击时会问要不要结束它再打开。旧版本可以在任务管理器里结束 `ClearC` 开头的进程。
+Nothing happens on double-click: before 3.6.3, ClearC sometimes stayed in the background after its window closed, and double-clicking again assumed one was already open and quit. From 3.6.3 on, closing the window ends the program, and if a copy is still stuck, double-clicking asks whether to end it and open again. On older versions, end the processes whose names start with `ClearC` in Task Manager.
 
-维护者发版的流程（包括提交微软复核的每一项怎么填）见 [docs/RELEASING.md](docs/RELEASING.md)。
+The maintainer's release process (including every field of the Microsoft review submission) is in [docs/RELEASING.md](docs/RELEASING.md).
 
-## 从源码运行或构建
+## Run or build from source
 
-整个程序就是一个 PowerShell 脚本 `src/CleanC-UI.ps1`，exe 只是把它包起来。这个脚本由 `src/parts/` 下按功能分开的文件拼成（见 [src/parts/README.md](src/parts/README.md)）：改代码时改 `src/parts/` 里的文件，再运行 `build\merge.ps1`。
+The whole program is one PowerShell script, `src/CleanC-UI.ps1`, and the exe only wraps it. The script is assembled from files split by function under `src/parts/` (see [src/parts/README.md](src/parts/README.md)): to change the code, edit the files in `src/parts/` and then run `build\merge.ps1`.
 
-**直接运行源码**：双击 `src/run-from-source.bat`（会请求管理员权限）。功能和 exe 一样，只是自动提醒、每周清理这类定时任务只有 exe 版本支持。
+**Run the source directly**: double-click `src/run-from-source.bat` (it asks for administrator rights). It works the same as the exe, except that scheduled tasks such as reminders and weekly cleanup are only supported by the exe.
 
-**在 Windows 上构建 exe**（只用系统自带的 C# 编译器，不需要 Visual Studio）：
+**Build the exe on Windows** (it only uses the C# compiler that comes with Windows; no Visual Studio needed):
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File build\build.ps1
 ```
 
-生成的 exe 在 `out\` 里。在 Linux / macOS 上可以用 PowerShell 7 运行 `build/build-roslyn.ps1`，准备步骤写在文件开头。
+The exe is written to `out\`. On Linux / macOS, run `build/build-roslyn.ps1` with PowerShell 7; the preparation steps are at the top of the file.
 
-### 代码结构
+### Code layout
 
 ```
-src/parts/               源码，按功能分开（拼起来就是 src/CleanC-UI.ps1）
-  ├─ cs/                   C# 部分：重复文件查找、批量读目录和多线程统计、读取 NTFS 文件表（MFT）和变更日志、空间地图、深色配色、列表的行
-  ├─ engine/Engine.ps1     清理、搬家、删除保护、日志、自检等核心逻辑；界面线程和每个后台任务共用
-  │                        清理项在里面的缓存目录库 $script:cacheLib 里：一行一条「名称 | 路径 | 说明 | 选项」，加条目改这里，英文写进 i18n/en.tsv
-  ├─ i18n/en.tsv           英文界面的翻译表
-  ├─ ui/                   WPF 界面（main.xaml、英文帮助页）和各页面的界面逻辑
-  └─ glue/                 把各部分接起来：管理员权限、加载 C# 类型、定时任务模式（/check、/autoclean、/selftest）
-src/CleanC-UI.ps1        拼好的整个程序（直接运行源码、构建 exe 都用它）
-src/run-from-source.bat  不构建、直接运行源码
-build/merge.ps1          把 src/parts/ 拼成 src/CleanC-UI.ps1（-Check 只检查是不是最新的）
-build/launcher.cs        exe 启动器：把脚本作为内嵌资源，放进本进程里的 PowerShell 5.1 运行
-build/app.manifest       要求管理员权限、长路径支持
-build/build.ps1          Windows 上构建 exe（先自动拼一次；设置了证书就顺便签名）
-build/build-roslyn.ps1   其他系统上构建 exe
-tests/                   测试，见下面
+src/parts/               the source, split by function (joined, it is src/CleanC-UI.ps1)
+  ├─ cs/                   C#: duplicate finding, batched folder reads and multi-threaded statistics, reading the NTFS file table (MFT) and change journal, the space map, dark-mode colors, list rows
+  ├─ engine/Engine.ps1     the core logic for cleaning, moving, delete protection, logging and the self-check; shared by the UI thread and every background job
+  │                        cleanup items live in its cache library $script:cacheLib, one "name | path | description | options" entry per line; add entries here and put the English in i18n/en.tsv
+  ├─ i18n/en.tsv           the English UI translation table
+  ├─ ui/                   the WPF interface (main.xaml, the English help page) and each page's UI logic
+  └─ glue/                 joins the parts: administrator rights, loading the C# types, scheduled-task modes (/check, /autoclean, /selftest)
+src/CleanC-UI.ps1        the whole program, joined (used both to run the source and to build the exe)
+src/run-from-source.bat  runs the source directly, without building
+build/merge.ps1          joins src/parts/ into src/CleanC-UI.ps1 (-Check only checks that it is up to date)
+build/launcher.cs        the exe launcher: holds the script as an embedded resource and runs it in an in-process PowerShell 5.1
+build/app.manifest       requests administrator rights and long path support
+build/build.ps1          builds the exe on Windows (joins the parts first; signs it if a certificate is configured)
+build/build-roslyn.ps1   builds the exe on other systems
+tests/                   tests, see below
 ```
 
-### 测试
+### Tests
 
-| 测试 | 在哪跑 | 怎么跑 |
+| Test | Where it runs | How to run it |
 |---|---|---|
-| 语法、C# 编译、XAML、控件名、翻译 | 任何装了 PowerShell 的系统 | `pwsh tests/Checks.ps1` |
-| 核心逻辑（统计大小、查找、树上查大小、深色配色等） | Windows PowerShell 5.1 或 PowerShell 7 | `pwsh tests/Engine.Tests.ps1` |
-| 直接读文件表、按改动增量更新 | Linux，root，装 ntfs-3g 和 PowerShell 7 | `sudo bash tests/ntfs/run.sh`：用 mkntfs 和 ntfs-3g 做出真的 NTFS 镜像（硬链接、稀疏文件、碎片、备用数据流、很深的路径、各种簇大小），和挂载后逐个文件夹数出来的结果对比。ntfs-3g 建的符号链接是普通文件，和 Windows 不同，所以允许差几处 |
-| 深色模式的对比度 | 任何装了 PowerShell 和 Python 的系统 | `bash tests/theme/run.sh`：算每段文字和底色的对比度（近似） |
-| 在真的 Windows 上核对快速扫描 | Windows | 程序里「帮助」→「检查扫描功能」；或者 `ClearC.exe /selftest`，结果在 `%LOCALAPPDATA%\CleanC\selftest.txt`（设置环境变量 `CLEANC_REPORT` 可以改位置，`CLEANC_QUIET=1` 不弹提示），退出码是不通过的项数。也核对实际占用（稀疏、NTFS 压缩、系统压缩、硬链接）和 Windows 自己报的是否一致 |
-| 界面功能 | Windows | `ClearC.exe /uitest`：打开窗口（放在屏幕外），把各页、设置开关、项目复选框、右键拖选、右键菜单、空间明细点一遍，对话框都当作点了取消，做完自己关掉；结果在 `%LOCALAPPDATA%\CleanC\uitest.txt`（`CLEANC_REPORT` 可以改），退出码是不通过的项数。测完设置原样放回。设置 `CLEANC_SHOTS=1` 时还会真的扫一遍 C 盘（只统计不删），把几页界面存成 PNG 放在报告旁边；GitHub 上的自动测试用英文浅色、中文浅色、中文深色各跑一遍，README 里的截图就是这样来的 |
+| Syntax, C# compile, XAML, control names, translations | Any system with PowerShell | `pwsh tests/Checks.ps1` |
+| Core logic (size statistics, searching, size lookups in the tree, dark-mode colors and so on) | Windows PowerShell 5.1 or PowerShell 7 | `pwsh tests/Engine.Tests.ps1` |
+| Reading the file table directly, incremental updates from changes | Linux, as root, with ntfs-3g and PowerShell 7 | `sudo bash tests/ntfs/run.sh`: builds real NTFS images with mkntfs and ntfs-3g (hard links, sparse files, fragmentation, alternate data streams, very deep paths, various cluster sizes) and compares them with folder-by-folder counts of the mounted image. Symbolic links created by ntfs-3g are ordinary files, unlike on Windows, so a few differences are allowed |
+| Dark-mode contrast | Any system with PowerShell and Python | `bash tests/theme/run.sh`: computes the contrast of each piece of text against its background (approximately) |
+| Checking the fast scan on real Windows | Windows | "Help" → "Check scanning" in the program; or `ClearC.exe /selftest`, with the result in `%LOCALAPPDATA%\CleanC\selftest.txt` (set the `CLEANC_REPORT` environment variable to change the location and `CLEANC_QUIET=1` to suppress the prompt); the exit code is the number of failed checks. It also checks that the size on disk (sparse, NTFS compression, system compression, hard links) matches what Windows itself reports |
+| UI features | Windows | `ClearC.exe /uitest`: opens the window (off screen), clicks through every page, the settings switches, the item check boxes, right-button drag selection, the right-click menu and Space breakdown, treats every dialog as cancelled, and closes itself when done; the result is in `%LOCALAPPDATA%\CleanC\uitest.txt` (`CLEANC_REPORT` changes it), and the exit code is the number of failed checks. Settings are put back as they were afterwards. With `CLEANC_SHOTS=1` it also really scans C: (measuring only, deleting nothing) and saves several pages as PNGs next to the report; the automated tests on GitHub run it once each in English light, Chinese light and Chinese dark, which is where the screenshots in this README come from |
 
-### 代码签名
+### Code signing
 
-exe 签了名，SmartScreen 的提示会少很多（签名的发布者信誉要随着下载量慢慢积累，刚签的版本一开始可能还会提示）。`build\build.ps1` 已经支持签名：设置环境变量 `CLEARC_SIGN_PFX`（.pfx 证书）和 `CLEARC_SIGN_PASSWORD`，或者 `CLEARC_SIGN_THUMBPRINT`（装在「当前用户 → 个人」里的证书），构建完会用 Windows SDK 的 signtool 签名并加时间戳。证书可以这样拿：
+With a signed exe, SmartScreen warns far less often (the publisher's reputation builds up gradually with downloads, so a newly signed version may still warn at first). `build\build.ps1` already supports signing: set the environment variables `CLEARC_SIGN_PFX` (a .pfx certificate) and `CLEARC_SIGN_PASSWORD`, or `CLEARC_SIGN_THUMBPRINT` (a certificate installed under "Current User → Personal"), and after the build it signs with the Windows SDK's signtool and adds a timestamp. Ways to get a certificate:
 
-- **SignPath Foundation**（免费，给开源项目）：在 [signpath.org](https://signpath.org/) 申请。要求包括 OSI 认可的开源许可证（本项目是 MIT）、exe 由公开的自动构建（比如 GitHub Actions）从源码生成、每次签名都由维护者手动批准、项目主页写明代码签名政策。
-- **Azure Artifact Signing**（原 Trusted Signing，每月约 10 美元）：目前个人开发者只限美国和加拿大，机构限美国、加拿大、欧盟和英国。
-- 也可以向证书机构买 OV 代码签名证书。
+- **SignPath Foundation** (free, for open-source projects): apply at [signpath.org](https://signpath.org/). The requirements include an OSI-approved open-source license (this project is MIT), an exe built from source by a public automated build (such as GitHub Actions), every signing approved by hand by the maintainer, and a code signing policy on the project page.
+- **Azure Artifact Signing** (formerly Trusted Signing, about USD 10 a month): currently limited to individual developers in the US and Canada, and organizations in the US, Canada, the EU and the UK.
+- An OV code signing certificate bought from a certificate authority also works.
 
-### 国内下载镜像
+### Download mirror in China
 
-GitHub 在国内下载慢的话，可以在 [Gitee](https://gitee.com/) 建一个同名仓库做镜像：Gitee 的「从 GitHub 导入仓库」可以定时同步代码；发版时把 exe 也上传到 Gitee 仓库的「发行版」里，再把下载地址补到这里。
+If downloading from GitHub is slow in China, a repository with the same name on [Gitee](https://gitee.com/) can serve as a mirror: Gitee's "import repository from GitHub" can sync the code on a schedule; when releasing, also upload the exe to the Gitee repository's releases and add the download link here.
 
-### 程序在电脑上留下的东西
+### What the program leaves on your PC
 
-- `%LOCALAPPDATA%\CleanC\`：设置（settings.txt）、C 盘空间记录（history.txt）、操作日志、空间地图快照。
-- 各盘的 `CDriveMoved\`：搬到其他盘的数据。
-- 任务计划程序里的 `CleanC` 文件夹：只在打开自动提醒或每周清理时才会创建，关掉开关就删除。
+- `%LOCALAPPDATA%\CleanC\`: settings (settings.txt), the C: space history (history.txt), the activity log, and space map snapshots.
+- `CDriveMoved\` on each drive: data moved to that drive.
+- The `CleanC` folder in Task Scheduler: only created when reminders or weekly cleanup are turned on, and deleted when they are turned off.
 
-## 安全风险提示
+## Risk notice
 
-本工具会按你的选择删除或搬移电脑上的文件。删除的文件可能无法恢复，存在资料丢失的风险。每次删除前，请确认这些资料确实不再需要、删除不会给你带来损失；重要资料请先备份。
+ClearC deletes or moves files on your PC as you choose. Deleted files may not be recoverable, so there is a risk of data loss. Before every delete, make sure the files really are no longer needed and that deleting them won't cause you any loss; back up important files first.
 
-**因使用本工具造成的资料丢失或其他损失，责任由使用者自行承担，开发者不承担责任。**
+**You are responsible for any data loss or other damage caused by using ClearC; the developer accepts no liability.**
 
-## 反馈
+## Feedback
 
-- 在本仓库提 [Issue](https://github.com/Xuanqiyun/ClearC/issues)，最好附上截图，以及程序里「帮助」→「复制诊断信息」的内容；扫描结果不对的话，附上「检查扫描功能」的结果。程序里「帮助」→「使用反馈」也有打开项目主页和提交问题的按钮。
+- Open an [Issue](https://github.com/Xuanqiyun/ClearC/issues) in this repository, ideally with a screenshot and the diagnostic information copied from "Help" → "Feedback and updates" in the program; if scan results look wrong, attach the result of "Check scanning". "Help" → "Feedback" in the program also has buttons that open the project page and the issue form.
 
-## 许可证
+## License
 
 [MIT](LICENSE)
-
----
-
-<a id="english"></a>
-
-## English
-
-ClearC (Chinese name 腾挪, "make room") frees up space on drive C: on Windows 10 / 11. It is a single exe that needs no installation and runs on the PowerShell 5.1 and .NET Framework 4.8 that ship with Windows.
-
-- **Clean up C:** scans in seconds (folder sizes come from the file table, which is read in the background while ClearC is idle, and the slow questions to Windows are asked in parallel) and lists, in group tabs that stay at the top while you scroll, what can be removed (caches, temp files, update leftovers) and what has a cost (Windows.old, Recycle Bin, orphaned Windows Installer packages), each with Delete / Move / Skip. The items come from a cache library with dozens of entries: Windows' own temp files, update cache and logs; the web cache of Chrome, Edge, Firefox, Brave, 360, QQ and other browsers; shader caches; the caches of Steam, Epic, Adobe, Teams, Discord, Slack, VS Code, Spotify and more; and the download caches of pip, npm, NuGet, Go and Rust. Only caches are deleted, never cookies, history, passwords or saved data. You can add your own folders and exclude folders. Every list in ClearC sorts by clicking a column name, and the cleanup list can be filtered by action.
-- **Move chat history and apps to another drive.** WeChat, QQ, WeCom, Tencent Meeting, Feishu, DingTalk, Telegram, Discord, Slack, Signal, LINE, Viber, KakaoTalk and Zoom data, as well as installed apps, are copied to another drive, verified, and replaced by a directory link, so the software keeps working unchanged.
-- **Duplicates, Save space, Space map, System health, Apps, Moved folders, Reminders, Activity log, Settings.** Find duplicate files or merge them into hard links. Use CompactOS, NTFS folder compression, page-file and hibernation settings, WSL / Docker disk compaction, move WSL distributions, make OneDrive files online-only, turn off reserved storage, keep crash dumps small, move the temp folder and let DISM analyze the component store. The "Moved folders" page lists everything on C: that can still be moved and moves several items at once. Browse folder sizes as a list or treemap (NTFS drives are read straight from the file table, the MFT, so even large drives take seconds; "Fast scan" can be turned off), look at the large files inside chat data (view only), find large files by size, age, type and name and delete several at once (item check boxes like File Explorer's, left- or right-button drag to select a run of rows, and a right-click menu), see size on disk and hard links with the fast scan plus a "Space breakdown" of the used space, check how much restore points take, export an HTML report, see which folders grew since the last scan, export lists to CSV, uninstall apps and clean leftovers, check for updates with winget, disable startup items, third-party scheduled tasks and context menu extensions, find leftover folders of uninstalled apps (tick several or drag over rows to uninstall one after another, disable or enable, or recycle leftovers together), see disk health cards, move folders back, and get low-space and junk-size reminders. Every change is logged.
-- **System health** has one tab per section: hardware cards (CPU, memory, drives with SMART, battery, GPU, Windows), boot time and the programs that slow it down, blue screens and crashes (ClearC parses minidumps itself: bug check, parameters, disk-read status codes, the process involved, the probable driver, drivers on the stack, each explained in one line, plus a combined diagnosis with fix buttons, a copyable report and a diagnostics-package export), common fixes (forum-standard repairs built from Windows commands, run in a visible terminal, asking first and saving what they change so it can be undone), an activity monitor and a Windows event summary. **Space map** adds a drive overview, treemap-list linking, file types, recent changes from the USN journal and growth attribution ("used space grew 18 GB: Docker 12 GB, browser caches 3.5 GB…"), back / forward with a clickable path, a delete list that shows the projected free space, "Worth a look" for caches, packages and build output, and treemap colours by kind. **Duplicates** adds similar photos (64-bit dHash), more keep rules and archiving. **Cleanup** has four tiers (safe, careful, needs confirmation, protected), a file list before deleting and an optional Recycle-Bin-first mode.
-- **Safety rules.** Personal folders (Desktop, Documents, Downloads…) are never deleted, every deletion needs an explicit confirmation, and system locations are blocked. Long operations can be cancelled at any time and stop at a safe point. "Move to Recycle Bin" never silently becomes a permanent delete, links are never followed, and every step is checked against what you confirmed. The data-safety audit, the defect list and the safety tests that run on every push are in [docs/SAFETY.md](docs/SAFETY.md) (Chinese).
-
-Three **modes** decide how much the window shows: **Home user** (Clean up C:, Save space, Space map, Apps, System health, Help; only everyday caches in the cleanup list), **Engineer** (adds Duplicates, Moves, Reminders, the log and the advanced features on each page) and **Developer and IT** (everything). ClearC asks once on first start; change it at the top of Settings at any time without losing anything. The interface is available in English and Chinese, light and dark. Switch on the "Settings" page or with "English / 中文" and "Appearance" at the bottom of the sidebar; "Settings" also hides pages, buttons, descriptions and space-map columns you don't use; the first launch follows the Windows display language. The Help page has a contents list on the left like Settings. It can check for updates (only when you click it) and run "Check scanning", which verifies the fast scan on your PC and produces a report you can send to the developer (also `ClearC.exe /selftest`; `ClearC.exe /uitest` clicks through the interface for automated testing).
-
-<table>
-  <tr>
-    <td width="33%"><img src="docs/screenshots/clean-en.png" width="100%" alt="Clean up C:"><br><sub>Clean up C:</sub></td>
-    <td width="33%"><img src="docs/screenshots/map-en.png" width="100%" alt="Space map"><br><sub>Space map</sub></td>
-    <td width="33%"><img src="docs/screenshots/help-en.png" width="100%" alt="Help"><br><sub>Help</sub></td>
-  </tr>
-</table>
-
-The screenshots are taken by the automated UI test on a GitHub test machine, so the folders and sizes are that machine's.
-
-Developers: the source is split by function under `src/parts/` and merged into `src/CleanC-UI.ps1` by `build/merge.ps1`; tests are in `tests/` (checks, engine tests, real NTFS image tests on Linux, dark-mode contrast). `build/build.ps1` signs the exe when a certificate is configured.
-
-Download the latest `ClearC-vX.X.exe` from [Releases](../../releases). The exe is not code-signed, so SmartScreen may warn; choose "More info → Run anyway", or build it yourself with `build\build.ps1`.
-
-If Windows Defender deletes the download as a trojan (3.6.1 was flagged as `Trojan:Win32/Bearfoos.B!ml`, a machine-learning heuristic), it is a false positive caused by the missing signature: each release is submitted to Microsoft for review, and 3.6.2 was confirmed as a false positive. Don't turn off your antivirus; wait a day or update Defender's definitions and download again, or run `src/run-from-source.bat` from the source. Release notes with each exe's SHA256 are in [docs/releases](docs/releases/README.md); the maintainer's release steps are in [docs/RELEASING.md](docs/RELEASING.md).
-
-**Disclaimer:** deleting files can lose data. Back up anything important. You use ClearC at your own risk, and the developer accepts no liability for any loss.
-
