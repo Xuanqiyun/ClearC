@@ -1,5 +1,9 @@
 # 更新记录
 
+## 3.6.3
+- **双击打不开的问题**：窗口关掉以后，还没做完的后台读取（磁盘健康、预读文件表）有时会把程序留在后台，看不到窗口，下次双击时程序以为已经开着一个，就直接退出了。现在窗口一关，整个程序就结束。万一还有卡在后台的，双击时会弹窗说明，问要不要结束它再打开，点「是」就行，不用打开任务管理器。它要是正在删除或搬家，会提醒停在一半的后果，默认选「否」。
+- Fixed ClearC not opening after a previous copy got stuck in the background without a window: closing the window now ends the whole program, and if a stuck copy is still running, ClearC explains it and offers to end it and open again.
+
 ## 3.6.2
 - 3.6.1 下载时被 Windows Defender 报成 Trojan:Win32/Bearfoos.B!ml（结尾的 !ml 表示是机器学习的启发式判断，不是查到了具体的恶意代码）。启动器不再自己先探测 PowerShell 的语言模式（攻击工具常这样做），改由脚本第一句检查，公司电脑上受限时照旧弹窗说明。exe 没有代码签名，仍可能被误报；遇到时可以把文件提交给微软复核。
 - 3.6.1 was flagged by Windows Defender as Trojan:Win32/Bearfoos.B!ml (a machine-learning heuristic). The launcher no longer probes the PowerShell language mode itself; the script checks it first and the launcher still explains a locked-down PC. The exe is not code-signed and may still be flagged; such files can be submitted to Microsoft for review.
