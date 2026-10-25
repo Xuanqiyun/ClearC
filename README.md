@@ -96,7 +96,6 @@ exe 没有代码签名，又是把 PowerShell 脚本打包成的程序，Windows
 
 - 不要关掉杀毒软件。等一两天再下载，或者在 Windows 安全中心 →「病毒和威胁防护更新」里点「检查更新」后再下载。
 - 着急用的话，下载源码，双击 `src/run-from-source.bat` 直接运行，不经过 exe。
-- 也可以自己把文件提交给微软：<https://www.microsoft.com/wdsi/filesubmission>（选 Software developer，再选 Incorrectly detected）。
 
 双击没反应：3.6.3 以前，窗口关掉后程序有时会留在后台，再双击时以为已经开着一个就直接退出了。3.6.3 起窗口一关程序就结束；万一还有卡住的，双击时会问要不要结束它再打开。旧版本可以在任务管理器里结束 `ClearC` 开头的进程。
 
