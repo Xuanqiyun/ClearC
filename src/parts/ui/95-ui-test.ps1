@@ -804,6 +804,38 @@ function Invoke-UiTest {
                 $ctl.DupRecycle.IsChecked = $true
             } finally { $ctl.ModeName.IsChecked = $true; $script:dupRows = $null; $script:dupByGroup = @{}; $script:dupSimilar = $false; $ctl.DupList.ItemsSource = $null; Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue }
         }
+        & $step 'duplicates: find by hash (paste a hash, pick a file)' {
+            $d = Join-Path ([IO.Path]::GetTempPath()) ('clearc-uitest-hash-' + [guid]::NewGuid().ToString('N').Substring(0, 6)); New-Item -ItemType Directory -Path "$d\sub" -Force | Out-Null
+            $hb = New-Object byte[] 200000; (New-Object Random 3).NextBytes($hb)
+            $hc = [byte[]]$hb.Clone(); $hc[100000] = [byte](($hc[100000] + 1) % 256)
+            [IO.File]::WriteAllBytes("$d\a.bin", $hb); [IO.File]::WriteAllBytes("$d\sub\b-copy.dat", $hb); [IO.File]::WriteAllBytes("$d\c-other.bin", $hc)
+            $sha = & { $h = [Security.Cryptography.SHA256]::Create(); try { [BitConverter]::ToString($h.ComputeHash($hb)).Replace('-', '').ToLowerInvariant() } finally { $h.Dispose() } }
+            $got = { @($script:dupRows | ForEach-Object { [IO.Path]::GetFileName($_.Path) } | Sort-Object) -join ',' }
+            try {
+                Show-Page 'dup'; $ctl.ModeHash.IsChecked = $true
+                if ($ctl.HashRow.Visibility -ne 'Visible' -or $ctl.SpeedRow.Visibility -ne 'Collapsed') { throw 'the hash row is not shown, or the comparison row is still shown' }
+                $ctl.HashText.Text = "SHA256: $sha"
+                if ($ctl.HashInfo.Text -notmatch [regex]::Escape($sha)) { throw ('the pasted hash was not recognized: ' + $ctl.HashInfo.Text) }
+                Start-HashLookup @($d) @{ Ok = $true; Min = 1; Max = 0 }
+                if (-not (& $waitUi { -not $script:worker } 60000)) { throw 'the pasted-hash lookup did not finish' }
+                if ((& $got) -ne 'a.bin,b-copy.dat' -or -not $script:dupHash) { throw ('pasted hash found: ' + (& $got)) }
+                if (@($script:dupRows | Where-Object { $_.ToDelete }).Count -ne 0) { throw 'lookup results were checked automatically' }
+                Set-HashSeed "$d\a.bin"
+                if ($ctl.HashText.Text -or $ctl.DTabModeVal.Text -notmatch [regex]::Escape((T '选了文件'))) { throw 'picking a file did not switch to the file' }
+                Start-HashLookup @($d) @{ Ok = $true; Min = 1; Max = 0 }
+                if (-not (& $waitUi { -not $script:worker } 60000)) { throw 'the picked-file lookup did not finish' }
+                if ((& $got) -ne 'a.bin,b-copy.dat') { throw ('picked file found: ' + (& $got)) }
+                if ([string]$ctl.HashText.Text -ne $sha -or $script:hashSeed -ne "$d\a.bin") { throw 'the computed SHA-256 is not shown, or the picked file was dropped' }
+                $L.Add(("hash lookup: {0} rows, SHA-256 {1}" -f $script:dupRows.Count, $sha.Substring(0, 12)))
+                Set-HashSeed ''; $ctl.HashText.Text = 'not a hash'; $n0 = $script:uiSheets.Count
+                Start-HashLookup @($d) @{ Ok = $true; Min = 1; Max = 0 }
+                if ($script:uiSheets.Count -le $n0 -or $script:worker) { throw 'text that is not a hash was not refused' }
+            } finally {
+                Set-HashSeed ''; $ctl.ModeName.IsChecked = $true
+                $script:dupRows = $null; $script:dupByGroup = @{}; $script:dupHash = $false; $ctl.DupList.ItemsSource = $null
+                Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        }
         & $step 'restore points card' {
             Show-Page 'save'
             $sw = [Diagnostics.Stopwatch]::StartNew()

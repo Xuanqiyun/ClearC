@@ -128,7 +128,7 @@ foreach ($n in 'NavSave','NavMap','NavApps','NavMoves','NavAuto','NavLog','PageM
                'Roots','BtnAddRoot','BtnDupScan','BtnDupStop',
                'DupFilterCard','DupFilterToggle','DupFilterBody','DTabRoots','DTabType','DTabSize','DTabMode','DTabRootsVal','DTabTypeVal','DTabSizeVal','DTabModeVal','DPaneRoots','DPaneType','DPaneSize','DPaneMode','FilterSummary','TypeChips','TypeReset','ExtraExt','SizeChips',
                'SizeMin','SizeMinUnit','SizeMax','SizeMaxUnit','SizeHint','ModeName','ModeContent','SpeedFast','SpeedExact',
-               'DupProgressText','DupList','DupRecycle','DupProtect','BtnDupDelete','ModeSimilar','SimilarRow','SimStrict','SimNormal','SimLoose','BtnKeepIn','BtnKeepShort','BtnDupMove',
+               'DupProgressText','DupList','DupRecycle','DupProtect','BtnDupDelete','ModeSimilar','SimilarRow','SimStrict','SimNormal','SimLoose','BtnKeepIn','BtnKeepShort','BtnDupMove','ModeHash','HashRow','HashText','BtnHashPick','HashInfo','SpeedRow','DupModeNote',
                'OpPanel','OpTime','OpTitle','OpBar','OpSubTime','OpDetail','OpSubBar','Root',
                'Overlay','OvTitle','OvTime','OvBar','OvStep','OvWhat','OvChecklist','OvDetail','OvSubBar','OvPlanBox','OvPlanScroll','OvPlan','OvHide','OvClose','OvNote',
                'BtnKeepNew','BtnKeepOld','BtnPickC','BtnPickNone','DupSummary',
@@ -984,6 +984,33 @@ function Update-Op {
             $stepLine = (T '整理结果')
         }
     }
+    elseif ($sync.Mode -eq 'duphash') {
+        $ph = [DupFinder]::Phase
+        if ($ph -eq 'list') {
+            $stepLine = (T '列出查找位置里的文件')
+            $what = (T '选了文件时只看和它一样大的文件；粘贴哈希时看符合类型和大小条件的文件。')
+            $detail = (T "已看过 {0:N0} 个文件夹、{1:N0} 个文件    {2}") -f [DupFinder]::DirsSeen, [DupFinder]::FilesSeen, (Shorten ([DupFinder]::Current))
+        } elseif ($ph -eq 'seed' -or $ph -eq 'quick' -or $ph -eq 'hash') {
+            if ($script:op.PhaseName -ne $ph) { $script:op.PhaseName = $ph; $script:op.PhaseStart = $now }
+            $etaEl = $now - $script:op.PhaseStart
+            $tot = [double][DupFinder]::BytesTotal
+            if ($ph -eq 'seed') {
+                $stepLine = (T '算所选文件的 SHA-256')
+                $what = (T '把选的文件整个读一遍。')
+            } elseif ($ph -eq 'quick') {
+                $stepLine = (T "快速筛选 {0:N0} 个一样大的文件") -f [DupFinder]::FilesTotal
+                $what = (T '先读开头和结尾各 64 KB，明显不同的不用整个读。')
+            } else {
+                $stepLine = (T "算 {0:N0} 个文件的哈希") -f [DupFinder]::FilesTotal
+                $what = (T '每个文件都整个读一遍，哈希完全一样的才算。')
+            }
+            if ($tot -gt 0) { $frac = [math]::Min(0.99, [DupFinder]::BytesDone / $tot) } else { $frac = 0.99 }
+            $detail = (T "{0:N0} / {1:N0} 个，已读 {2} / {3}") -f [DupFinder]::FilesDone, [DupFinder]::FilesTotal, (Fmt ([DupFinder]::BytesDone)), (Fmt $tot)
+            if ($sync.DriveNote) { $detail += "    " + $sync.DriveNote }
+        } elseif ($ph -eq 'finish') {
+            $stepLine = (T '整理结果')
+        }
+    }
     elseif ($p -and $p.Steps -gt 0) {
         $step = [math]::Max(1, [int]$p.Step)
         $stepLine = (T "第 {0} / {1} 项：{2}") -f $step, $p.Steps, $p.StepName
@@ -1138,7 +1165,8 @@ function UI-Busy($b) {
     $ctl.BtnAddRoot.IsEnabled = -not $b; $ctl.Roots.IsEnabled = -not $b
     $has = (-not $b) -and ($script:dupRows -ne $null) -and ($script:dupRows.Count -gt 0)
     foreach ($n in 'BtnKeepNew','BtnKeepOld','BtnPickC','BtnPickNone','BtnKeepIn','BtnKeepShort') { $ctl[$n].IsEnabled = $has }
-    $ctl.BtnDupStop.IsEnabled = $b -and ($sync.Mode -eq 'dup' -or $sync.Mode -eq 'similar')
+    $ctl.BtnDupStop.IsEnabled = $b -and ($sync.Mode -eq 'dup' -or $sync.Mode -eq 'similar' -or $sync.Mode -eq 'duphash')
+    $ctl.BtnHashPick.IsEnabled = -not $b; $ctl.HashText.IsEnabled = -not $b
     foreach ($n in 'BtnMapScan','BtnAppsRefresh','BtnMovesRefresh','BtnCosOn','BtnCosOff','BtnPfMove','BtnPfAuto','BtnHibReduced','BtnHibOff','BtnHibFull','BtnFolderCompress','BtnSaveRefresh') { $ctl[$n].IsEnabled = -not $b }
     $ctl.BtnMapStop.IsEnabled = $b -and ($sync.Mode -eq 'map')
     if (-not $b -and $script:pageLoaded.save) { $on = Get-CompactOSOn; $ctl.BtnCosOn.IsEnabled = -not $on; $ctl.BtnCosOff.IsEnabled = $on }

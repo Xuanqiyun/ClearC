@@ -584,16 +584,28 @@ public static class DupFinder {
     public static List<DupGroup> Find(string[] roots, long minSize, long maxSize, bool matchName, string[] onlyExt, bool exact, string[] driveThreads) {
         return Find(roots, minSize, maxSize, matchName, onlyExt, exact, driveThreads, null);
     }
-    public static List<DupGroup> Find(string[] roots, long minSize, long maxSize, bool matchName, string[] onlyExt, bool exact, string[] driveThreads, DmNode[] trees) {
+    static void ResetCounters() {
         FilesSeen = 0; DirsSeen = 0; CandidateFiles = 0; BytesDone = 0; BytesTotal = 0;
         GroupsFound = 0; FilesDone = 0; FilesTotal = 0;
         ListMs = 0; QuickMs = 0; DeepMs = 0; QuickFiles = 0; DeepFiles = 0; QuickBytes = 0; DeepBytes = 0;
-        Stopwatch phase = Stopwatch.StartNew();
-        Phase = "list"; Current = "";
+        Current = "";
         progDirCache = new ConcurrentDictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+    }
+    public static List<DupGroup> Find(string[] roots, long minSize, long maxSize, bool matchName, string[] onlyExt, bool exact, string[] driveThreads, DmNode[] trees) {
+        ResetCounters();
+        Stopwatch phase = Stopwatch.StartNew();
+        Phase = "list";
         Dictionary<string, int> threads = ParseThreads(driveThreads);
 
         // ---- 第 1 步：多线程列举 ----
+        Dictionary<string, List<DupFile>> buckets = ListAll(roots, minSize, maxSize, matchName, onlyExt, trees);
+        ListMs = phase.ElapsedMilliseconds;
+        if (Cancel || buckets == null) return new List<DupGroup>();
+        return FindInBuckets(buckets, exact, threads, phase);
+    }
+
+    // 列出所有查找位置里符合条件的文件，按「名字|大小」分好；同一个路径只留一次。取消了返回 null
+    static Dictionary<string, List<DupFile>> ListAll(string[] roots, long minSize, long maxSize, bool matchName, string[] onlyExt, DmNode[] trees) {
         EnumJob job = new EnumJob();
         job.MinSize = Math.Max(1, minSize); job.MaxSize = maxSize; job.MatchName = matchName;
         job.Allow = (onlyExt != null && onlyExt.Length > 0) ? MakeSet(onlyExt) : null;
@@ -632,8 +644,7 @@ public static class DupFinder {
             t.IsBackground = true; t.Start(); ets.Add(t);
         }
         foreach (Thread t in ets) t.Join();
-        ListMs = phase.ElapsedMilliseconds;
-        if (Cancel) return new List<DupGroup>();
+        if (Cancel) return null;
 
         Dictionary<string, List<DupFile>> buckets = new Dictionary<string, List<DupFile>>();
         // 同一个路径只留一次（几个查找位置互相包含、一部分从文件表列出时，同一个文件不能自己和自己算重复）
@@ -645,7 +656,10 @@ public static class DupFinder {
                 foreach (DupFile f in kv.Value) if (seenPath.Add(f.Path)) l.Add(f);
             }
         }
+        return buckets;
+    }
 
+    static List<DupGroup> FindInBuckets(Dictionary<string, List<DupFile>> buckets, bool exact, Dictionary<string, int> threads, Stopwatch phase) {
         // ---- 第 2 步：头尾指纹 ----
         List<DupFile> cands = new List<DupFile>();
         long quickBytes = 0;
@@ -705,6 +719,138 @@ public static class DupFinder {
         result.Sort(delegate (DupGroup x, DupGroup y) { return y.Waste.CompareTo(x.Waste); });
         Phase = "done";
         return result;
+    }
+
+    // ================= 按哈希查：选一个文件找它的副本，或者粘贴 MD5 / SHA-1 / SHA-256 找内容对得上的文件 =================
+    // 只读：列出、算哈希、成组；删不删照旧由重复文件的删除流程决定（每组至少留一份、删前逐字节核对）
+    public static volatile string LookupAlgo = "", LookupHash = "", LookupError = "";   // LookupError：nohash 不是哈希、seed 选的文件读不了、empty 空文件、algo 这台电脑不允许这种算法
+    // 从一段文字里找出哈希：正好 32 / 40 / 64 位十六进制（MD5 / SHA-1 / SHA-256），前后可以带别的字；找不到返回 null
+    public static string ParseHash(string text, out string algo) {
+        algo = "";
+        if (string.IsNullOrEmpty(text)) return null;
+        foreach (Match m in Regex.Matches(text, "[0-9A-Fa-f]+")) {
+            int n = m.Value.Length;
+            string a = n == 32 ? "MD5" : n == 40 ? "SHA1" : n == 64 ? "SHA256" : null;
+            if (a != null) { algo = a; return m.Value.ToLowerInvariant(); }
+        }
+        return null;
+    }
+    static System.Security.Cryptography.HashAlgorithm NewHash(string algo) {
+        if (algo == "MD5") return System.Security.Cryptography.MD5.Create();
+        if (algo == "SHA1") return System.Security.Cryptography.SHA1.Create();
+        return System.Security.Cryptography.SHA256.Create();
+    }
+    // 读完整个文件算哈希；读不了、大小和列出时不一样、读不完或取消了，返回 null
+    static string HashFile(string path, long size, string algo, byte[] buf) {
+        FileStream fs = Open(path, true);
+        if (fs == null) return null;
+        try {
+            if (size >= 0 && fs.Length != size) return null;
+            using (System.Security.Cryptography.HashAlgorithm h = NewHash(algo)) {
+                Current = path;
+                long left = fs.Length;
+                while (left > 0) {
+                    if (Cancel) return null;
+                    int n = ReadFull(fs, buf, (int)Math.Min(buf.Length, left));
+                    if (n <= 0) break;
+                    h.TransformBlock(buf, 0, n, null, 0);
+                    left -= n;
+                    Interlocked.Add(ref BytesDone, n);
+                }
+                if (left != 0) return null;
+                h.TransformFinalBlock(buf, 0, 0);
+                return BitConverter.ToString(h.Hash).Replace("-", "").ToLowerInvariant();
+            }
+        } catch { return null; }
+        finally { fs.Dispose(); Interlocked.Increment(ref FilesDone); }
+    }
+    // seedPath 不为空：按这个文件的 SHA-256 找，只看和它一样大的文件（类型和大小条件不管），结果里也列出它自己；
+    // 否则从 hashText 里读出哈希，在符合类型和大小条件的文件里找。找到的文件放成一组（只有一个也放，说明它在哪）
+    public static List<DupGroup> FindByHash(string[] roots, string hashText, string seedPath, long minSize, long maxSize, string[] onlyExt, string[] driveThreads, DmNode[] trees) {
+        ResetCounters();
+        LookupAlgo = ""; LookupHash = ""; LookupError = "";
+        List<DupGroup> none = new List<DupGroup>();
+        Stopwatch phase = Stopwatch.StartNew();
+        Dictionary<string, int> threads = ParseThreads(driveThreads);
+        string algo, want;
+        DupFile seed = null;
+        if (!string.IsNullOrEmpty(seedPath)) {
+            FileInfo fi;
+            try { fi = new FileInfo(seedPath); if (!fi.Exists) { LookupError = "seed"; Phase = "done"; return none; } }
+            catch { LookupError = "seed"; Phase = "done"; return none; }
+            if (fi.Length <= 0) { LookupError = "empty"; Phase = "done"; return none; }
+            algo = "SHA256";
+            Phase = "seed"; BytesTotal = fi.Length; FilesTotal = 1;
+            want = HashFile(fi.FullName, fi.Length, algo, new byte[1 << 20]);
+            if (Cancel) return none;
+            if (want == null) { LookupError = "seed"; Phase = "done"; return none; }
+            seed = new DupFile();
+            seed.Path = fi.FullName; seed.Size = fi.Length; seed.Full = true;
+            try { seed.Modified = fi.LastWriteTime; } catch { seed.Modified = DateTime.MinValue; }
+            minSize = fi.Length; maxSize = fi.Length; onlyExt = null;
+        } else {
+            want = ParseHash(hashText, out algo);
+            if (want == null) { LookupError = "nohash"; Phase = "done"; return none; }
+            try { using (NewHash(algo)) { } } catch { LookupError = "algo"; Phase = "done"; return none; }   // 开着 FIPS 的电脑不让用 MD5
+        }
+        LookupAlgo = algo; LookupHash = want;
+
+        Phase = "list";
+        Dictionary<string, List<DupFile>> buckets = ListAll(roots, minSize, maxSize, false, onlyExt, trees);
+        ListMs = phase.ElapsedMilliseconds;
+        if (Cancel || buckets == null) return none;
+        List<DupFile> cands = new List<DupFile>();
+        foreach (List<DupFile> l in buckets.Values)
+            foreach (DupFile f in l)
+                if (seed == null || !string.Equals(f.Path, seed.Path, StringComparison.OrdinalIgnoreCase)) cands.Add(f);
+        buckets = null;
+
+        // 选了文件：先读头尾各 64 KB 和它比，明显不同的不用整个读
+        if (seed != null && cands.Count > 0) {
+            phase.Restart();
+            Phase = "quick";
+            HashHeadTail(seed, new IoWorker());
+            if (seed.Bad) { LookupError = "seed"; Phase = "done"; return none; }
+            long qb = 0; foreach (DupFile f in cands) qb += Math.Min(f.Size, 2L * BLOCK);
+            BytesDone = 0; BytesTotal = qb; FilesDone = 0; FilesTotal = cands.Count; QuickFiles = cands.Count; QuickBytes = qb;
+            RunPerVolume(cands, threads, HashHeadTail);
+            QuickMs = phase.ElapsedMilliseconds;
+            if (Cancel) return none;
+            List<DupFile> keep = new List<DupFile>();
+            foreach (DupFile f in cands) if (!f.Bad && f.H1 == seed.H1) keep.Add(f);
+            cands = keep;
+        }
+
+        // 整个读一遍算哈希，和要找的那个一样的才算
+        phase.Restart();
+        Phase = "hash";
+        long total = 0; foreach (DupFile f in cands) total += f.Size;
+        CandidateFiles = cands.Count;
+        BytesDone = 0; BytesTotal = total; FilesDone = 0; FilesTotal = cands.Count; DeepFiles = cands.Count; DeepBytes = total;
+        ConcurrentBag<DupFile> hits = new ConcurrentBag<DupFile>();
+        string a2 = algo, w2 = want;
+        RunPerVolume(cands, threads, delegate (DupFile f, IoWorker w) {
+            string h = HashFile(f.Path, f.Size, a2, w.Buf);
+            if (h != null && h == w2) hits.Add(f);
+        });
+        DeepMs = phase.ElapsedMilliseconds;
+        if (Cancel) return none;
+
+        Phase = "finish";
+        List<DupFile> files = new List<DupFile>(hits);
+        if (seed != null) files.Add(seed);
+        if (files.Count == 0) { Phase = "done"; return none; }
+        DupGroup g = new DupGroup();
+        g.Name = System.IO.Path.GetFileName(seed != null ? seed.Path : files[0].Path);
+        g.Size = files[0].Size;
+        g.Verified = true;
+        foreach (DupFile f in files) { f.Full = true; f.Risk = RiskOf(f.Path); }
+        files.Sort(delegate (DupFile x, DupFile y) { return y.Modified.CompareTo(x.Modified); });
+        g.Files = files;
+        GroupsFound = 1;
+        Phase = "done";
+        none.Add(g);
+        return none;
     }
 
     static Dictionary<string, List<DupFile>> GroupBy(List<DupFile> files, bool useH2) {

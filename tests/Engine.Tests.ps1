@@ -242,6 +242,39 @@ try { & {
     Check "file categories by extension ($($cats -join ','))" (($cats -join ',') -eq '1,5,0,0,9,0')
     $u = [Text.Encoding]::Unicode.GetBytes('photo.JPEG'); Check 'file category from UTF-16 name bytes' ([FileCats]::Of($u, 0, $u.Length) -eq 2)
     Check 'walk scan counts file types' ($tree.TypeBytes -and $tree.TypeBytes.Length -eq 10 -and (($tree.TypeCount | Measure-Object -Sum).Sum) -eq $tree.Files)
+    # 按哈希查：选一个文件找它的副本（按它的 SHA-256），或者粘贴 MD5 / SHA-1 / SHA-256 找内容对得上的文件
+    $hr = Join-Path $T 'hashfind'; New-Item -ItemType Directory -Force -Path (Join-Path $hr 'sub') | Out-Null
+    $hx = New-Object byte[] 300000; (New-Object Random 7).NextBytes($hx)
+    $hy = [byte[]]$hx.Clone(); $hy[150000] = [byte](($hy[150000] + 1) % 256)
+    [IO.File]::WriteAllBytes((Join-Path $hr 'a.bin'), $hx); [IO.File]::WriteAllBytes((Join-Path (Join-Path $hr 'sub') 'b-copy.dat'), $hx)
+    [IO.File]::WriteAllBytes((Join-Path $hr 'c-same-size.bin'), $hy); [IO.File]::WriteAllBytes((Join-Path $hr 'd-short.bin'), $hx[0..999])
+    $hseed = Join-Path (Join-Path $T 'hashseed') 'orig.bin'; New-Item -ItemType Directory -Force -Path (Split-Path $hseed) | Out-Null; [IO.File]::WriteAllBytes($hseed, $hx)
+    $hex = { param($alg, $bytes) $h = [Security.Cryptography.HashAlgorithm]::Create($alg); try { [BitConverter]::ToString($h.ComputeHash([byte[]]$bytes)).Replace('-', '').ToLowerInvariant() } finally { $h.Dispose() } }
+    $sha = & $hex 'SHA256' $hx; $md5 = & $hex 'MD5' $hx; $sha1 = & $hex 'SHA1' $hx
+    $names = { param($gs) @($gs | ForEach-Object { $_.Files } | ForEach-Object { [IO.Path]::GetFileName($_.Path) } | Sort-Object) -join ',' }
+    $al = ''; $p1 = [DupFinder]::ParseHash("SHA256: $($sha.ToUpperInvariant())", [ref]$al)
+    $al2 = ''; $p2 = [DupFinder]::ParseHash("  $md5  ", [ref]$al2); $al3 = ''; $p3 = [DupFinder]::ParseHash("SHA1 $sha1", [ref]$al3)
+    Check 'hash lookup reads a pasted SHA-256, MD5 or SHA-1 (any case, with a label in front)' ($p1 -eq $sha -and $al -eq 'SHA256' -and $p2 -eq $md5 -and $al2 -eq 'MD5' -and $p3 -eq $sha1 -and $al3 -eq 'SHA1')
+    $z = ''; Check 'hash lookup refuses text that is not exactly one of those lengths (SHA-512, a 63-digit typo, plain words)' ($null -eq [DupFinder]::ParseHash(($sha + $sha), [ref]$z) -and $null -eq [DupFinder]::ParseHash($sha.Substring(1), [ref]$z) -and $null -eq [DupFinder]::ParseHash('hello world', [ref]$z))
+    $g = @([DupFinder]::FindByHash([string[]]@($hr), '', $hseed, 1, 0, $null, [string[]]@(), $null))
+    Check ("picking a file finds its copies by content, under any name, and lists the picked file too ({0})" -f (& $names $g)) ($g.Count -eq 1 -and (& $names $g) -eq 'a.bin,b-copy.dat,orig.bin' -and $g[0].Verified -and [DupFinder]::LookupAlgo -eq 'SHA256' -and [DupFinder]::LookupHash -eq $sha)
+    $g = @([DupFinder]::FindByHash([string[]]@($hr), '', (Join-Path $hr 'a.bin'), 1, 0, $null, [string[]]@(), $null))
+    Check 'a picked file inside the search location is listed once' ((& $names $g) -eq 'a.bin,b-copy.dat')
+    $ok = $true; foreach ($q in @($sha, $md5, $sha1)) { $g = @([DupFinder]::FindByHash([string[]]@($hr), $q, '', 1, 0, $null, [string[]]@(), $null)); if ((& $names $g) -ne 'a.bin,b-copy.dat' -or -not $g[0].Verified) { $ok = $false } }
+    Check 'a pasted SHA-256, MD5 or SHA-1 finds exactly the files with that content (same size but one byte different does not match)' $ok
+    $g = @([DupFinder]::FindByHash([string[]]@($hr), (& $hex 'SHA256' $hx[0..999]), '', 1, 0, $null, [string[]]@(), $null))
+    Check 'a hash with only one matching file still shows where that file is' ((& $names $g) -eq 'd-short.bin')
+    $g = @([DupFinder]::FindByHash([string[]]@($hr), $sha, '', 1MB, 0, $null, [string[]]@(), $null))
+    Check 'a pasted hash follows the size filter (nothing under 1 MB is read)' ($g.Count -eq 0 -and [DupFinder]::LookupError -eq '' -and [DupFinder]::FilesSeen -eq 0)
+    $g = @([DupFinder]::FindByHash([string[]]@($hr), 'not a hash', '', 1, 0, $null, [string[]]@(), $null))
+    Check 'text that is not a hash is reported, not searched' ($g.Count -eq 0 -and [DupFinder]::LookupError -eq 'nohash')
+    $e0 = Join-Path (Split-Path $hseed) 'empty.bin'; [IO.File]::WriteAllBytes($e0, (New-Object byte[] 0))
+    $g = @([DupFinder]::FindByHash([string[]]@($hr), '', $e0, 1, 0, $null, [string[]]@(), $null)); $ge = [DupFinder]::LookupError
+    $g2 = @([DupFinder]::FindByHash([string[]]@($hr), '', (Join-Path (Split-Path $hseed) 'missing.bin'), 1, 0, $null, [string[]]@(), $null))
+    Check 'an empty or missing picked file is reported, not searched' ($g.Count -eq 0 -and $ge -eq 'empty' -and $g2.Count -eq 0 -and [DupFinder]::LookupError -eq 'seed')
+    [DupFinder]::Cancel = $true
+    try { $g = @([DupFinder]::FindByHash([string[]]@($hr), $sha, '', 1, 0, $null, [string[]]@(), $null)) } finally { [DupFinder]::Cancel = $false }
+    Check 'a cancelled hash lookup returns nothing' ($g.Count -eq 0)
     # 一块盘用了多少：已用 + 可用 = 总容量，百分比在 0 到 100 之间；读不到的盘不报错
     $root = [IO.Path]::GetPathRoot([IO.Path]::GetTempPath())
     $du = Get-DriveUse $root; $dn = Get-DriveUse 'Q:\no-such-drive'

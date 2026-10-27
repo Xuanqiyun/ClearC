@@ -1649,6 +1649,8 @@
                     <RadioButton x:Name="ModeContent" GroupName="dupmode" Content="只看内容，名字不同也算" Style="{StaticResource Seg}"/>
                     <RadioButton x:Name="ModeSimilar" GroupName="dupmode" Content="相似照片" Style="{StaticResource Seg}"
                                  ToolTip="找看起来一样的照片：不同分辨率、重新压缩过、轻微裁剪过的也算。只看 jpg、png、bmp、gif、tif、webp、heic。不是同一个文件，删之前自己看一眼"/>
+                    <RadioButton x:Name="ModeHash" GroupName="dupmode" Content="按哈希查" Style="{StaticResource Seg}"
+                                 ToolTip="选一个文件找它的副本，或者粘贴 MD5、SHA-1、SHA-256，找出内容对得上的文件"/>
                   </StackPanel>
                 </Border>
                 <StackPanel x:Name="SimilarRow" Orientation="Horizontal" Margin="0,0,28,0" Visibility="Collapsed">
@@ -1661,7 +1663,7 @@
                     </StackPanel>
                   </Border>
                 </StackPanel>
-                <StackPanel Orientation="Horizontal">
+                <StackPanel x:Name="SpeedRow" Orientation="Horizontal">
                   <TextBlock Text="比对方式" VerticalAlignment="Center" Margin="0,0,12,0"/>
                   <Border Style="{StaticResource SegBox}">
                     <StackPanel Orientation="Horizontal">
@@ -1673,7 +1675,15 @@
                   </Border>
                 </StackPanel>
               </WrapPanel>
-              <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="2,8,0,0"
+              <StackPanel x:Name="HashRow" Margin="0,10,0,0" Visibility="Collapsed">
+                <DockPanel MaxWidth="820" HorizontalAlignment="Left">
+                  <Button x:Name="BtnHashPick" DockPanel.Dock="Right" Style="{StaticResource Small}" Content="选一个文件…" Margin="10,0,0,0"
+                          ToolTip="按这个文件的 SHA-256 找：只看和它一样大的文件，类型和大小条件不管"/>
+                  <TextBox x:Name="HashText" MinWidth="520" ToolTip="粘贴 MD5（32 位）、SHA-1（40 位）或 SHA-256（64 位），前后带别的字也行"/>
+                </DockPanel>
+                <TextBlock x:Name="HashInfo" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="2,6,0,0" Text="粘贴一个哈希值，或者选一个文件。"/>
+              </StackPanel>
+              <TextBlock x:Name="DupModeNote" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="2,8,0,0"
                          Text="快速模式下大文件只抽样读约 1 MB；删除前都会逐字节完整核对，有任何不同就不删。"/>
               </StackPanel>
             </Grid>
@@ -3664,6 +3674,10 @@
                     <StackPanel>
                       <TextBlock Style="{StaticResource HelpLead}" Text="相似照片"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>找看起来一样的照片，比如不同分辨率或重新压缩过的。相似不等于相同，不会自动勾选，只能放进回收站或归档。</Run></TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="按哈希查"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>在「怎样算重复」里选「按哈希查」：选一个文件，按它的 SHA-256 找出内容完全一样的副本；或者粘贴 MD5、SHA-1、SHA-256，看看哪些文件是这个内容，比如核对下载的文件。只是查找，不会自动勾选。</Run></TextBlock>
                     </StackPanel>
                   </Grid>
                   <TextBlock Text="处理" Style="{StaticResource HelpGroup}" Margin="0,40,0,0"/>

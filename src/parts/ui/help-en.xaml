@@ -242,6 +242,10 @@
                       <TextBlock Style="{StaticResource HelpLead}" Text="Similar photos"/>
                       <TextBlock Style="{StaticResource HelpBody}"><Run>Finds photos that look the same, such as different resolutions or recompressed copies. Similar is not identical: nothing is checked automatically, and they can only go to the Recycle Bin or an archive.</Run></TextBlock>
                     </StackPanel>
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource HelpLead}" Text="Find by hash"/>
+                      <TextBlock Style="{StaticResource HelpBody}"><Run>Choose "Find by hash" under "Match by": pick a file to find exact copies of it by its SHA-256, or paste an MD5, SHA-1 or SHA-256 to see which files have that content, for example to check a download. It only searches; nothing is checked automatically.</Run></TextBlock>
+                    </StackPanel>
                   </Grid>
                   <TextBlock Text="Handling the results" Style="{StaticResource HelpGroup}" Margin="0,40,0,0"/>
                   <Grid Tag="cols:330:44:26:3" Margin="0,14,0,0">

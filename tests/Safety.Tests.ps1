@@ -160,6 +160,10 @@ try { & {
     Check "duplicate finder scans a real folder ($($g1.Count) group) but skips a link root ($($g2.Count))" ($g1.Count -eq 1 -and $g2.Count -eq 0)
     Check 'duplicate deletion checks the modification time and the file identity before deleting' ($src -match 'fi\.LastWriteTime\.Ticks -ne \[long\]\$p\.Mtime' -and ([regex]::Matches($src, '\[FsTools\]::SameFile\(')).Count -ge 3)
     Check 'duplicates never use the VisualBasic recycle call that can silently delete permanently' ($src -notmatch 'VisualBasic\.FileIO\.FileSystem\]::DeleteFile')
+    # 按哈希查只是查找：C# 里只读文件，界面那段不删不搬，结果交给原来的删除流程（每组至少留一份、删前逐字节核对）
+    $fbh = [regex]::Match($src, '(?s)public static List<DupGroup> FindByHash\(.*?\r?\n    \}').Value
+    $hlu = [regex]::Match($src, '(?s)# ---------- 按哈希查：.*?\r?\nRegister-BgJob ''duphash''').Value
+    Check 'the hash lookup only reads files: no delete, move or write in FindByHash or its page code' ($fbh.Length -gt 1000 -and $hlu.Length -gt 1000 -and $fbh -notmatch 'File\.(Delete|Move|Write|Open\()|Directory\.Delete|Recycle|FileMode\.(Create|Truncate|Append)' -and $hlu -notmatch 'Invoke-SafeRemove|Remove-Item|Move-Item|\]::Delete|Recycle|Start-DupDelete')
     # 自动清理：一天内写过的临时文件不碰；本轮放进过回收站就不清空回收站
     $tmpd = Join-Path $T 'autotemp'; New-Item -ItemType Directory -Force -Path $tmpd | Out-Null
     [IO.File]::WriteAllText((Join-Path $tmpd 'fresh.tmp'), 'x'); [IO.File]::WriteAllText((Join-Path $tmpd 'stale.tmp'), 'x')
@@ -515,7 +519,7 @@ try { & {
         'Update-Growth'         = 2   # 本工具自己的空间快照
         'Register-CleanTask'    = 1   # 注册任务用的临时 XML
         'Invoke-SelfTest'       = 4   # 自检在自己建的临时文件夹里试删
-        'Invoke-UiTest'         = 9   # 界面自测删它自己建的临时文件和设置
+        'Invoke-UiTest'         = 10  # 界面自测删它自己建的临时文件和设置（第 10 处：按哈希查那一步自己建的临时文件夹）
     }
     $sites = @(Get-DeleteSites $src)
     $byFn = @{}; foreach ($x in $sites) { $fn = ($x.Where -split '/')[-1]; if (-not $byFn.ContainsKey($fn)) { $byFn[$fn] = 0 }; $byFn[$fn]++ }
@@ -814,7 +818,7 @@ try { & {
     Check 'ARC-5 cancelling, the lock and the finish step read the registry; the separate mode tables and the long if/elseif chain are gone' ($src -notmatch '\$script:cancelModes' -and $src -notmatch '\$script:readOnlyModes' -and $tick -match '\. \$job\.Done' -and $tick -notmatch '\$sync\.Mode -eq' -and $tick -notmatch "-contains \[string\]\`$sync\.Mode" -and [regex]::Match($src, '(?s)function Request-Cancel.*?\r?\n\}').Value -match 'Get-BgJob' -and [regex]::Match($src, '(?s)function Start-Worker.*?\r?\n\}').Value -match 'Get-BgJob')
     # 只读的任务不拿删除、搬家的锁（自动清理可以同时进行），所以哪些算只读由这条测试定死：新加的只读任务要在这里写上
     $ro = @($regs | Where-Object { $_.Extent.Text -match '(?m)^Register-BgJob [^\r\n]*-ReadOnly\b' } | ForEach-Object { [string]$_.CommandElements[1].SafeGetValue() } | Sort-Object)
-    $roWant = @('apps', 'csanalyze', 'dup', 'leftovers', 'map', 'movescan', 'movesize', 'odinfo', 'recent', 'scan', 'selftest', 'similar', 'startup', 'update', 'winget')
+    $roWant = @('apps', 'csanalyze', 'dup', 'duphash', 'leftovers', 'map', 'movescan', 'movesize', 'odinfo', 'recent', 'scan', 'selftest', 'similar', 'startup', 'update', 'winget')
     Check ("ARC-5 only jobs that just look are read-only and skip the delete/move lock: {0}" -f ($ro -join ' ')) (($ro -join ' ') -eq ($roWant -join ' '))
     $kinds = @($regs | ForEach-Object { if ($_.Extent.Text -match '(?m)^Register-BgJob [^\r\n]*-Cancel (\w+)') { $Matches[1] } } | Sort-Object -Unique)
     $rc = [regex]::Match($src, '(?s)function Request-Cancel.*?\r?\n\}').Value

@@ -41,6 +41,7 @@ PAGE = dict(
             I('What counts as a duplicate', 'By default both the name and the content must match; with "Content only", names may differ. Content must match byte for byte.'),
             I('Fast or full comparison', '"Fast" samples large files and verifies them byte for byte before deleting; "Full comparison" reads every file completely.'),
             I('Similar photos', 'Finds photos that look the same, such as different resolutions or recompressed copies. Similar is not identical: nothing is checked automatically, and they can only go to the Recycle Bin or an archive.'),
+            I('Find by hash', 'Choose "Find by hash" under "Match by": pick a file to find exact copies of it by its SHA-256, or paste an MD5, SHA-1 or SHA-256 to see which files have that content, for example to check a download. It only searches; nothing is checked automatically.'),
             G('Handling the results'),
             I('Which copy to keep', 'By default the newest copy in each group is kept. You can also keep the oldest, the one outside C:, the one in a chosen folder, or check them yourself.'),
             I('Delete, archive or merge', 'Files go to the Recycle Bin by default, so they can be restored. You can also move the extra copies to an archive folder, or "Merge into one copy": every location keeps its file, but the space is used once.'),

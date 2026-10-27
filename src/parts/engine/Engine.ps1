@@ -4099,3 +4099,39 @@ function Get-Hogs {
     }
     $rows | Sort-Object B -Descending | Select-Object -First 25
 }
+# 查重复文件之前（整片查找和按哈希查共用）：每块盘用几个线程读（固态并行，机械硬盘单线程按顺序读，并行反而让磁头来回跳），
+# 以及能直接用的 NTFS 文件表（已经在内存里的按变更日志补读；查整块盘时现读一次）：1 MB 以上的文件直接从里面列，不用逐个文件夹去看
+function Get-DupReadPlan([string[]]$roots, [long]$min) {
+    $spec = New-Object System.Collections.ArrayList; $notes = @()
+    $cpu = [math]::Max(2, [math]::Min(8, [Environment]::ProcessorCount))
+    $letters = @($roots | ForEach-Object { if ($_ -match '^([A-Za-z]):') { $matches[1].ToUpper() } } | Sort-Object -Unique)
+    foreach ($L in $letters) {
+        $kind = ''
+        try {
+            $part = Get-Partition -DriveLetter $L -ErrorAction Stop
+            $pd = Get-PhysicalDisk -ErrorAction Stop | Where-Object { $_.DeviceId -eq [string]$part.DiskNumber } | Select-Object -First 1
+            if ($pd) { $kind = [string]$pd.MediaType }
+        } catch {}
+        if ($kind -eq 'SSD' -or $kind -eq 'SCM') { $n = $cpu; $desc = ((T "固态硬盘，{0} 线程并行") -f $n) }
+        elseif ($kind -eq 'HDD') { $n = 1; $desc = (T '机械硬盘，单线程按顺序读') }
+        else { $n = 2; $desc = (T '类型未知，2 线程') }
+        [void]$spec.Add("$($L):=$n"); $notes += "$($L): $desc"
+    }
+    if ($notes) { Log ((T "磁盘：") + ($notes -join (T '；'))); $sync.DriveNote = ($notes -join (T '；')) }
+    $trees = New-Object 'System.Collections.Generic.List[DmNode]'
+    if ($min -ge 1MB) {
+        foreach ($L in $letters) {
+            if (Stopping) { break }
+            $whole = @($roots | Where-Object { ([string]$_).TrimEnd('\') -ieq "$($L):" }).Count -gt 0
+            if (-not $whole -and -not [DiskMap]::HasIndex("$($L):")) { continue }   # 只查一个文件夹、文件表又不在手上：逐个看更快
+            if ([FsTools]::IsSubst("$($L):")) { continue }
+            try {
+                SetP @{ Detail = ((T "读取 {0} 盘的文件表") -f $L) }
+                $t = [DiskMap]::GetTree("$($L):", [DirStat]::ThreadsFor("$($L):"), $false, $false)
+                $m = [string][DiskMap]::LastMethod
+                if ($t -and $t.HasDisk -and ($m -eq 'mft' -or $m -eq 'mft-usn')) { $trees.Add($t); Log ((T "读取 {0} 盘的文件表：{1:N0} 个文件，用时 {2:N1} 秒") -f $L, $t.Files, ([double][DiskMap]::LastMs / 1000)) }
+            } catch {}
+        }
+    }
+    return @{ Spec = [string[]]$spec.ToArray(); Trees = [DmNode[]]$trees.ToArray() }
+}

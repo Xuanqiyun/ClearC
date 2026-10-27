@@ -207,7 +207,9 @@ foreach ($c in @($ctl.SizeMinUnit, $ctl.SizeMaxUnit)) { $c.Add_SelectionChanged(
 # ---------- 条件摘要：收起面板后也能看到当前条件 ----------
 function Update-FilterSummary {
     if ($null -eq $script:typeAll -or $null -eq $script:sizeCustom) { return }
+    $hashSeedOn = [bool]($ctl.ModeHash.IsChecked -and $script:hashSeed)
     if ($ctl.ModeSimilar.IsChecked) { $types = (T '相似照片') }
+    elseif ($hashSeedOn) { $types = (T '不限类型') }
     elseif ($script:typeAll.IsChecked) { $types = (T '全部类型') }
     else {
         $names = @($script:chips | Where-Object { $_.Btn.IsChecked } | ForEach-Object { $_.Label })
@@ -216,21 +218,26 @@ function Update-FilterSummary {
         $types = if ($names.Count -gt 3) { ($names[0..2] -join (T '、')) + ((T " 等 {0} 类") -f $($names.Count)) } else { $names -join (T '、') }
     }
     $r = Get-SizeRange
-    if (-not $r.Ok) { $size = (T '大小填写有误') }
+    if ($hashSeedOn) { $size = (T '和所选文件一样大') }
+    elseif (-not $r.Ok) { $size = (T '大小填写有误') }
     elseif ($r.Min -le 1 -and $r.Max -le 0) { $size = (T '不限大小') }
     elseif ($r.Max -le 0) { $size = (Size-Text $r.Min) + (T ' 以上') }
     elseif ($r.Min -le 1) { $size = (Size-Text $r.Max) + (T ' 以下') }
     else { $size = (T "{0} 到 {1}") -f (Size-Text $r.Min), (Size-Text $r.Max) }
     $ctl.SizeHint.Text = if ($r.Ok) { (T '留空表示不限') } else { $r.Err }
     $ctl.SizeHint.Foreground = if ($r.Ok) { Brush '#6E6E73' } else { Brush '#D70015' }
-    $mode = if ($ctl.ModeName.IsChecked) { (T '文件名和内容都相同') } else { (T '只要内容相同') }
-    $mode += if ($ctl.SpeedExact.IsChecked) { (T '，完整比对') } else { (T '，快速比对') }
+    if ($ctl.ModeHash.IsChecked) { $mode = if ($hashSeedOn) { (T '按所选文件的 SHA-256') } else { (T '按哈希值') } }
+    else {
+        $mode = if ($ctl.ModeName.IsChecked) { (T '文件名和内容都相同') } else { (T '只要内容相同') }
+        $mode += if ($ctl.SpeedExact.IsChecked) { (T '，完整比对') } else { (T '，快速比对') }
+    }
     $n = @($script:roots | Where-Object { $_.Enabled }).Count
     $ctl.FilterSummary.Text = (T "{0}，{1}，{2}，{3} 个位置") -f $types, $size, $mode, $n
     # 选项卡上直接写着现在的条件：收起来也看得到
     $ctl.DTabRootsVal.Text = (T "{0} 个") -f $n
     $ctl.DTabTypeVal.Text = $types
     $ctl.DTabSizeVal.Text = $size
+    if ($ctl.ModeHash.IsChecked) { $ctl.DTabModeVal.Text = (T '按哈希查') + (T ' · ') + $(if ($hashSeedOn) { (T '选了文件') } else { $alg = ''; if ([DupFinder]::ParseHash([string]$ctl.HashText.Text, [ref]$alg)) { Get-HashAlgoName $alg } else { (T '还没填') } }); return }
     $ctl.DTabModeVal.Text = $(if ($ctl.ModeSimilar.IsChecked) { (T '相似照片') } elseif ($ctl.ModeName.IsChecked) { (T '名字和内容') } else { (T '只看内容') }) + (T ' · ') + $(if ($ctl.ModeSimilar.IsChecked) { $(if ($ctl.SimStrict.IsChecked) { (T '几乎一样') } elseif ($ctl.SimLoose.IsChecked) { (T '大致相似') } else { (T '相似') }) } elseif ($ctl.SpeedExact.IsChecked) { (T '完整比对') } else { (T '快速') })
 }
 # ---------- 查找条件的选项卡：点一个打开那一类；再点一下（或点「收起」）收起来；开始查找时自动收起 ----------
@@ -278,19 +285,21 @@ $ctl.BtnAddRoot.Add_Click({
     }
 })
 
-function Build-DupRows($groups, [int]$totalGroups) {
+function Build-DupRows($groups, [int]$totalGroups, [string]$HashAlgo = '', [string]$HashValue = '') {
     $protectOn = [bool]$ctl.DupProtect.IsChecked
+    $script:dupHash = [bool]$HashAlgo; $script:dupHashAlgo = $HashAlgo
     $col = New-Object 'System.Collections.ObjectModel.ObservableCollection[DupRow]'
     $byGroup = @{}
     $kept = New-Object System.Collections.Generic.List[DupGroup]
     $gid = 0; $waste = [double]0
     foreach ($g in $groups) {
-        if ($g.Files.Count -lt 2) { continue }
+        if ($g.Files.Count -lt 2 -and -not ($HashAlgo -and $g.Files.Count -eq 1)) { continue }
         $gid++
         if ($gid -gt 3000) { break }
         $kept.Add($g)
-        $meta  = (T "{0} × {1} 份，可释放 {2}") -f (Fmt $g.Size), $g.Files.Count, (Fmt $g.Waste)
-        if ($g.Verified) { $badge = (T '已完整比对'); $tip = (T '每个文件都读完了全部内容，内容完全相同。'); $bbg = '#E6F4EA'; $bfg = '#1E7B34' }
+        $meta  = if ($g.Files.Count -eq 1) { (T "{0}，只找到这一个") -f (Fmt $g.Size) } else { (T "{0} × {1} 份，可释放 {2}") -f (Fmt $g.Size), $g.Files.Count, (Fmt $g.Waste) }
+        if ($HashAlgo) { $badge = (T "{0} 一致") -f $HashAlgo; $tip = (T "{0}：{1}`n每个文件都整个读过，哈希完全一样。") -f $HashAlgo, $HashValue; $bbg = '#E6F4EA'; $bfg = '#1E7B34' }
+        elseif ($g.Verified) { $badge = (T '已完整比对'); $tip = (T '每个文件都读完了全部内容，内容完全相同。'); $bbg = '#E6F4EA'; $bfg = '#1E7B34' }
         else { $badge = (T '抽样判定'); $tip = (T '文件名、大小和 16 处抽样内容都相同。删除前会逐字节完整比对，有任何不同就不删。'); $bbg = '#EFEFF4'; $bfg = '#6E6E73' }
         $list = New-Object System.Collections.ArrayList
         foreach ($f in $g.Files) {
@@ -330,6 +339,10 @@ function Update-DupSummary {
     foreach ($r in $script:dupRows) { if ($r.ToDelete) { $n++; $b += $r.Size } }
     $locked = 0; foreach ($r in $script:dupRows) { if (-not $r.CanDelete) { $locked++ } }
     if ($script:dupRows.Count -eq 0) { $ctl.DupSummary.Text = (T '没有找到重复文件。') }
+    elseif ($script:dupHash) {
+        $ctl.DupSummary.Text = ((T "按 {0} 找到 {1} 个内容完全一样的文件。已勾选 {2} 个，删除后释放 {3}。") -f $script:dupHashAlgo, $script:dupRows.Count, $n, (Fmt $b))
+        if ($locked -gt 0) { $ctl.DupSummary.Text += ((T " C 盘个人文件夹里的 {0} 个副本受保护，不会删。") -f $locked) }
+    }
     else {
         $ctl.DupSummary.Text = ((T "找到 {0} 组重复文件。已勾选 {1} 个，删除后释放 {2}。") -f $script:dupByGroup.Count, $n, (Fmt $b))
         if ($locked -gt 0) { $ctl.DupSummary.Text += ((T " C 盘个人文件夹里的 {0} 个副本受保护，不会删。") -f $locked) }
@@ -421,6 +434,110 @@ $ctl.DupList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickEv
 
 $ctl.ModeSimilar.Add_Checked({ $ctl.SimilarRow.Visibility = 'Visible'; Update-FilterSummary })
 $ctl.ModeSimilar.Add_Unchecked({ $ctl.SimilarRow.Visibility = 'Collapsed'; Update-FilterSummary })
+
+# ---------- 按哈希查：选一个文件找它的副本，或者粘贴 MD5 / SHA-1 / SHA-256 找内容对得上的文件 ----------
+# 只是查找：结果放进同一个列表，删不删照旧走重复文件的删除流程（每组至少留一份、删前逐字节核对）
+$script:hashSeed = ''; $script:hashSetting = $false
+function Get-HashAlgoName([string]$a) { if ($a -eq 'MD5') { 'MD5' } elseif ($a -eq 'SHA1') { 'SHA-1' } else { 'SHA-256' } }
+function Update-HashInfo {
+    $gray = Brush '#6E6E73'
+    if ($script:hashSeed) {
+        $sz = [double]0; try { $sz = [double](Get-Item -LiteralPath $script:hashSeed -ErrorAction Stop).Length } catch {}
+        $ctl.HashInfo.Text = (T "按这个文件找：{0}（{1}）。开始查找时先算它的 SHA-256，再在查找位置里找一样大、内容完全一样的文件，类型和大小条件不管。") -f $script:hashSeed, (Fmt $sz)
+        $ctl.HashInfo.Foreground = $gray; return
+    }
+    $txt = [string]$ctl.HashText.Text
+    if (-not $txt.Trim()) { $ctl.HashInfo.Text = (T '粘贴一个 MD5、SHA-1 或 SHA-256，或者选一个文件。粘贴哈希时不知道文件多大，查找位置里符合类型和大小条件的文件都要整个读一遍，条件越窄越快。'); $ctl.HashInfo.Foreground = $gray; return }
+    $alg = ''; $h = [DupFinder]::ParseHash($txt, [ref]$alg)
+    if ($h) { $ctl.HashInfo.Text = (T "认出是 {0}：{1}") -f (Get-HashAlgoName $alg), $h; $ctl.HashInfo.Foreground = $gray }
+    else { $ctl.HashInfo.Text = (T '没认出哈希值：MD5 是 32 位、SHA-1 是 40 位、SHA-256 是 64 位十六进制。'); $ctl.HashInfo.Foreground = Brush '#D70015' }
+}
+# 自己改了框里的字：不再按选的文件找
+$ctl.HashText.Add_TextChanged({ if ($script:hashSetting) { return }; $script:hashSeed = ''; Update-HashInfo; Update-FilterSummary })
+$ctl.BtnHashPick.Add_Click({
+    $dlg = New-Object Microsoft.Win32.OpenFileDialog
+    $dlg.Title = (T '选一个文件，找它的副本'); $dlg.CheckFileExists = $true; $dlg.Multiselect = $false
+    if (-not $dlg.ShowDialog($win)) { return }
+    Set-HashSeed $dlg.FileName
+})
+function Set-HashSeed([string]$path) {
+    $script:hashSetting = $true; try { $ctl.HashText.Text = '' } finally { $script:hashSetting = $false }
+    $script:hashSeed = $path
+    Update-HashInfo; Update-FilterSummary
+}
+$ctl.ModeHash.Add_Checked({
+    $ctl.HashRow.Visibility = 'Visible'; $ctl.SpeedRow.Visibility = 'Collapsed'
+    $ctl.DupModeNote.Text = (T '按哈希查只是查找：找到的文件放进下面的列表，删不删由你决定；删除前照样逐字节核对，每组至少留一份。')
+    Update-HashInfo; Update-FilterSummary
+})
+$ctl.ModeHash.Add_Unchecked({
+    $ctl.HashRow.Visibility = 'Collapsed'; $ctl.SpeedRow.Visibility = 'Visible'
+    $ctl.DupModeNote.Text = (T '快速模式下大文件只抽样读约 1 MB；删除前都会逐字节完整核对，有任何不同就不删。')
+    Update-FilterSummary
+})
+function Start-HashLookup([string[]]$paths, $range) {
+    $seed = [string]$script:hashSeed; $txt = [string]$ctl.HashText.Text
+    if ($seed -and -not (Test-Path -LiteralPath $seed -PathType Leaf)) {
+        Show-Sheet -Kind warn -Title (T '选的文件找不到了') -Text $seed | Out-Null
+        $script:hashSeed = ''; Update-HashInfo; Update-FilterSummary; return
+    }
+    $min = [long][math]::Max([double]1, [double]$range.Min)
+    if ($seed) { try { $min = [long](Get-Item -LiteralPath $seed -ErrorAction Stop).Length } catch {} }
+    else {
+        $alg = ''
+        if (-not [DupFinder]::ParseHash($txt, [ref]$alg)) { Show-Sheet -Title (T '还没有要查的哈希') -Text (T '粘贴一个 MD5、SHA-1 或 SHA-256，或者点「选一个文件…」。') | Out-Null; Set-DupFilterOpen $true 'mode'; return }
+    }
+    $script:dupRows = $null; $script:dupByGroup = @{}; $ctl.DupList.ItemsSource = $null
+    $ctl.EmptyDup.Visibility = 'Visible'; $ctl.EmptyDupText.Text = (T '正在查找…')
+    $arg = @{
+        Roots = [string[]]$paths
+        Text  = $txt
+        Seed  = $seed
+        Min   = $min
+        Max   = [long]$range.Max
+        Ext   = $(if ($seed) { $null } else { Get-SelectedExt })
+    }
+    $sync.DriveNote = ''
+    Set-DupFilterOpen $false
+    Use-BgJob 'duphash'; $sync.DupResult = $null
+    Start-Op (T '按哈希查文件')
+    $ctl.DupProgressText.Text = (T '正在查找…')
+    UI-Busy $true
+    UI-Log ((T "开始按哈希查文件：{0}。位置：{1}") -f $(if ($seed) { $seed } else { $txt.Trim() }), ($paths -join (T '；')))
+    Start-Worker @'
+$ext = $null; if ($arg.Ext) { $ext = [string[]]$arg.Ext }
+$plan = Get-DupReadPlan ([string[]]$arg.Roots) ([long]$arg.Min)
+$sync.DupResult = [DupFinder]::FindByHash([string[]]$arg.Roots, [string]$arg.Text, [string]$arg.Seed, [long]$arg.Min, [long]$arg.Max, $ext, $plan.Spec, $plan.Trees)
+'@ $arg
+}
+Register-BgJob 'duphash' -Cancel look -Stop { [DupFinder]::Cancel = $true } -ReadOnly -Done {
+    $script:dupSimilar = $false
+    $res = $sync.DupResult
+    $stopped = [DupFinder]::Cancel
+    $err = [string][DupFinder]::LookupError
+    $alg = Get-HashAlgoName ([string][DupFinder]::LookupAlgo); $hv = [string][DupFinder]::LookupHash
+    $n = 0; if ($res -and $res.Count -gt 0) { $n = $res[0].Files.Count }
+    if ($err) {
+        $why = switch ($err) {
+            'nohash' { (T '没认出哈希值：MD5 是 32 位、SHA-1 是 40 位、SHA-256 是 64 位十六进制。') }
+            'empty'  { (T '选的是空文件：空文件内容都一样，不用查。') }
+            'algo'   { (T "这台电脑的安全策略不允许用 {0}（FIPS），请换成 SHA-256 再查。") -f $alg }
+            default  { (T '选的文件读不了：可能正被别的程序独占，或者没有权限。') }
+        }
+        End-Op (T '没有查')
+        Build-DupRows @() 0
+        $ctl.DupProgressText.Text = $why
+        Show-Sheet -Kind warn -Title (T '没有查') -Text $why | Out-Null
+        return
+    }
+    # 选了文件：把算出来的 SHA-256 填进框里，可以复制（仍然按这个文件找）
+    if ($script:hashSeed -and $hv) { $script:hashSetting = $true; try { $ctl.HashText.Text = $hv } finally { $script:hashSetting = $false } }
+    $ctl.DupProgressText.Text = ((T "{0}看过 {1:N0} 个文件夹、{2:N0} 个文件，{3} 一样的有 {4} 个。") -f $(if ($stopped) { (T '已停止。') } else { (T '查找完成。') }), [DupFinder]::DirsSeen, [DupFinder]::FilesSeen, $alg, $n)
+    End-Op $(if ($stopped) { ((T "已停止，找到 {0} 个") -f $n) } else { ((T "完成，找到 {0} 个") -f $n) })
+    if ($res) { Build-DupRows $res $res.Count $alg $hv } else { Build-DupRows @() 0 $alg $hv }
+    if ($n -eq 0) { $ctl.EmptyDupText.Text = (T '查找位置里没有内容对得上的文件') }
+    elseif ($n -ge 2) { UI-Log (T '没有自动勾选：要删多余的，用上面「每组只留一份」的按钮勾选，或者自己勾。') }
+}
 $script:dupSimilar = $false
 Register-BgJob 'similar' -Cancel look -ReadOnly -Done {
     $res = $sync.DupResult
@@ -503,6 +620,7 @@ $ctl.BtnDupScan.Add_Click({
     $range = Get-SizeRange
     if (-not $range.Ok) { Show-Sheet -Kind warn -Title (T '文件大小填写有误') -Text $range.Err | Out-Null; Set-DupFilterOpen $true 'size'; return }
     if ($ctl.ModeSimilar.IsChecked) { Start-SimilarScan $paths $range; return }
+    if ($ctl.ModeHash.IsChecked) { Start-HashLookup $paths $range; return }
     $ext = Get-SelectedExt
     $script:dupRows = $null; $script:dupByGroup = @{}; $ctl.DupList.ItemsSource = $null
     $ctl.EmptyDup.Visibility = 'Visible'; $ctl.EmptyDupText.Text = (T '正在查找…')
@@ -523,40 +641,9 @@ $ctl.BtnDupScan.Add_Click({
     UI-Log ((T "开始查找重复文件：{0}。位置：{1}") -f $ctl.FilterSummary.Text, ($paths -join (T '；')))
     Start-Worker @'
 $ext = $null; if ($arg.Ext) { $ext = [string[]]$arg.Ext }
-# 看每块盘是固态还是机械：固态多线程并行读，机械硬盘单线程顺序读（并行反而让磁头来回跳）
-$spec = New-Object System.Collections.ArrayList; $notes = @()
-$cpu = [math]::Max(2, [math]::Min(8, [Environment]::ProcessorCount))
-$letters = @($arg.Roots | ForEach-Object { if ($_ -match '^([A-Za-z]):') { $matches[1].ToUpper() } } | Sort-Object -Unique)
-foreach ($L in $letters) {
-    $kind = ''
-    try {
-        $part = Get-Partition -DriveLetter $L -ErrorAction Stop
-        $pd = Get-PhysicalDisk -ErrorAction Stop | Where-Object { $_.DeviceId -eq [string]$part.DiskNumber } | Select-Object -First 1
-        if ($pd) { $kind = [string]$pd.MediaType }
-    } catch {}
-    if ($kind -eq 'SSD' -or $kind -eq 'SCM') { $n = $cpu; $desc = ((T "固态硬盘，{0} 线程并行") -f $n) }
-    elseif ($kind -eq 'HDD') { $n = 1; $desc = (T '机械硬盘，单线程按顺序读') }
-    else { $n = 2; $desc = (T '类型未知，2 线程') }
-    [void]$spec.Add("$($L):=$n"); $notes += "$($L): $desc"
-}
-if ($notes) { Log ((T "磁盘：") + ($notes -join (T '；'))); $sync.DriveNote = ($notes -join (T '；')) }
-# NTFS 盘的文件表（已经在内存里的按变更日志补读；查整块盘时现读一次）：1 MB 以上的文件直接从里面列，不用逐个文件夹去看
-$trees = New-Object 'System.Collections.Generic.List[DmNode]'
-if ([long]$arg.Min -ge 1MB) {
-    foreach ($L in $letters) {
-        if (Stopping) { break }
-        $whole = @($arg.Roots | Where-Object { ([string]$_).TrimEnd('\') -ieq "$($L):" }).Count -gt 0
-        if (-not $whole -and -not [DiskMap]::HasIndex("$($L):")) { continue }   # 只查一个文件夹、文件表又不在手上：逐个看更快
-        if ([FsTools]::IsSubst("$($L):")) { continue }
-        try {
-            SetP @{ Detail = ((T "读取 {0} 盘的文件表") -f $L) }
-            $t = [DiskMap]::GetTree("$($L):", [DirStat]::ThreadsFor("$($L):"), $false, $false)
-            $m = [string][DiskMap]::LastMethod
-            if ($t -and $t.HasDisk -and ($m -eq 'mft' -or $m -eq 'mft-usn')) { $trees.Add($t); Log ((T "读取 {0} 盘的文件表：{1:N0} 个文件，用时 {2:N1} 秒") -f $L, $t.Files, ([double][DiskMap]::LastMs / 1000)) }
-        } catch {}
-    }
-}
-$sync.DupResult = [DupFinder]::Find([string[]]$arg.Roots, [long]$arg.Min, [long]$arg.Max, [bool]$arg.MatchName, $ext, [bool]$arg.Exact, [string[]]$spec, [DmNode[]]$trees.ToArray())
+# 每块盘几个线程读、能直接用的文件表（见引擎里的 Get-DupReadPlan，按哈希查也用它）
+$plan = Get-DupReadPlan ([string[]]$arg.Roots) ([long]$arg.Min)
+$sync.DupResult = [DupFinder]::Find([string[]]$arg.Roots, [long]$arg.Min, [long]$arg.Max, [bool]$arg.MatchName, $ext, [bool]$arg.Exact, $plan.Spec, $plan.Trees)
 if ([DupFinder]::FromTreeRoots -gt 0) { Log ((T "{0} 个查找位置从文件表里列出文件（不用逐个文件夹去看）") -f [DupFinder]::FromTreeRoots) }
 if (-not [DupFinder]::UsedFastEnum) { Log (T '提示：快速列举不可用，已改用普通方式列举文件（结果相同，只是慢一些）。') }
 '@ $arg
