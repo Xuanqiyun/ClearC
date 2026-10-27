@@ -30,7 +30,12 @@ for banner, name in [('// ==================== 读一个文件夹里的条目', 
     i = find(starts(banner), 0, banner)
     if i >= d: raise SystemExit('split.py: %r is not inside $dupCode' % banner)
     cuts.append((i, name))
-here("$engine = @'", 'engine/Engine.ps1', 'glue/03-translations.ps1', "'")
+e0 = find(line_eq("$engine = @'"), 0, "$engine = @'")
+e = here("$engine = @'", 'engine/SettingsStore.ps1', 'glue/03-translations.ps1', "'")
+for banner, name in [('# ==================== 文件传输策略', 'engine/TransferPolicy.ps1'), ('# ==================== 引擎编排', 'engine/Engine.ps1')]:
+    i = find(starts(banner), e0, banner)
+    if i >= e: raise SystemExit('split.py: %r is not inside $engine' % banner)
+    cuts.append((i, name))
 here("$script:l10nData = @'", 'i18n/en.tsv', 'glue/04-help.ps1', "'")
 here("$script:helpEnXaml = @'", 'ui/help-en.xaml', 'glue/05-scheduled-modes.ps1', "'")
 m = here('[xml]$xaml = @"', 'ui/main.xaml', 'ui/10-window.ps1', '"')

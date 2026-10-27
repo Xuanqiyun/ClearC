@@ -2283,7 +2283,12 @@ function Invoke-Move($it, $destRoot, $res) {
         $cxHalf = (T "已取消：{0} 原文件夹没动。已复制的部分留在 {1}，下次再搬这一项会接着复制；不需要的话，可以在「搬家管理」里删掉这份副本") -f $src, $dst
         $cxCopied = (T "已取消：{0} 已经复制到 {1}，但还没换成链接，原文件夹没动。下次再搬只补有变化的文件") -f $src, $dst
         if ($rc.Cancelled) { Log "  $cxHalf"; OpLog '搬运' (T '搬家已取消') $src $cxHalf; $res.Cancelled = $true; $res.Msgs += $cxHalf; break }
-        if (-not (Test-RobocopySuccess $rc.Code)) { $m = ((T "复制失败（robocopy 代码 {0}，可能是空间不够或有文件被占用），原目录未动") -f $rc.Code); Log "  $m"; OpLog '搬运' (T '搬家失败') $src $m; $res.Fail++; $res.Msgs += $m; continue }
+        if (-not (Test-RobocopySuccess $rc.Code)) {
+            # 代码里带 4（8 以下）：有同名的文件和文件夹对不上，那几项没复制过去，单独说清楚
+            $m = if ($rc.Code -ge 0 -and $rc.Code -lt 8 -and ($rc.Code -band 4) -ne 0) { (T "复制时有名字对不上的项目（robocopy 代码 {0}：同一个名字一边是文件一边是文件夹），原目录未动。打开 {1} 看看") -f $rc.Code, $dst }
+                 else { (T "复制失败（robocopy 代码 {0}，可能是空间不够或有文件被占用），原目录未动") -f $rc.Code }
+            Log "  $m"; OpLog '搬运' (T '搬家失败') $src $m; $res.Fail++; $res.Msgs += $m; continue
+        }
         SetP @{ MovePhase = 'verify'; SubKind = 'measure'; SubStart = (Get-Date); Detail = (T '复制完成，核对两边大小') }
         # 两边重新数一遍，文件个数和总大小一个都不能差，才继续（之后才会删 C 盘上的原目录）。
         # 对不上多半是复制时还有程序在写：再补复制一遍、再数一次，还对不上就不搬

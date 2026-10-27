@@ -297,7 +297,8 @@ try { & {
     Check ("no Remove-Item -Recurse in program code ({0})" -f ($progLines -join ' | ')) ($progLines.Count -eq 0 -and @(Calls 'remove-item').Count -ge 10)
     # 搬家
     Check 'a reused or dropped copy must have zero files that C: lacks (no 5% tolerance any more)' (([regex]::Matches($engineText, 'if \(\$extra -ne 0\) \{')).Count -eq 2 -and $engineText -notmatch 'Max\(20, \$(haveFiles|nf) \* 0\.05\)')
-    Check 'robocopy mismatches (exit bit 4) stop the move' ($engineText -match '\(\$rc\.Code -band 4\) -ne 0')
+    Check 'robocopy mismatches (exit bit 4) stop the move' ((Test-RobocopySuccess 0) -and (Test-RobocopySuccess 1) -and (Test-RobocopySuccess 3) -and -not (Test-RobocopySuccess 4) -and -not (Test-RobocopySuccess 5) -and -not (Test-RobocopySuccess 8) -and -not (Test-RobocopySuccess 16) -and -not (Test-RobocopySuccess -1) -and $engineText -match 'if \(-not \(Test-RobocopySuccess \$rc\.Code\)\)' -and $engineText -match '\(\$rc\.Code -band 4\) -ne 0')
+    Check 'every follow-up robocopy in a move checks its own exit code (no stale LASTEXITCODE)' ($engineText -notmatch 'LASTEXITCODE -ge 8' -and ([regex]::Matches($engineText, '\$copyCode = Invoke-RobocopyStep')).Count -ge 5 -and $engineText -match '(?s)function Invoke-RobocopyStep.*?\$global:LASTEXITCODE = -1')
     Check 'move-back refuses when the link on C: no longer points at the recorded copy' ($engineText -match '\$lt = LinkTarget \$src' -and $engineText -match '和记录里的')
     Check 'deleting a leftover copy refuses when another link still uses it' ($engineText -match '(?s)function Invoke-DropCopy.*?Get-MoveRecords.*?IsLink \(\[string\]\$r\.Src\)')
     Check 'repairing a broken link never picks a folder another link is using' ($engineText -match '(?s)\$taken = @\(Get-MovedTargets\).*?别的链接正指着它')
@@ -437,14 +438,19 @@ try { & {
     New-Item -ItemType Directory -Force -Path $script:appDir | Out-Null
     $script:settingsBad = $false
     Set-Setting 'Exclude' (Join-Path $T 'keepme'); Set-Setting 'Other' '1'
-    Check 'OPS-2 settings are written whole, with nothing left behind' ((Get-Setting 'Exclude' '') -eq (Join-Path $T 'keepme') -and (Get-Setting 'Other' '') -eq '1' -and -not (Test-Path ($script:settingsFile + '.tmp')))
+    $tmpLeft = { @(Get-ChildItem -LiteralPath (Split-Path $script:settingsFile) -Filter ((Split-Path $script:settingsFile -Leaf) + '*.tmp') -ErrorAction SilentlyContinue).Count }
+    Check 'OPS-2 settings are written whole, with nothing left behind' ((Get-Setting 'Exclude' '') -eq (Join-Path $T 'keepme') -and (Get-Setting 'Other' '') -eq '1' -and (& $tmpLeft) -eq 0)
+    $bad = Write-SettingsFile -Path $script:settingsFile -Key "Other=2`r`nExclude" -Value ''
+    Check 'a settings key with = or a line break is refused and changes nothing' (-not $bad.Ok -and $bad.Error -and (Get-Setting 'Other' '') -eq '1' -and (Get-Setting 'Exclude' '') -eq (Join-Path $T 'keepme'))
     $lock = [IO.File]::Open($script:settingsFile, 'Open', 'ReadWrite', 'None')
     try {
         $script:settingsBad = $false
         $got = Get-Setting 'Exclude' 'DEFAULT'
         Check 'OPS-2 an unreadable settings file is noticed (not taken as empty)' ($script:settingsBad -and $got -eq 'DEFAULT')
-        Set-Setting 'Other' '2'
+        $w = Set-Setting 'Other' '2' -PassThru
+        Check 'a settings write that cannot read the file reports the failure (Ok false, with the reason)' (-not $w.Ok -and $w.Error)
     } finally { $lock.Close() }
+    Check 'a failed settings write leaves no temporary file behind' ((& $tmpLeft) -eq 0)
     $script:settingsBad = $false
     Check 'OPS-2 a write while the file cannot be read does not wipe the other settings' ((Get-Setting 'Exclude' '') -eq (Join-Path $T 'keepme'))
     $kd = Join-Path $T 'keepme'; New-Item -ItemType Directory -Force -Path $kd | Out-Null; [IO.File]::WriteAllText((Join-Path $kd 'a.tmp'), 'x')
@@ -501,7 +507,7 @@ try { & {
         'Export-DiagPack'       = 3   # 诊断包自己的临时文件和没写完的 zip
         'Install-TaskExe'       = 1   # 定时任务用的副本：核对不一致时删掉刚复制的临时文件
         'Remove-TaskExeIfUnused' = 2  # Program Files\ClearC 里本工具自己的副本
-        'Set-Setting'           = 1   # 设置文件的临时文件
+        'Write-SettingsFile'    = 1   # 写设置时自己刚建的临时文件（GUID 名字、CreateNew 建出来的才删）
         'Rotate-RunLog'         = 1   # 本工具自己最旧的那份运行记录
         'Read-ResumeData'       = 1   # 重开时用过一次的「回到原来的页面」记录
         'Test-AppDirWritable'   = 1   # 试写本工具文件夹时写的小文件
@@ -570,8 +576,15 @@ try { & {
     Check 'ARC-2 a later step replaces the earlier one for the same folder' (@(Get-MoveJournal | Where-Object { $_.Src -eq $js }).Count -eq 1 -and @(Get-MoveJournal | Where-Object { $_.Src -eq $js })[0].Step -eq 'linked')
     Clear-MoveStep $js
     Check 'ARC-2 a finished move leaves no record' (@(Get-MoveJournal | Where-Object { $_.Src -eq $js }).Count -eq 0)
-    $a = [pscustomobject]@{ Files = 1500; Bytes = 6000; Cancelled = $false }
-    Check 'ARC-2 the copy check needs both sides exactly the same (one byte off fails)' ((Test-SameCount $a ([pscustomobject]@{ Files = 1500; Bytes = 6000; Cancelled = $false })) -and -not (Test-SameCount $a ([pscustomobject]@{ Files = 1500; Bytes = 6001; Cancelled = $false })) -and -not (Test-SameCount $a ([pscustomobject]@{ Files = 1501; Bytes = 6000; Cancelled = $false })) -and -not (Test-SameCount $a ([pscustomobject]@{ Files = 1500; Bytes = 6000; Cancelled = $true })))
+    $cnt = { param($f, $b, $more) $h = @{ Files = $f; Bytes = $b; Cancelled = $false; ErrorCount = 0; Reparse = 0; Complete = $true }; if ($more) { foreach ($k in $more.Keys) { $h[$k] = $more[$k] } }; [pscustomobject]$h }
+    $a = & $cnt 1500 6000
+    Check 'ARC-2 the copy check needs both sides exactly the same (one byte off fails)' ((Test-SameCount $a (& $cnt 1500 6000)) -and -not (Test-SameCount $a (& $cnt 1500 6001)) -and -not (Test-SameCount $a (& $cnt 1501 6000)) -and -not (Test-SameCount $a (& $cnt 1500 6000 @{ Cancelled = $true; Complete = $false })))
+    Check 'the copy check refuses a count that was not read completely (read errors, links inside, or no Complete flag)' (-not (Test-SameCount $a (& $cnt 1500 6000 @{ ErrorCount = 1; Complete = $false })) -and -not (Test-SameCount $a (& $cnt 1500 6000 @{ Reparse = 1 })) -and -not (Test-SameCount $a ([pscustomobject]@{ Files = 1500; Bytes = 6000; Cancelled = $false })) -and -not (Test-CountComplete $null))
+    $miss = DirCount (Join-Path $T 'no-such-folder')
+    Check 'counting a folder that does not exist is incomplete, not an empty folder' ($miss -and $miss.ErrorCount -gt 0 -and -not $miss.Complete -and -not (Test-CountComplete $miss))
+    # 不同的文件夹不能共用一份搬家记录（旧的命名会把 C:\a_b 和 C:\a\b 都写成 c__a_b.txt）
+    $ka = [ClearCCore.JournalIdentity]::Key('C:\Users\x\a_b'); $kb = [ClearCCore.JournalIdentity]::Key('C:\Users\x\a\b'); $kc = [ClearCCore.JournalIdentity]::Key('c:\users\X\A_B\')
+    Check 'move records of different folders never share a file name; case and a trailing slash do not matter' ($ka -ne $kb -and $ka -eq $kc -and $ka -match '^[0-9a-f]{64}$' -and (MoveJournalPath 'C:\Users\x\a_b') -ne (MoveJournalPath 'C:\Users\x\a\b'))
     $im = [regex]::Match($engineText, '(?s)function Invoke-Move\(.*?\r?\n\}').Value
     $order = @("Step = 'copying'", 'robocopy.exe', "Step = 'renamed'", 'mklink /J', "Step = 'linked'", "Step = 'cleanup'", 'Remove-MovedOriginal', 'Clear-MoveStep')
     $pos = @($order | ForEach-Object { if ($_ -eq 'Clear-MoveStep') { $im.LastIndexOf($_) } else { $im.IndexOf($_) } })
