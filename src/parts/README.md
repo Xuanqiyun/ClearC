@@ -20,6 +20,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File build\merge.ps1
 
 Notes:
 
+- `engine/SettingsStore.ps1` is a standalone persistence service: `Write-SettingsFile` takes a file path, key, value and lock timeout and returns `{ Ok, Error, Stage }`. It does not read UI state or application globals and can be loaded by itself for tests.
+- `engine/TransferPolicy.ps1` contains pure copy-result and complete-count checks. `engine/Engine.ps1` adapts these services to application state, translations and filesystem operations. The files are joined inside the engine here-string, so the executable still needs no sidecar modules.
+- New move journals use normalized-path SHA-256 identities in `ClearCCore.JournalIdentity`. Recovery reads legacy records too, prefers a new-format record for the same source, and only clears matching legacy records.
+
 - These files are **fragments**. They can't run or compile on their own; only the joined file is the complete program.
 - `cs/RowTypes.cs` and `ui/main.xaml` sit inside double-quoted here-strings: don't write `$` or backticks in them.
 - The files are UTF-8 with CRLF line endings; `glue/00-start.ps1` starts with a BOM (Windows PowerShell 5.1 needs it to read Chinese).

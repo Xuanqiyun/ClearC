@@ -5,6 +5,10 @@ $timer = New-Object System.Windows.Threading.DispatcherTimer
 $timer.Interval = [TimeSpan]::FromMilliseconds(300)
 $timer.Add_Tick({
     while ($sync.Log.Count -gt 0) { UI-Log $sync.Log.Dequeue() }
+    if ($sync.SettingsWriteError -and -not $script:worker) {
+        $msg = [string]$sync.SettingsWriteError; $sync.SettingsWriteError = $null
+        Show-Sheet -Kind warn -Title (T '设置未保存') -Text $msg | Out-Null
+    }
     Update-CleanSummary
     if ($Error.Count -gt 0 -and -not [object]::ReferenceEquals($Error[0], $script:lastErrObj)) {
         $script:lastErrObj = $Error[0]
@@ -339,9 +343,10 @@ $ctl.BtnTheme.Add_Click({
     Set-ThemePref $to
 })
 function Set-ThemePref([string]$to) {
-    Set-Setting 'Theme' $to
+    if (-not (Set-Setting 'Theme' $to -PassThru).Ok) { Load-Settings; return $false }
     OpLog '系统设置' (T '切换外观') $to ''
     Restart-App
+    return $true
 }
 # 设置页上点了外观：问一下再换（返回 $false：没换）
 function Request-Theme([string]$to) {
@@ -349,8 +354,7 @@ function Request-Theme([string]$to) {
     if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return $false }
     $ok = (T '换')
     if ((Show-Sheet -Title ((T "换成「{0}」外观？") -f $script:themeNames[$to]) -Text (T '本工具会关闭，然后用新的外观重新打开。') -Buttons @((T '取消'), $ok) -Primary $ok -Cancel (T '取消')) -ne $ok) { return $false }
-    Set-ThemePref $to
-    return $true
+    return (Set-ThemePref $to)
 }
 # 界面语言切换：存到设置里，关掉本窗口，用新语言重新打开（返回 $false：没换）
 $ctl.BtnLangText.Text = if ($script:Lang -eq 'en') { '中文' } else { 'English' }
@@ -360,7 +364,7 @@ function Request-Lang {
     if ($to -eq 'en') { $t = '切换为英文界面？'; $x = "本工具会关闭，然后以英文界面重新打开。`n`nClearC will close and reopen in English."; $ok = '切换'; $no = '取消' }
     else { $t = 'Switch to Chinese?'; $x = "ClearC will close and reopen in Chinese.`n`n本工具会关闭，然后以中文界面重新打开。"; $ok = 'Switch'; $no = 'Cancel' }
     if ((Show-Sheet -Title $t -Text $x -Buttons @($no, $ok) -Primary $ok -Cancel $no) -ne $ok) { return $false }
-    Set-Setting 'Lang' $to
+    if (-not (Set-Setting 'Lang' $to -PassThru).Ok) { Load-Settings; return $false }
     OpLog '系统设置' (T '切换界面语言') $to ''
     Save-ResumeState
     Exit-UiLock

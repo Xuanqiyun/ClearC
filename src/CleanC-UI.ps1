@@ -937,6 +937,7 @@ public sealed class DirReader {
     FD fd;
     List<FileSystemInfo> list; int li;
     string dirPath; int count;
+    public int ErrorCount;                 // 打不开、读到一半失败或条目损坏，不能当成正常结束
     public bool FellBack;                  // 批量读出错，这个文件夹改用了 FindFirstFileEx
 
     public uint Attr; public long Size, Write;
@@ -965,14 +966,14 @@ public sealed class DirReader {
     public bool Open(string dir) {
         Close();
         mode = force != 0 ? force : ChooseMode(dir);
-        name = null; dirPath = dir; count = 0;
+        name = null; dirPath = dir; count = 0; ErrorCount = 0; FellBack = false;
         if (mode == 3) {
             try { list = new List<FileSystemInfo>(new DirectoryInfo(dir).EnumerateFileSystemInfos()); li = 0; return true; }
-            catch { list = null; return false; }
+            catch { list = null; ErrorCount++; return false; }
         }
         if (mode == 2) return OpenFind(dir);
         h = CreateFileW(LongPath(dir), 0x0001 /*FILE_LIST_DIRECTORY*/, 7, IntPtr.Zero, 3 /*OPEN_EXISTING*/, 0x02000000 /*BACKUP_SEMANTICS*/, IntPtr.Zero);
-        if (h == BAD) return false;
+        if (h == BAD) { ErrorCount++; return false; }
         if (hbuf == IntPtr.Zero) { hbuf = Marshal.AllocHGlobal(BUF); buf = new byte[BUF]; }
         pos = 0; len = 0; more = true;
         return true;
@@ -981,7 +982,11 @@ public sealed class DirReader {
     bool OpenFind(string dir) {
         string p = LongPath(dir); if (!p.EndsWith("\\")) p += "\\";
         hf = FindFirstFileExW(p + "*", 1, out fd, 0, IntPtr.Zero, 2);
-        if (hf == BAD) return false;
+        if (hf == BAD) {
+            int error = Marshal.GetLastWin32Error();
+            if ((error == 2 || error == 18) && Directory.Exists(dir)) { first = false; return true; }
+            ErrorCount++; return false;
+        }
         first = true; return true;
     }
 
@@ -997,14 +1002,18 @@ public sealed class DirReader {
                     Write = e.LastWriteTimeUtc.ToFileTimeUtc();
                     name = e.Name;
                     return true;
-                } catch { }
+                } catch { ErrorCount++; }
             }
             return false;
         }
         if (mode == 2) {
+            if (hf == BAD) return false;
             while (true) {
                 if (first) first = false;
-                else if (!FindNextFileW(hf, out fd)) return false;
+                else if (!FindNextFileW(hf, out fd)) {
+                    if (Marshal.GetLastWin32Error() != 18) ErrorCount++;
+                    return false;
+                }
                 if (fd.name == "." || fd.name == "..") continue;
                 Attr = fd.attr; Size = ((long)fd.sizeHigh << 32) | fd.sizeLow; Write = ((long)fd.w2 << 32) | fd.w1;
                 if ((Attr & 0x400) != 0) Tag = fd.r0;      // dwReserved0：重解析点的类型
@@ -1026,15 +1035,17 @@ public sealed class DirReader {
                         mode = 2;
                         return Next();
                     }
+                    if (err != 18 && !(err == 2 && count == 0 && Directory.Exists(dirPath))) ErrorCount++;
                     return false;
                 }
                 Marshal.Copy(hbuf, buf, 0, BUF);
                 pos = 0; len = BUF;
             }
             int e = pos;
+            if (e < 0 || e > BUF - 68) { ErrorCount++; more = false; return false; }
             int next = BitConverter.ToInt32(buf, e);
             int nl = BitConverter.ToInt32(buf, e + 60);
-            if (next < 0 || nl < 0 || e + 68 + nl > BUF) { more = false; return false; }
+            if (next < 0 || (next != 0 && (next < 68 || next > BUF - e)) || nl < 0 || (nl & 1) != 0 || nl > BUF - e - 68) { ErrorCount++; more = false; return false; }
             pos = next == 0 ? len : e + next;
             if (nl == 2 && buf[e + 68] == '.' && buf[e + 69] == 0) continue;
             if (nl == 4 && buf[e + 68] == '.' && buf[e + 69] == 0 && buf[e + 70] == '.' && buf[e + 71] == 0) continue;
@@ -1113,6 +1124,8 @@ public sealed class DirReader {
 public sealed class DirCount {
     public long Files, Bytes, Reparse;
     public string ReparseSample = "";
+    public long ErrorCount;   // 读取失败次数；进度可以显示部分统计，校验必须拒绝
+    public bool Complete { get { return !Cancelled && ErrorCount == 0; } }
     public bool Cancelled;     // 数到一半被取消了：结果不完整，不能拿来做判断
 }
 // 快速统计文件夹大小：不进入链接目录（搬走后留下的链接不会把别的盘算进来）。
@@ -1137,8 +1150,8 @@ public static class DirStat {
     public static DirCount Count(string root) {
         DirCount c = new DirCount();
         live = c;
-        if (string.IsNullOrEmpty(root)) return c;
-        try { if (!Directory.Exists(root)) return c; } catch { return c; }
+        if (string.IsNullOrEmpty(root)) { c.ErrorCount++; return c; }
+        try { if (!Directory.Exists(root)) { c.ErrorCount++; return c; } } catch { c.ErrorCount++; return c; }
         string r0 = root.TrimEnd('\\', '/');
         if (r0.Length == 0 || (r0.Length == 2 && r0[1] == ':')) r0 = root;
         ConcurrentStack<string> work = new ConcurrentStack<string>();
@@ -1176,8 +1189,8 @@ public static class DirStat {
                                     } else Interlocked.Decrement(ref started);
                                 }
                             }
-                        } catch { }
-                        finally { r.Close(); }
+                        } catch { Interlocked.Increment(ref c.ErrorCount); }
+                        finally { Interlocked.Add(ref c.ErrorCount, r.ErrorCount); r.ErrorCount = 0; r.Close(); }
                         if (Interlocked.Decrement(ref pending) == 0) break;
                     } else {
                         if (Volatile.Read(ref pending) == 0) break;
@@ -3322,6 +3335,18 @@ namespace ClearCCore {
             return false;
         }
     }
+    // 规范化完整路径后做摘要；不同层级的下划线不能造成记录名碰撞。
+    public static class JournalIdentity {
+        public static string Normalize(string path) {
+            if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Missing journal source");
+            return System.IO.Path.GetFullPath(path).Replace('/', '\\').TrimEnd('\\').ToUpperInvariant();
+        }
+        public static string Key(string path) {
+            using (var hash = System.Security.Cryptography.SHA256.Create()) {
+                return BitConverter.ToString(hash.ComputeHash(System.Text.Encoding.UTF8.GetBytes(Normalize(path)))).Replace("-", "").ToLowerInvariant();
+            }
+        }
+    }
     // 搬家进度记录里写的那一步，和磁盘上实际的样子对一下：写记录前一刻断电时，实际可能已经多做了一步。
     // kind：move 搬走 / back 搬回；place：C 盘那个位置现在是 none 不在、link 链接、empty 空文件夹、data 有内容的真文件夹；
     // bakThere：C 盘上改了名的旧文件夹（搬回时是复制回来的临时文件夹）在不在；dstThere：目标盘上那份在不在
@@ -3659,6 +3684,63 @@ $script:tPrep = $script:startClock.Elapsed.TotalSeconds
 # 引擎：清理项目录、测量、删除、搬家。主线程和后台线程都会加载这一段。
 # ============================================================
 $engine = @'
+# ==================== 持久化设置服务：显式输入和结果，不依赖界面、引擎全局状态 ====================
+function Get-SettingsLockName([string]$Path) {
+    $full = [IO.Path]::GetFullPath($Path).ToUpperInvariant()
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { $key = [BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($full))).Replace('-', '') } finally { $sha.Dispose() }
+    return ('Local\ClearC-Settings-' + $key)
+}
+function Write-SettingsFile {
+    param([string]$Path, [string]$Key, [string]$Value, [int]$TimeoutMs = 3000)
+    $ErrorActionPreference = 'Stop'
+    $result = @{ Ok = $false; Error = ''; Stage = 'lock' }
+    $mx = $null; $got = $false; $tmp = ''; $ownsTemp = $false
+    try {
+        if (-not $Key -or $Key -match '[=\r\n]' -or $Value -match '[\r\n]' -or $TimeoutMs -lt 0) { throw 'Invalid settings input' }
+        $Path = [IO.Path]::GetFullPath($Path)
+        $mx = New-Object Threading.Mutex($false, (Get-SettingsLockName $Path))
+        try { $got = $mx.WaitOne($TimeoutMs) } catch [Threading.AbandonedMutexException] { $got = $true }
+        if (-not $got) { throw 'Settings are busy; please retry' }
+        $result.Stage = 'read'
+        $old = @(); if ([IO.File]::Exists($Path)) { $old = [IO.File]::ReadAllLines($Path, [Text.Encoding]::UTF8) }
+        $lines = New-Object Collections.Generic.List[string]
+        foreach ($line in $old) {
+            $i = $line.IndexOf('=')
+            if ($i -gt 0 -and $line.Substring(0, $i).Trim() -ieq $Key) { continue }
+            $lines.Add($line)
+        }
+        $lines.Add("$Key=$Value")
+        $result.Stage = 'write'
+        [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($Path))
+        $tmp = $Path + '.' + [guid]::NewGuid().ToString('N') + '.tmp'
+        $stream = [IO.File]::Open($tmp, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+        $ownsTemp = $true
+        try {
+            $enc = New-Object Text.UTF8Encoding($true)
+            $bytes = $enc.GetPreamble() + $enc.GetBytes(($lines.ToArray() -join "`r`n") + "`r`n")
+            $stream.Write($bytes, 0, $bytes.Length); $stream.Flush($true)
+        } finally { $stream.Dispose() }
+        if ([IO.File]::Exists($Path)) { [IO.File]::Replace($tmp, $Path, ($Path + '.bak')) } else { [IO.File]::Move($tmp, $Path) }
+        $result.Ok = $true; $result.Stage = 'done'
+    } catch { $result.Error = $_.Exception.Message }
+    finally {
+        if ($ownsTemp -and $tmp) { try { if ([IO.File]::Exists($tmp)) { [IO.File]::Delete($tmp) } } catch {} }
+        if ($mx) { if ($got) { try { $mx.ReleaseMutex() } catch {} }; $mx.Dispose() }
+    }
+    return $result
+}
+
+# ==================== 文件传输策略：纯判断，可脱离界面与磁盘单独测试 ====================
+function Test-RobocopySuccess([int]$Code) { return ($Code -ge 0 -and $Code -lt 8 -and ($Code -band 4) -eq 0) }
+function Test-CountComplete($Count) {
+    return [bool]($Count -and $Count.Complete -and -not $Count.Cancelled -and $Count.ErrorCount -eq 0 -and $Count.Reparse -eq 0)
+}
+function Test-SameCount($a, $b) {
+    return [bool]((Test-CountComplete $a) -and (Test-CountComplete $b) -and [long]$a.Files -eq [long]$b.Files -and [long]$a.Bytes -eq [long]$b.Bytes)
+}
+
+# ==================== 引擎编排：文件系统适配、任务状态和界面消息 ====================
 # 界面文字翻译：中文是原文；英文界面时查表，查不到就原样显示中文。后台任务通过 $sync.L10n 拿到同一张表
 function T([string]$s) {
     $d = $script:L10n
@@ -5887,6 +5969,7 @@ function Invoke-Move($it, $destRoot, $res) {
         $sc = DirCount $src; $srcBytes = [double]$sc.Bytes
         $cxNone = (T "已取消：{0} 还没开始复制，原文件夹没动") -f $src
         if ((Stopping) -or $sc.Cancelled) { Log "  $cxNone"; $res.Cancelled = $true; $res.Msgs += $cxNone; break }
+        if (-not $sc.Complete) { $res.Fail++; $res.Msgs += (T '目录没有读取完整，原文件夹已保留'); continue }
         if ($sc.Reparse -gt 0) {
             # 里面的链接（或系统压缩过的文件）复制和核对时都会被跳过，搬完删原目录时就会丢。宁可不搬
             $m = (T "{0} 里有 {1} 个特殊项目（链接，或用 Windows 压缩功能压过的文件，比如 {2}）。复制时可能漏掉它们，为了不丢东西，这个文件夹不搬，原目录未动") -f $src, $sc.Reparse, $sc.ReparseSample
@@ -5942,16 +6025,15 @@ function Invoke-Move($it, $destRoot, $res) {
         $cxHalf = (T "已取消：{0} 原文件夹没动。已复制的部分留在 {1}，下次再搬这一项会接着复制；不需要的话，可以在「搬家管理」里删掉这份副本") -f $src, $dst
         $cxCopied = (T "已取消：{0} 已经复制到 {1}，但还没换成链接，原文件夹没动。下次再搬只补有变化的文件") -f $src, $dst
         if ($rc.Cancelled) { Log "  $cxHalf"; OpLog '搬运' (T '搬家已取消') $src $cxHalf; $res.Cancelled = $true; $res.Msgs += $cxHalf; break }
-        if ($rc.Code -ge 8 -or $rc.Code -lt 0) { $m = ((T "复制失败（robocopy 代码 {0}，可能是空间不够或有文件被占用），原目录未动") -f $rc.Code); Log "  $m"; OpLog '搬运' (T '搬家失败') $src $m; $res.Fail++; $res.Msgs += $m; continue }
-        # 代码里带 4：有同名的文件和文件夹对不上，那几项没复制过去。数量核对可能照样通过，所以这里就停
-        if (($rc.Code -band 4) -ne 0) { $m = ((T "复制时有名字对不上的项目（robocopy 代码 {0}：同一个名字一边是文件一边是文件夹），原目录未动。打开 {1} 看看") -f $rc.Code, $dst); Log "  $m"; OpLog '搬运' (T '搬家失败') $src $m; $res.Fail++; $res.Msgs += $m; continue }
+        if (-not (Test-RobocopySuccess $rc.Code)) { $m = ((T "复制失败（robocopy 代码 {0}，可能是空间不够或有文件被占用），原目录未动") -f $rc.Code); Log "  $m"; OpLog '搬运' (T '搬家失败') $src $m; $res.Fail++; $res.Msgs += $m; continue }
         SetP @{ MovePhase = 'verify'; SubKind = 'measure'; SubStart = (Get-Date); Detail = (T '复制完成，核对两边大小') }
         # 两边重新数一遍，文件个数和总大小一个都不能差，才继续（之后才会删 C 盘上的原目录）。
         # 对不上多半是复制时还有程序在写：再补复制一遍、再数一次，还对不上就不搬
         $sc = DirCount $src; $dc = DirCount $dst
         if (-not (Stopping) -and -not (Test-SameCount $sc $dc)) {
             SetP @{ Detail = (T '两边差一点，补复制一遍再核对') }
-            & "$sys32\robocopy.exe" @rcArgs | Out-Null
+            $copyCode = Invoke-RobocopyStep $rcArgs
+            if (-not (Test-RobocopySuccess $copyCode)) { $res.Fail++; $res.Msgs += (T '补复制失败，原文件夹已保留'); continue }
             $sc = DirCount $src; $dc = DirCount $dst
         }
         $srcBytes = [double]$sc.Bytes; $srcFiles = [long]$sc.Files; $dstBytes = [double]$dc.Bytes; $dstFiles = [long]$dc.Files
@@ -5992,8 +6074,8 @@ function Invoke-Move($it, $destRoot, $res) {
         $jr.Step = 'linked'; [void](Set-MoveStep $jr)
         # 核对之后到改名之间可能有程序又写了文件，补复制一遍新文件；补不过去就保留 C 盘上的旧文件夹（记录留着，下次打开可以接着做完或撤回）
         SetP @{ Detail = (T '补复制最后写入的文件') }
-        & "$sys32\robocopy.exe" "$bak" "$dst" /E /XO $cp /R:1 /W:1 /XJ /NFL /NDL /NJH /NJS /NP | Out-Null
-        if ($LASTEXITCODE -ge 8) {
+        $copyCode = Invoke-RobocopyStep @($bak, $dst, '/E', '/XO', $cp, '/R:1', '/W:1', '/XJ', '/NFL', '/NDL', '/NJH', '/NJS', '/NP')
+        if (-not (Test-RobocopySuccess $copyCode) -or -not (Test-MoveCopyReady $bak $dst)) {
             $m = ((T "已搬好，但最后几个文件没补复制过去，C 盘上的旧文件夹先保留：{0}") -f $bak)
             Log "  $m"; OpLog '搬运' (T '搬到其他盘') "$src → $dst" ((T "{0:N0} 个文件，{1}，两边已核对一致") -f $srcFiles, (GB $srcBytes)); OpLog '搬运' (T '搬家后保留 C 盘旧文件夹') $bak $m
             $res.Done++; $res.Moved += $srcBytes; $res.Dest += $dst; $res.Msgs += $m; $script:movedTargets = $null
@@ -6059,22 +6141,15 @@ function Get-Setting([string]$k, [string]$def = '') {
 }
 # 写设置：先写到旁边的临时文件，再整个换上去（写到一半断电、C 盘满了，原来的文件都还在）；
 # 界面和定时任务可能同时写，用一把锁排队；原来的文件读不出来时不写（不然会把别的设置都冲掉）
-function Set-Setting([string]$k, [string]$v) {
-    $mx = $null; $got = $false
-    try {
-        try { $mx = New-Object System.Threading.Mutex($false, 'Local\ClearC-Settings'); $got = $mx.WaitOne(3000) } catch [System.Threading.AbandonedMutexException] { $got = $true } catch {}
-        New-Item -ItemType Directory -Path $script:appDir -Force | Out-Null
-        $old = Read-SettingsLines
-        if ($null -eq $old) { return }
-        $lines = New-Object System.Collections.Generic.List[string]
-        foreach ($l in $old) { if ($l -and -not $l.StartsWith("$k=")) { $lines.Add($l) } }
-        $lines.Add("$k=$v")
-        $tmp = $script:settingsFile + '.tmp'
-        [IO.File]::WriteAllLines($tmp, $lines.ToArray(), (New-Object Text.UTF8Encoding $true))
-        if (Test-Path -LiteralPath $script:settingsFile) { [IO.File]::Replace($tmp, $script:settingsFile, ($script:settingsFile + '.bak')) } else { [IO.File]::Move($tmp, $script:settingsFile) }
-    } catch {
-        try { if (Test-Path -LiteralPath ($script:settingsFile + '.tmp')) { [IO.File]::Delete($script:settingsFile + '.tmp') } } catch {}
-    } finally { if ($mx) { if ($got) { try { $mx.ReleaseMutex() } catch {} }; $mx.Dispose() } }
+function Set-Setting([string]$k, [string]$v, [switch]$Required, [switch]$PassThru) {
+    $r = Write-SettingsFile -Path $script:settingsFile -Key $k -Value $v
+    if (-not $r.Ok) {
+        $msg = (T "设置没有保存，请稍后重试：{0}") -f $r.Error
+        Log $msg
+        if ($sync) { $sync.SettingsWriteError = $msg }
+        if ($Required) { throw $msg }
+    }
+    if ($PassThru) { return $r }
 }
 
 # 操作日志：每月一个 txt，一行一条：时间 <Tab> 类别 <Tab> 操作 <Tab> 对象 <Tab> 详情
@@ -6326,7 +6401,7 @@ function Find-HalfMoves {
 # 搬回：copying 复制回 C 盘中（链接没动）→ unlinked 链接已拆 → swapped 已换回真文件夹 → cleanup 删目标盘上的那份 → 删掉记录
 # 写不进去（C 盘满）不拦着搬家：打开时还会按 *.moved_backup 找没做完的
 function MoveJournalPath([string]$src) {
-    $name = ($src.TrimEnd('\', '/').ToLowerInvariant() -replace '[\\/:*?"<>|]', '_') + '.txt'
+    $name = [ClearCCore.JournalIdentity]::Key($src) + '.txt'
     return (Join-Path (Join-Path $script:appDir '搬家进度') $name)
 }
 function Set-MoveStep($j) {
@@ -6344,20 +6419,64 @@ function Set-MoveStep($j) {
 }
 function Clear-MoveStep([string]$src) {
     $f = MoveJournalPath $src
-    foreach ($x in $f, "$f.tmp") { try { if ([IO.File]::Exists($x)) { [IO.File]::Delete($x) } } catch {} }
+    $files = @($f, "$f.tmp")
+    # 兼容旧记录，只清除内容中的 Src 确实属于本任务的文件；不能误删名称碰撞的另一项。
+    foreach ($j in @(Read-MoveJournalFiles)) {
+        if ([ClearCCore.JournalIdentity]::Normalize([string]$j.Src) -eq [ClearCCore.JournalIdentity]::Normalize($src)) { $files += [string]$j.File }
+    }
+    foreach ($x in @($files | Select-Object -Unique)) { try { if ([IO.File]::Exists($x)) { [IO.File]::Delete($x) } } catch {} }
 }
-function Get-MoveJournal {
+function Read-MoveJournalFiles {
     $dir = Join-Path $script:appDir '搬家进度'
     $out = New-Object System.Collections.Generic.List[object]
     foreach ($f in @(Get-ChildItem -LiteralPath $dir -Filter '*.txt' -File -ErrorAction SilentlyContinue)) {
         $j = @{ File = $f.FullName }
         try { foreach ($l in [IO.File]::ReadAllLines($f.FullName, [Text.Encoding]::UTF8)) { $p = $l.Split("`t", 2); if ($p.Count -eq 2) { $j[$p[0]] = $p[1] } } } catch { continue }
-        if ($j.Src -and $j.Step -and ($j.Kind -eq 'move' -or $j.Kind -eq 'back')) { $out.Add([pscustomobject]$j) }
+        if (-not $j.Src -or -not $j.Dst -or -not $j.Bak -or -not $j.Step -or $j.Kind -notin @('move', 'back')) { continue }
+        try {
+            $hashName = [IO.Path]::GetFileName((MoveJournalPath ([string]$j.Src)))
+            $legacyName = (([string]$j.Src).TrimEnd('\', '/').ToLowerInvariant() -replace '[\\/:*?"<>|]', '_') + '.txt'
+            if ($f.Name -ine $hashName -and $f.Name -ine $legacyName) { continue }
+            $j.Hashed = ($f.Name -ieq $hashName)
+            $out.Add([pscustomobject]$j)
+        } catch { continue }
     }
     return $out.ToArray()
 }
-# 两次统计是不是完全一样：个数、大小一个都不能差，哪边数到一半被取消都不算
-function Test-SameCount($a, $b) { return [bool]($a -and $b -and -not $a.Cancelled -and -not $b.Cancelled -and [long]$a.Files -eq [long]$b.Files -and [long]$a.Bytes -eq [long]$b.Bytes) }
+function Get-MoveJournal {
+    $seen = @{}
+    foreach ($j in @(Read-MoveJournalFiles | Sort-Object -Property Hashed -Descending)) {
+        $key = [ClearCCore.JournalIdentity]::Key([string]$j.Src)
+        if (-not $seen.ContainsKey($key)) { $seen[$key] = $true; $j }
+    }
+}
+# 补复制的外部命令适配：显式返回代码，失败启动不能复用上一次命令的退出码。
+function Invoke-RobocopyStep([string[]]$Arguments) {
+    $global:LASTEXITCODE = -1
+    & "$sys32\robocopy.exe" @Arguments | Out-Null
+    return [int]$LASTEXITCODE
+}
+# 每次清理旧副本前都重新查磁盘，不把历史阶段当成当前副本仍可用的证明。
+function Test-MoveCopyReady([string]$Backup, [string]$Kept) {
+    try {
+        if (-not (Test-Path -LiteralPath $Backup -PathType Container) -or -not (Test-Path -LiteralPath $Kept -PathType Container)) { return $false }
+        if ((IsLink $Backup) -or (IsLink $Kept)) { return $false }
+        $a = DirCount $Backup; $b = DirCount $Kept
+        if (-not (Test-CountComplete $a) -or -not (Test-CountComplete $b)) { return $false }
+        # robocopy 的文件差异输出不保证列出缺失的空目录；单独核对每一层目录也存在。
+        $pending = New-Object Collections.Generic.Stack[object]
+        $pending.Push(@($Backup, $Kept))
+        while ($pending.Count) {
+            $pair = $pending.Pop()
+            foreach ($dir in [IO.Directory]::GetDirectories([string]$pair[0])) {
+                $target = Join-Path ([string]$pair[1]) ([IO.Path]::GetFileName($dir))
+                if ((IsLink $dir) -or (IsLink $target) -or -not (Test-Path -LiteralPath $target -PathType Container)) { return $false }
+                $pending.Push(@($dir, $target))
+            }
+        }
+        return ((Get-ExtraCount $Backup $Kept) -eq 0)
+    } catch { return $false }
+}
 # C 盘上那个位置现在是什么：none 不在、link 链接、empty 空文件夹（多半是软件重新建的）、data 有内容的真文件夹
 function Get-PlaceState([string]$p) {
     if (IsLink $p) { return 'link' }
@@ -6431,7 +6550,7 @@ function Resume-Move($j, [string]$how) {
         }
         if ($step -eq 'linked' -or $step -eq 'cleanup') {
             $lt = LinkTarget $src
-            if ($st -ne 'link' -or ($lt -and $lt.TrimEnd('\') -ine $dst.TrimEnd('\'))) { $res.Msg = (T "{0} 现在不是指向 {1} 的链接，没动。数据在 {2}") -f $src, $dst, $bak; return $res }
+            if ($st -ne 'link' -or -not $lt -or $lt.TrimEnd('\') -ine $dst.TrimEnd('\')) { $res.Msg = (T "{0} 现在不是指向 {1} 的链接，没动。数据在 {2}") -f $src, $dst, $bak; return $res }
             if ($step -eq 'linked' -and $how -eq 'undo') {
                 $newer = Get-ExtraCount $dst $bak
                 & "$sys32\cmd.exe" /c rmdir "$src" 2>$null | Out-Null
@@ -6447,12 +6566,13 @@ function Resume-Move($j, [string]$how) {
             }
             if ($step -eq 'linked') {
                 # 改名之后才写进去的文件补复制过去，核对 C 盘旧文件夹里没有一个文件是目标盘上没有或比它新的，才删旧文件夹
-                & "$sys32\robocopy.exe" "$bak" "$dst" /E /XO $cp /R:1 /W:1 /XJ /NFL /NDL /NJH /NJS /NP | Out-Null
-                if ($LASTEXITCODE -ge 8) { $res.Msg = (T "补复制没成功（robocopy 代码 {0}），C 盘上的旧文件夹先保留：{1}") -f $LASTEXITCODE, $bak; & $log (T '接着做完搬家失败'); return $res }
+                $copyCode = Invoke-RobocopyStep @($bak, $dst, '/E', '/XO', $cp, '/R:1', '/W:1', '/XJ', '/NFL', '/NDL', '/NJH', '/NJS', '/NP')
+                if (-not (Test-RobocopySuccess $copyCode)) { $res.Msg = (T "补复制没成功（robocopy 代码 {0}），C 盘上的旧文件夹先保留：{1}") -f $copyCode, $bak; & $log (T '接着做完搬家失败'); return $res }
                 $left = Get-ExtraCount $bak $dst
                 if ($left -ne 0) { $res.Msg = (T "核对不一致：{0} 里有 {1} 个文件在目标盘上没有，先保留") -f $bak, $left; & $log (T '接着做完搬家失败'); return $res }
                 $j.Step = 'cleanup'; [void](Set-MoveStep $j)
             }
+            if (-not (Test-MoveCopyReady $bak $dst)) { $res.Msg = (T "副本不可用、读取不完整或仍有差异，旧文件夹已保留：{0}") -f $bak; & $log (T '接着做完搬家失败'); return $res }
             if (-not (Remove-MovedOriginal $bak)) { $res.Msg = (T "已搬好，但 C 盘上的旧文件夹没删干净（可能有文件被占用），过后可以再试：{0}") -f $bak; & $log (T '接着做完搬家：旧文件夹没删干净'); return $res }
             Clear-MoveStep $src; $res.Ok = $true; $script:movedTargets = $null
             $res.Msg = (T "已做完：{0} 的数据在 {1}，C 盘上的旧文件夹已删") -f $src, $dst
@@ -6483,14 +6603,15 @@ function Resume-Move($j, [string]$how) {
                 & $log (T '没做完的搬回：保留目标盘上的那份'); return $res
             }
             if ($step -eq 'swapped') {
-                & "$sys32\robocopy.exe" "$dst" "$src" /E /XO /COPY:DAT /R:1 /W:1 /XJ /NFL /NDL /NJH /NJS /NP | Out-Null
-                if ($LASTEXITCODE -ge 8 -or -not (Test-OurMoveCopy $src $dst) -or (Get-ExtraCount $dst $src) -ne 0) {
+                $copyCode = Invoke-RobocopyStep @($dst, $src, '/E', '/XO', '/COPY:DAT', '/R:1', '/W:1', '/XJ', '/NFL', '/NDL', '/NJH', '/NJS', '/NP')
+                if (-not (Test-RobocopySuccess $copyCode) -or -not (Test-OurMoveCopy $src $dst) -or (Get-ExtraCount $dst $src) -ne 0) {
                     Clear-MoveStep $src; $res.Ok = $true; $res.Msg = (T "已搬回 C 盘；目标盘上的 {0} 先保留，确认不需要的话可以自己删") -f $dst
                     foreach ($root in (All-MoveRoots)) { Remove-MoveMapEntry $root $src }
                     & $log (T '接着做完搬回：保留目标盘上的那份'); return $res
                 }
                 $j.Step = 'cleanup'; [void](Set-MoveStep $j)
             }
+            if (-not (Test-MoveCopyReady $dst $src) -or -not (Test-OurMoveCopy $src $dst)) { $res.Msg = (T "副本不可用、读取不完整或仍有差异，旧文件夹已保留：{0}") -f $dst; & $log (T '接着做完搬家失败'); return $res }
             if (-not (Remove-MovedOriginal $dst)) { $res.Msg = (T "已搬回，但目标盘上的旧副本没删干净：{0}") -f $dst; return $res }
             foreach ($root in (All-MoveRoots)) { Remove-MoveMapEntry $root $src }
             Clear-MoveStep $src; $res.Ok = $true; $script:movedTargets = $null
@@ -6561,7 +6682,11 @@ function Get-MoveRecords {
 # （robocopy /L 只列出不复制；/XO 不算副本里比 C 盘旧的，/XX 不算只有 C 盘上才有的）
 function Get-ExtraCount([string]$dst, [string]$src) {
     if (-not (Test-Path -LiteralPath $dst) -or -not (Test-Path -LiteralPath $src)) { return -1 }
+    $global:LASTEXITCODE = -1
     $lines = @(& "$sys32\robocopy.exe" "$dst" "$src" /L /E /XO /XX /XJ /NJH /NJS /NDL /NC /NS /NP /FP /R:0 /W:0 | Where-Object { ([string]$_).Trim() })
+    if (-not (Test-RobocopySuccess $LASTEXITCODE)) { return -1 }
+    # 代码里的 1 表示有文件需要复制；即使输出解析不到文件名也不能误报零差异。
+    if (($LASTEXITCODE -band 1) -ne 0) { return [math]::Max(1, $lines.Count) }
     return $lines.Count
 }
 # 看一条记录现在的状态
@@ -6615,6 +6740,7 @@ function Invoke-MoveBack($rec, $res) {
     SetP @{ MovePhase = 'measure'; SubKind = 'measure'; SubStart = (Get-Date); Detail = ((T "统计 {0} 的大小") -f $dst) }
     $dc = DirCount $dst; $bytes = [double]$dc.Bytes; $files = [long]$dc.Files
     if ((Stopping) -or $dc.Cancelled) { $res.Cancelled = $true; $res.Msg = (T '已取消，什么都没改'); return }
+    if (-not (Test-CountComplete $dc)) { $res.Msg = (T '目录没有读取完整，原文件夹已保留'); return }
     $free = [double](FreeC)
     if ($free -lt $bytes + 2GB) { $res.Msg = (T "C 盘只剩 {0}，放不下 {1}（还要留 2 GB 余量）") -f (GB $free), (GB $bytes); OpLog '搬运' (T '搬回 C 盘失败') $src $res.Msg; return }
     $tmp = "$src.cleanc_back"
@@ -6626,11 +6752,15 @@ function Invoke-MoveBack($rec, $res) {
     $rcArgs = @($dst, $tmp, '/E', '/COPY:DAT', '/DCOPY:DAT', '/R:2', '/W:2', '/NDL', '/NJH', '/NJS', '/NP', '/BYTES', '/XJ')
     $rc = Invoke-Tool "$sys32\robocopy.exe" $rcArgs '' 0
     if ($rc.Cancelled) { Undo-MoveBackCopy $tmp $tmpFresh $dst $src $res; Clear-MoveStep $src; return }
-    if ($rc.Code -ge 8 -or $rc.Code -lt 0) { $res.Msg = ((T "复制回 C 盘失败（robocopy 代码 {0}），什么都没改，复制了一半的临时文件夹在 {1}") -f $rc.Code, $tmp); OpLog '搬运' (T '搬回 C 盘失败') $src $res.Msg; return }
+    if (-not (Test-RobocopySuccess $rc.Code)) { $res.Msg = ((T "复制回 C 盘失败（robocopy 代码 {0}），什么都没改，复制了一半的临时文件夹在 {1}") -f $rc.Code, $tmp); OpLog '搬运' (T '搬回 C 盘失败') $src $res.Msg; return }
     SetP @{ MovePhase = 'verify'; SubKind = 'measure'; SubStart = (Get-Date); Detail = (T '核对两边是否一致') }
     # 个数和大小一个都不能差；差一点多半是复制时还有程序在写：再补复制一遍、再数一次
     $dc = DirCount $dst; $tc = DirCount $tmp
-    if (-not (Stopping) -and -not (Test-SameCount $dc $tc)) { & "$sys32\robocopy.exe" @rcArgs | Out-Null; $dc = DirCount $dst; $tc = DirCount $tmp }
+    if (-not (Stopping) -and -not (Test-SameCount $dc $tc)) {
+        $copyCode = Invoke-RobocopyStep $rcArgs
+        if (-not (Test-RobocopySuccess $copyCode)) { $res.Msg = (T '补复制失败，原文件夹已保留'); return }
+        $dc = DirCount $dst; $tc = DirCount $tmp
+    }
     $bytes = [double]$dc.Bytes; $files = [long]$dc.Files; $b2 = [double]$tc.Bytes; $f2 = [long]$tc.Files
     if ((Stopping) -or $tc.Cancelled -or $dc.Cancelled) { Undo-MoveBackCopy $tmp $tmpFresh $dst $src $res; Clear-MoveStep $src; return }
     if (-not (Test-SameCount $dc $tc)) {
@@ -6649,8 +6779,8 @@ function Invoke-MoveBack($rec, $res) {
     }
     $jr.Step = 'swapped'; [void](Set-MoveStep $jr)
     OpLog '搬运' (T '搬回 C 盘') "$dst → $src" ((T "{0:N0} 个文件，{1}，已核对") -f $files, (GB $bytes))
-    & "$sys32\robocopy.exe" "$dst" "$src" /E /XO /COPY:DAT /R:1 /W:1 /XJ /NFL /NDL /NJH /NJS /NP | Out-Null
-    if ($LASTEXITCODE -ge 8) {
+    $copyCode = Invoke-RobocopyStep @($dst, $src, '/E', '/XO', '/COPY:DAT', '/R:1', '/W:1', '/XJ', '/NFL', '/NDL', '/NJH', '/NJS', '/NP')
+    if (-not (Test-RobocopySuccess $copyCode) -or -not (Test-MoveCopyReady $dst $src)) {
         $res.Ok = $true; $res.Bytes = $bytes; $res.Msg = ((T "已搬回 C 盘，但有几个最后写入的文件没补复制过来，目标盘上的那份先保留：{0}") -f $dst)
         OpLog '搬运' (T '搬回后保留目标盘副本') $dst $res.Msg
         foreach ($root in (All-MoveRoots)) { Remove-MoveMapEntry $root $src }
@@ -7867,6 +7997,11 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+设置没有保存，请稍后重试：{0}	Settings were not saved. Please retry: {0}
+设置未保存	Settings not saved
+副本不可用、读取不完整或仍有差异，旧文件夹已保留：{0}	The copy is unavailable, could not be fully read, or still differs. The old folder has been kept: {0}
+补复制失败，原文件夹已保留	The follow-up copy failed. The original folder has been kept.
+目录没有读取完整，原文件夹已保留	The directory could not be fully read. The original folder has been kept.
 腾挪 ClearC 已经开着一个（可能在别的窗口后面）。如果找不到它，重启电脑后再打开。	ClearC is already open (perhaps behind another window). If you cannot find it, restart the PC and open it again.
 上一次打开的腾挪 ClearC 还在后台运行，但一直没有窗口，多半是卡住了（比如被杀毒软件拦在了一半）。\n\n要结束它，再重新打开吗？	The ClearC you opened last time is still running in the background but never showed a window. It is probably stuck (for example, antivirus stopped it halfway).\n\nEnd it and open ClearC again?
 它可能正在删除或搬家，现在结束会停在一半；下次打开时会说明停在哪一步，可以接着做完或撤回。不着急的话，可以先等几分钟再试。	It may be deleting or moving files. Ending it now stops that halfway; the next start explains where it stopped so you can finish or undo it. If it is not urgent, wait a few minutes and try again.
@@ -23222,7 +23357,7 @@ function Apply-Mode {
     if ($script:mapRoot) { try { $ctl.BtnMapAcct.Visibility = if ($script:mapRoot.HasDisk -and $m -ge 2) { 'Visible' } else { 'Collapsed' } } catch {} }
 }
 function Set-Mode([string]$mode) {
-    Set-Setting 'Mode' $mode
+    if (-not (Set-Setting 'Mode' $mode -PassThru).Ok) { Apply-Mode; return }
     Apply-Mode
     OpLog '系统设置' (T '使用模式') (Get-ModeName) ''
     UI-Log ((T "使用模式：{0}") -f (Get-ModeName))
@@ -23307,19 +23442,19 @@ $ctl.SetFast.Add_Click({ if (-not $script:setLoading) { Set-FastScan ([bool]$ctl
 $ctl.SetRestorePoint.Add_Click({
     if ($script:setLoading) { return }
     $on = [bool]$ctl.SetRestorePoint.IsChecked
-    Set-Setting 'RestorePoint' $(if ($on) { '1' } else { '0' })
+    if (-not (Set-Setting 'RestorePoint' $(if ($on) { '1' } else { '0' }) -PassThru).Ok) { Load-Settings; return }
     OpLog '系统设置' (T '改系统设置前先建还原点') $(if ($on) { (T '打开') } else { (T '关闭') }) ''
 })
 $ctl.SetRecycle.Add_Click({
     if ($script:setLoading) { return }
     $on = [bool]$ctl.SetRecycle.IsChecked
-    Set-Setting 'Recycle' $(if ($on) { '1' } else { '0' })
+    if (-not (Set-Setting 'Recycle' $(if ($on) { '1' } else { '0' }) -PassThru).Ok) { Load-Settings; return }
     UI-Log $(if ($on) { (T '删除时先放进回收站：已打开') } else { (T '删除时先放进回收站：已关闭') })
 })
 $ctl.SetLowIo.Add_Click({
     if ($script:setLoading) { return }
     $on = [bool]$ctl.SetLowIo.IsChecked
-    Set-Setting 'LowIo' $(if ($on) { '1' } else { '0' }); [DupFinder]::LowPriority = $on
+    if (-not (Set-Setting 'LowIo' $(if ($on) { '1' } else { '0' }) -PassThru).Ok) { Load-Settings; return }; [DupFinder]::LowPriority = $on
     UI-Log $(if ($on) { (T '查重复文件时让着其他程序：已打开') } else { (T '查重复文件时让着其他程序：已关闭') })
 })
 $ctl.BtnSetReset.Add_Click({
@@ -23336,8 +23471,9 @@ function Load-CleanLists {
     $ctl.SetExcludeList.ItemsSource = $x; $ctl.SetExcludeEmpty.Visibility = if ($x.Count) { 'Collapsed' } else { 'Visible' }
 }
 function Save-CleanList([string]$key, [string[]]$items) {
-    Set-Setting $key (($items | Where-Object { $_ }) -join '|')
+    $saved = Set-Setting $key (($items | Where-Object { $_ }) -join '|') -PassThru
     Load-CleanLists
+    if (-not $saved.Ok) { return $false }
     # 清理列表变了：扫描结果作废，下次扫描按新的来
     $script:catalog = Get-Catalog
     if ($script:rows -and -not $script:worker) {
@@ -23347,6 +23483,7 @@ function Save-CleanList([string]$key, [string[]]$items) {
         $ctl.EmptyClean.Visibility = 'Visible'; $ctl.EmptyCleanText.Text = (T '清理列表改了，请重新扫描。')
         $ctl.Summary.Text = (T '清理列表改了，请重新扫描。')
     }
+    return $true
 }
 function Add-CleanListFolder([bool]$exclude) {
     $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
@@ -23362,7 +23499,7 @@ function Add-CleanListFolder([bool]$exclude) {
     $key = if ($exclude) { 'Exclude' } else { 'CustomClean' }
     $cur = @(if ($exclude) { Get-ExcludeList } else { Get-CustomClean })
     if ($cur -contains $p) { return }
-    Save-CleanList $key ($cur + $p)
+    if (-not (Save-CleanList $key ($cur + $p))) { return }
     OpLog '系统设置' $(if ($exclude) { (T '排除文件夹') } else { (T '加入清理列表') }) $p ''
     UI-Log ((T "{0}：{1}") -f $(if ($exclude) { (T '排除文件夹') } else { (T '加入清理列表') }), $p)
 }
@@ -23376,7 +23513,7 @@ $removeHandler = [System.Windows.RoutedEventHandler]{
     $exclude = [object]::ReferenceEquals($s, $ctl.SetExcludeList)
     $key = if ($exclude) { 'Exclude' } else { 'CustomClean' }
     $cur = @(if ($exclude) { Get-ExcludeList } else { Get-CustomClean })
-    Save-CleanList $key @($cur | Where-Object { $_ -ne $p })
+    if (-not (Save-CleanList $key @($cur | Where-Object { $_ -ne $p }))) { return }
     OpLog '系统设置' $(if ($exclude) { (T '取消排除') } else { (T '移出清理列表') }) $p ''
 }
 $ctl.SetCustomList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent, $removeHandler)
@@ -24570,6 +24707,10 @@ $timer = New-Object System.Windows.Threading.DispatcherTimer
 $timer.Interval = [TimeSpan]::FromMilliseconds(300)
 $timer.Add_Tick({
     while ($sync.Log.Count -gt 0) { UI-Log $sync.Log.Dequeue() }
+    if ($sync.SettingsWriteError -and -not $script:worker) {
+        $msg = [string]$sync.SettingsWriteError; $sync.SettingsWriteError = $null
+        Show-Sheet -Kind warn -Title (T '设置未保存') -Text $msg | Out-Null
+    }
     Update-CleanSummary
     if ($Error.Count -gt 0 -and -not [object]::ReferenceEquals($Error[0], $script:lastErrObj)) {
         $script:lastErrObj = $Error[0]
@@ -24904,9 +25045,10 @@ $ctl.BtnTheme.Add_Click({
     Set-ThemePref $to
 })
 function Set-ThemePref([string]$to) {
-    Set-Setting 'Theme' $to
+    if (-not (Set-Setting 'Theme' $to -PassThru).Ok) { Load-Settings; return $false }
     OpLog '系统设置' (T '切换外观') $to ''
     Restart-App
+    return $true
 }
 # 设置页上点了外观：问一下再换（返回 $false：没换）
 function Request-Theme([string]$to) {
@@ -24914,8 +25056,7 @@ function Request-Theme([string]$to) {
     if ($script:worker) { Show-Sheet -Title (T '请等当前操作做完') -Text (T '另一个操作还在进行中。') | Out-Null; return $false }
     $ok = (T '换')
     if ((Show-Sheet -Title ((T "换成「{0}」外观？") -f $script:themeNames[$to]) -Text (T '本工具会关闭，然后用新的外观重新打开。') -Buttons @((T '取消'), $ok) -Primary $ok -Cancel (T '取消')) -ne $ok) { return $false }
-    Set-ThemePref $to
-    return $true
+    return (Set-ThemePref $to)
 }
 # 界面语言切换：存到设置里，关掉本窗口，用新语言重新打开（返回 $false：没换）
 $ctl.BtnLangText.Text = if ($script:Lang -eq 'en') { '中文' } else { 'English' }
@@ -24925,7 +25066,7 @@ function Request-Lang {
     if ($to -eq 'en') { $t = '切换为英文界面？'; $x = "本工具会关闭，然后以英文界面重新打开。`n`nClearC will close and reopen in English."; $ok = '切换'; $no = '取消' }
     else { $t = 'Switch to Chinese?'; $x = "ClearC will close and reopen in Chinese.`n`n本工具会关闭，然后以中文界面重新打开。"; $ok = 'Switch'; $no = 'Cancel' }
     if ((Show-Sheet -Title $t -Text $x -Buttons @($no, $ok) -Primary $ok -Cancel $no) -ne $ok) { return $false }
-    Set-Setting 'Lang' $to
+    if (-not (Set-Setting 'Lang' $to -PassThru).Ok) { Load-Settings; return $false }
     OpLog '系统设置' (T '切换界面语言') $to ''
     Save-ResumeState
     Exit-UiLock

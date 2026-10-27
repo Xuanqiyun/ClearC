@@ -29,6 +29,18 @@ namespace ClearCCore {
             return false;
         }
     }
+    // 规范化完整路径后做摘要；不同层级的下划线不能造成记录名碰撞。
+    public static class JournalIdentity {
+        public static string Normalize(string path) {
+            if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Missing journal source");
+            return System.IO.Path.GetFullPath(path).Replace('/', '\\').TrimEnd('\\').ToUpperInvariant();
+        }
+        public static string Key(string path) {
+            using (var hash = System.Security.Cryptography.SHA256.Create()) {
+                return BitConverter.ToString(hash.ComputeHash(System.Text.Encoding.UTF8.GetBytes(Normalize(path)))).Replace("-", "").ToLowerInvariant();
+            }
+        }
+    }
     // 搬家进度记录里写的那一步，和磁盘上实际的样子对一下：写记录前一刻断电时，实际可能已经多做了一步。
     // kind：move 搬走 / back 搬回；place：C 盘那个位置现在是 none 不在、link 链接、empty 空文件夹、data 有内容的真文件夹；
     // bakThere：C 盘上改了名的旧文件夹（搬回时是复制回来的临时文件夹）在不在；dstThere：目标盘上那份在不在

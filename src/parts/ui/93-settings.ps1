@@ -114,7 +114,7 @@ function Apply-Mode {
     if ($script:mapRoot) { try { $ctl.BtnMapAcct.Visibility = if ($script:mapRoot.HasDisk -and $m -ge 2) { 'Visible' } else { 'Collapsed' } } catch {} }
 }
 function Set-Mode([string]$mode) {
-    Set-Setting 'Mode' $mode
+    if (-not (Set-Setting 'Mode' $mode -PassThru).Ok) { Apply-Mode; return }
     Apply-Mode
     OpLog '系统设置' (T '使用模式') (Get-ModeName) ''
     UI-Log ((T "使用模式：{0}") -f (Get-ModeName))
@@ -199,19 +199,19 @@ $ctl.SetFast.Add_Click({ if (-not $script:setLoading) { Set-FastScan ([bool]$ctl
 $ctl.SetRestorePoint.Add_Click({
     if ($script:setLoading) { return }
     $on = [bool]$ctl.SetRestorePoint.IsChecked
-    Set-Setting 'RestorePoint' $(if ($on) { '1' } else { '0' })
+    if (-not (Set-Setting 'RestorePoint' $(if ($on) { '1' } else { '0' }) -PassThru).Ok) { Load-Settings; return }
     OpLog '系统设置' (T '改系统设置前先建还原点') $(if ($on) { (T '打开') } else { (T '关闭') }) ''
 })
 $ctl.SetRecycle.Add_Click({
     if ($script:setLoading) { return }
     $on = [bool]$ctl.SetRecycle.IsChecked
-    Set-Setting 'Recycle' $(if ($on) { '1' } else { '0' })
+    if (-not (Set-Setting 'Recycle' $(if ($on) { '1' } else { '0' }) -PassThru).Ok) { Load-Settings; return }
     UI-Log $(if ($on) { (T '删除时先放进回收站：已打开') } else { (T '删除时先放进回收站：已关闭') })
 })
 $ctl.SetLowIo.Add_Click({
     if ($script:setLoading) { return }
     $on = [bool]$ctl.SetLowIo.IsChecked
-    Set-Setting 'LowIo' $(if ($on) { '1' } else { '0' }); [DupFinder]::LowPriority = $on
+    if (-not (Set-Setting 'LowIo' $(if ($on) { '1' } else { '0' }) -PassThru).Ok) { Load-Settings; return }; [DupFinder]::LowPriority = $on
     UI-Log $(if ($on) { (T '查重复文件时让着其他程序：已打开') } else { (T '查重复文件时让着其他程序：已关闭') })
 })
 $ctl.BtnSetReset.Add_Click({
@@ -228,8 +228,9 @@ function Load-CleanLists {
     $ctl.SetExcludeList.ItemsSource = $x; $ctl.SetExcludeEmpty.Visibility = if ($x.Count) { 'Collapsed' } else { 'Visible' }
 }
 function Save-CleanList([string]$key, [string[]]$items) {
-    Set-Setting $key (($items | Where-Object { $_ }) -join '|')
+    $saved = Set-Setting $key (($items | Where-Object { $_ }) -join '|') -PassThru
     Load-CleanLists
+    if (-not $saved.Ok) { return $false }
     # 清理列表变了：扫描结果作废，下次扫描按新的来
     $script:catalog = Get-Catalog
     if ($script:rows -and -not $script:worker) {
@@ -239,6 +240,7 @@ function Save-CleanList([string]$key, [string[]]$items) {
         $ctl.EmptyClean.Visibility = 'Visible'; $ctl.EmptyCleanText.Text = (T '清理列表改了，请重新扫描。')
         $ctl.Summary.Text = (T '清理列表改了，请重新扫描。')
     }
+    return $true
 }
 function Add-CleanListFolder([bool]$exclude) {
     $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
@@ -254,7 +256,7 @@ function Add-CleanListFolder([bool]$exclude) {
     $key = if ($exclude) { 'Exclude' } else { 'CustomClean' }
     $cur = @(if ($exclude) { Get-ExcludeList } else { Get-CustomClean })
     if ($cur -contains $p) { return }
-    Save-CleanList $key ($cur + $p)
+    if (-not (Save-CleanList $key ($cur + $p))) { return }
     OpLog '系统设置' $(if ($exclude) { (T '排除文件夹') } else { (T '加入清理列表') }) $p ''
     UI-Log ((T "{0}：{1}") -f $(if ($exclude) { (T '排除文件夹') } else { (T '加入清理列表') }), $p)
 }
@@ -268,7 +270,7 @@ $removeHandler = [System.Windows.RoutedEventHandler]{
     $exclude = [object]::ReferenceEquals($s, $ctl.SetExcludeList)
     $key = if ($exclude) { 'Exclude' } else { 'CustomClean' }
     $cur = @(if ($exclude) { Get-ExcludeList } else { Get-CustomClean })
-    Save-CleanList $key @($cur | Where-Object { $_ -ne $p })
+    if (-not (Save-CleanList $key @($cur | Where-Object { $_ -ne $p }))) { return }
     OpLog '系统设置' $(if ($exclude) { (T '取消排除') } else { (T '移出清理列表') }) $p ''
 }
 $ctl.SetCustomList.AddHandler([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent, $removeHandler)

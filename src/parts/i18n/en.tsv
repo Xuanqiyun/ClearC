@@ -155,6 +155,11 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+设置没有保存，请稍后重试：{0}	Settings were not saved. Please retry: {0}
+设置未保存	Settings not saved
+副本不可用、读取不完整或仍有差异，旧文件夹已保留：{0}	The copy is unavailable, could not be fully read, or still differs. The old folder has been kept: {0}
+补复制失败，原文件夹已保留	The follow-up copy failed. The original folder has been kept.
+目录没有读取完整，原文件夹已保留	The directory could not be fully read. The original folder has been kept.
 腾挪 ClearC 已经开着一个（可能在别的窗口后面）。如果找不到它，重启电脑后再打开。	ClearC is already open (perhaps behind another window). If you cannot find it, restart the PC and open it again.
 上一次打开的腾挪 ClearC 还在后台运行，但一直没有窗口，多半是卡住了（比如被杀毒软件拦在了一半）。\n\n要结束它，再重新打开吗？	The ClearC you opened last time is still running in the background but never showed a window. It is probably stuck (for example, antivirus stopped it halfway).\n\nEnd it and open ClearC again?
 它可能正在删除或搬家，现在结束会停在一半；下次打开时会说明停在哪一步，可以接着做完或撤回。不着急的话，可以先等几分钟再试。	It may be deleting or moving files. Ending it now stops that halfway; the next start explains where it stopped so you can finish or undo it. If it is not urgent, wait a few minutes and try again.

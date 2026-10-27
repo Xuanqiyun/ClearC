@@ -11,6 +11,8 @@ cs/FsTools.cs
 cs/Core.cs
 cs/Rows.cs
 glue/02-engine.ps1
+engine/SettingsStore.ps1
+engine/TransferPolicy.ps1
 engine/Engine.ps1
 glue/03-translations.ps1
 i18n/en.tsv

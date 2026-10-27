@@ -38,6 +38,7 @@ public sealed class DirReader {
     FD fd;
     List<FileSystemInfo> list; int li;
     string dirPath; int count;
+    public int ErrorCount;                 // 打不开、读到一半失败或条目损坏，不能当成正常结束
     public bool FellBack;                  // 批量读出错，这个文件夹改用了 FindFirstFileEx
 
     public uint Attr; public long Size, Write;
@@ -66,14 +67,14 @@ public sealed class DirReader {
     public bool Open(string dir) {
         Close();
         mode = force != 0 ? force : ChooseMode(dir);
-        name = null; dirPath = dir; count = 0;
+        name = null; dirPath = dir; count = 0; ErrorCount = 0; FellBack = false;
         if (mode == 3) {
             try { list = new List<FileSystemInfo>(new DirectoryInfo(dir).EnumerateFileSystemInfos()); li = 0; return true; }
-            catch { list = null; return false; }
+            catch { list = null; ErrorCount++; return false; }
         }
         if (mode == 2) return OpenFind(dir);
         h = CreateFileW(LongPath(dir), 0x0001 /*FILE_LIST_DIRECTORY*/, 7, IntPtr.Zero, 3 /*OPEN_EXISTING*/, 0x02000000 /*BACKUP_SEMANTICS*/, IntPtr.Zero);
-        if (h == BAD) return false;
+        if (h == BAD) { ErrorCount++; return false; }
         if (hbuf == IntPtr.Zero) { hbuf = Marshal.AllocHGlobal(BUF); buf = new byte[BUF]; }
         pos = 0; len = 0; more = true;
         return true;
@@ -82,7 +83,11 @@ public sealed class DirReader {
     bool OpenFind(string dir) {
         string p = LongPath(dir); if (!p.EndsWith("\\")) p += "\\";
         hf = FindFirstFileExW(p + "*", 1, out fd, 0, IntPtr.Zero, 2);
-        if (hf == BAD) return false;
+        if (hf == BAD) {
+            int error = Marshal.GetLastWin32Error();
+            if ((error == 2 || error == 18) && Directory.Exists(dir)) { first = false; return true; }
+            ErrorCount++; return false;
+        }
         first = true; return true;
     }
 
@@ -98,14 +103,18 @@ public sealed class DirReader {
                     Write = e.LastWriteTimeUtc.ToFileTimeUtc();
                     name = e.Name;
                     return true;
-                } catch { }
+                } catch { ErrorCount++; }
             }
             return false;
         }
         if (mode == 2) {
+            if (hf == BAD) return false;
             while (true) {
                 if (first) first = false;
-                else if (!FindNextFileW(hf, out fd)) return false;
+                else if (!FindNextFileW(hf, out fd)) {
+                    if (Marshal.GetLastWin32Error() != 18) ErrorCount++;
+                    return false;
+                }
                 if (fd.name == "." || fd.name == "..") continue;
                 Attr = fd.attr; Size = ((long)fd.sizeHigh << 32) | fd.sizeLow; Write = ((long)fd.w2 << 32) | fd.w1;
                 if ((Attr & 0x400) != 0) Tag = fd.r0;      // dwReserved0：重解析点的类型
@@ -127,15 +136,17 @@ public sealed class DirReader {
                         mode = 2;
                         return Next();
                     }
+                    if (err != 18 && !(err == 2 && count == 0 && Directory.Exists(dirPath))) ErrorCount++;
                     return false;
                 }
                 Marshal.Copy(hbuf, buf, 0, BUF);
                 pos = 0; len = BUF;
             }
             int e = pos;
+            if (e < 0 || e > BUF - 68) { ErrorCount++; more = false; return false; }
             int next = BitConverter.ToInt32(buf, e);
             int nl = BitConverter.ToInt32(buf, e + 60);
-            if (next < 0 || nl < 0 || e + 68 + nl > BUF) { more = false; return false; }
+            if (next < 0 || (next != 0 && (next < 68 || next > BUF - e)) || nl < 0 || (nl & 1) != 0 || nl > BUF - e - 68) { ErrorCount++; more = false; return false; }
             pos = next == 0 ? len : e + next;
             if (nl == 2 && buf[e + 68] == '.' && buf[e + 69] == 0) continue;
             if (nl == 4 && buf[e + 68] == '.' && buf[e + 69] == 0 && buf[e + 70] == '.' && buf[e + 71] == 0) continue;
@@ -214,6 +225,8 @@ public sealed class DirReader {
 public sealed class DirCount {
     public long Files, Bytes, Reparse;
     public string ReparseSample = "";
+    public long ErrorCount;   // 读取失败次数；进度可以显示部分统计，校验必须拒绝
+    public bool Complete { get { return !Cancelled && ErrorCount == 0; } }
     public bool Cancelled;     // 数到一半被取消了：结果不完整，不能拿来做判断
 }
 // 快速统计文件夹大小：不进入链接目录（搬走后留下的链接不会把别的盘算进来）。
@@ -238,8 +251,8 @@ public static class DirStat {
     public static DirCount Count(string root) {
         DirCount c = new DirCount();
         live = c;
-        if (string.IsNullOrEmpty(root)) return c;
-        try { if (!Directory.Exists(root)) return c; } catch { return c; }
+        if (string.IsNullOrEmpty(root)) { c.ErrorCount++; return c; }
+        try { if (!Directory.Exists(root)) { c.ErrorCount++; return c; } } catch { c.ErrorCount++; return c; }
         string r0 = root.TrimEnd('\\', '/');
         if (r0.Length == 0 || (r0.Length == 2 && r0[1] == ':')) r0 = root;
         ConcurrentStack<string> work = new ConcurrentStack<string>();
@@ -277,8 +290,8 @@ public static class DirStat {
                                     } else Interlocked.Decrement(ref started);
                                 }
                             }
-                        } catch { }
-                        finally { r.Close(); }
+                        } catch { Interlocked.Increment(ref c.ErrorCount); }
+                        finally { Interlocked.Add(ref c.ErrorCount, r.ErrorCount); r.ErrorCount = 0; r.Close(); }
                         if (Interlocked.Decrement(ref pending) == 0) break;
                     } else {
                         if (Volatile.Read(ref pending) == 0) break;
