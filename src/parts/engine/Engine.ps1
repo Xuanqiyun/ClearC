@@ -59,12 +59,14 @@ function Start-Parallel($jobs, [int]$max = 4) {
 }
 # 等一起做的那几件做完：返回 键 → @{ V = 结果; Ms = 用了多少毫秒 }。出错的、没开成的不在里面（调用的地方自己再做一遍）。
 # 点了取消就停下不等；超过 $limitSec 秒还没回答的（系统那边卡住了）也不等了，放进 $h.Late，调用的地方当作没问到
-function Wait-Parallel($h, [int]$limitSec = 120) {
+# $names（键 → 显示的名字）：等的时候在进度卡片上写着还在等哪几件
+function Wait-Parallel($h, [int]$limitSec = 120, [hashtable]$names = $null) {
     $res = @{}
     if (-not $h -or -not $h.Run) { return $res }
     $h.Late = @()
     $until = (Get-Date).AddSeconds($limitSec)
     $hung = $false
+    $shown = $null
     try {
         foreach ($k in @($h.Run.Keys)) {
             $j = $h.Run[$k]
@@ -72,6 +74,10 @@ function Wait-Parallel($h, [int]$limitSec = 120) {
             while (-not $j.AR.AsyncWaitHandle.WaitOne(200)) {
                 if (Stopping) { break }
                 if ((Get-Date) -gt $until) { $late = $true; break }
+                if ($names) {
+                    $w = Format-Waiting $names @($h.Run.Keys | Where-Object { -not $h.Run[$_].AR.IsCompleted })
+                    if ($w -ne $shown) { $shown = $w; SetP @{ Detail = $w } }
+                }
             }
             if (Stopping) { break }
             if ($late) { $h.Late += $k; $hung = $true; try { [void]$j.PS.BeginStop($null, $null) } catch {}; continue }
@@ -85,6 +91,21 @@ function Wait-Parallel($h, [int]$limitSec = 120) {
         $h.Run = @{}; $h.Pool = $null
     }
     return $res
+}
+# 进度卡片上写的「还在等 Windows 回答：……」：$names 键 → 名字，$keys 还没回答的那几个键（按名字排）
+function Format-Waiting([hashtable]$names, $keys) {
+    $list = @(@($keys) | Where-Object { $names.ContainsKey([string]$_) } | ForEach-Object { [string]$names[[string]$_] } | Sort-Object)
+    if ($list.Count -eq 0) { return '' }
+    return (T "还在等 Windows 回答：{0}") -f ($list -join (T '、'))
+}
+# 进度卡片上的「预计还要」：按已用时间和总进度推算，返回秒数；不写的时候返回 $null。
+# 这一步已经用了比算出来的剩余时间还长（比如最后一步在等系统回答，要多久说不准），或者算出来不到 1 秒却还没做完，
+# 就不写：写一个明显不对的数（「还要 0 秒」）比不写更糟
+function Get-OpEta($frac, [double]$elSec, [double]$stepSec = 0) {
+    if ($null -eq $frac -or [double]$frac -le 0.03 -or [double]$frac -ge 1 -or $elSec -le 3) { return $null }
+    $left = $elSec * (1 - [double]$frac) / [double]$frac
+    if ($left -lt 1 -or $left -lt $stepSec) { return $null }
+    return $left
 }
 # 记下后台里每一段用了多久（扫描为什么慢一看就知道；写进日志）
 function Start-Phases { $script:phSw = [Diagnostics.Stopwatch]::StartNew(); $script:phLast = [long]0; $script:phList = New-Object System.Collections.ArrayList }

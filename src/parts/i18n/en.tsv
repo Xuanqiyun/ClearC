@@ -155,6 +155,7 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+还在等 Windows 回答：{0}	Still waiting for Windows to report: {0}
 列出查找位置里的文件	Listing the files in the search locations
 选了文件时只看和它一样大的文件；粘贴哈希时看符合类型和大小条件的文件。	With a picked file, only files of the same size are considered; with a pasted hash, files matching the type and size filters.
 算所选文件的 SHA-256	Computing the SHA-256 of the picked file

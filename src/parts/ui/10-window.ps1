@@ -955,6 +955,7 @@ function Update-Op {
     $frac = $null          # 总进度 0~1；$null 表示不确定
     $etaEl = $el           # 用来估算剩余时间的已用时长
     $etaOk = $true         # 各步工作量差不多时，才用总进度估算剩余时间
+    $stepSec = 0           # 现在这一步已经用了多少秒（比推算出来的剩余时间还长，就不写预计时间）
     $stepLine = ''         # 现在在做第几步
     $what = ''             # 这一步是干什么的
     $detail = ''; $subFrac = $null; $subShow = $false; $subTime = ''
@@ -1013,6 +1014,8 @@ function Update-Op {
     }
     elseif ($p -and $p.Steps -gt 0) {
         $step = [math]::Max(1, [int]$p.Step)
+        if ($script:op.StepNo -ne $step) { $script:op.StepNo = $step; $script:op.StepStart = $now }
+        $stepSec = ($now - $script:op.StepStart).TotalSeconds
         $stepLine = (T "第 {0} / {1} 项：{2}") -f $step, $p.Steps, $p.StepName
         if (@('run', 'movemany') -contains $sync.Mode) {
             $what = [string]$p.StepNote
@@ -1100,9 +1103,8 @@ function Update-Op {
     }
 
     $timeText = (T "已用 ") + (FmtSpan $el)
-    if ($frac -ne $null -and $etaOk -and $frac -gt 0.03 -and $etaEl.TotalSeconds -gt 3) {
-        $timeText += (T "，预计还要 ") + (FmtSpan ([TimeSpan]::FromSeconds($etaEl.TotalSeconds * (1 - $frac) / $frac)))
-    }
+    $left = if ($etaOk) { Get-OpEta $frac $etaEl.TotalSeconds $stepSec } else { $null }
+    if ($null -ne $left) { $timeText += (T "，预计还要 ") + (FmtSpan ([TimeSpan]::FromSeconds($left))) }
 
     # ---- 底部进度条 ----
     $ctl.OpTitle.Text = if ($stepLine) { (T "{0}，{1}") -f $script:op.Title, $stepLine } else { $script:op.Title }

@@ -275,6 +275,16 @@ try { & {
     [DupFinder]::Cancel = $true
     try { $g = @([DupFinder]::FindByHash([string[]]@($hr), $sha, '', 1, 0, $null, [string[]]@(), $null)) } finally { [DupFinder]::Cancel = $false }
     Check 'a cancelled hash lookup returns nothing' ($g.Count -eq 0)
+    # 进度卡片的「预计还要」：按已用时间和总进度推算；最后一步在等系统回答这类不知道要多久的时候不写（不能写「还要 0 秒」）
+    Check 'remaining time: half done after 20 seconds means about 20 more' ([math]::Round((Get-OpEta 0.5 20 1), 1) -eq 20)
+    Check 'remaining time: not shown at step 89 of 89 when that step has already run 27 seconds' ($null -eq (Get-OpEta (88 / 89) 45 27))
+    Check 'remaining time: not shown when it would be under a second, too early, unknown or at 100%' ($null -eq (Get-OpEta 0.999 300 0) -and $null -eq (Get-OpEta 0.02 100 0) -and $null -eq (Get-OpEta 0.5 2 0) -and $null -eq (Get-OpEta $null 10 0) -and $null -eq (Get-OpEta 1 10 0))
+    Check 'remaining time: a slow step in the middle still gets an estimate' ($null -ne (Get-OpEta 0.3 30 8))
+    Check 'waiting for Windows: the card names what is still being waited for' ((Format-Waiting @{ a = 'Alpha'; b = 'Beta'; c = 'Gamma' } @('c', 'a')) -eq ((T "还在等 Windows 回答：{0}") -f ('Alpha' + (T '、') + 'Gamma')) -and (Format-Waiting @{ a = 'Alpha' } @()) -eq '')
+    $engineText = [regex]::Match($src, "(?s)\`$engine = @'\r?\n(.*?)\r?\n'@").Groups[1].Value
+    $wp = Wait-Parallel (Start-Parallel @{ a = 'Start-Sleep -Milliseconds 300; 11'; b = '22' } 2) 30 @{ a = 'Alpha'; b = 'Beta' }
+    Check ("Wait-Parallel with names still returns every answer ({0})" -f (($wp.Keys | Sort-Object) -join ',')) ($wp.a.V -eq 11 -and $wp.b.V -eq 22)
+    $engineText = $null
     # 一块盘用了多少：已用 + 可用 = 总容量，百分比在 0 到 100 之间；读不到的盘不报错
     $root = [IO.Path]::GetPathRoot([IO.Path]::GetTempPath())
     $du = Get-DriveUse $root; $dn = Get-DriveUse 'Q:\no-such-drive'

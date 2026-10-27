@@ -3947,12 +3947,14 @@ function Start-Parallel($jobs, [int]$max = 4) {
 }
 # 等一起做的那几件做完：返回 键 → @{ V = 结果; Ms = 用了多少毫秒 }。出错的、没开成的不在里面（调用的地方自己再做一遍）。
 # 点了取消就停下不等；超过 $limitSec 秒还没回答的（系统那边卡住了）也不等了，放进 $h.Late，调用的地方当作没问到
-function Wait-Parallel($h, [int]$limitSec = 120) {
+# $names（键 → 显示的名字）：等的时候在进度卡片上写着还在等哪几件
+function Wait-Parallel($h, [int]$limitSec = 120, [hashtable]$names = $null) {
     $res = @{}
     if (-not $h -or -not $h.Run) { return $res }
     $h.Late = @()
     $until = (Get-Date).AddSeconds($limitSec)
     $hung = $false
+    $shown = $null
     try {
         foreach ($k in @($h.Run.Keys)) {
             $j = $h.Run[$k]
@@ -3960,6 +3962,10 @@ function Wait-Parallel($h, [int]$limitSec = 120) {
             while (-not $j.AR.AsyncWaitHandle.WaitOne(200)) {
                 if (Stopping) { break }
                 if ((Get-Date) -gt $until) { $late = $true; break }
+                if ($names) {
+                    $w = Format-Waiting $names @($h.Run.Keys | Where-Object { -not $h.Run[$_].AR.IsCompleted })
+                    if ($w -ne $shown) { $shown = $w; SetP @{ Detail = $w } }
+                }
             }
             if (Stopping) { break }
             if ($late) { $h.Late += $k; $hung = $true; try { [void]$j.PS.BeginStop($null, $null) } catch {}; continue }
@@ -3973,6 +3979,21 @@ function Wait-Parallel($h, [int]$limitSec = 120) {
         $h.Run = @{}; $h.Pool = $null
     }
     return $res
+}
+# 进度卡片上写的「还在等 Windows 回答：……」：$names 键 → 名字，$keys 还没回答的那几个键（按名字排）
+function Format-Waiting([hashtable]$names, $keys) {
+    $list = @(@($keys) | Where-Object { $names.ContainsKey([string]$_) } | ForEach-Object { [string]$names[[string]$_] } | Sort-Object)
+    if ($list.Count -eq 0) { return '' }
+    return (T "还在等 Windows 回答：{0}") -f ($list -join (T '、'))
+}
+# 进度卡片上的「预计还要」：按已用时间和总进度推算，返回秒数；不写的时候返回 $null。
+# 这一步已经用了比算出来的剩余时间还长（比如最后一步在等系统回答，要多久说不准），或者算出来不到 1 秒却还没做完，
+# 就不写：写一个明显不对的数（「还要 0 秒」）比不写更糟
+function Get-OpEta($frac, [double]$elSec, [double]$stepSec = 0) {
+    if ($null -eq $frac -or [double]$frac -le 0.03 -or [double]$frac -ge 1 -or $elSec -le 3) { return $null }
+    $left = $elSec * (1 - [double]$frac) / [double]$frac
+    if ($left -lt 1 -or $left -lt $stepSec) { return $null }
+    return $left
 }
 # 记下后台里每一段用了多久（扫描为什么慢一看就知道；写进日志）
 function Start-Phases { $script:phSw = [Diagnostics.Stopwatch]::StartNew(); $script:phLast = [long]0; $script:phList = New-Object System.Collections.ArrayList }
@@ -8184,6 +8205,7 @@ CAD 图纸	CAD drawings
 安装包	Installers
 磁盘镜像	Disk images
 全部类型	All types
+还在等 Windows 回答：{0}	Still waiting for Windows to report: {0}
 列出查找位置里的文件	Listing the files in the search locations
 选了文件时只看和它一样大的文件；粘贴哈希时看符合类型和大小条件的文件。	With a picked file, only files of the same size are considered; with a pasted hash, files matching the type and size filters.
 算所选文件的 SHA-256	Computing the SHA-256 of the picked file
@@ -17215,6 +17237,7 @@ function Update-Op {
     $frac = $null          # 总进度 0~1；$null 表示不确定
     $etaEl = $el           # 用来估算剩余时间的已用时长
     $etaOk = $true         # 各步工作量差不多时，才用总进度估算剩余时间
+    $stepSec = 0           # 现在这一步已经用了多少秒（比推算出来的剩余时间还长，就不写预计时间）
     $stepLine = ''         # 现在在做第几步
     $what = ''             # 这一步是干什么的
     $detail = ''; $subFrac = $null; $subShow = $false; $subTime = ''
@@ -17273,6 +17296,8 @@ function Update-Op {
     }
     elseif ($p -and $p.Steps -gt 0) {
         $step = [math]::Max(1, [int]$p.Step)
+        if ($script:op.StepNo -ne $step) { $script:op.StepNo = $step; $script:op.StepStart = $now }
+        $stepSec = ($now - $script:op.StepStart).TotalSeconds
         $stepLine = (T "第 {0} / {1} 项：{2}") -f $step, $p.Steps, $p.StepName
         if (@('run', 'movemany') -contains $sync.Mode) {
             $what = [string]$p.StepNote
@@ -17360,9 +17385,8 @@ function Update-Op {
     }
 
     $timeText = (T "已用 ") + (FmtSpan $el)
-    if ($frac -ne $null -and $etaOk -and $frac -gt 0.03 -and $etaEl.TotalSeconds -gt 3) {
-        $timeText += (T "，预计还要 ") + (FmtSpan ([TimeSpan]::FromSeconds($etaEl.TotalSeconds * (1 - $frac) / $frac)))
-    }
+    $left = if ($etaOk) { Get-OpEta $frac $etaEl.TotalSeconds $stepSec } else { $null }
+    if ($null -ne $left) { $timeText += (T "，预计还要 ") + (FmtSpan ([TimeSpan]::FromSeconds($left))) }
 
     # ---- 底部进度条 ----
     $ctl.OpTitle.Text = if ($stepLine) { (T "{0}，{1}") -f $script:op.Title, $stepLine } else { $script:op.Title }
@@ -17841,8 +17865,10 @@ $bg = @{}; foreach ($it in $cat) { if ($it.Bg -and $it.Size) { $bg[[string]$it.I
 $par = Start-Parallel $bg 4
 foreach ($it in $cat) { if (Stopping) { break }; if ($par.Run.ContainsKey([string]$it.Idx)) { continue }; $i++; SetP @{ Steps = $steps; Step = $i; StepName = $it.N; SubKind = 'measure'; SubStart = (Get-Date); Detail = (T '统计大小') }; $t0 = $sw.ElapsedMilliseconds; $sizes[$it.Idx] = Measure-Item $it $tree; [void]$times.Add(@{ N = $it.N; Ms = $sw.ElapsedMilliseconds - $t0 }) }
 if ($par.Run.Count -gt 0) {
-    SetP @{ Steps = $steps; Step = $steps; StepName = (T '等系统回答安装包、驱动包这几项'); SubKind = 'measure'; SubStart = (Get-Date); Detail = (T '统计大小') }
-    $t0 = $sw.ElapsedMilliseconds; $got = Wait-Parallel $par 90; [void]$times.Add(@{ N = 'wait for the parallel ones'; Ms = $sw.ElapsedMilliseconds - $t0 })
+    # 这一步要多久说不准（看 Windows 什么时候回答，最多等一分半钟）：按「慢的一项」显示，卡片上写着还在等哪几项，不估算剩余时间
+    $names = @{}; foreach ($it in $cat) { if ($bg.ContainsKey([string]$it.Idx)) { $names[[string]$it.Idx] = [string]$it.N } }
+    SetP @{ Steps = $steps; Step = $steps; StepName = (T '等系统回答安装包、驱动包这几项'); SubKind = 'slow'; SubStart = (Get-Date); Detail = (Format-Waiting $names @($par.Run.Keys)) }
+    $t0 = $sw.ElapsedMilliseconds; $got = Wait-Parallel $par 90 $names; [void]$times.Add(@{ N = 'wait for the parallel ones'; Ms = $sw.ElapsedMilliseconds - $t0 })
     foreach ($it in $cat) {
         $k = [string]$it.Idx; if (-not $bg.ContainsKey($k) -or (Stopping)) { continue }
         if ($got.ContainsKey($k)) { $sizes[$it.Idx] = [double]$got[$k].V; [void]$times.Add(@{ N = $it.N + ' (alongside)'; Ms = [double]$got[$k].Ms }) }

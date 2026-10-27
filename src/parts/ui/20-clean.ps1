@@ -373,8 +373,10 @@ $bg = @{}; foreach ($it in $cat) { if ($it.Bg -and $it.Size) { $bg[[string]$it.I
 $par = Start-Parallel $bg 4
 foreach ($it in $cat) { if (Stopping) { break }; if ($par.Run.ContainsKey([string]$it.Idx)) { continue }; $i++; SetP @{ Steps = $steps; Step = $i; StepName = $it.N; SubKind = 'measure'; SubStart = (Get-Date); Detail = (T '统计大小') }; $t0 = $sw.ElapsedMilliseconds; $sizes[$it.Idx] = Measure-Item $it $tree; [void]$times.Add(@{ N = $it.N; Ms = $sw.ElapsedMilliseconds - $t0 }) }
 if ($par.Run.Count -gt 0) {
-    SetP @{ Steps = $steps; Step = $steps; StepName = (T '等系统回答安装包、驱动包这几项'); SubKind = 'measure'; SubStart = (Get-Date); Detail = (T '统计大小') }
-    $t0 = $sw.ElapsedMilliseconds; $got = Wait-Parallel $par 90; [void]$times.Add(@{ N = 'wait for the parallel ones'; Ms = $sw.ElapsedMilliseconds - $t0 })
+    # 这一步要多久说不准（看 Windows 什么时候回答，最多等一分半钟）：按「慢的一项」显示，卡片上写着还在等哪几项，不估算剩余时间
+    $names = @{}; foreach ($it in $cat) { if ($bg.ContainsKey([string]$it.Idx)) { $names[[string]$it.Idx] = [string]$it.N } }
+    SetP @{ Steps = $steps; Step = $steps; StepName = (T '等系统回答安装包、驱动包这几项'); SubKind = 'slow'; SubStart = (Get-Date); Detail = (Format-Waiting $names @($par.Run.Keys)) }
+    $t0 = $sw.ElapsedMilliseconds; $got = Wait-Parallel $par 90 $names; [void]$times.Add(@{ N = 'wait for the parallel ones'; Ms = $sw.ElapsedMilliseconds - $t0 })
     foreach ($it in $cat) {
         $k = [string]$it.Idx; if (-not $bg.ContainsKey($k) -or (Stopping)) { continue }
         if ($got.ContainsKey($k)) { $sizes[$it.Idx] = [double]$got[$k].V; [void]$times.Add(@{ N = $it.N + ' (alongside)'; Ms = [double]$got[$k].Ms }) }
